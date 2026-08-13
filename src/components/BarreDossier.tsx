@@ -1,5 +1,6 @@
 import React from 'react';
 import type { VisibilityLevel } from '../types';
+import { BrandLogo } from './BrandLogo';
 
 interface BarreDossierProps {
   publicCode: string;
@@ -40,14 +41,8 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
         width: '100%'
       }}>
         {/* Logo / Nom du Service */}
-        <div className="dossier-bar__logo" style={{
-          fontFamily: 'var(--font-headings)',
-          fontSize: '22px',
-          fontWeight: 700,
-          color: 'var(--ink)',
-          letterSpacing: '-0.02em'
-        }}>
-          Cartularia
+        <div className="dossier-bar__logo">
+          <BrandLogo />
         </div>
 
         {/* Info Montre (Centrée) */}

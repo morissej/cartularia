@@ -23,6 +23,7 @@ import {
 import { mockCartulary } from './data/mockData';
 import type { Asset, ComparableTransaction, MediaTag, VisibilityLevel } from './types';
 import { BarreDossier } from './components/BarreDossier';
+import { BrandLogo } from './components/BrandLogo';
 import { MediaCarousel } from './components/MediaCarousel';
 import { Spin360 } from './components/Spin360';
 import { AuditPanel } from './components/AuditPanel';
@@ -1454,7 +1455,7 @@ function App() {
       <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
         <header className="watch-website__masthead">
           <div className="container">
-            <span className="watch-website__wordmark">Cartularia</span>
+            <BrandLogo className="watch-website__wordmark" />
             <div><span className="eyebrow">Watch website · {mockCartulary.publicCode}</span><strong>{watch.reference.brand} · {watch.reference.model}</strong></div>
           </div>
         </header>
@@ -1463,7 +1464,7 @@ function App() {
             ? orderedBlocks.map((blockId) => <div className="watch-website__block" id={blockId} key={blockId}>{renderWatchWebsiteBlock(blockId)}</div>)
             : <div className="watch-website__empty-state"><Globe2 size={26} /><h1>Aucun contenu publié</h1><p>Cette sélection publique ne contient actuellement aucun bloc.</p></div>}
         </main>
-        <footer className="watch-website__footer"><div className="container"><span>Dossier numérique indépendant</span><span>{mockCartulary.publicCode} · 2026</span></div></footer>
+        <footer className="watch-website__footer"><div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Dossier numérique indépendant</span></span><span>{mockCartulary.publicCode} · 2026</span></div></footer>
       </div>
     );
   }
@@ -2201,12 +2202,13 @@ function App() {
       </main>
 
       <footer className="editorial-footer">
-        <div className="container"><span>Cartularia · Cartulaire {mockCartulary.publicCode}</span><span>Prototype v2.1 · 2026</span></div>
+        <div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Cartulaire {mockCartulary.publicCode}</span></span><span>Prototype v2.1 · 2026</span></div>
       </footer>
 
       {orderedReportBlocks.length > 0 && (
         <div className="report-print-view">
           <header className="report-print-view__header">
+            <BrandLogo className="report-print-view__logo" variant="monochrome" />
             <span className="eyebrow">Rapport Cartularia · {mockCartulary.publicCode}</span>
             <h1>{specificationValue('Marque', watch.reference.brand)}<br />{specificationValue('Modèle', watch.reference.model)}</h1>
             <dl>
@@ -2220,7 +2222,7 @@ function App() {
               <div className="report-print-view__block" key={blockId}>{renderWatchWebsiteBlock(blockId)}</div>
             ))}
           </main>
-          <footer><span>Cartularia · Rapport généré depuis le Cartulaire</span><span>{mockCartulary.publicCode}</span></footer>
+          <footer><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Rapport généré depuis le Cartulaire</span></span><span>{mockCartulary.publicCode}</span></footer>
         </div>
       )}
 
