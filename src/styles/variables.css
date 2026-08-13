@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+
+:root {
+  /* Design system Cartularia — dossier d'instrument */
+  --paper: #F4F2ED;
+  --sheet: #FFFFFF;
+  --fill: #E7E4DC;
+  --rule: #D6D2C8;
+  --muted: #6E6A61;
+  --ink: #1A1815;
+  --mark: #97412F;
+  --positive: #2F6652;
+  --negative: #A12E2A;
+  --warning: #9A6425;
+  --verified: #2F6652;
+  --private: #514B68;
+
+  --font-headings: 'Archivo', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: 'Newsreader', Georgia, serif;
+  --font-sans: 'Archivo', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Échelle typographique */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+
+  /* Échelle d'espacement */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 20px;
+  --s5: 32px;
+  --s6: 56px;
+  --s7: 72px;
+
+  --control-size: 44px;
+  --surface-secondary: color-mix(in srgb, var(--sheet) 62%, var(--fill));
+
+  --transition: 120ms linear;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
