@@ -10,7 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.firebase/
 *.local
+*.cartularia-backup.json
+cartularia-production-readiness*.json
 
 # Local environment and credentials
 .env

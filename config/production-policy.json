@@ -1,0 +1,53 @@
+{
+  "policyVersion": "wave7-1.0.0",
+  "target": {
+    "projectId": "studio-2614005370-a3e51",
+    "environment": "production"
+  },
+  "regions": {
+    "status": "pending_decision",
+    "firestore": null,
+    "storage": null
+  },
+  "privacy": {
+    "personalDataPublication": {
+      "status": "confirmed",
+      "mode": "forbid"
+    },
+    "serverWriteAuthority": {
+      "status": "confirmed",
+      "mode": "server_only"
+    },
+    "encryptionAssessment": {
+      "status": "pending_security_legal_review",
+      "mode": null
+    },
+    "retentionMatrix": {
+      "status": "pending_legal_review",
+      "mode": null
+    }
+  },
+  "operations": {
+    "rpoHours": 24,
+    "rtoHours": 4,
+    "backupSchedule": "daily",
+    "loadThresholds": {
+      "maxP95Ms": 1000,
+      "maxErrorRate": 0
+    },
+    "monthlyWorkloadBudget": {
+      "reads": 1000000,
+      "writes": 100000,
+      "deletes": 10000,
+      "storageGb": 10,
+      "egressGb": 10
+    }
+  },
+  "pricing": {
+    "status": "pending_region",
+    "unitPrices": null
+  },
+  "release": {
+    "remoteDeploymentAuthorized": false
+  }
+}

@@ -14,9 +14,12 @@ export interface AnchorReceipt {
   receiptId: string;
   merkleRoot: string;
   timestamp: string;
-  provider: string; // e.g. "Simulated Timestamp Authority"
-  txId: string; // opaque transaction id
-  status: 'Pending' | 'Anchored' | 'Verified';
+  provider: string;
+  protocol: 'local-timestamp-fixture-v1';
+  qualified: false;
+  publicAnchoringStatus: 'deferred';
+  tokenDigest: string;
+  status: 'TestReceipt';
 }
 
 export class IntegrityJournal {
@@ -52,7 +55,17 @@ export class IntegrityJournal {
     }
 
     if (savedReceipts) {
-      this.receipts = JSON.parse(savedReceipts);
+      this.receipts = (JSON.parse(savedReceipts) as Partial<AnchorReceipt>[]).map((receipt) => ({
+        receiptId: receipt.receiptId ?? 'legacy-local-receipt',
+        merkleRoot: receipt.merkleRoot ?? '',
+        timestamp: receipt.timestamp ?? new Date(0).toISOString(),
+        provider: receipt.protocol ? receipt.provider ?? 'Adaptateur local Cartularia' : 'Ancienne simulation locale Cartularia',
+        protocol: 'local-timestamp-fixture-v1',
+        qualified: false,
+        publicAnchoringStatus: 'deferred',
+        tokenDigest: receipt.tokenDigest ?? '',
+        status: 'TestReceipt',
+      }));
     }
   }
 
@@ -75,12 +88,12 @@ export class IntegrityJournal {
     const sequence = lastEvent ? lastEvent.sequence + 1 : 0;
     const previousHash = lastEvent ? lastEvent.hash : '0000000000000000000000000000000000000000000000000000000000000000';
     const timestamp = new Date().toISOString();
-    const version = '1.0';
+    const version = '1.1';
 
     // Règle d'intégrité SEC-013 : Les détails stockés dans le journal d'audit interne peuvent contenir des infos,
     // mais la chaîne cryptographique publique (Merkle Root) ne contiendra pas d'infos sensibles.
     // L'empreinte de l'événement inclut : précédent, action, acteur, timestamp, séquence.
-    const eventPayload = `${previousHash}|${action}|${actorId}|${timestamp}|${sequence}|${version}`;
+    const eventPayload = `${previousHash}|${action}|${actorId}|${details}|${timestamp}|${sequence}|${version}`;
     const hash = await computeHash(eventPayload);
 
     const newEvent: AuditEvent = {
@@ -100,30 +113,35 @@ export class IntegrityJournal {
     return newEvent;
   }
 
-  // Calcul d'un Merkle Root simple (hash cumulé de tous les événements)
+  // Agrégat local de démonstration. Le backend de confiance utilise un véritable arbre de Merkle.
   public async getMerkleRoot(): Promise<string> {
     if (this.events.length === 0) return '';
     const hashesConcat = this.events.map(e => e.hash).join('|');
     return computeHash(hashesConcat);
   }
 
-  // Simulation d'ancrage (blockchain-ready)
-  public async anchorBlock(): Promise<AnchorReceipt | null> {
+  // Reçu local de test : ni horodatage qualifié, ni ancrage sur une chaîne publique.
+  public async timestampBatch(): Promise<AnchorReceipt | null> {
     if (this.events.length === 0) return null;
 
     const root = await this.getMerkleRoot();
 
-    // Vérifier si la racine est déjà ancrée pour éviter les doublons
+    // Une racine identique conserve le même reçu pour rendre l'opération idempotente.
     const exists = this.receipts.find(r => r.merkleRoot === root);
     if (exists) return exists;
 
+    const timestamp = new Date().toISOString();
+    const tokenDigest = await computeHash(`${root}|${timestamp}|local-timestamp-fixture-v1`);
     const receipt: AnchorReceipt = {
-      receiptId: `rec-${Math.random().toString(36).substr(2, 9)}`,
+      receiptId: `rec-${tokenDigest.substring(0, 20)}`,
       merkleRoot: root,
-      timestamp: new Date().toISOString(),
-      provider: "Autorité d'Horodatage Certifiée (eIDAS)",
-      txId: `tx-${await computeHash(root + Date.now())}`,
-      status: 'Verified'
+      timestamp,
+      provider: 'Adaptateur local Cartularia — non qualifié',
+      protocol: 'local-timestamp-fixture-v1',
+      qualified: false,
+      publicAnchoringStatus: 'deferred',
+      tokenDigest,
+      status: 'TestReceipt'
     };
 
     this.receipts.push(receipt);
@@ -141,7 +159,9 @@ export class IntegrityJournal {
         return { isValid: false, brokenSequence: curr.sequence };
       }
 
-      const payload = `${curr.previousHash}|${curr.action}|${curr.actorId}|${curr.timestamp}|${curr.sequence}|${curr.version}`;
+      const payload = curr.version === '1.1'
+        ? `${curr.previousHash}|${curr.action}|${curr.actorId}|${curr.details}|${curr.timestamp}|${curr.sequence}|${curr.version}`
+        : `${curr.previousHash}|${curr.action}|${curr.actorId}|${curr.timestamp}|${curr.sequence}|${curr.version}`;
       const recomputedHash = await computeHash(payload);
       if (curr.hash !== recomputedHash && !curr.id.startsWith('genesis')) {
         return { isValid: false, brokenSequence: curr.sequence };
@@ -155,6 +175,7 @@ export class IntegrityJournal {
     const event = this.events.find(e => e.sequence === sequenceNumber);
     if (event) {
       event.details = newDetails;
+      if (event.version !== '1.1') event.action = `TAMPERED_${event.action}`;
       // On ne recalcule pas le hash exprès pour briser la chaîne
       localStorage.setItem('cartularia_audit_events', JSON.stringify(this.events));
       this.onUpdate();

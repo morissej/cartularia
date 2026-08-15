@@ -36,8 +36,8 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
     refreshJournal();
   }, [refreshJournal]);
 
-  const handleAnchor = async () => {
-    await journal.anchorBlock();
+  const handleTimestamp = async () => {
+    await journal.timestampBatch();
     await refreshJournal();
   };
 
@@ -89,14 +89,17 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)', marginTop: 'var(--s2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
             <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? "Statut Sceau" : "Seal Status"}</span>
-            <span style={{ fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Check size={12} /> {language === 'FR' ? "Dossier intègre" : "Verified Record"}
+            <span style={{ fontWeight: 600, color: integrityStatus.isValid ? 'var(--ink)' : 'var(--mark)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {integrityStatus.isValid ? <Check size={12} /> : <AlertTriangle size={12} />}
+              {integrityStatus.isValid
+                ? (language === 'FR' ? "Chaîne locale cohérente" : "Local chain consistent")
+                : (language === 'FR' ? "Rupture détectée" : "Break detected")}
             </span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-            <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? "Dernière inspection" : "Last Verification"}</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>07.08.2026</span>
+            <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? "Portée du contrôle" : "Verification scope"}</span>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{language === 'FR' ? 'Session locale' : 'Local session'}</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: 'var(--s1)' }}>
@@ -233,11 +236,11 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           })}
         </div>
 
-        {/* Horodatages Blockchain */}
+        {/* Reçus d'horodatage local de test */}
         {receipts.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: 'var(--s1)' }}>
             <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {language === 'FR' ? "Ancrages Blockchain / eIDAS" : "Blockchain / eIDAS Anchors"}
+              {language === 'FR' ? "Reçus d’horodatage de test" : "Test timestamp receipts"}
             </span>
             {receipts.map((rec) => (
               <div key={rec.receiptId} style={{
@@ -252,11 +255,14 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
                   <span style={{ fontSize: '10px' }}>{rec.provider}</span>
                   <span style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '9px' }}>
-                    <Check size={8} /> VÉRIFIÉ
+                    <Check size={8} /> {language === 'FR' ? 'NON QUALIFIÉ' : 'NON-QUALIFIED'}
                   </span>
                 </div>
                 <div style={{ fontSize: '8px', color: 'var(--muted)', wordBreak: 'break-all' }}>
                   ROOT: {rec.merkleRoot.substring(0, 24)}...
+                </div>
+                <div style={{ fontSize: '8px', color: 'var(--muted)' }}>
+                  {language === 'FR' ? 'Ancrage public : différé' : 'Public anchoring: deferred'}
                 </div>
               </div>
             ))}
@@ -303,8 +309,8 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           }}>
             <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: 'var(--s1)' }}>
               {language === 'FR'
-                ? "Simulez une attaque sur la chaîne en falsifiant une donnée historique de la base d'audit."
-                : "Simulate an attack on the audit chain by altering historical logs."}
+                ? "Simulation locale : testez la détection d’une altération et créez un reçu non qualifié. Aucun ancrage public n’est effectué."
+                : "Local simulation: test tamper detection and create a non-qualified receipt. No public anchoring is performed."}
             </p>
             <div style={{ display: 'flex', gap: 'var(--s2)' }}>
               {integrityStatus.isValid && events.length > 1 ? (
@@ -348,7 +354,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
               )}
 
               <button
-                onClick={handleAnchor}
+                onClick={handleTimestamp}
                 disabled={!integrityStatus.isValid}
                 style={{
                   backgroundColor: integrityStatus.isValid ? 'var(--ink)' : 'var(--fill)',
@@ -362,7 +368,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                   transition: 'var(--transition)'
                 }}
               >
-                {language === 'FR' ? "Ancrer Racine" : "Anchor Root"}
+                {language === 'FR' ? "Horodater le lot" : "Timestamp Batch"}
               </button>
             </div>
           </div>
