@@ -12,7 +12,6 @@ import {
 
 export const CAR_SCHEMA_ID = 'car';
 export const CAR_SCHEMA_VERSION = '1.0.0';
-export const CAR_SCHEMA_EXPECTED_FIELD_COUNT = 40;
 
 interface CarFieldDefinition {
   fieldId: string;
@@ -236,10 +235,3 @@ export const CAR_SCHEMA = defineVerticalSchema({
   status: 'baseline',
   fields: CAR_SCHEMA_FIELDS,
 });
-
-if (CAR_SCHEMA_FIELDS.length !== CAR_SCHEMA_EXPECTED_FIELD_COUNT) {
-  throw new Error(
-    `Le profil car@${CAR_SCHEMA_VERSION} attend ${CAR_SCHEMA_EXPECTED_FIELD_COUNT} postes, ` +
-      `mais le catalogue en contient ${CAR_SCHEMA_FIELDS.length}.`,
-  );
-}

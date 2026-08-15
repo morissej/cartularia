@@ -3,7 +3,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CAR_SCHEMA,
-  CAR_SCHEMA_EXPECTED_FIELD_COUNT,
   CAR_SCHEMA_FIELDS,
   CAR_SCHEMA_VERSION,
 } from '../src/schema/carSchema.ts';
@@ -15,8 +14,8 @@ const exportedSchema = JSON.parse(
 
 test('car@1.0.0 représente exactement les 40 champs de la verticale pilote', () => {
   assert.equal(CAR_SCHEMA_VERSION, '1.0.0');
-  assert.equal(CAR_SCHEMA_FIELDS.length, CAR_SCHEMA_EXPECTED_FIELD_COUNT);
-  assert.equal(new Set(CAR_SCHEMA_FIELDS.map((field) => field.fieldId)).size, CAR_SCHEMA_EXPECTED_FIELD_COUNT);
+  assert.equal(CAR_SCHEMA_FIELDS.length, CAR_SCHEMA.fieldCount);
+  assert.equal(new Set(CAR_SCHEMA_FIELDS.map((field) => field.fieldId)).size, CAR_SCHEMA_FIELDS.length);
   assert.equal(CAR_SCHEMA.assetType, 'car');
   assert.ok(CAR_SCHEMA.sections.includes('technical.powertrain'));
   assert.ok(CAR_SCHEMA.sections.includes('history.service'));

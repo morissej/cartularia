@@ -42,9 +42,11 @@ npm run build
 
 ## Fondations Firebase — vague 1
 
-La première vague met en place Auth, organisations, memberships, Registres et le schéma `watch@1.3.0` dans un environnement d’émulation sécurisé. Les règles restent deny-by-default ; depuis la vague 3, Storage ouvre uniquement un dérivé sous `public/{publicCode}/...` lorsque la publication Firestore correspondante est active.
+La première vague met en place Auth, organisations, memberships, Registres et le schéma historique `watch@1.3.0` dans un environnement d’émulation sécurisé. Le catalogue conserve désormais cette baseline à 78 champs et publie `watch@1.4.0` à 91 champs comme version active, sans réécriture de l’artefact historique. Les règles restent deny-by-default ; depuis la vague 3, Storage ouvre uniquement un dérivé sous `public/{publicCode}/...` lorsque la publication Firestore correspondante est active.
 
 Le guide d’exécution et les garde-fous de déploiement sont décrits dans [`docs/FOUNDATIONS_WAVE_1.md`](docs/FOUNDATIONS_WAVE_1.md). La décision d’architecture correspondante est consignée dans [`docs/ADR-001-fondations-firebase.md`](docs/ADR-001-fondations-firebase.md).
+
+Le versionnement immuable, les empreintes du catalogue et la coexistence des profils Watch sont définis dans [`docs/ADR-005-versionnement-immuable-schema-watch.md`](docs/ADR-005-versionnement-immuable-schema-watch.md). Utiliser `npm run schema:check` pour un contrôle sans écriture et `npm run schema:export` uniquement pour publier une nouvelle version.
 
 ## Cartulaire privé IWC — vague 2
 
@@ -60,7 +62,7 @@ Le guide d’exécution se trouve dans [`docs/PROJECTIONS_WAVE_3.md`](docs/PROJE
 
 ## Noyau multi-actifs et verticale automobile — vague 4
 
-La quatrième vague ajoute `car@1.0.0` au même catalogue et au même root `cartularies` que `watch@1.3.0`. Elle fournit un import automobile de démonstration, la projection Registre filtrable par type et collection, ainsi qu’un lecteur privé générique accessible par `/cartulary-view?cartularyId={cartularyId}`. Aucun root `cars` et aucune règle d’autorisation propre à l’automobile ne sont introduits.
+La quatrième vague ajoute `car@1.0.0` au même catalogue et au même root `cartularies` que les versions Watch. Elle fournit un import automobile de démonstration, la projection Registre filtrable par type et collection, ainsi qu’un lecteur privé générique accessible par `/cartulary-view?cartularyId={cartularyId}`. Aucun root `cars` et aucune règle d’autorisation propre à l’automobile ne sont introduits.
 
 Le guide d’exécution se trouve dans [`docs/MULTI_ASSETS_WAVE_4.md`](docs/MULTI_ASSETS_WAVE_4.md) et la décision d’architecture dans [`docs/ADR-004-noyau-multi-actifs.md`](docs/ADR-004-noyau-multi-actifs.md).
 

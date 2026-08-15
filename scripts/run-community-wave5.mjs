@@ -1,13 +1,13 @@
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { IWC_CARTULARY_ID, IWC_IMPORT_ACTOR_ID } from '../src/migrations/iwcImport.ts';
-import { WATCH_SCHEMA } from '../src/schema/watchSchema.ts';
+import { buildIwcImportBundle, IWC_CARTULARY_ID, IWC_IMPORT_ACTOR_ID } from '../src/migrations/iwcImport.ts';
 import {
   addCommunityComment,
   createCommunityPost,
   publishCommunityBlocks,
   setCommunityReaction,
 } from './lib/community-command.mjs';
+import { verifySchemaCatalog } from './lib/schema-catalog-files.mjs';
 
 export const WAVE5_COMMUNITY_PUBLICATION_ID = 'community_iwc_pilot_20260814';
 export const WAVE5_COMMUNITY_POST_ID = 'post_iwc_pilot_20260814';
@@ -33,10 +33,15 @@ const app = getApps()[0] || initializeApp({
   ...(usesEmulator ? {} : { credential: applicationDefault() }),
 });
 const firestore = getFirestore(app);
+const iwcBundle = buildIwcImportBundle();
+const iwcSchemaKey = `${iwcBundle.envelope.schemaId}@${iwcBundle.envelope.schemaVersion}`;
+const iwcSchema = verifySchemaCatalog(new URL('../firebase/schema-catalog/', import.meta.url))
+  .find(({ key }) => key === iwcSchemaKey)?.schema;
+if (!iwcSchema) throw new Error(`Profil ${iwcSchemaKey} absent du catalogue vérifié.`);
 
 const publication = await publishCommunityBlocks({
   firestore,
-  schema: WATCH_SCHEMA,
+  schema: iwcSchema,
   cartularyId: IWC_CARTULARY_ID,
   publicationId: WAVE5_COMMUNITY_PUBLICATION_ID,
   actorId: IWC_IMPORT_ACTOR_ID,

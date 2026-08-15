@@ -9,6 +9,7 @@ const FORBIDDEN_ENVELOPE_KEYS = [
   'storageInstructions',
   'documents',
   'media',
+  'schemaDigest',
 ];
 
 const collections = {
@@ -121,7 +122,7 @@ const assertFoundation = ({ organization, registry, membership, schemaVersion },
   }
 };
 
-const createAuditEvent = ({ bundle, requestId, actorId, occurredAt, bundleDigest }) => {
+const createAuditEvent = ({ bundle, requestId, actorId, occurredAt, afterDigest }) => {
   const eventId = `evt_${sha256Digest(requestId).slice(7, 31)}`;
   const eventWithoutHash = {
     eventId,
@@ -132,7 +133,7 @@ const createAuditEvent = ({ bundle, requestId, actorId, occurredAt, bundleDigest
     action: 'cartulary.created',
     resource: { type: 'cartulary', id: bundle.envelope.id },
     beforeDigest: null,
-    afterDigest: bundleDigest,
+    afterDigest,
     previousEventHash: ZERO_HASH,
     canonicalizationVersion: CANONICALIZATION_VERSION,
     requestId,
@@ -201,12 +202,20 @@ export const importCartularyBundle = async ({
 
     assertFoundation({ organization, registry, membership, schemaVersion }, bundle, actorId);
 
-    const auditEvent = createAuditEvent({ bundle, requestId, actorId, occurredAt, bundleDigest });
+    const schemaDigest = schemaVersion.data().catalogDigest ?? null;
+    if (schemaDigest !== null && !/^sha256:[a-f0-9]{64}$/.test(schemaDigest)) {
+      throw new CartularyCommandError('schema_not_ready', 'L’empreinte du catalogue de schéma est invalide.');
+    }
+    const sealedDigest = schemaDigest === null
+      ? bundleDigest
+      : sha256Digest({ bundleDigest, schemaDigest });
+    const auditEvent = createAuditEvent({ bundle, requestId, actorId, occurredAt, afterDigest: sealedDigest });
     const serverTimestamp = FieldValue.serverTimestamp();
     const occurredAtTimestamp = Timestamp.fromDate(new Date(occurredAt));
 
     transaction.create(rootRef, {
       ...bundle.envelope,
+      ...(schemaDigest === null ? {} : { schemaDigest }),
       integrityHead: auditEvent.hash,
       integritySequence: auditEvent.sequence,
       createdAt: serverTimestamp,
@@ -225,6 +234,7 @@ export const importCartularyBundle = async ({
       auditEventId: auditEvent.eventId,
       integrityHead: auditEvent.hash,
       inputDigest: bundleDigest,
+      schemaDigest,
     };
     transaction.create(receiptRef, {
       requestId,

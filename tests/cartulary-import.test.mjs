@@ -18,6 +18,8 @@ import {
 } from '../src/migrations/iwcImport.ts';
 import { importCartularyBundle } from '../scripts/lib/import-cartulary-command.mjs';
 import { sha256Digest } from '../scripts/lib/canonical-json.mjs';
+import { schemaContractDigest } from '../scripts/lib/schema-catalog-files.mjs';
+import { WATCH_SCHEMA } from '../src/schema/watchSchema.ts';
 
 const projectId = 'cartularia-wave2-test';
 const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
@@ -26,6 +28,23 @@ const port = Number(portValue);
 let adminApp;
 let adminFirestore;
 let testEnvironment;
+const watchV14Digest = schemaContractDigest(WATCH_SCHEMA);
+
+const WATCH_V14_ADDED_FIELD_IDS = [
+  'value.market.activeListings',
+  'value.market.medianDaysOnMarket',
+  'value.market.lowValue',
+  'value.market.midValue',
+  'value.market.highValue',
+  'value.market.valuations[].lowValue',
+  'value.market.valuations[].highValue',
+  'value.market.valuations[].source',
+  'value.comparables.analysis[].angle',
+  'value.comparables.analysis[].finding',
+  'value.comparables.analysis[].reading',
+  'value.sensitivity.prices[]',
+  'value.sensitivity.costs[]',
+];
 
 const seedFoundations = async () => {
   const now = new Date('2026-08-14T08:00:00.000Z');
@@ -60,7 +79,101 @@ const seedFoundations = async () => {
       version: '1.3.0',
       status: 'baseline',
     }),
+    adminFirestore.doc('schemaCatalog/watch/versions/1.4.0').set({
+      schemaId: 'watch',
+      assetType: 'watch',
+      version: '1.4.0',
+      status: 'active',
+      catalogDigest: watchV14Digest,
+    }),
   ]);
+};
+
+const buildIwcV14ImportBundle = () => {
+  const bundle = buildIwcImportBundle();
+  const cartularyId = `${IWC_CARTULARY_ID}_v14`;
+  const sourceValue = bundle.sections
+    .find((section) => section.id === 'value.retained')
+    .fields['value.market.analysisDate'];
+  const provenance = (value) => ({ ...sourceValue, value });
+
+  bundle.envelope = { ...bundle.envelope, id: cartularyId, schemaVersion: '1.4.0' };
+  bundle.sections = bundle.sections.map((section) => ({ ...section, schemaVersion: 'watch@1.4.0' }));
+  for (const collectionName of [
+    'assets',
+    'spinSets',
+    'observations',
+    'valuations',
+    'comparables',
+    'reports',
+    'reminders',
+    'ownerRelations',
+    'events',
+  ]) {
+    bundle[collectionName] = bundle[collectionName].map((document) =>
+      'cartularyId' in document ? { ...document, cartularyId } : document);
+  }
+
+  bundle.sections.push(
+    {
+      id: 'value.market-depth.v14',
+      schemaSectionId: 'value.market_depth',
+      schemaVersion: 'watch@1.4.0',
+      title: 'Profondeur de marché',
+      visibility: 'secret',
+      status: 'imported_unreviewed',
+      fields: {
+        'value.market.activeListings': provenance(14),
+        'value.market.medianDaysOnMarket': provenance(58),
+        'value.market.lowValue': provenance(3200),
+        'value.market.midValue': provenance(3600),
+        'value.market.highValue': provenance(4200),
+      },
+      revision: 1,
+    },
+    {
+      id: 'value.market-history.v14',
+      schemaSectionId: 'value.market_history',
+      schemaVersion: 'watch@1.4.0',
+      title: 'Historique de valorisation',
+      visibility: 'secret',
+      status: 'imported_unreviewed',
+      fields: {
+        'value.market.valuations[].lowValue': bundle.valuations.map((valuation) => provenance(valuation.lowValue)),
+        'value.market.valuations[].highValue': bundle.valuations.map((valuation) => provenance(valuation.highValue)),
+        'value.market.valuations[].source': bundle.valuations.map((valuation) => provenance(valuation.sourceLabel)),
+      },
+      revision: 1,
+    },
+    {
+      id: 'value.comparables-analysis.v14',
+      schemaSectionId: 'value.comparables_analysis',
+      schemaVersion: 'watch@1.4.0',
+      title: 'Analyse des comparables',
+      visibility: 'secret',
+      status: 'imported_unreviewed',
+      fields: {
+        'value.comparables.analysis[].angle': [provenance('Liquidité')],
+        'value.comparables.analysis[].finding': [provenance('Marché étroit')],
+        'value.comparables.analysis[].reading': [provenance('Conclusion à confirmer sur un échantillon élargi.')],
+      },
+      revision: 1,
+    },
+    {
+      id: 'value.sensitivity.v14',
+      schemaSectionId: 'value.sensitivity',
+      schemaVersion: 'watch@1.4.0',
+      title: 'Hypothèses de sensibilité',
+      visibility: 'secret',
+      status: 'imported_unreviewed',
+      fields: {
+        'value.sensitivity.prices[]': [3200, 3600, 4000, 4400, 4800].map(provenance),
+        'value.sensitivity.costs[]': [0, 5, 10, 15, 20].map(provenance),
+      },
+      revision: 1,
+    },
+  );
+  return bundle;
 };
 
 const runImport = (overrides = {}) =>
@@ -101,7 +214,7 @@ test('le bundle IWC isole les données sensibles de l’enveloppe et neutralise 
   const bundle = buildIwcImportBundle();
   const envelopeText = JSON.stringify(bundle.envelope);
 
-  for (const forbidden of ['serialNumber', 'acquisitionPrice', 'address', 'documents']) {
+  for (const forbidden of ['serialNumber', 'acquisitionPrice', 'address', 'documents', 'schemaDigest']) {
     assert.equal(envelopeText.includes(forbidden), false);
   }
   assert.equal(bundle.envelope.defaultVisibility, 'secret');
@@ -144,6 +257,24 @@ test('createCartulary importe l’IWC privé avec sections, provenance et listes
   assert.equal(observations.size, bundle.observations.length);
   assert.equal(valuations.size, bundle.valuations.length);
   assert.equal(auditEvents.size, 1);
+});
+
+test('watch@1.4.0 persiste les 13 nouveaux champs et scelle l’empreinte du catalogue', async () => {
+  const bundle = buildIwcV14ImportBundle();
+  const bundleDigest = sha256Digest(bundle);
+  const result = await runImport({
+    bundle,
+    requestId: 'wave2-import-iwc-v14',
+  });
+  const root = await adminFirestore.doc(`cartularies/${bundle.envelope.id}`).get();
+  const sections = await root.ref.collection('sections').get();
+  const persistedFieldIds = new Set(sections.docs.flatMap((section) => Object.keys(section.data().fields ?? {})));
+  const event = (await root.ref.collection('auditEvents').doc(result.auditEventId).get()).data();
+
+  assert.equal(root.data().schemaVersion, '1.4.0');
+  assert.equal(root.data().schemaDigest, watchV14Digest);
+  assert.deepEqual(WATCH_V14_ADDED_FIELD_IDS.filter((fieldId) => !persistedFieldIds.has(fieldId)), []);
+  assert.equal(event.afterDigest, sha256Digest({ bundleDigest, schemaDigest: watchV14Digest }));
 });
 
 test('le journal canonique relie le digest importé à la tête d’intégrité', async () => {

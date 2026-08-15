@@ -1,7 +1,11 @@
-import { readFileSync } from 'node:fs';
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import {
+  SCHEMA_CONTRACT_DIGEST_VERSION,
+  schemaContractDigest,
+  verifySchemaCatalog,
+} from './lib/schema-catalog-files.mjs';
 
 const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || 'cartularia-wave1-local';
 const usesEmulators = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
@@ -54,6 +58,7 @@ const now = FieldValue.serverTimestamp();
 const batch = firestore.batch();
 
 const set = (path, data) => batch.set(firestore.doc(path), data, { merge: true });
+const create = (path, data) => batch.create(firestore.doc(path), data);
 
 set(`users/${fixtures.owner.uid}`, {
   ...fixtures.owner,
@@ -152,19 +157,50 @@ for (const [registry, organization] of [
   });
 }
 
-const schemas = [
-  JSON.parse(readFileSync(new URL('../firebase/schema-catalog/watch/1.3.0.json', import.meta.url), 'utf8')),
-  JSON.parse(readFileSync(new URL('../firebase/schema-catalog/car/1.0.0.json', import.meta.url), 'utf8')),
-];
+const catalogArtifacts = verifySchemaCatalog(new URL('../firebase/schema-catalog/', import.meta.url));
+const schemas = catalogArtifacts.map(({ schema, contractDigest }) => ({ schema, contractDigest }));
 
-for (const schema of schemas) {
-  set(`schemaCatalog/${schema.schemaId}`, {
-    assetType: schema.assetType,
-    latestVersion: schema.version,
-    status: 'active',
-    updatedAt: now,
-  });
-  set(`schemaCatalog/${schema.schemaId}/versions/${schema.version}`, {
+const readDeployedContract = async (versionRef, versionData) => {
+  const sectionIds = Array.isArray(versionData.sectionIds) ? [...versionData.sectionIds].sort() : [];
+  const fieldSnapshots = await Promise.all(sectionIds.map((sectionId) =>
+    versionRef.collection('sections').doc(sectionId).collection('fields').get()));
+  const fields = fieldSnapshots
+    .flatMap((snapshot) => snapshot.docs.map((document) => document.data()))
+    .sort((left, right) => left.fieldId.localeCompare(right.fieldId));
+  return {
+    schemaId: versionData.schemaId,
+    assetType: versionData.assetType,
+    version: versionData.version,
+    defaultVisibility: versionData.defaultVisibility,
+    fieldCount: versionData.fieldCount,
+    sections: sectionIds,
+    fields,
+  };
+};
+
+for (const { schema, contractDigest } of schemas) {
+  const versionPath = `schemaCatalog/${schema.schemaId}/versions/${schema.version}`;
+  const versionRef = firestore.doc(versionPath);
+  const deployedVersion = await versionRef.get();
+
+  if (deployedVersion.exists) {
+    const deployedContract = await readDeployedContract(versionRef, deployedVersion.data());
+    const deployedDigest = schemaContractDigest(deployedContract);
+    if (deployedDigest !== contractDigest) {
+      throw new Error(
+        `Refus de réécrire ${schema.schemaId}@${schema.version} dans Firestore : ` +
+          `le contrat déployé ${deployedDigest} diffère du contrat publié ${contractDigest}.`,
+      );
+    }
+    set(versionPath, {
+      catalogDigest: contractDigest,
+      contractDigestVersion: SCHEMA_CONTRACT_DIGEST_VERSION,
+      verifiedAt: now,
+    });
+    continue;
+  }
+
+  create(versionPath, {
     schemaId: schema.schemaId,
     assetType: schema.assetType,
     version: schema.version,
@@ -175,21 +211,42 @@ for (const schema of schemas) {
     communityFieldIds: schema.fields
       .filter((field) => field.publishableTo.includes('community'))
       .map((field) => field.fieldId),
-    source: `src/schema/${schema.schemaId}Schema.ts`,
+    catalogDigest: contractDigest,
+    contractDigestVersion: SCHEMA_CONTRACT_DIGEST_VERSION,
+    source: `firebase/schema-catalog/${schema.schemaId}/${schema.version}.json`,
     publishedAt: now,
+    verifiedAt: now,
   });
 
   for (const sectionId of schema.sections) {
     const sectionFields = schema.fields.filter((field) => field.sectionId === sectionId);
-    set(`schemaCatalog/${schema.schemaId}/versions/${schema.version}/sections/${sectionId}`, {
+    create(`${versionPath}/sections/${sectionId}`, {
       sectionId,
       fieldCount: sectionFields.length,
       defaultVisibility: sectionFields.some((field) => field.defaultVisibility === 'secret') ? 'secret' : 'community',
     });
     for (const field of sectionFields) {
-      set(`schemaCatalog/${schema.schemaId}/versions/${schema.version}/sections/${sectionId}/fields/${field.fieldId}`, field);
+      create(`${versionPath}/sections/${sectionId}/fields/${field.fieldId}`, field);
     }
   }
+}
+
+const schemasById = Map.groupBy(schemas.map(({ schema }) => schema), (schema) => schema.schemaId);
+for (const [schemaId, versions] of schemasById) {
+  const activeVersions = versions.filter((schema) => schema.status === 'active');
+  if (activeVersions.length > 1) {
+    throw new Error(`Le catalogue ${schemaId} contient plusieurs versions actives : ${activeVersions.map(({ version }) => version).join(', ')}.`);
+  }
+  const latestSchema = activeVersions[0] ?? [...versions]
+    .sort((left, right) => left.version.localeCompare(right.version, undefined, { numeric: true }))
+    .at(-1);
+  set(`schemaCatalog/${schemaId}`, {
+    assetType: latestSchema.assetType,
+    latestVersion: latestSchema.version,
+    activeVersion: activeVersions[0]?.version ?? null,
+    status: 'active',
+    updatedAt: now,
+  });
 }
 
 await batch.commit();
@@ -198,5 +255,5 @@ console.log(
   `Fondations créées dans ${projectId}${usesEmulators ? ' (émulateurs)' : ' (distant explicitement autorisé)'} : ` +
     `2 comptes, 2 organisations, 2 memberships, 2 registres, ` +
     `1 admission communautaire pseudonyme, ` +
-    `${schemas.map((schema) => `${schema.schemaId}@${schema.version}`).join(' et ')}.`,
+    `${schemas.map(({ schema }) => `${schema.schemaId}@${schema.version}`).join(', ')}.`,
 );

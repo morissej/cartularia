@@ -39,6 +39,7 @@ export interface CartularyEnvelope {
   assetType: CartularyAssetType;
   schemaId: string;
   schemaVersion: string;
+  schemaDigest?: string;
   publicCode: string;
   displayTitle: string;
   makerName: string;

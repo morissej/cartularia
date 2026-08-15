@@ -14,7 +14,6 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
-import { WATCH_SCHEMA } from '../src/schema/watchSchema.ts';
 import {
   buildIwcImportBundle,
   IWC_CARTULARY_ID,
@@ -41,6 +40,9 @@ const readerUid = 'community-reader';
 const outsiderUid = 'community-outsider';
 const publicationId = 'community_iwc_test_20260814';
 const postId = 'post_iwc_test_20260814';
+const IWC_WATCH_SCHEMA = JSON.parse(
+  readFileSync(new URL('../firebase/schema-catalog/watch/1.3.0.json', import.meta.url), 'utf8'),
+);
 
 let adminApp;
 let adminFirestore;
@@ -139,7 +141,7 @@ const safeBlocks = () => [
 
 const publishCommunity = (overrides = {}) => publishCommunityBlocks({
   firestore: adminFirestore,
-  schema: WATCH_SCHEMA,
+  schema: IWC_WATCH_SCHEMA,
   cartularyId: IWC_CARTULARY_ID,
   publicationId,
   blocks: safeBlocks(),

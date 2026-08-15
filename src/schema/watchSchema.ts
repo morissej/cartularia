@@ -12,7 +12,6 @@ import {
 
 export const WATCH_SCHEMA_ID = 'watch';
 export const WATCH_SCHEMA_VERSION = AI_SCHEMA_VERSION;
-export const WATCH_SCHEMA_EXPECTED_FIELD_COUNT = 78;
 
 export type { SchemaPublishTarget, SchemaVisibility } from './schemaTypes.ts';
 export interface WatchSchemaField extends VerticalSchemaField<AIFieldId> {}
@@ -51,15 +50,8 @@ export const WATCH_SCHEMA = defineVerticalSchema({
   schemaId: WATCH_SCHEMA_ID,
   assetType: 'watch',
   version: WATCH_SCHEMA_VERSION,
-  status: 'baseline',
+  status: 'active',
   fields: WATCH_SCHEMA_FIELDS,
 });
 
 export const WATCH_SCHEMA_SECTIONS = WATCH_SCHEMA.sections;
-
-if (WATCH_SCHEMA_FIELDS.length !== WATCH_SCHEMA_EXPECTED_FIELD_COUNT) {
-  throw new Error(
-    `Le profil watch@${WATCH_SCHEMA_VERSION} attend ${WATCH_SCHEMA_EXPECTED_FIELD_COUNT} postes, ` +
-      `mais le catalogue en contient ${WATCH_SCHEMA_FIELDS.length}.`,
-  );
-}

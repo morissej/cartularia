@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { mockCartulary } from './data/mockData';
-import type { Asset, ComparableTransaction, MediaTag, VisibilityLevel } from './types';
+import type { Asset, ComparableTransaction, MediaTag, Valuation, VisibilityLevel } from './types';
 import { BarreDossier } from './components/BarreDossier';
 import { BrandLogo } from './components/BrandLogo';
 import { MediaCarousel } from './components/MediaCarousel';
@@ -123,7 +123,12 @@ interface OwnerDocument {
 
 interface MarketDepthState {
   analysisDate: string;
+  activeListings: number;
   transactions12m: number;
+  medianDaysOnMarket: number;
+  lowValue: number;
+  midValue: number;
+  highValue: number;
 }
 
 interface RetainedValuationState {
@@ -169,6 +174,13 @@ interface ExitAssumptions {
 interface DatedCashFlow {
   date: string;
   amount: number;
+}
+
+interface ComparableAnalysisEntry {
+  id: string;
+  angle: string;
+  finding: string;
+  reading: string;
 }
 
 interface SpecificationDatum {
@@ -296,6 +308,31 @@ const DEFAULT_OWNER_FIELDS: OwnerField[] = [
   { id: 'owner-phone', label: 'Téléphone', value: '' },
 ];
 
+const OWNER_DOCUMENT_CATEGORIES: Record<OwnerType, string[]> = {
+  'Personne physique': [
+    'Carte nationale d’identité',
+    'Passeport',
+    'Permis de conduire',
+    'Titre de séjour',
+    'Justificatif de domicile',
+    'Acte de naissance',
+    'Justificatif d’identifiant fiscal',
+    'Autre document d’identification',
+  ],
+  Entreprise: [
+    'Extrait Kbis / registre du commerce',
+    'Statuts à jour',
+    'Certificat d’immatriculation / d’incorporation',
+    'Avis de situation SIRENE',
+    'Attestation de TVA / identifiant fiscal',
+    'Registre des bénéficiaires effectifs',
+    'Pouvoir du représentant légal',
+    'Pièce d’identité du représentant légal',
+    'Justificatif du siège social',
+    'Autre document d’identification de l’entreprise',
+  ],
+};
+
 const DEFAULT_STORAGE_DESCRIPTION = `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}. Accès contrôlé et conditions de conservation à documenter.`;
 
 const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de la montre, de la complétude de son dossier et du canal de cession.';
@@ -311,6 +348,14 @@ const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = [
 const DEFAULT_EXPENSES: PurchaseExpense[] = [
   { id: 'revision-2008', kind: 'Révision', date: '2008-05-16', label: 'Révision complète IWC', amount: 620 },
   { id: 'insurance-2026', kind: 'Assurance', date: '2026-08-01', label: 'Prime collection 2026–2027', amount: 180 },
+];
+
+const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = [
+  { id: 'analysis-listings', angle: 'Prix affichés', finding: '4 150 €', reading: 'Deux annonces observées ; ce niveau reste un prix demandé et non un prix encaissé.' },
+  { id: 'analysis-transactions', angle: 'Prix réalisés', finding: '3 450 €', reading: 'Une transaction observée ; ce point dispose d’une valeur probante supérieure mais l’échantillon reste limité.' },
+  { id: 'analysis-gap', angle: 'Écart annonce / transaction', finding: '20,3 %', reading: 'L’écart mesure la prime d’affichage observée. Il doit couvrir la négociation, le délai et les frais de cession.' },
+  { id: 'analysis-price-channel', angle: 'Canal de prix', finding: 'Annonce spécialisée', reading: 'Canal à privilégier pour défendre le prix d’un exemplaire complet, avec un délai de commercialisation plus long.' },
+  { id: 'analysis-liquidity-channel', angle: 'Canal de liquidité', finding: 'Enchère', reading: 'Exécution plus rapide et prix public, mais résultat plus volatil et frais généralement plus élevés.' },
 ];
 
 const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
@@ -401,8 +446,8 @@ const DEFAULT_EDITABLE_COPY: EditableCopyData = {
   },
 };
 
-const SENSITIVITY_PRICES = [3200, 3600, 4000, 4400, 4800];
-const SENSITIVITY_COSTS = [0, 5, 10, 15, 20];
+const DEFAULT_SENSITIVITY_PRICES = [3200, 3600, 4000, 4400, 4800];
+const DEFAULT_SENSITIVITY_COSTS = [0, 5, 10, 15, 20];
 
 const pageFromHash = (): CartularyPage => {
   const candidate = window.location.hash.replace('#', '') as CartularyPage;
@@ -429,6 +474,17 @@ const readStored = <T,>(key: string, fallback: T): T => {
     return fallback;
   }
 };
+
+const loadMarketDepth = (): MarketDepthState => ({
+  analysisDate: mockCartulary.marketSnapshot.date,
+  activeListings: mockCartulary.marketSnapshot.activeListings,
+  transactions12m: mockCartulary.marketSnapshot.observedTransactions90d,
+  medianDaysOnMarket: mockCartulary.marketSnapshot.medianDaysOnMarket,
+  lowValue: mockCartulary.marketSnapshot.lowValue,
+  midValue: mockCartulary.marketSnapshot.midValue,
+  highValue: mockCartulary.marketSnapshot.highValue,
+  ...readStored<Partial<MarketDepthState>>('cartularia-market-depth', {}),
+});
 
 const loadStorageLocations = (): StorageLocation[] => {
   const stored = readStored<StorageLocation[] | null>('cartularia-storage-locations', null);
@@ -759,32 +815,54 @@ function ComparableTable({
   items,
   selection,
   hideHeading = false,
+  onUpdate,
+  onDelete,
+  onAdd,
 }: {
   title: string;
   items: ComparableTransaction[];
   selection?: BlockMarkerState;
   hideHeading?: boolean;
+  onUpdate?: (id: string, patch: Partial<ComparableTransaction>) => void;
+  onDelete?: (id: string) => void;
+  onAdd?: () => void;
 }) {
+  const editable = Boolean(onUpdate);
   return (
     <div className="comparable-group">
       {!hideHeading && <div className="comparable-group__heading">
         <div><h3>{title}</h3><span>{items.length} observation{items.length > 1 ? 's' : ''}</span></div>
-        {selection && <BlockMarkers selection={selection} label={title} />}
+        <div className="comparable-group__actions">
+          {onAdd && <button type="button" className="button button--quiet no-print" onClick={onAdd}><Plus size={14} /> Ajouter</button>}
+          {selection && <BlockMarkers selection={selection} label={title} />}
+        </div>
       </div>}
-      <div className="comparables-table" role="table" aria-label={title}>
+      <div className={`comparables-table ${editable ? 'comparables-table--editable' : ''}`} role="table" aria-label={title}>
         <div className="comparables-table__head" role="row">
-          <span>Date</span><span>Comparable</span><span>Source</span><span>Canal</span><span>État</span><span>Valeur</span>
+          <span>Date</span><span>Comparable</span><span>Source</span><span>Canal</span><span>État</span><span>Valeur</span>{editable && <span />}
         </div>
         {items.map((comparable) => (
           <div role="row" key={comparable.id} data-ai-scope="value.comparables[]" data-ai-instance={comparable.id}>
             <span hidden {...aiFieldProps('value.comparables[].sourceType', comparable.id)}>{comparable.sourceType}</span>
             <span hidden {...aiFieldProps('value.comparables[].currency', comparable.id)}>{comparable.currency}</span>
-            <time {...aiFieldProps('value.comparables[].date', comparable.id)}>{formatDate(comparable.date)}</time>
-            <span {...aiFieldProps('value.comparables[].description', comparable.id)}><strong>{comparable.description}</strong></span>
-            <span {...aiFieldProps('value.comparables[].source', comparable.id)}>{comparable.source}</span>
-            <span {...aiFieldProps('value.comparables[].channel', comparable.id)}>{comparable.saleChannel}</span>
-            <span {...aiFieldProps('value.comparables[].condition', comparable.id)}>{comparable.condition}</span>
-            <strong {...aiFieldProps('value.comparables[].amount', comparable.id)} data-ai-currency={comparable.currency}>{formatMoney(comparable.amount, comparable.currency)}</strong>
+            {editable && onUpdate ? <>
+              <input {...aiFieldProps('value.comparables[].date', comparable.id)} type="date" value={comparable.date} onChange={(event) => onUpdate(comparable.id, { date: event.target.value })} aria-label={`Date de ${comparable.description || 'ce comparable'}`} />
+              <textarea {...aiFieldProps('value.comparables[].description', comparable.id)} value={comparable.description} rows={2} onChange={(event) => onUpdate(comparable.id, { description: event.target.value })} aria-label="Description du comparable" />
+              <input {...aiFieldProps('value.comparables[].source', comparable.id)} type="text" value={comparable.source} onChange={(event) => onUpdate(comparable.id, { source: event.target.value })} aria-label="Source du comparable" />
+              <select {...aiFieldProps('value.comparables[].channel', comparable.id)} value={comparable.saleChannel} onChange={(event) => onUpdate(comparable.id, { saleChannel: event.target.value as ComparableTransaction['saleChannel'] })} aria-label="Canal du comparable">
+                <option>Annonce</option><option>Enchère</option><option>Vente privée</option><option>Marchand</option>
+              </select>
+              <input {...aiFieldProps('value.comparables[].condition', comparable.id)} type="text" value={comparable.condition} onChange={(event) => onUpdate(comparable.id, { condition: event.target.value })} aria-label="État du comparable" />
+              <input {...aiFieldProps('value.comparables[].amount', comparable.id)} data-ai-currency={comparable.currency} type="number" min="0" step="1" value={comparable.amount} onChange={(event) => onUpdate(comparable.id, { amount: Math.max(0, Number(event.target.value)) })} aria-label="Valeur du comparable" />
+              <button type="button" className="icon-button no-print" onClick={() => onDelete?.(comparable.id)} aria-label={`Supprimer ${comparable.description || 'le comparable'}`}><Trash2 size={15} /></button>
+            </> : <>
+              <time {...aiFieldProps('value.comparables[].date', comparable.id)}>{formatDate(comparable.date)}</time>
+              <span {...aiFieldProps('value.comparables[].description', comparable.id)}><strong>{comparable.description}</strong></span>
+              <span {...aiFieldProps('value.comparables[].source', comparable.id)}>{comparable.source}</span>
+              <span {...aiFieldProps('value.comparables[].channel', comparable.id)}>{comparable.saleChannel}</span>
+              <span {...aiFieldProps('value.comparables[].condition', comparable.id)}>{comparable.condition}</span>
+              <strong {...aiFieldProps('value.comparables[].amount', comparable.id)} data-ai-currency={comparable.currency}>{formatMoney(comparable.amount, comparable.currency)}</strong>
+            </>}
           </div>
         ))}
       </div>
@@ -811,6 +889,7 @@ function App() {
   const [eventTrigger, setEventTrigger] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSpinOpen, setIsSpinOpen] = useState(false);
+  const [isMarketHistoryEditorOpen, setIsMarketHistoryEditorOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [editingBlock, setEditingBlock] = useState<PublishedBlockId | null>(null);
   const [mediaAssets, setMediaAssets] = useState<Asset[]>(loadMediaAssets);
@@ -840,11 +919,21 @@ function App() {
     readStored<TransmissionRecipient[]>('cartularia-transmission-recipients', []),
   );
   const [storageLocations, setStorageLocations] = useState<StorageLocation[]>(loadStorageLocations);
-  const [marketDepth, setMarketDepth] = useState<MarketDepthState>(() =>
-    readStored('cartularia-market-depth', {
-      analysisDate: mockCartulary.marketSnapshot.date,
-      transactions12m: mockCartulary.marketSnapshot.observedTransactions90d,
-    }),
+  const [marketHistory, setMarketHistory] = useState<Valuation[]>(() =>
+    readStored('cartularia-market-history', mockCartulary.watchInstance.valuations),
+  );
+  const [marketDepth, setMarketDepth] = useState<MarketDepthState>(loadMarketDepth);
+  const [comparables, setComparables] = useState<ComparableTransaction[]>(() =>
+    readStored('cartularia-comparables', mockCartulary.comparables),
+  );
+  const [comparableAnalysis, setComparableAnalysis] = useState<ComparableAnalysisEntry[]>(() =>
+    readStored('cartularia-comparable-analysis', DEFAULT_COMPARABLE_ANALYSIS),
+  );
+  const [sensitivityPrices, setSensitivityPrices] = useState<number[]>(() =>
+    readStored('cartularia-sensitivity-prices', DEFAULT_SENSITIVITY_PRICES),
+  );
+  const [sensitivityCosts, setSensitivityCosts] = useState<number[]>(() =>
+    readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
   );
   const [retainedValuation, setRetainedValuation] = useState<RetainedValuationState>(() =>
     readStored('cartularia-retained-valuation', {
@@ -931,6 +1020,7 @@ function App() {
       if (event.key === 'Escape') {
         setSelectedAsset(null);
         setIsSpinOpen(false);
+        setIsMarketHistoryEditorOpen(false);
         setIsDrawerOpen(false);
       }
     };
@@ -1006,6 +1096,23 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('cartularia-market-depth', JSON.stringify(marketDepth));
   }, [marketDepth]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-market-history', JSON.stringify(marketHistory));
+  }, [marketHistory]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-comparables', JSON.stringify(comparables));
+  }, [comparables]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-comparable-analysis', JSON.stringify(comparableAnalysis));
+  }, [comparableAnalysis]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-sensitivity-prices', JSON.stringify(sensitivityPrices));
+    window.localStorage.setItem('cartularia-sensitivity-costs', JSON.stringify(sensitivityCosts));
+  }, [sensitivityPrices, sensitivityCosts]);
 
   useEffect(() => {
     window.localStorage.setItem('cartularia-retained-valuation', JSON.stringify(retainedValuation));
@@ -1114,22 +1221,14 @@ function App() {
     } : {}),
   });
 
-  const marketValues = [...watch.valuations].sort((a, b) => a.date.localeCompare(b.date));
-  const maxMarketValue = Math.max(...marketValues.map((valuation) => valuation.highValue));
+  const marketValues = [...marketHistory].sort((a, b) => a.date.localeCompare(b.date));
+  const maxMarketValue = Math.max(1, ...marketValues.map((valuation) => valuation.highValue));
   const costBasis = useMemo(
     () => purchase.purchasePrice + purchaseExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
     [purchase.purchasePrice, purchaseExpenses],
   );
-  const listingComparables = mockCartulary.comparables.filter((comparable) => comparable.sourceType === 'Annonce');
-  const transactionComparables = mockCartulary.comparables.filter((comparable) => comparable.sourceType === 'Transaction');
-  const averageAmount = (items: ComparableTransaction[]) => items.length === 0
-    ? 0
-    : items.reduce((sum, item) => sum + item.amount, 0) / items.length;
-  const averageListingPrice = averageAmount(listingComparables);
-  const averageTransactionPrice = averageAmount(transactionComparables);
-  const listingPremium = averageTransactionPrice > 0
-    ? averageListingPrice / averageTransactionPrice - 1
-    : 0;
+  const listingComparables = comparables.filter((comparable) => comparable.sourceType === 'Annonce');
+  const transactionComparables = comparables.filter((comparable) => comparable.sourceType === 'Transaction');
 
   const datedAcquisitionCashFlows = useMemo<DatedCashFlow[]>(() => [
     { date: purchase.date, amount: -Number(purchase.purchasePrice || 0) },
@@ -1175,16 +1274,17 @@ function App() {
   };
 
   const handleReportPrint = () => {
-    if (orderedReportBlocks.length === 0) return;
+    // The print call stays first and synchronous so the browser keeps the
+    // original user gesture. Without an R selection, print the current page.
+    window.print();
 
-    // Keep the print dialog in the original click event. Awaiting the audit
-    // write first can make browsers treat window.print() as an unsolicited popup.
+    const scope = orderedReportBlocks.length > 0
+      ? `rapport personnalisé · ${orderedReportBlocks.length} blocs`
+      : `page actuelle · ${activePage}`;
     void journal
-      .logEvent('EXPORT_PDF', 'Propriétaire', `Export du rapport personnalisé · ${orderedReportBlocks.length} blocs`)
+      .logEvent('EXPORT_PDF', 'Propriétaire', `Impression ${scope}`)
       .then(() => setEventTrigger((previous) => previous + 1))
       .catch((error: unknown) => console.error("Échec de la journalisation de l'impression", error));
-
-    window.print();
   };
 
   const toggleMediaTag = (assetId: string, tag: MediaTag) => {
@@ -1355,6 +1455,47 @@ function App() {
 
   const updateExpense = <K extends keyof PurchaseExpense>(id: string, key: K, value: PurchaseExpense[K]) => {
     setPurchaseExpenses((current) => current.map((expense) => expense.id === id ? { ...expense, [key]: value } : expense));
+  };
+
+  const updateMarketHistory = (id: string, patch: Partial<Valuation>) => {
+    setMarketHistory((current) => current.map((valuation) => valuation.id === id ? { ...valuation, ...patch } : valuation));
+  };
+
+  const addMarketHistoryEntry = () => {
+    setMarketHistory((current) => [...current, {
+      id: newId('valuation'),
+      date: marketDepth.analysisDate,
+      lowValue: marketDepth.lowValue,
+      midValue: marketDepth.midValue,
+      highValue: marketDepth.highValue,
+      currency: watch.currency || 'EUR',
+      confidence: 'Moyenne',
+      source: '',
+      visibility: 'Secret',
+    }]);
+  };
+
+  const updateComparable = (id: string, patch: Partial<ComparableTransaction>) => {
+    setComparables((current) => current.map((comparable) => comparable.id === id ? { ...comparable, ...patch } : comparable));
+  };
+
+  const addComparable = (sourceType: ComparableTransaction['sourceType']) => {
+    setComparables((current) => [...current, {
+      id: newId('comparable'),
+      date: marketDepth.analysisDate,
+      channel: '',
+      description: '',
+      amount: 0,
+      currency: watch.currency || 'EUR',
+      condition: '',
+      sourceType,
+      source: '',
+      saleChannel: sourceType === 'Transaction' ? 'Enchère' : 'Annonce',
+    }]);
+  };
+
+  const updateComparableAnalysis = (id: string, patch: Partial<ComparableAnalysisEntry>) => {
+    setComparableAnalysis((current) => current.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
   };
 
   const updateSpecification = (groupId: string, itemId: string, patch: Partial<SpecificationDatum>) => {
@@ -1639,7 +1780,7 @@ function App() {
             <SectionTitle eyebrow="Évaluation de marché" title="Données de marché" />
             <div className="market-grid">
               <article className="market-chart-card"><span className="eyebrow">Évolution du marché</span><div className="market-bars">{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>Source : évaluations datées du dossier</small></article>
-              <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">Profondeur de marché</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? `Analyse du ${formatDate(marketDepth.analysisDate)}` : 'Date non renseignée'}</time></div><div className="metric-grid"><div><strong>{mockCartulary.marketSnapshot.activeListings}</strong><span>Annonces actives</span></div><div><strong>{marketDepth.transactions12m}</strong><span>Transactions identifiées · 12 mois</span></div><div><strong>{mockCartulary.marketSnapshot.medianDaysOnMarket} j</strong><span>Délai médian estimé</span></div></div><div className="valuation-range"><span>Fourchette actuelle</span><strong>{formatMoney(mockCartulary.marketSnapshot.lowValue)} — {formatMoney(mockCartulary.marketSnapshot.highValue)}</strong><small>VALEUR MÉDIANE {formatMoney(mockCartulary.marketSnapshot.midValue)}</small></div></article>
+              <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">Profondeur de marché</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? `Analyse du ${formatDate(marketDepth.analysisDate)}` : 'Date non renseignée'}</time></div><div className="metric-grid"><div><strong>{marketDepth.activeListings}</strong><span>Annonces actives</span></div><div><strong>{marketDepth.transactions12m}</strong><span>Transactions identifiées · 12 mois</span></div><div><strong>{marketDepth.medianDaysOnMarket} j</strong><span>Délai médian estimé</span></div></div><div className="valuation-range"><span>Fourchette actuelle</span><strong>{formatMoney(marketDepth.lowValue)} — {formatMoney(marketDepth.highValue)}</strong><small>VALEUR MÉDIANE {formatMoney(marketDepth.midValue)}</small></div></article>
               <article className="retained-value-card retained-value-card--published">
                 <div><span className="eyebrow">Décision du propriétaire</span><h3>Valeur retenue</h3></div>
                 <strong>{formatMoney(retainedValuation.amount, watch.currency)}</strong>
@@ -1666,7 +1807,7 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow="Comparables" title="Synthèse de l’analyse" />
-            <div className="comparables-analysis"><p>Prix affiché moyen : {formatMoney(averageListingPrice)}. Prix réalisé moyen : {formatMoney(averageTransactionPrice)}. Écart observé : {formatPercent(listingPremium)}. Les annonces spécialisées défendent mieux le prix ; l’enchère privilégie la liquidité.</p></div>
+            <div className="comparables-analysis"><div className="comparables-analysis-table">{comparableAnalysis.map((entry) => <div key={entry.id}><strong>{entry.angle}</strong><span>{entry.finding}</span><p>{entry.reading}</p></div>)}</div></div>
           </section>
         );
       case 'value-cost-basis':
@@ -1687,7 +1828,7 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow="Sensibilité" title="Prix de vente et coût de cession" />
-            <div className="sensitivity-stack"><div><h3>Plus-value ou moins-value nette</h3><div className="sensitivity-table"><div className="sensitivity-table__head"><span>Coût \ Prix</span>{SENSITIVITY_PRICES.map((price) => <strong key={price}>{formatMoney(price, watch.currency)}</strong>)}</div>{SENSITIVITY_COSTS.map((costPct) => <div key={costPct}><strong>{costPct} %</strong>{SENSITIVITY_PRICES.map((price) => { const scenario = scenarioPerformance(price, costPct); return <span key={price} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>; })}</div>)}</div></div><div><h3>TRI annualisé</h3><div className="sensitivity-table sensitivity-table--irr"><div className="sensitivity-table__head"><span>Coût \ Prix</span>{SENSITIVITY_PRICES.map((price) => <strong key={price}>{formatMoney(price, watch.currency)}</strong>)}</div>{SENSITIVITY_COSTS.map((costPct) => <div key={costPct}><strong>{costPct} %</strong>{SENSITIVITY_PRICES.map((price) => { const scenario = scenarioPerformance(price, costPct); return <span key={price} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>; })}</div>)}</div></div></div>
+            <div className="sensitivity-stack"><div><h3>Plus-value ou moins-value nette</h3><div className="sensitivity-table"><div className="sensitivity-table__head"><span>Coût \ Prix</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>; })}</div>)}</div></div><div><h3>TRI annualisé</h3><div className="sensitivity-table sensitivity-table--irr"><div className="sensitivity-table__head"><span>Coût \ Prix</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>; })}</div>)}</div></div></div>
           </section>
         );
       default:
@@ -1768,13 +1909,12 @@ function App() {
             type="button"
             className="page-tabs__report"
             onClick={handleReportPrint}
-            disabled={orderedReportBlocks.length === 0}
             aria-label={orderedReportBlocks.length > 0
               ? `Imprimer le rapport PDF (${orderedReportBlocks.length} blocs sélectionnés)`
-              : 'Sélectionnez au moins un bloc pour imprimer le rapport PDF'}
+              : 'Imprimer la page actuelle'}
             title={orderedReportBlocks.length > 0
               ? 'Imprimer le rapport ou l’enregistrer au format PDF'
-              : 'Sélectionnez au moins un bloc R'}
+              : 'Imprimer la page actuelle ; sélectionnez des blocs R pour composer un rapport personnalisé'}
           >
             <Printer size={14} />
             Rapport PDF
@@ -1872,10 +2012,20 @@ function App() {
                           </div>
                         ))}
                       </div>
-                    ) : <p className="owner-documents__empty">Aucun document d’identité ajouté.</p>}
+                    ) : <p className="owner-documents__empty">Aucun document d’identification ajouté.</p>}
 
                     <form className="owner-document-upload no-print" onSubmit={addOwnerDocuments}>
-                      <label>Catégorie<input {...aiFieldProps('cover.owner.documents[].category', 'new')} type="text" name="owner-document-category" list="owner-document-categories" defaultValue="Carte d’identité" placeholder="Carte d’identité, passeport…" /><datalist id="owner-document-categories"><option value="Carte d’identité" /><option value="Passeport" /><option value="Justificatif de domicile" /><option value="Autre" /></datalist></label>
+                      <label>Catégorie
+                        <select
+                          key={ownerType}
+                          {...aiFieldProps('cover.owner.documents[].category', 'new')}
+                          name="owner-document-category"
+                          defaultValue={OWNER_DOCUMENT_CATEGORIES[ownerType][0]}
+                          aria-label={`Catégorie de document pour ${ownerType.toLowerCase()}`}
+                        >
+                          {OWNER_DOCUMENT_CATEGORIES[ownerType].map((category) => <option key={category}>{category}</option>)}
+                        </select>
+                      </label>
                       <label className="file-drop"><Upload size={18} /><span>Ajouter un ou plusieurs documents</span><small>PDF, images ou autres formats</small><input {...aiFieldProps('cover.owner.documents[].file', 'new')} type="file" name="owner-documents" multiple /></label>
                       <button type="submit" className="button button--primary">Ajouter les documents</button>
                     </form>
@@ -2368,17 +2518,17 @@ function App() {
                 <SectionTitle eyebrow="Évaluation de marché" title="Données de marché" publish={publishProps('value-market')} />
                 <div className="market-grid">
                   <article className="market-chart-card">
-                  <span className="eyebrow">Évolution du marché</span>
-                  <div className="market-bars" aria-label="Évolution des évaluations médianes">
-                    {marketValues.map((valuation) => (
-                      <div key={valuation.id} data-ai-scope="value.market.valuations[]" data-ai-instance={valuation.id}>
-                        <span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} />
-                        <strong {...aiFieldProps('value.market.valuations[].midValue', valuation.id)} data-ai-currency={valuation.currency}>{formatMoney(valuation.midValue, valuation.currency)}</strong>
-                        <time {...aiFieldProps('value.market.valuations[].date', valuation.id)}>{formatDate(valuation.date)}</time>
-                      </div>
-                    ))}
-                  </div>
-                  <small>Source : évaluations datées du dossier · échantillon interne</small>
+                    <div className="market-chart-card__heading"><span className="eyebrow">Évolution du marché</span><button type="button" className="button button--quiet no-print" onClick={() => setIsMarketHistoryEditorOpen(true)}><Plus size={14} /> Ajouter une évaluation</button></div>
+                    <div className="market-bars" aria-label="Évolution des évaluations médianes">
+                      {marketValues.map((valuation) => (
+                        <div key={valuation.id} data-ai-scope="value.market.valuations[]" data-ai-instance={valuation.id}>
+                          <span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} />
+                          <strong {...aiFieldProps('value.market.valuations[].midValue', valuation.id)} data-ai-currency={valuation.currency}>{formatMoney(valuation.midValue, valuation.currency)}</strong>
+                          <time {...aiFieldProps('value.market.valuations[].date', valuation.id)}>{formatDate(valuation.date)}</time>
+                        </div>
+                      ))}
+                    </div>
+                    <small>Source : évaluations datées du dossier · échantillon interne</small>
                   </article>
 
                   <article className="market-depth-card">
@@ -2387,14 +2537,17 @@ function App() {
                     <label>Date de l’analyse<input {...aiFieldProps('value.market.analysisDate')} type="date" value={marketDepth.analysisDate} onChange={(event) => setMarketDepth((current) => ({ ...current, analysisDate: event.target.value }))} /></label>
                   </div>
                   <div className="metric-grid">
-                    <div><strong>{mockCartulary.marketSnapshot.activeListings}</strong><span>Annonces actives</span></div>
+                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.activeListings')} type="number" min="0" value={marketDepth.activeListings} onChange={(event) => setMarketDepth((current) => ({ ...current, activeListings: Math.max(0, Number(event.target.value)) }))} aria-label="Annonces actives" /><span>Annonces actives</span></div>
                     <div className="metric-grid__editable"><input {...aiFieldProps('value.market.transactions12m')} type="number" min="0" value={marketDepth.transactions12m} onChange={(event) => setMarketDepth((current) => ({ ...current, transactions12m: Number(event.target.value) }))} aria-label="Transactions identifiées sur les douze derniers mois" /><span>Transactions identifiées · 12 mois</span></div>
-                    <div><strong>{mockCartulary.marketSnapshot.medianDaysOnMarket} j</strong><span>Délai médian estimé</span></div>
+                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.medianDaysOnMarket')} type="number" min="0" value={marketDepth.medianDaysOnMarket} onChange={(event) => setMarketDepth((current) => ({ ...current, medianDaysOnMarket: Math.max(0, Number(event.target.value)) }))} aria-label="Délai médian estimé en jours" /><span>Délai médian estimé · jours</span></div>
                   </div>
-                  <div className="valuation-range">
+                  <div className="valuation-range valuation-range--editable">
                     <span>Fourchette actuelle</span>
-                    <strong>{formatMoney(mockCartulary.marketSnapshot.lowValue)} — {formatMoney(mockCartulary.marketSnapshot.highValue)}</strong>
-                    <small>VALEUR MÉDIANE {formatMoney(mockCartulary.marketSnapshot.midValue)}</small>
+                    <div>
+                      <label>Valeur basse<input {...aiFieldProps('value.market.lowValue')} type="number" min="0" step="100" value={marketDepth.lowValue} onChange={(event) => setMarketDepth((current) => ({ ...current, lowValue: Math.max(0, Number(event.target.value)) }))} /></label>
+                      <label>Valeur médiane<input {...aiFieldProps('value.market.midValue')} type="number" min="0" step="100" value={marketDepth.midValue} onChange={(event) => setMarketDepth((current) => ({ ...current, midValue: Math.max(0, Number(event.target.value)) }))} /></label>
+                      <label>Valeur haute<input {...aiFieldProps('value.market.highValue')} type="number" min="0" step="100" value={marketDepth.highValue} onChange={(event) => setMarketDepth((current) => ({ ...current, highValue: Math.max(0, Number(event.target.value)) }))} /></label>
+                    </div>
                   </div>
                   </article>
 
@@ -2409,7 +2562,7 @@ function App() {
                         <input {...aiFieldProps('value.retained.amount')} type="number" min="0" step="100" value={retainedValuation.amount} onChange={(event) => setRetainedValuation((current) => ({ ...current, amount: Math.max(0, Number(event.target.value)) }))} />
                         <strong>{watch.currency || 'EUR'}</strong>
                       </span>
-                      <small>Valeur actuelle : {formatMoney(mockCartulary.marketSnapshot.midValue, watch.currency)}</small>
+                      <small>Valeur actuelle : {formatMoney(marketDepth.midValue, watch.currency)}</small>
                     </label>
                     <label className="retained-value-card__explanation">Explication de la valeur retenue
                       <textarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder="Expliquez le montant retenu, les ajustements et les réserves éventuelles." />
@@ -2425,8 +2578,8 @@ function App() {
               <section>
                 <SectionTitle eyebrow="Analyse de marché" title="Comparables" />
                 <div className="comparable-groups">
-                  <ComparableTable title="Annonces en cours" items={listingComparables} selection={publishProps('value-comparables-listings')} />
-                  <ComparableTable title="Transactions réalisées" items={transactionComparables} selection={publishProps('value-comparables-transactions')} />
+                  <ComparableTable title="Annonces en cours" items={listingComparables} selection={publishProps('value-comparables-listings')} onUpdate={updateComparable} onDelete={(id) => setComparables((current) => current.filter((item) => item.id !== id))} onAdd={() => addComparable('Annonce')} />
+                  <ComparableTable title="Transactions réalisées" items={transactionComparables} selection={publishProps('value-comparables-transactions')} onUpdate={updateComparable} onDelete={(id) => setComparables((current) => current.filter((item) => item.id !== id))} onAdd={() => addComparable('Transaction')} />
                 </div>
 
                 <div className="comparables-analysis">
@@ -2435,17 +2588,17 @@ function App() {
                     <div className="comparables-analysis-table__head" role="row">
                       <span>Angle d’analyse</span><span>Constat</span><span>Lecture</span>
                     </div>
-                    {[
-                      ['Prix affichés', formatMoney(averageListingPrice), `${listingComparables.length} annonces observées ; ce niveau reste un prix demandé et non un prix encaissé.`],
-                      ['Prix réalisés', formatMoney(averageTransactionPrice), `${transactionComparables.length} transaction observée ; ce point dispose d’une valeur probante supérieure mais l’échantillon reste limité.`],
-                      ['Écart annonce / transaction', formatPercent(listingPremium), 'L’écart mesure la prime d’affichage observée. Il doit couvrir la négociation, le délai et les frais de cession.'],
-                      ['Canal de prix', 'Annonce spécialisée', 'Canal à privilégier pour défendre le prix d’un exemplaire complet, avec un délai de commercialisation plus long.'],
-                      ['Canal de liquidité', 'Enchère', 'Exécution plus rapide et prix public, mais résultat plus volatil et frais généralement plus élevés.'],
-                    ].map(([angle, finding, reading]) => (
-                      <div {...aiFieldProps('value.comparables.analysis[]', angle)} role="row" key={angle}><strong>{angle}</strong><span>{finding}</span><p>{reading}</p></div>
+                    {comparableAnalysis.map((entry) => (
+                      <div {...aiFieldProps('value.comparables.analysis[]', entry.id)} role="row" key={entry.id} data-ai-scope="value.comparables.analysis[]" data-ai-instance={entry.id}>
+                        <input {...aiFieldProps('value.comparables.analysis[].angle', entry.id)} type="text" value={entry.angle} onChange={(event) => updateComparableAnalysis(entry.id, { angle: event.target.value })} aria-label="Angle d’analyse" />
+                        <input {...aiFieldProps('value.comparables.analysis[].finding', entry.id)} type="text" value={entry.finding} onChange={(event) => updateComparableAnalysis(entry.id, { finding: event.target.value })} aria-label="Constat d’analyse" />
+                        <textarea {...aiFieldProps('value.comparables.analysis[].reading', entry.id)} value={entry.reading} rows={2} onChange={(event) => updateComparableAnalysis(entry.id, { reading: event.target.value })} aria-label="Lecture de l’analyse" />
+                        <button type="button" className="icon-button no-print" onClick={() => setComparableAnalysis((current) => current.filter((item) => item.id !== entry.id))} aria-label={`Supprimer ${entry.angle}`}><Trash2 size={15} /></button>
+                      </div>
                     ))}
                   </div>
-                  <small>ÉCHANTILLON INTERNE · 3 OBSERVATIONS · CONCLUSIONS À CONFIRMER PAR UN ÉCHANTILLON ÉLARGI</small>
+                  <button type="button" className="button button--quiet no-print" onClick={() => setComparableAnalysis((current) => [...current, { id: newId('analysis'), angle: '', finding: '', reading: '' }])}><Plus size={14} /> Ajouter une ligne d’analyse</button>
+                  <small>ÉCHANTILLON INTERNE · {comparables.length} OBSERVATION{comparables.length > 1 ? 'S' : ''} · CONCLUSIONS À CONFIRMER PAR UN ÉCHANTILLON ÉLARGI</small>
                 </div>
               </section>
             )}
@@ -2518,16 +2671,20 @@ function App() {
               <section>
                 <SectionTitle eyebrow="Sensibilité" title="Prix de vente et coût de cession" publish={publishProps('value-sensitivity')} />
                 <div {...aiFieldProps('value.computed.sensitivity')} className="sensitivity-stack">
+                  <div className="sensitivity-parameters no-print">
+                    <div><span>Prix de vente testés</span>{sensitivityPrices.map((price, index) => <label key={`price-input-${index}`}>Scénario {index + 1}<input {...aiFieldProps('value.sensitivity.prices[]', index)} type="number" min="0" step="100" value={price} onChange={(event) => setSensitivityPrices((current) => current.map((item, itemIndex) => itemIndex === index ? Math.max(0, Number(event.target.value)) : item))} /></label>)}</div>
+                    <div><span>Coûts de cession testés</span>{sensitivityCosts.map((cost, index) => <label key={`cost-input-${index}`}>Scénario {index + 1}<span><input {...aiFieldProps('value.sensitivity.costs[]', index)} type="number" min="0" max="100" step="0.5" value={cost} onChange={(event) => setSensitivityCosts((current) => current.map((item, itemIndex) => itemIndex === index ? Math.min(100, Math.max(0, Number(event.target.value))) : item))} /><strong>%</strong></span></label>)}</div>
+                  </div>
                   <div>
                     <h3>Plus-value ou moins-value nette</h3>
                     <div className="sensitivity-table" role="table" aria-label="Sensibilité de la plus-value ou moins-value">
-                      <div className="sensitivity-table__head" role="row"><span>Coût \ Prix</span>{SENSITIVITY_PRICES.map((price) => <strong key={price}>{formatMoney(price, watch.currency)}</strong>)}</div>
-                      {SENSITIVITY_COSTS.map((costPct) => (
-                        <div role="row" key={costPct}>
+                      <div className="sensitivity-table__head" role="row"><span>Coût \ Prix</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>
+                      {sensitivityCosts.map((costPct, costIndex) => (
+                        <div role="row" key={`${costPct}-${costIndex}`}>
                           <strong>{costPct} %</strong>
-                          {SENSITIVITY_PRICES.map((price) => {
+                          {sensitivityPrices.map((price, priceIndex) => {
                             const scenario = scenarioPerformance(price, costPct);
-                            return <span key={`${costPct}-${price}`} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>;
+                            return <span key={`${costPct}-${price}-${priceIndex}`} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>;
                           })}
                         </div>
                       ))}
@@ -2536,13 +2693,13 @@ function App() {
                   <div>
                     <h3>TRI annualisé</h3>
                     <div className="sensitivity-table sensitivity-table--irr" role="table" aria-label="Sensibilité du TRI annualisé">
-                      <div className="sensitivity-table__head" role="row"><span>Coût \ Prix</span>{SENSITIVITY_PRICES.map((price) => <strong key={price}>{formatMoney(price, watch.currency)}</strong>)}</div>
-                      {SENSITIVITY_COSTS.map((costPct) => (
-                        <div role="row" key={costPct}>
+                      <div className="sensitivity-table__head" role="row"><span>Coût \ Prix</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>
+                      {sensitivityCosts.map((costPct, costIndex) => (
+                        <div role="row" key={`${costPct}-${costIndex}`}>
                           <strong>{costPct} %</strong>
-                          {SENSITIVITY_PRICES.map((price) => {
+                          {sensitivityPrices.map((price, priceIndex) => {
                             const scenario = scenarioPerformance(price, costPct);
-                            return <span key={`${costPct}-${price}`} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>;
+                            return <span key={`${costPct}-${price}-${priceIndex}`} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>;
                           })}
                         </div>
                       ))}
@@ -2607,6 +2764,42 @@ function App() {
           sealSupportCode={mockCartulary.seal?.supportCode}
         />
       </aside>
+
+      {isMarketHistoryEditorOpen && (
+        <div className="modal-overlay" onClick={() => setIsMarketHistoryEditorOpen(false)}>
+          <div
+            className="modal-content modal-content--market-history"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="market-history-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div><span className="eyebrow">04 · Valorisation</span><strong id="market-history-dialog-title">Évolution du marché</strong></div>
+              <button type="button" onClick={() => setIsMarketHistoryEditorOpen(false)} aria-label="Fermer l’éditeur de l’évolution du marché"><X size={18} /></button>
+            </div>
+            <div className="market-history-dialog__body">
+              <div className="market-history-dialog__intro">
+                <div><h3>Évaluations datées</h3><p>Ajoutez ou modifiez les bornes et la source de chaque point du graphique.</p></div>
+                <button type="button" className="button button--primary" onClick={addMarketHistoryEntry}><Plus size={14} /> Ajouter une ligne</button>
+              </div>
+              <div className="market-history-editor" role="table" aria-label="Saisie manuelle de l’évolution du marché">
+                <div className="market-history-editor__head" role="row"><span>Date</span><span>Basse</span><span>Médiane</span><span>Haute</span><span>Source</span><span /></div>
+                {marketValues.map((valuation) => (
+                  <div role="row" key={`editor-${valuation.id}`} data-ai-scope="value.market.valuations[]" data-ai-instance={valuation.id}>
+                    <input {...aiFieldProps('value.market.valuations[].date', valuation.id)} type="date" value={valuation.date} onChange={(event) => updateMarketHistory(valuation.id, { date: event.target.value })} aria-label="Date de valorisation" />
+                    <input {...aiFieldProps('value.market.valuations[].lowValue', valuation.id)} type="number" min="0" step="100" value={valuation.lowValue} onChange={(event) => updateMarketHistory(valuation.id, { lowValue: Math.max(0, Number(event.target.value)) })} aria-label="Valeur basse" />
+                    <input {...aiFieldProps('value.market.valuations[].midValue', valuation.id)} type="number" min="0" step="100" value={valuation.midValue} onChange={(event) => updateMarketHistory(valuation.id, { midValue: Math.max(0, Number(event.target.value)) })} aria-label="Valeur médiane" />
+                    <input {...aiFieldProps('value.market.valuations[].highValue', valuation.id)} type="number" min="0" step="100" value={valuation.highValue} onChange={(event) => updateMarketHistory(valuation.id, { highValue: Math.max(0, Number(event.target.value)) })} aria-label="Valeur haute" />
+                    <input {...aiFieldProps('value.market.valuations[].source', valuation.id)} type="text" value={valuation.source} onChange={(event) => updateMarketHistory(valuation.id, { source: event.target.value })} aria-label="Source de la valorisation" />
+                    <button type="button" className="icon-button" onClick={() => setMarketHistory((current) => current.filter((item) => item.id !== valuation.id))} aria-label="Supprimer l’évaluation"><Trash2 size={15} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isSpinOpen && spinAssets.length > 0 && (
         <div className="modal-overlay" onClick={() => setIsSpinOpen(false)}>
