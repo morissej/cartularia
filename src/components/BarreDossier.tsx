@@ -1,6 +1,35 @@
-import React from 'react';
-import type { VisibilityLevel } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, ListTodo, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+
+interface TodoItem {
+  id: string;
+  text: string;
+}
+
+const TODO_STORAGE_KEY = 'cartularia-todos';
+
+const readStoredTodos = (): TodoItem[] => {
+  try {
+    const stored = window.localStorage.getItem(TODO_STORAGE_KEY);
+    if (!stored) return [];
+
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.filter((item): item is TodoItem => (
+      typeof item === 'object'
+      && item !== null
+      && typeof (item as TodoItem).id === 'string'
+      && typeof (item as TodoItem).text === 'string'
+      && (item as TodoItem).text.trim().length > 0
+    ));
+  } catch {
+    return [];
+  }
+};
+
+const createTodoId = () => `todo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 interface BarreDossierProps {
   publicCode: string;
@@ -8,8 +37,6 @@ interface BarreDossierProps {
   model: string;
   language: 'FR' | 'EN';
   setLanguage: (lang: 'FR' | 'EN') => void;
-  audience: VisibilityLevel;
-  setAudience: (aud: VisibilityLevel) => void;
 }
 
 export const BarreDossier: React.FC<BarreDossierProps> = ({
@@ -17,10 +44,81 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
   brand,
   model,
   language,
-  setLanguage,
-  audience,
-  setAudience
+  setLanguage
 }) => {
+  const [todos, setTodos] = useState<TodoItem[]>(readStoredTodos);
+  const [isTodoOpen, setIsTodoOpen] = useState(false);
+  const [newTodo, setNewTodo] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const todoContainerRef = useRef<HTMLDivElement>(null);
+  const newTodoInputRef = useRef<HTMLInputElement>(null);
+
+  const isFrench = language === 'FR';
+
+  useEffect(() => {
+    window.localStorage.setItem(TODO_STORAGE_KEY, JSON.stringify(todos));
+  }, [todos]);
+
+  useEffect(() => {
+    if (!isTodoOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!todoContainerRef.current?.contains(event.target as Node)) {
+        setIsTodoOpen(false);
+        setEditingId(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsTodoOpen(false);
+        setEditingId(null);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    window.addEventListener('keydown', closeOnEscape);
+    const focusFrame = window.requestAnimationFrame(() => newTodoInputRef.current?.focus());
+
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      window.removeEventListener('keydown', closeOnEscape);
+      window.cancelAnimationFrame(focusFrame);
+    };
+  }, [isTodoOpen]);
+
+  const addTodo = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = newTodo.trim();
+    if (!text) return;
+
+    setTodos((current) => [...current, { id: createTodoId(), text }]);
+    setNewTodo('');
+    newTodoInputRef.current?.focus();
+  };
+
+  const startEditing = (todo: TodoItem) => {
+    setEditingId(todo.id);
+    setEditingText(todo.text);
+  };
+
+  const saveTodo = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = editingText.trim();
+    if (!editingId || !text) return;
+
+    setTodos((current) => current.map((todo) => todo.id === editingId ? { ...todo, text } : todo));
+    setEditingId(null);
+    setEditingText('');
+  };
+
+  const deleteTodo = (todoId: string) => {
+    setTodos((current) => current.filter((todo) => todo.id !== todoId));
+    if (editingId === todoId) {
+      setEditingId(null);
+      setEditingText('');
+    }
+  };
 
   return (
     <header className="dossier-bar no-print" style={{
@@ -68,38 +166,87 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
           alignItems: 'center',
           gap: 'var(--s4)'
         }}>
-          {/* Sélecteur d'Audience (Bascule cyclique simple pour rester épuré) */}
-          <div className="dossier-bar__preview" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{
-              fontSize: '10px',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}>
-              {language === 'FR' ? 'Aperçu :' : 'Preview :'}
-            </span>
-            <select
-              value={audience}
-              onChange={(e) => setAudience(e.target.value as VisibilityLevel)}
-              style={{
-                fontFamily: 'var(--font-sans)',
-                fontSize: '13px',
-                fontWeight: 600,
-                color: 'var(--ink)',
-                cursor: 'pointer',
-                backgroundColor: 'transparent',
-                outline: 'none',
-                padding: '2px 4px'
-              }}
+          <div className="dossier-bar__todo" ref={todoContainerRef}>
+            <button
+              type="button"
+              className={`todo-trigger${isTodoOpen ? ' is-active' : ''}`}
+              onClick={() => setIsTodoOpen((current) => !current)}
+              aria-expanded={isTodoOpen}
+              aria-controls="cartularia-todo-panel"
             >
-              <option value="Secret">{language === 'FR' ? 'Propriétaire (Privé)' : 'Owner (Private)'}</option>
-              <option value="Communauté">{language === 'FR' ? 'Communauté' : 'Community'}</option>
-              <option value="Tous">{language === 'FR' ? 'Tous (Public)' : 'Everyone (Public)'}</option>
-            </select>
-          </div>
+              <ListTodo size={16} />
+              <span>{isFrench ? 'À faire' : 'To do'}</span>
+              {todos.length > 0 && <strong aria-label={`${todos.length} ${isFrench ? 'tâche(s)' : 'task(s)'}`}>{todos.length}</strong>}
+            </button>
 
-          <span style={{ color: 'var(--rule)', height: '12px', width: '1px', backgroundColor: 'var(--rule)' }} />
+            {isTodoOpen && (
+              <section id="cartularia-todo-panel" className="todo-popover" aria-label={isFrench ? 'Liste des choses à faire' : 'To-do list'}>
+                <div className="todo-popover__header">
+                  <div>
+                    <span className="eyebrow">{isFrench ? 'Organisation' : 'Organization'}</span>
+                    <h2>{isFrench ? 'À faire' : 'To do'}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="todo-action"
+                    onClick={() => {
+                      setIsTodoOpen(false);
+                      setEditingId(null);
+                    }}
+                    aria-label={isFrench ? 'Fermer la liste' : 'Close the list'}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <form className="todo-add-form" onSubmit={addTodo}>
+                  <input
+                    ref={newTodoInputRef}
+                    type="text"
+                    value={newTodo}
+                    onChange={(event) => setNewTodo(event.target.value)}
+                    placeholder={isFrench ? 'Ajouter une chose à faire…' : 'Add a task…'}
+                    aria-label={isFrench ? 'Nouvelle chose à faire' : 'New task'}
+                  />
+                  <button type="submit" disabled={!newTodo.trim()} aria-label={isFrench ? 'Ajouter' : 'Add'}>
+                    <Plus size={17} />
+                  </button>
+                </form>
+
+                {todos.length > 0 ? (
+                  <ul className="todo-list">
+                    {todos.map((todo) => (
+                      <li key={todo.id}>
+                        {editingId === todo.id ? (
+                          <form className="todo-edit-form" onSubmit={saveTodo}>
+                            <input
+                              type="text"
+                              value={editingText}
+                              onChange={(event) => setEditingText(event.target.value)}
+                              aria-label={isFrench ? 'Modifier la tâche' : 'Edit task'}
+                              autoFocus
+                            />
+                            <button type="submit" disabled={!editingText.trim()} aria-label={isFrench ? 'Enregistrer' : 'Save'}><Check size={15} /></button>
+                            <button type="button" onClick={() => setEditingId(null)} aria-label={isFrench ? 'Annuler' : 'Cancel'}><X size={15} /></button>
+                          </form>
+                        ) : (
+                          <>
+                            <span>{todo.text}</span>
+                            <div className="todo-list__actions">
+                              <button type="button" onClick={() => startEditing(todo)} aria-label={`${isFrench ? 'Modifier' : 'Edit'} : ${todo.text}`}><Pencil size={14} /></button>
+                              <button type="button" onClick={() => deleteTodo(todo.id)} aria-label={`${isFrench ? 'Supprimer' : 'Delete'} : ${todo.text}`}><Trash2 size={14} /></button>
+                            </div>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="todo-empty">{isFrench ? 'Aucune chose à faire pour le moment.' : 'Nothing to do for now.'}</p>
+                )}
+              </section>
+            )}
+          </div>
 
           {/* Langue FR / EN */}
           <div className="dossier-bar__languages" style={{ display: 'flex', gap: '6px' }}>

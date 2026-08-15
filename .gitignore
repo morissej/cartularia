@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+*.cartularia-backup.json
+cartularia-production-readiness*.json
 
 # Local environment and credentials
 .env

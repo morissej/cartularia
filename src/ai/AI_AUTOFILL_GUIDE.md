@@ -58,10 +58,11 @@ L’IA ne remplit jamais directement le dossier. Elle prépare une proposition s
 
 Les données propriétaire, stockage, acquisition, dépenses et localisation précise restent `secret` par défaut. Une information Secret ne peut pas être copiée dans un texte public sans décision humaine explicite.
 
-Les marqueurs `W` et `R` ne sont jamais modifiables par l’IA :
+Les marqueurs `W`, `R` et `C` ne sont jamais modifiables par l’IA :
 
 - `W` décide du contenu du Watch website indépendant ;
-- `R` décide du contenu du rapport PDF.
+- `R` décide du contenu du rapport PDF ;
+- `C` décide du contenu proposé pour publication dans le Cercle.
 
 L’IA peut détecter un risque de divulgation ou suggérer un bloc, mais la publication reste une action humaine distincte du remplissage.
 

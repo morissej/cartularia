@@ -1,8 +1,64 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function publicationIsActive(publicCode) {
+      return firestore.exists(
+          /databases/(default)/documents/publications/$(publicCode)
+        )
+        && firestore.get(
+          /databases/(default)/documents/publications/$(publicCode)
+        ).data.status == 'published';
+    }
+
+    function isAdmittedCommunityMember() {
+      return request.auth != null
+        && firestore.exists(
+          /databases/(default)/documents/communityMemberships/$(request.auth.uid)
+        )
+        && firestore.get(
+          /databases/(default)/documents/communityMemberships/$(request.auth.uid)
+        ).data.status == 'active'
+        && 'community.read' in firestore.get(
+          /databases/(default)/documents/communityMemberships/$(request.auth.uid)
+        ).data.permissions;
+    }
+
+    function communityPublicationIsActive(publicationId) {
+      return firestore.exists(
+          /databases/(default)/documents/communityPublications/$(publicationId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/communityPublications/$(publicationId)
+        ).data.status == 'published'
+        && firestore.get(
+          /databases/(default)/documents/communityPublications/$(publicationId)
+        ).data.moderationStatus == 'approved';
+    }
+
+    // Seul l'objet dérivé physiquement copié dans l'espace public est lisible.
+    // L'original, les dérivés privés et toutes les écritures client restent fermés.
+    match /public/{publicCode}/{assetId}/{derivativeId} {
+      allow read: if publicationIsActive(publicCode)
+        && resource != null
+        && resource.metadata.publicCode == publicCode
+        && resource.metadata.assetId == assetId
+        && resource.metadata.derivativeId == derivativeId;
+      allow write: if false;
+    }
+
+    // Les dérivés communautaires sont séparés des masters et exigent une admission active.
+    match /community/{publicationId}/{assetId}/{derivativeId} {
+      allow read: if isAdmittedCommunityMember()
+        && communityPublicationIsActive(publicationId)
+        && resource != null
+        && resource.metadata.publicationId == publicationId
+        && resource.metadata.assetId == assetId
+        && resource.metadata.derivativeId == derivativeId;
+      allow write: if false;
+    }
+
     match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

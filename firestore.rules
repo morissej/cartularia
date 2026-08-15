@@ -1,8 +1,261 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function membershipPath(organizationId) {
+      return /databases/$(database)/documents/organizations/$(organizationId)/memberships/$(request.auth.uid);
+    }
+
+    function hasActiveMembership(organizationId) {
+      return signedIn()
+        && exists(membershipPath(organizationId))
+        && get(membershipPath(organizationId)).data.status == 'active'
+        && get(membershipPath(organizationId)).data.uid == request.auth.uid;
+    }
+
+    function hasPermission(organizationId, permission) {
+      return hasActiveMembership(organizationId)
+        && permission in get(membershipPath(organizationId)).data.permissions;
+    }
+
+    function registryIsInScope(organizationId, registryId) {
+      return hasActiveMembership(organizationId)
+        && registryId in get(membershipPath(organizationId)).data.scopes.registryIds;
+    }
+
+    function canReadRegistry(organizationId, registryId) {
+      return hasPermission(organizationId, 'registry.read')
+        && registryIsInScope(organizationId, registryId);
+    }
+
+    function canReadCartulary(organizationId, registryId) {
+      return hasPermission(organizationId, 'cartulary.read')
+        && registryIsInScope(organizationId, registryId);
+    }
+
+    function communityMembershipPath() {
+      return /databases/$(database)/documents/communityMemberships/$(request.auth.uid);
+    }
+
+    function hasCommunityPermission(permission) {
+      return signedIn()
+        && exists(communityMembershipPath())
+        && get(communityMembershipPath()).data.uid == request.auth.uid
+        && get(communityMembershipPath()).data.status == 'active'
+        && permission in get(communityMembershipPath()).data.permissions;
+    }
+
+    function communityPublicationIsActive(publicationId) {
+      return exists(/databases/$(database)/documents/communityPublications/$(publicationId))
+        && get(/databases/$(database)/documents/communityPublications/$(publicationId)).data.status == 'published'
+        && get(/databases/$(database)/documents/communityPublications/$(publicationId)).data.moderationStatus == 'approved';
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+
+      match /private/{privateDocument} {
+        allow get: if signedIn() && request.auth.uid == uid;
+        allow list, create, update, delete: if false;
+      }
+    }
+
+    match /organizations/{organizationId} {
+      allow get: if hasPermission(organizationId, 'organization.read');
+      allow list, create, update, delete: if false;
+
+      match /memberships/{uid} {
+        allow get: if signedIn()
+          && (request.auth.uid == uid || hasPermission(organizationId, 'membership.read'));
+        allow list: if hasPermission(organizationId, 'membership.read');
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Autorise uniquement une requête collectionGroup explicitement bornée au uid courant.
+    match /{membershipPath=**}/memberships/{membershipId} {
+      allow get, list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /registries/{registryId} {
+      allow get: if canReadRegistry(resource.data.organizationId, registryId);
+      allow list, create, update, delete: if false;
+
+      match /items/{cartularyId} {
+        allow get, list: if canReadRegistry(
+          get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+          registryId
+        );
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /schemaCatalog/{assetType} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if false;
+
+      match /{schemaDocument=**} {
+        allow get, list: if signedIn();
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /cartularies/{cartularyId} {
+      allow get: if canReadCartulary(resource.data.organizationId, resource.data.registryId);
+      allow list, create, update, delete: if false;
+
+      match /{cartularyDocument=**} {
+        allow get, list: if canReadCartulary(
+          get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.organizationId,
+          get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.registryId
+        );
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /publications/{publicCode} {
+      allow get: if resource.data.status == 'published';
+      allow list, create, update, delete: if false;
+
+      match /blocks/{blockId} {
+        allow get, list: if get(
+          /databases/$(database)/documents/publications/$(publicCode)
+        ).data.status == 'published';
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /seals/{publicCode} {
+      allow get: if resource.data.status == 'issued';
+      allow list, create, update, delete: if false;
+    }
+
+    match /communityMemberships/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /communityProfiles/{uid} {
+      allow get, list: if hasCommunityPermission('community.read')
+        && resource.data.status == 'active'
+        && resource.data.visibility == 'community';
+      allow create, update, delete: if false;
+
+      match /{privateProfileDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /communityPublications/{publicationId} {
+      allow get, list: if hasCommunityPermission('community.read')
+        && resource.data.status == 'published'
+        && resource.data.moderationStatus == 'approved';
+      allow create, update, delete: if false;
+
+      match /blocks/{blockId} {
+        allow get, list: if hasCommunityPermission('community.read')
+          && communityPublicationIsActive(publicationId);
+        allow create, update, delete: if false;
+      }
+
+      match /moderationEvents/{eventId} {
+        allow get, list: if hasCommunityPermission('community.moderate');
+        allow create, update, delete: if false;
+      }
+
+      match /{privateCommunityPublicationDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /communityPosts/{postId} {
+      allow get, list: if hasCommunityPermission('community.read')
+        && resource.data.status == 'active'
+        && resource.data.moderationStatus == 'visible'
+        && communityPublicationIsActive(resource.data.communityPublicationId);
+      allow create, update, delete: if false;
+
+      match /comments/{commentId} {
+        allow get, list: if hasCommunityPermission('community.read')
+          && resource.data.status == 'visible'
+          && get(/databases/$(database)/documents/communityPosts/$(postId)).data.status == 'active'
+          && get(/databases/$(database)/documents/communityPosts/$(postId)).data.moderationStatus == 'visible'
+          && communityPublicationIsActive(
+            get(/databases/$(database)/documents/communityPosts/$(postId)).data.communityPublicationId
+          );
+        allow create, update, delete: if false;
+      }
+
+      match /{privateCommunityPostDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /communityCommandReceipts/{receiptId} {
+      allow read, write: if false;
+    }
+
+    match /cartularyExports/{exportId} {
+      allow get: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && resource.data.status == 'ready'
+        && hasPermission(resource.data.organizationId, 'cartulary.export')
+        && registryIsInScope(resource.data.organizationId, resource.data.registryId);
+      allow list, create, update, delete: if false;
+
+      match /records/{recordId} {
+        allow get, list: if signedIn()
+          && get(/databases/$(database)/documents/cartularyExports/$(exportId)).data.ownerUid == request.auth.uid
+          && get(/databases/$(database)/documents/cartularyExports/$(exportId)).data.status == 'ready'
+          && hasPermission(
+            get(/databases/$(database)/documents/cartularyExports/$(exportId)).data.organizationId,
+            'cartulary.export'
+          )
+          && registryIsInScope(
+            get(/databases/$(database)/documents/cartularyExports/$(exportId)).data.organizationId,
+            get(/databases/$(database)/documents/cartularyExports/$(exportId)).data.registryId
+          );
+        allow create, update, delete: if false;
+      }
+
+      match /{privateExportDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /integrityBatches/{batchId} {
+      allow get: if signedIn() && request.auth.uid in resource.data.readerUids;
+      allow list, create, update, delete: if false;
+
+      match /receipts/{receiptId} {
+        allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+        allow list, create, update, delete: if false;
+      }
+
+      match /timestampReceipts/{receiptId} {
+        allow get: if signedIn()
+          && request.auth.uid in get(
+            /databases/$(database)/documents/integrityBatches/$(batchId)
+          ).data.readerUids;
+        allow list, create, update, delete: if false;
+      }
+
+      match /{privateBatchDocument=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /integrityProjections/{cartularyId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

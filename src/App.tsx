@@ -29,11 +29,15 @@ import { Spin360 } from './components/Spin360';
 import { AuditPanel } from './components/AuditPanel';
 import { IntegrityJournal } from './utils/integrityJournal';
 import { AI_SCHEMA_VERSION, aiFieldProps, type AIFieldId } from './ai/fieldCatalog';
+import { ProjectedPublicBlock } from './components/ProjectedPublicBlock';
+import { loadPublicProjection } from './services/projections';
+import type { LoadedPublicProjection } from './domain/projections';
 
 type CartularyPage = 'cover' | 'media' | 'reference' | 'condition' | 'value';
 type PublishedBlockId =
   | 'cover-watch'
   | 'cover-owner'
+  | 'cover-transmission'
   | 'cover-storage'
   | 'media-hero'
   | 'media-motion'
@@ -95,6 +99,18 @@ interface OwnerField {
 }
 
 type OwnerType = 'Personne physique' | 'Entreprise';
+type WatchPatrimonialStatus = 'Patrimonial' | 'À vendre' | 'Ouvert à proposition';
+type AssetKind = 'Montre' | 'Voiture' | 'Vin' | 'Sculpture' | 'Peinture' | 'Photographie' | 'Meuble' | 'Autre art' | 'Bien immobilier' | 'Autre';
+
+interface TransmissionRecipient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  email: string;
+  phone: string;
+  percentage: number | '';
+}
 
 interface OwnerDocument {
   id: string;
@@ -108,6 +124,18 @@ interface OwnerDocument {
 interface MarketDepthState {
   analysisDate: string;
   transactions12m: number;
+}
+
+interface RetainedValuationState {
+  amount: number;
+  explanation: string;
+}
+
+interface StorageLocation {
+  id: string;
+  name: string;
+  contents: string;
+  description: string;
 }
 
 type PopularityResourceType = 'Forum officiel' | 'Discussion dédiée' | 'Communauté' | 'Base de données' | 'Revue';
@@ -172,13 +200,26 @@ const PAGE_IDS: CartularyPage[] = ['cover', 'media', 'reference', 'condition', '
 const journal = new IntegrityJournal();
 
 const PUBLISHED_BLOCK_IDS: PublishedBlockId[] = [
-  'cover-watch', 'cover-owner', 'cover-storage',
+  'cover-watch', 'cover-owner', 'cover-transmission', 'cover-storage',
   'media-hero', 'media-motion', 'media-spin', 'media-slideshow', 'media-library',
   'reference-history', 'reference-specs', 'reference-checks', 'reference-popularity',
   'condition-description', 'condition-summary', 'condition-documentation',
   'condition-reference-report', 'condition-prior-reviews',
   'value-market', 'value-comparables-listings', 'value-comparables-transactions', 'value-comparables-analysis',
   'value-cost-basis', 'value-performance', 'value-sensitivity',
+];
+
+const ASSET_KINDS: AssetKind[] = [
+  'Montre',
+  'Voiture',
+  'Vin',
+  'Sculpture',
+  'Peinture',
+  'Photographie',
+  'Meuble',
+  'Autre art',
+  'Bien immobilier',
+  'Autre',
 ];
 
 const MEDIA_TAGS: Array<{ id: MediaTag; label: string }> = [
@@ -256,6 +297,8 @@ const DEFAULT_OWNER_FIELDS: OwnerField[] = [
 ];
 
 const DEFAULT_STORAGE_DESCRIPTION = `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}. Accès contrôlé et conditions de conservation à documenter.`;
+
+const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de la montre, de la complétude de son dossier et du canal de cession.';
 
 const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = [
   { id: 'pop-iwc-forum', name: 'IWC Collectors Forum', type: 'Forum officiel', url: 'https://forum.iwc.com/' },
@@ -373,6 +416,11 @@ const publishedBlocksFromUrl = (): PublishedBlockId[] | null => {
   return requested.filter((block): block is PublishedBlockId => PUBLISHED_BLOCK_IDS.includes(block as PublishedBlockId));
 };
 
+const publicCodeFromUrl = (): string | null => {
+  const value = new URLSearchParams(window.location.search).get('publicCode');
+  return value && /^[A-Za-z0-9_-]{6,64}$/.test(value) ? value : null;
+};
+
 const readStored = <T,>(key: string, fallback: T): T => {
   try {
     const value = window.localStorage.getItem(key);
@@ -380,6 +428,19 @@ const readStored = <T,>(key: string, fallback: T): T => {
   } catch {
     return fallback;
   }
+};
+
+const loadStorageLocations = (): StorageLocation[] => {
+  const stored = readStored<StorageLocation[] | null>('cartularia-storage-locations', null);
+  if (stored) return stored;
+
+  const legacyDescription = readStored('cartularia-storage-description', DEFAULT_STORAGE_DESCRIPTION);
+  return [{
+    id: 'storage-main',
+    name: `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}`,
+    contents: 'Montre',
+    description: legacyDescription,
+  }];
 };
 
 const loadConditionEntries = (): ConditionEntry[] => readStored(
@@ -408,6 +469,16 @@ const loadReportBlocks = (): PublishedBlockId[] => {
   return [...new Set(stored.flatMap((blockId) => blockId === 'value-comparables'
     ? ['value-comparables-listings', 'value-comparables-transactions', 'value-comparables-analysis']
     : [blockId]).filter((blockId): blockId is PublishedBlockId =>
+    PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)))];
+};
+
+const loadCommunityBlocks = (): PublishedBlockId[] => {
+  const stored = readStored<string[]>('cartularia-community-blocks', []);
+  return [...new Set(stored.flatMap((blockId) => {
+    if (blockId === 'condition-reports') return ['condition-reference-report', 'condition-prior-reviews'];
+    if (blockId === 'value-comparables') return ['value-comparables-listings', 'value-comparables-transactions', 'value-comparables-analysis'];
+    return [blockId];
+  }).filter((blockId): blockId is PublishedBlockId =>
     PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)))];
 };
 
@@ -564,6 +635,7 @@ interface BlockMarkerState {
   blockId: PublishedBlockId;
   website: MarkerState;
   report: MarkerState;
+  community: MarkerState;
   edit?: MarkerState;
 }
 
@@ -575,19 +647,25 @@ function ContentMarker({
   instance,
   disabled = false,
 }: {
-  marker: 'W' | 'R';
+  marker: 'W' | 'R' | 'C';
   active: boolean;
   label: string;
   onToggle: () => void;
   instance: PublishedBlockId;
   disabled?: boolean;
 }) {
-  const destination = marker === 'W' ? 'Watch website' : 'rapport PDF';
+  const destination = marker === 'W' ? 'Watch website' : marker === 'R' ? 'rapport PDF' : 'Cercle';
+  const markerClass = marker === 'W' ? 'website' : marker === 'R' ? 'report' : 'community';
+  const aiBinding = marker === 'W'
+    ? aiFieldProps('publishing.blocks.website', instance)
+    : marker === 'R'
+      ? aiFieldProps('publishing.blocks.report', instance)
+      : {};
   return (
     <button
       type="button"
-      {...aiFieldProps(marker === 'W' ? 'publishing.blocks.website' : 'publishing.blocks.report', instance)}
-      className={`content-marker content-marker--${marker === 'W' ? 'website' : 'report'} no-print ${active ? 'is-active' : ''}`}
+      {...aiBinding}
+      className={`content-marker content-marker--${markerClass} no-print ${active ? 'is-active' : ''}`}
       onClick={onToggle}
       disabled={disabled}
       aria-pressed={active}
@@ -602,6 +680,7 @@ function BlockMarkers({ selection, label }: { selection: BlockMarkerState; label
     <div className="content-markers">
       <ContentMarker marker="W" active={selection.website.active} label={label} instance={selection.blockId} onToggle={selection.website.onToggle} disabled={selection.website.disabled} />
       <ContentMarker marker="R" active={selection.report.active} label={label} instance={selection.blockId} onToggle={selection.report.onToggle} disabled={selection.report.disabled} />
+      <ContentMarker marker="C" active={selection.community.active} label={label} instance={selection.blockId} onToggle={selection.community.onToggle} disabled={selection.community.disabled} />
       {selection.edit && (
         <button
           type="button"
@@ -724,8 +803,10 @@ function AccessRestricted({ title }: { title: string }) {
 }
 
 function App() {
+  const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
+  const requestedPublicCode = publicCodeFromUrl();
   const [language, setLanguage] = useState<'FR' | 'EN'>('FR');
-  const [audience, setAudience] = useState<VisibilityLevel>('Secret');
+  const [audience] = useState<VisibilityLevel>('Secret');
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
   const [eventTrigger, setEventTrigger] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -749,13 +830,26 @@ function App() {
     readStored<OwnerType>('cartularia-owner-type', 'Personne physique'),
   );
   const [ownerDocuments, setOwnerDocuments] = useState<OwnerDocument[]>(loadOwnerDocuments);
-  const [storageDescription, setStorageDescription] = useState(() =>
-    readStored('cartularia-storage-description', DEFAULT_STORAGE_DESCRIPTION),
+  const [assetKind, setAssetKind] = useState<AssetKind>(() =>
+    readStored<AssetKind>('cartularia-asset-kind', 'Montre'),
   );
+  const [watchStatus, setWatchStatus] = useState<WatchPatrimonialStatus>(() =>
+    readStored<WatchPatrimonialStatus>('cartularia-watch-status', 'Patrimonial'),
+  );
+  const [transmissionRecipients, setTransmissionRecipients] = useState<TransmissionRecipient[]>(() =>
+    readStored<TransmissionRecipient[]>('cartularia-transmission-recipients', []),
+  );
+  const [storageLocations, setStorageLocations] = useState<StorageLocation[]>(loadStorageLocations);
   const [marketDepth, setMarketDepth] = useState<MarketDepthState>(() =>
     readStored('cartularia-market-depth', {
       analysisDate: mockCartulary.marketSnapshot.date,
       transactions12m: mockCartulary.marketSnapshot.observedTransactions90d,
+    }),
+  );
+  const [retainedValuation, setRetainedValuation] = useState<RetainedValuationState>(() =>
+    readStored('cartularia-retained-valuation', {
+      amount: mockCartulary.marketSnapshot.midValue,
+      explanation: DEFAULT_RETAINED_VALUE_EXPLANATION,
     }),
   );
   const [popularityResources, setPopularityResources] = useState<PopularityResource[]>(() =>
@@ -763,6 +857,7 @@ function App() {
   );
   const [publishedBlocks, setPublishedBlocks] = useState<PublishedBlockId[]>(loadPublishedBlocks);
   const [reportBlocks, setReportBlocks] = useState<PublishedBlockId[]>(loadReportBlocks);
+  const [communityBlocks, setCommunityBlocks] = useState<PublishedBlockId[]>(loadCommunityBlocks);
   const [specificationGroups, setSpecificationGroups] = useState<SpecificationGroupData[]>(loadSpecificationGroups);
   const [editableCopy, setEditableCopy] = useState<EditableCopyData>(loadEditableCopy);
   const [purchase, setPurchase] = useState<PurchaseState>(() => readStored('cartularia-purchase', {
@@ -779,6 +874,9 @@ function App() {
       disposalCostPct: 10,
     }),
   );
+  const [publicProjection, setPublicProjection] = useState<LoadedPublicProjection | null>(null);
+  const [publicProjectionLoading, setPublicProjectionLoading] = useState(Boolean(isWatchWebsite && requestedPublicCode));
+  const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (window.location.pathname.replace(/\/$/, '') === '/watch-website') return;
@@ -787,6 +885,36 @@ function App() {
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
+
+  useEffect(() => {
+    if (!isWatchWebsite || !requestedPublicCode) return;
+    let active = true;
+    setPublicProjectionLoading(true);
+    setPublicProjectionError(null);
+    loadPublicProjection(requestedPublicCode)
+      .then((projection) => {
+        if (!active) return;
+        setPublicProjection(projection);
+        if (!projection) setPublicProjectionError('Publication absente ou révoquée.');
+      })
+      .catch(() => {
+        if (!active) return;
+        setPublicProjection(null);
+        setPublicProjectionError('Publication indisponible.');
+      })
+      .finally(() => {
+        if (active) setPublicProjectionLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isWatchWebsite, requestedPublicCode]);
+
+  useEffect(() => () => {
+    publicProjection?.blocks.forEach((block) => block.assets.forEach((asset) => {
+      if (asset.downloadUrl?.startsWith('blob:')) URL.revokeObjectURL(asset.downloadUrl);
+    }));
+  }, [publicProjection]);
 
   useEffect(() => {
     journal
@@ -860,12 +988,28 @@ function App() {
   }, [ownerDocuments]);
 
   useEffect(() => {
-    window.localStorage.setItem('cartularia-storage-description', JSON.stringify(storageDescription));
-  }, [storageDescription]);
+    window.localStorage.setItem('cartularia-asset-kind', JSON.stringify(assetKind));
+  }, [assetKind]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-watch-status', JSON.stringify(watchStatus));
+  }, [watchStatus]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-transmission-recipients', JSON.stringify(transmissionRecipients));
+  }, [transmissionRecipients]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-storage-locations', JSON.stringify(storageLocations));
+  }, [storageLocations]);
 
   useEffect(() => {
     window.localStorage.setItem('cartularia-market-depth', JSON.stringify(marketDepth));
   }, [marketDepth]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-retained-valuation', JSON.stringify(retainedValuation));
+  }, [retainedValuation]);
 
   useEffect(() => {
     window.localStorage.setItem('cartularia-popularity-resources', JSON.stringify(popularityResources));
@@ -878,6 +1022,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('cartularia-report-blocks', JSON.stringify(reportBlocks));
   }, [reportBlocks]);
+
+  useEffect(() => {
+    window.localStorage.setItem('cartularia-community-blocks', JSON.stringify(communityBlocks));
+  }, [communityBlocks]);
 
   useEffect(() => {
     window.localStorage.setItem('cartularia-specification-groups', JSON.stringify(specificationGroups));
@@ -897,7 +1045,6 @@ function App() {
   }, [exitAssumptions]);
 
   const watch = mockCartulary.watchInstance;
-  const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
   const isVisible = (required: VisibilityLevel) => {
     if (audience === 'Secret') return true;
     if (audience === 'Communauté') return required !== 'Secret';
@@ -915,8 +1062,11 @@ function App() {
   const specificationValue = (label: string, fallback: string) =>
     specificationGroups.flatMap((group) => group.items).find((item) => item.label === label)?.value || fallback;
   const requestedPublishedBlocks = publishedBlocksFromUrl();
+  const firestorePublishedBlocks = publicProjection?.blocks
+    .map((block) => block.blockId)
+    .filter((blockId): blockId is PublishedBlockId => PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)) ?? [];
   const watchWebsiteBlocks = isWatchWebsite
-    ? (requestedPublishedBlocks ?? publishedBlocks)
+    ? (requestedPublicCode ? firestorePublishedBlocks : (requestedPublishedBlocks ?? publishedBlocks))
     : publishedBlocks;
   const watchWebsiteUrl = `${window.location.origin}/watch-website?blocks=${publishedBlocks.join(',')}`;
   const orderedReportBlocks = PUBLISHED_BLOCK_IDS.filter((blockId) => reportBlocks.includes(blockId));
@@ -932,6 +1082,12 @@ function App() {
       ? current.filter((item) => item !== blockId)
       : [...current, blockId]);
   };
+  const toggleCommunityBlock = (blockId: PublishedBlockId) => {
+    if (audience !== 'Secret') return;
+    setCommunityBlocks((current) => current.includes(blockId)
+      ? current.filter((item) => item !== blockId)
+      : [...current, blockId]);
+  };
   const publishProps = (blockId: PublishedBlockId, editable = false): BlockMarkerState => ({
     blockId,
     website: {
@@ -942,6 +1098,11 @@ function App() {
     report: {
       active: reportBlocks.includes(blockId),
       onToggle: () => toggleReportBlock(blockId),
+      disabled: audience !== 'Secret',
+    },
+    community: {
+      active: communityBlocks.includes(blockId),
+      onToggle: () => toggleCommunityBlock(blockId),
       disabled: audience !== 'Secret',
     },
     ...(editable ? {
@@ -1013,10 +1174,16 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleReportPrint = async () => {
+  const handleReportPrint = () => {
     if (orderedReportBlocks.length === 0) return;
-    await journal.logEvent('EXPORT_PDF', 'Propriétaire', `Export du rapport personnalisé · ${orderedReportBlocks.length} blocs`);
-    setEventTrigger((previous) => previous + 1);
+
+    // Keep the print dialog in the original click event. Awaiting the audit
+    // write first can make browsers treat window.print() as an unsolicited popup.
+    void journal
+      .logEvent('EXPORT_PDF', 'Propriétaire', `Export du rapport personnalisé · ${orderedReportBlocks.length} blocs`)
+      .then(() => setEventTrigger((previous) => previous + 1))
+      .catch((error: unknown) => console.error("Échec de la journalisation de l'impression", error));
+
     window.print();
   };
 
@@ -1117,6 +1284,35 @@ function App() {
     setOwnerFields((current) => current.map((field) => field.id === id ? { ...field, ...patch } : field));
   };
 
+  const updateTransmissionRecipient = (id: string, patch: Partial<TransmissionRecipient>) => {
+    setTransmissionRecipients((current) => current.map((recipient) => recipient.id === id ? { ...recipient, ...patch } : recipient));
+  };
+
+  const addTransmissionRecipient = () => {
+    setTransmissionRecipients((current) => [...current, {
+      id: newId('transmission-recipient'),
+      firstName: '',
+      lastName: '',
+      address: '',
+      email: '',
+      phone: '',
+      percentage: '',
+    }]);
+  };
+
+  const updateStorageLocation = (id: string, patch: Partial<StorageLocation>) => {
+    setStorageLocations((current) => current.map((location) => location.id === id ? { ...location, ...patch } : location));
+  };
+
+  const addStorageLocation = () => {
+    setStorageLocations((current) => [...current, {
+      id: newId('storage-location'),
+      name: '',
+      contents: '',
+      description: '',
+    }]);
+  };
+
   const updateOwnerDocument = (id: string, patch: Partial<OwnerDocument>) => {
     setOwnerDocuments((current) => current.map((document) => document.id === id ? { ...document, ...patch } : document));
   };
@@ -1187,6 +1383,8 @@ function App() {
   };
 
   const renderWatchWebsiteBlock = (blockId: PublishedBlockId) => {
+    const projectedBlock = publicProjection?.blocks.find((block) => block.blockId === blockId);
+    if (projectedBlock) return <ProjectedPublicBlock block={projectedBlock} />;
     switch (blockId) {
       case 'cover-watch':
         return (
@@ -1197,7 +1395,11 @@ function App() {
                 <p>{specificationValue('Marque', watch.reference.brand)}</p>
                 <h1>{specificationValue('Modèle', watch.reference.model)}</h1>
               </div>
-              <small>{specificationValue('Numéro de référence', watch.reference.reference)}</small>
+              <div className="cover-sheet__identity-meta">
+                <span className="asset-kind-badge">{assetKind}</span>
+                <span className="watch-status-badge">{watchStatus}</span>
+                <small>{specificationValue('Numéro de référence', watch.reference.reference)}</small>
+              </div>
             </div>
             <div className="cover-sheet__photo">
               {mainPhoto
@@ -1224,11 +1426,50 @@ function App() {
             </article>
           </section>
         );
+      case 'cover-transmission':
+        return (
+          <section>
+            <SectionTitle eyebrow="Projet patrimonial" title="Transmission" />
+            <article className="transmission-card transmission-card--published">
+              {transmissionRecipients.length > 0 ? (
+                <div className="transmission-published-grid">
+                  {transmissionRecipients.map((recipient, index) => (
+                    <article key={recipient.id}>
+                      <span className="eyebrow">Personne {String(index + 1).padStart(2, '0')}</span>
+                      <h3>{[recipient.firstName, recipient.lastName].filter(Boolean).join(' ') || 'Identité non renseignée'}</h3>
+                      <dl>
+                        <div><dt>Adresse</dt><dd>{recipient.address || 'Non renseignée'}</dd></div>
+                        <div><dt>Email</dt><dd>{recipient.email || 'Non renseigné'}</dd></div>
+                        <div><dt>Téléphone</dt><dd>{recipient.phone || 'Non renseigné'}</dd></div>
+                        <div><dt>Part donnée</dt><dd>{recipient.percentage === '' ? 'Non renseignée' : `${recipient.percentage} %`}</dd></div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="transmission-empty">Aucune personne renseignée pour la transmission.</p>}
+            </article>
+          </section>
+        );
       case 'cover-storage':
         return (
           <section>
             <SectionTitle eyebrow="Conservation" title="Stockage" />
-            <article className="storage-card"><p>{storageDescription || 'Lieu de stockage non renseigné.'}</p></article>
+            <article className="storage-card storage-card--published">
+              {storageLocations.length > 0 ? (
+                <div className="storage-published-grid">
+                  {storageLocations.map((location, index) => (
+                    <article key={location.id}>
+                      <span className="eyebrow">Lieu {String(index + 1).padStart(2, '0')}</span>
+                      <h3>{location.name || 'Lieu non renseigné'}</h3>
+                      <dl>
+                        <div><dt>Contenu stocké</dt><dd>{location.contents || 'Non renseigné'}</dd></div>
+                        <div><dt>Description</dt><dd>{location.description || 'Aucune précision'}</dd></div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="storage-empty">Aucun lieu de stockage renseigné.</p>}
+            </article>
           </section>
         );
       case 'media-hero':
@@ -1240,7 +1481,7 @@ function App() {
               <h2>{watch.reference.brand}<br />{watch.reference.model}</h2>
               <p>{editableCopy.heroSummary}</p>
               <dl className="hero-facts">
-                <div><dt>Statut</dt><dd>En possession</dd></div>
+                <div><dt>Statut</dt><dd>{watchStatus}</dd></div>
                 <div><dt>Dernier contrôle</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
                 <div><dt>Référence</dt><dd>{watch.reference.reference}</dd></div>
                 <div><dt>Dossier</dt><dd>{mockCartulary.publicCode}</dd></div>
@@ -1398,7 +1639,12 @@ function App() {
             <SectionTitle eyebrow="Évaluation de marché" title="Données de marché" />
             <div className="market-grid">
               <article className="market-chart-card"><span className="eyebrow">Évolution du marché</span><div className="market-bars">{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>Source : évaluations datées du dossier</small></article>
-              <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">Profondeur de marché</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? `Analyse du ${formatDate(marketDepth.analysisDate)}` : 'Date non renseignée'}</time></div><div className="metric-grid"><div><strong>{mockCartulary.marketSnapshot.activeListings}</strong><span>Annonces actives</span></div><div><strong>{marketDepth.transactions12m}</strong><span>Transactions identifiées · 12 mois</span></div><div><strong>{mockCartulary.marketSnapshot.medianDaysOnMarket} j</strong><span>Délai médian estimé</span></div></div><div className="valuation-range"><span>Fourchette actuelle</span><strong>{formatMoney(mockCartulary.marketSnapshot.lowValue)} — {formatMoney(mockCartulary.marketSnapshot.highValue)}</strong></div></article>
+              <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">Profondeur de marché</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? `Analyse du ${formatDate(marketDepth.analysisDate)}` : 'Date non renseignée'}</time></div><div className="metric-grid"><div><strong>{mockCartulary.marketSnapshot.activeListings}</strong><span>Annonces actives</span></div><div><strong>{marketDepth.transactions12m}</strong><span>Transactions identifiées · 12 mois</span></div><div><strong>{mockCartulary.marketSnapshot.medianDaysOnMarket} j</strong><span>Délai médian estimé</span></div></div><div className="valuation-range"><span>Fourchette actuelle</span><strong>{formatMoney(mockCartulary.marketSnapshot.lowValue)} — {formatMoney(mockCartulary.marketSnapshot.highValue)}</strong><small>VALEUR MÉDIANE {formatMoney(mockCartulary.marketSnapshot.midValue)}</small></div></article>
+              <article className="retained-value-card retained-value-card--published">
+                <div><span className="eyebrow">Décision du propriétaire</span><h3>Valeur retenue</h3></div>
+                <strong>{formatMoney(retainedValuation.amount, watch.currency)}</strong>
+                <p>{retainedValuation.explanation || 'Aucune explication renseignée.'}</p>
+              </article>
             </div>
           </section>
         );
@@ -1449,14 +1695,34 @@ function App() {
     }
   };
 
+  if (isWatchWebsite && requestedPublicCode && (publicProjectionLoading || !publicProjection)) {
+    return (
+      <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
+        <header className="watch-website__masthead">
+          <div className="container"><BrandLogo className="watch-website__wordmark" /></div>
+        </header>
+        <main className="container watch-website__main">
+          <div className="watch-website__empty-state">
+            {publicProjectionLoading ? <RotateCw className="is-spinning" size={26} /> : <Lock size={26} />}
+            <h1>{publicProjectionLoading ? 'Chargement de la publication' : 'Aucun contenu publié'}</h1>
+            <p>{publicProjectionLoading ? 'Lecture de la projection Firestore…' : publicProjectionError}</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (isWatchWebsite) {
     const orderedBlocks = PUBLISHED_BLOCK_IDS.filter((blockId) => watchWebsiteBlocks.includes(blockId));
+    const websiteCode = publicProjection?.publication.publicCode ?? mockCartulary.publicCode;
+    const websiteBrand = publicProjection?.publication.makerName ?? watch.reference.brand;
+    const websiteModel = publicProjection?.publication.modelName ?? watch.reference.model;
     return (
       <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
         <header className="watch-website__masthead">
           <div className="container">
             <BrandLogo className="watch-website__wordmark" />
-            <div><span className="eyebrow">Watch website · {mockCartulary.publicCode}</span><strong>{watch.reference.brand} · {watch.reference.model}</strong></div>
+            <div><span className="eyebrow">Watch website · {websiteCode}</span><strong>{websiteBrand} · {websiteModel}</strong></div>
           </div>
         </header>
         <main className="container watch-website__main">
@@ -1464,7 +1730,7 @@ function App() {
             ? orderedBlocks.map((blockId) => <div className="watch-website__block" id={blockId} key={blockId}>{renderWatchWebsiteBlock(blockId)}</div>)
             : <div className="watch-website__empty-state"><Globe2 size={26} /><h1>Aucun contenu publié</h1><p>Cette sélection publique ne contient actuellement aucun bloc.</p></div>}
         </main>
-        <footer className="watch-website__footer"><div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Dossier numérique indépendant</span></span><span>{mockCartulary.publicCode} · 2026</span></div></footer>
+        <footer className="watch-website__footer"><div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Dossier numérique indépendant</span></span><span>{websiteCode} · {publicProjection?.seal?.supportCode ?? 'projection'}</span></div></footer>
       </div>
     );
   }
@@ -1477,8 +1743,6 @@ function App() {
         model={watch.reference.model}
         language={language}
         setLanguage={setLanguage}
-        audience={audience}
-        setAudience={setAudience}
       />
 
       <nav className="page-tabs no-print" aria-label={language === 'FR' ? 'Pages du Cartulaire' : 'Cartulary pages'}>
@@ -1500,7 +1764,18 @@ function App() {
             Watch website
             <span>{publishedBlocks.length}</span>
           </a>
-          <button type="button" className="page-tabs__report" onClick={handleReportPrint} disabled={orderedReportBlocks.length === 0}>
+          <button
+            type="button"
+            className="page-tabs__report"
+            onClick={handleReportPrint}
+            disabled={orderedReportBlocks.length === 0}
+            aria-label={orderedReportBlocks.length > 0
+              ? `Imprimer le rapport PDF (${orderedReportBlocks.length} blocs sélectionnés)`
+              : 'Sélectionnez au moins un bloc pour imprimer le rapport PDF'}
+            title={orderedReportBlocks.length > 0
+              ? 'Imprimer le rapport ou l’enregistrer au format PDF'
+              : 'Sélectionnez au moins un bloc R'}
+          >
             <Printer size={14} />
             Rapport PDF
             <span>{orderedReportBlocks.length}</span>
@@ -1530,7 +1805,21 @@ function App() {
                     <strong>{specificationValue('Modèle', watch.reference.model)}</strong>
                   </button>
                 )}
-                <small {...aiFieldProps('cover.watch.reference')}>{specificationValue('Numéro de référence', watch.reference.reference)}</small>
+                <div className="cover-sheet__identity-meta">
+                  <label className="asset-kind-control">Type de bien
+                    <select {...aiFieldProps('cover.asset.type')} value={assetKind} onChange={(event) => setAssetKind(event.target.value as AssetKind)} disabled={audience !== 'Secret'}>
+                      {ASSET_KINDS.map((kind) => <option key={kind}>{kind}</option>)}
+                    </select>
+                  </label>
+                  <label className="watch-status-control">Statut
+                    <select {...aiFieldProps('cover.watch.status')} value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchPatrimonialStatus)} disabled={audience !== 'Secret'}>
+                      <option>Patrimonial</option>
+                      <option>À vendre</option>
+                      <option>Ouvert à proposition</option>
+                    </select>
+                  </label>
+                  <small {...aiFieldProps('cover.watch.reference')}>{specificationValue('Numéro de référence', watch.reference.reference)}</small>
+                </div>
               </div>
               <button
                 type="button"
@@ -1595,11 +1884,71 @@ function App() {
               </section>
 
               <section>
-                <SectionTitle eyebrow="Conservation" title="Stockage" publish={publishProps('cover-storage', true)} />
+                <SectionTitle eyebrow="Projet patrimonial" title="Transmission" publish={publishProps('cover-transmission')} />
+                <article className="transmission-card">
+                  <header className="transmission-card__heading">
+                    <div>
+                      <span className="eyebrow">Personnes désignées</span>
+                      <p>Renseignez les personnes auxquelles vous souhaitez transmettre tout ou partie du bien.</p>
+                    </div>
+                    <span>{transmissionRecipients.length} personne{transmissionRecipients.length > 1 ? 's' : ''}</span>
+                  </header>
+
+                  {transmissionRecipients.length > 0 ? (
+                    <div className="transmission-list">
+                      {transmissionRecipients.map((recipient, index) => (
+                        <article className="transmission-person" key={recipient.id} data-ai-scope="cover.transmission.recipients[]" data-ai-instance={recipient.id}>
+                          <header>
+                            <span className="eyebrow">Personne {String(index + 1).padStart(2, '0')}</span>
+                            <button type="button" className="icon-button no-print" onClick={() => setTransmissionRecipients((current) => current.filter((item) => item.id !== recipient.id))} aria-label={`Supprimer ${recipient.firstName || recipient.lastName || `la personne ${index + 1}`}`}><Trash2 size={15} /></button>
+                          </header>
+                          <div className="transmission-person__fields">
+                            <label>Prénom<input {...aiFieldProps('cover.transmission.recipients[].firstName', recipient.id)} type="text" value={recipient.firstName} onChange={(event) => updateTransmissionRecipient(recipient.id, { firstName: event.target.value })} placeholder="Prénom" /></label>
+                            <label>Nom<input {...aiFieldProps('cover.transmission.recipients[].lastName', recipient.id)} type="text" value={recipient.lastName} onChange={(event) => updateTransmissionRecipient(recipient.id, { lastName: event.target.value })} placeholder="Nom" /></label>
+                            <label className="transmission-person__address">Adresse<textarea {...aiFieldProps('cover.transmission.recipients[].address', recipient.id)} value={recipient.address} rows={3} onChange={(event) => updateTransmissionRecipient(recipient.id, { address: event.target.value })} placeholder="Adresse complète" /></label>
+                            <label>Email<input {...aiFieldProps('cover.transmission.recipients[].email', recipient.id)} type="email" value={recipient.email} onChange={(event) => updateTransmissionRecipient(recipient.id, { email: event.target.value })} placeholder="nom@exemple.com" /></label>
+                            <label>Téléphone<input {...aiFieldProps('cover.transmission.recipients[].phone', recipient.id)} type="tel" value={recipient.phone} onChange={(event) => updateTransmissionRecipient(recipient.id, { phone: event.target.value })} placeholder="+33…" /></label>
+                            <label>Part donnée<span className="percentage-input"><input {...aiFieldProps('cover.transmission.recipients[].percentage', recipient.id)} type="number" min="0" max="100" step="0.1" value={recipient.percentage} onChange={(event) => updateTransmissionRecipient(recipient.id, { percentage: event.target.value === '' ? '' : Math.min(100, Math.max(0, Number(event.target.value))) })} placeholder="0" /><span>%</span></span></label>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : <p className="transmission-empty">Aucune personne renseignée. Ajoutez une personne pour préparer votre projet de transmission.</p>}
+
+                  <button type="button" className="button button--quiet no-print" onClick={addTransmissionRecipient}><Plus size={14} /> Ajouter une personne</button>
+                </article>
+              </section>
+
+              <section>
+                <SectionTitle eyebrow="Conservation" title="Stockage" publish={publishProps('cover-storage')} />
                 <article className="storage-card">
-                  {editingBlock === 'cover-storage'
-                    ? <textarea {...aiFieldProps('cover.storage.description')} value={storageDescription} rows={4} onChange={(event) => setStorageDescription(event.target.value)} aria-label="Description du lieu de stockage" placeholder="Décrire le lieu et les conditions de stockage" />
-                    : <p {...aiFieldProps('cover.storage.description')} className="editable-click-target" onClick={() => setEditingBlock('cover-storage')} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setEditingBlock('cover-storage'); }} title="Cliquer pour modifier">{storageDescription || 'Lieu de stockage non renseigné.'}</p>}
+                  <header className="storage-card__heading">
+                    <div>
+                      <span className="eyebrow">Lieux et contenus</span>
+                      <p>Chaque emplacement distingue le lieu, ce qui y est conservé et les conditions de stockage.</p>
+                    </div>
+                    <span>{storageLocations.length} lieu{storageLocations.length > 1 ? 'x' : ''}</span>
+                  </header>
+
+                  {storageLocations.length > 0 ? (
+                    <div className="storage-list">
+                      {storageLocations.map((location, index) => (
+                        <article className="storage-location" key={location.id} data-ai-scope="cover.storage.locations[]" data-ai-instance={location.id}>
+                          <header>
+                            <span className="eyebrow">Lieu {String(index + 1).padStart(2, '0')}</span>
+                            <button type="button" className="icon-button no-print" onClick={() => setStorageLocations((current) => current.filter((item) => item.id !== location.id))} aria-label={`Supprimer ${location.name || `le lieu ${index + 1}`}`}><Trash2 size={15} /></button>
+                          </header>
+                          <div className="storage-location__fields">
+                            <label>Lieu de stockage<input {...aiFieldProps('cover.storage.locations[].name', location.id)} type="text" value={location.name} onChange={(event) => updateStorageLocation(location.id, { name: event.target.value })} placeholder="Coffre, cave, domicile…" /></label>
+                            <label>Ce qui est stocké<textarea {...aiFieldProps('cover.storage.locations[].contents', location.id)} value={location.contents} rows={3} onChange={(event) => updateStorageLocation(location.id, { contents: event.target.value })} placeholder="Montre, boîte, papiers, accessoires…" /></label>
+                            <label>Description et conditions<textarea {...aiFieldProps('cover.storage.locations[].description', location.id)} value={location.description} rows={3} onChange={(event) => updateStorageLocation(location.id, { description: event.target.value })} placeholder="Sécurité, accès, température, humidité ou autres précisions…" /></label>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : <p className="storage-empty">Aucun lieu renseigné. Ajoutez un lieu pour décrire où chaque élément est conservé.</p>}
+
+                  <button type="button" className="button button--quiet no-print" onClick={addStorageLocation}><Plus size={14} /> Ajouter un lieu de stockage</button>
                 </article>
               </section>
               </>
@@ -1635,9 +1984,9 @@ function App() {
                   <textarea {...aiFieldProps('media.hero.summary')} className="editable-copy-single" value={editableCopy.heroSummary} rows={5} onChange={(event) => setEditableCopy((current) => ({ ...current, heroSummary: event.target.value }))} aria-label="Modifier la présentation principale" />
                 ) : <p {...aiFieldProps('media.hero.summary')} className="watch-hero__summary editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('media-hero')} tabIndex={audience === 'Secret' ? 0 : undefined} onKeyDown={(event) => { if (event.key === 'Enter' && audience === 'Secret') setEditingBlock('media-hero'); }} title={audience === 'Secret' ? 'Cliquer pour modifier' : undefined}>{editableCopy.heroSummary}</p>}
                 <dl className="hero-facts">
-                  <div><dt>Statut</dt><dd>En possession</dd></div>
+                  <div><dt>Statut</dt><dd>{watchStatus}</dd></div>
                   <div><dt>Dernier contrôle</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
-                  <div><dt>Valeur estimée</dt><dd>{isVisible('Secret') ? formatMoney(mockCartulary.marketSnapshot.midValue) : 'ACCÈS RESTREINT'}</dd></div>
+                  <div><dt>Valeur retenue</dt><dd>{isVisible('Secret') ? formatMoney(retainedValuation.amount, watch.currency) : 'ACCÈS RESTREINT'}</dd></div>
                   <div><dt>Dossier</dt><dd>{mockCartulary.publicCode}</dd></div>
                 </dl>
               </div>
@@ -1938,7 +2287,7 @@ function App() {
                 </section>
 
                 <section>
-                  <SectionTitle eyebrow="Rapports et notes" title="Historique de l’état" />
+                  <SectionTitle eyebrow="Rapports et notes" title="Rapport sur l'état de la montre" />
                   <div className="condition-layout">
                     <div className="condition-entry-list">
                       {referenceConditionReport && (
@@ -2045,8 +2394,26 @@ function App() {
                   <div className="valuation-range">
                     <span>Fourchette actuelle</span>
                     <strong>{formatMoney(mockCartulary.marketSnapshot.lowValue)} — {formatMoney(mockCartulary.marketSnapshot.highValue)}</strong>
-                    <small>MÉDIANE {formatMoney(mockCartulary.marketSnapshot.midValue)}</small>
+                    <small>VALEUR MÉDIANE {formatMoney(mockCartulary.marketSnapshot.midValue)}</small>
                   </div>
+                  </article>
+
+                  <article className="retained-value-card">
+                    <div className="retained-value-card__intro">
+                      <span className="eyebrow">Décision du propriétaire</span>
+                      <h3>Valeur retenue</h3>
+                      <p>Le montant est initialisé avec la valeur actuelle, puis peut être ajusté manuellement sans modifier les données de marché.</p>
+                    </div>
+                    <label className="retained-value-card__amount">Montant retenu
+                      <span>
+                        <input {...aiFieldProps('value.retained.amount')} type="number" min="0" step="100" value={retainedValuation.amount} onChange={(event) => setRetainedValuation((current) => ({ ...current, amount: Math.max(0, Number(event.target.value)) }))} />
+                        <strong>{watch.currency || 'EUR'}</strong>
+                      </span>
+                      <small>Valeur actuelle : {formatMoney(mockCartulary.marketSnapshot.midValue, watch.currency)}</small>
+                    </label>
+                    <label className="retained-value-card__explanation">Explication de la valeur retenue
+                      <textarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder="Expliquez le montant retenu, les ajustements et les réserves éventuelles." />
+                    </label>
                   </article>
                 </div>
               </section>

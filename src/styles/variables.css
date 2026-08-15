@@ -1,14 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
 
 :root {
-  /* Design system Cartularia — dossier d'instrument */
+  /* Design system Cartularia v2 — aligné sur le kit logo officiel v1.0 */
   --paper: #F4F2ED;
   --sheet: #FFFFFF;
   --fill: #E7E4DC;
   --rule: #D6D2C8;
   --muted: #6E6A61;
   --ink: #1A1815;
-  --mark: #97412F;
+  --mark: #A63A2A;
   --positive: #2F6652;
   --negative: #A12E2A;
   --warning: #9A6425;

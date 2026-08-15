@@ -1,0 +1,48 @@
+{
+  "version": "wave7-draft-1",
+  "status": "pending_legal_review",
+  "categories": [
+    {
+      "category": "account_private",
+      "classification": "secret_personal",
+      "retention": null,
+      "deletionMode": "pending_legal_review"
+    },
+    {
+      "category": "cartulary_master",
+      "classification": "secret_patrimonial",
+      "retention": null,
+      "deletionMode": "logical_then_controlled_cascade"
+    },
+    {
+      "category": "audit_events",
+      "classification": "secret_integrity",
+      "retention": null,
+      "deletionMode": "append_only_subject_to_legal_hold"
+    },
+    {
+      "category": "public_projections",
+      "classification": "public_controlled",
+      "retention": "until_revocation_then_cache_expiry",
+      "deletionMode": "revoke_and_delete_projection"
+    },
+    {
+      "category": "community_content",
+      "classification": "community_pseudonymous",
+      "retention": null,
+      "deletionMode": "suspend_then_policy_delete"
+    },
+    {
+      "category": "operational_logs",
+      "classification": "restricted_no_payload",
+      "retention": null,
+      "deletionMode": "scheduled_expiry"
+    },
+    {
+      "category": "backups",
+      "classification": "secret_encrypted",
+      "retention": null,
+      "deletionMode": "lifecycle_and_verified_destruction"
+    }
+  ]
+}
