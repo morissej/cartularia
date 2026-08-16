@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  buildCartularyHref,
+  DEFAULT_REGISTRY_CATALOG_FILTERS,
+  filterAndSortRegistryItems,
+  isRegistryReturnPath,
+} from '../src/features/registry/registryCatalog.ts';
+
+const item = (overrides) => ({
+  cartularyId: 'cartulary-default',
+  organizationId: 'org_demo',
+  registryId: 'reg_collection_privee',
+  collectionId: 'col_watches',
+  assetType: 'watch',
+  displayTitle: 'Montre exemple',
+  makerName: 'Maison exemple',
+  modelName: 'Modèle exemple',
+  referenceCode: null,
+  manufactureYear: null,
+  lifecycleStatus: 'active',
+  possessionStatus: 'in_possession',
+  completenessLevel: 'imported_unreviewed',
+  primaryAssetId: null,
+  sourceRevision: 1,
+  projectionStatus: 'active',
+  contentHash: 'sha256:test',
+  ...overrides,
+});
+
+const fixtures = [
+  item({
+    cartularyId: 'iwc-flieger-utc',
+    displayTitle: 'IWC Flieger UTC',
+    makerName: 'IWC Schaffhausen',
+    modelName: 'Flieger UTC',
+    referenceCode: '3251',
+    manufactureYear: 1999,
+    sourceRevision: 4,
+    updatedAt: { seconds: 200, nanoseconds: 0 },
+  }),
+  item({
+    cartularyId: 'car-bentley-gt',
+    collectionId: 'col_vehicles',
+    assetType: 'car',
+    displayTitle: 'Bentley Continental GT',
+    makerName: 'Bentley',
+    modelName: 'Continental GT',
+    referenceCode: 'SCBCE63W',
+    manufactureYear: 2018,
+    lifecycleStatus: 'review',
+    sourceRevision: 2,
+    updatedAt: { seconds: 300, nanoseconds: 0 },
+  }),
+  item({
+    cartularyId: 'watch-geneve',
+    displayTitle: 'Pièce de Genève',
+    makerName: 'Atelier Genève',
+    modelName: 'Classique',
+    manufactureYear: 1965,
+    lifecycleStatus: 'archived',
+    sourceRevision: 7,
+    updatedAt: { seconds: 100, nanoseconds: 0 },
+  }),
+];
+
+test('la recherche est multi-termes et insensible aux accents', () => {
+  const result = filterAndSortRegistryItems(fixtures, {
+    ...DEFAULT_REGISTRY_CATALOG_FILTERS,
+    query: 'piece geneve',
+  });
+  assert.deepEqual(result.map(({ cartularyId }) => cartularyId), ['watch-geneve']);
+});
+
+test('les facettes type, collection et statut se combinent', () => {
+  const result = filterAndSortRegistryItems(fixtures, {
+    ...DEFAULT_REGISTRY_CATALOG_FILTERS,
+    assetType: 'car',
+    collectionId: 'col_vehicles',
+    lifecycleStatus: 'review',
+  });
+  assert.deepEqual(result.map(({ cartularyId }) => cartularyId), ['car-bentley-gt']);
+});
+
+test('les trois tris restent déterministes et ne modifient pas la source', () => {
+  const sourceOrder = fixtures.map(({ cartularyId }) => cartularyId);
+  const recent = filterAndSortRegistryItems(fixtures, DEFAULT_REGISTRY_CATALOG_FILTERS);
+  const alphabetical = filterAndSortRegistryItems(fixtures, {
+    ...DEFAULT_REGISTRY_CATALOG_FILTERS,
+    sort: 'title-asc',
+  });
+  const byYear = filterAndSortRegistryItems(fixtures, {
+    ...DEFAULT_REGISTRY_CATALOG_FILTERS,
+    sort: 'year-desc',
+  });
+
+  assert.deepEqual(recent.map(({ cartularyId }) => cartularyId), ['car-bentley-gt', 'iwc-flieger-utc', 'watch-geneve']);
+  assert.deepEqual(alphabetical.map(({ cartularyId }) => cartularyId), ['car-bentley-gt', 'iwc-flieger-utc', 'watch-geneve']);
+  assert.deepEqual(byYear.map(({ cartularyId }) => cartularyId), ['car-bentley-gt', 'iwc-flieger-utc', 'watch-geneve']);
+  assert.deepEqual(fixtures.map(({ cartularyId }) => cartularyId), sourceOrder);
+});
+
+test('le lien Cartulaire conserve le contexte et encode les paramètres', () => {
+  const href = buildCartularyHref('cartulary/à vérifier', '/registry/reg_demo/items?q=IWC UTC');
+  const url = new URL(href, 'https://cartularia.test');
+  assert.equal(url.pathname, '/cartulary-view');
+  assert.equal(url.searchParams.get('cartularyId'), 'cartulary/à vérifier');
+  assert.equal(url.searchParams.get('returnTo'), '/registry/reg_demo/items?q=IWC UTC');
+});
+
+test('le Cartulaire IWC du pilote ouvre l’interface complète existante', () => {
+  const href = buildCartularyHref('cart_iwc_flieger_utc_2002', '/registry/reg_demo/gallery');
+  const url = new URL(href, 'https://cartularia.test');
+  assert.equal(url.pathname, '/');
+  assert.equal(url.searchParams.get('returnTo'), '/registry/reg_demo/gallery');
+});
+
+test('le retour n’accepte qu’un chemin interne du Registre', () => {
+  assert.equal(isRegistryReturnPath('/registry/reg_demo/items?q=iwc'), true);
+  assert.equal(isRegistryReturnPath('//example.com/registry/reg_demo'), false);
+  assert.equal(isRegistryReturnPath('/community'), false);
+  assert.equal(isRegistryReturnPath('/registry\\example.com'), false);
+  assert.equal(isRegistryReturnPath(null), false);
+});

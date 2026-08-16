@@ -38,6 +38,7 @@ export const CommunityPage = () => {
         <BrandLogo />
         <h1>{heading}</h1>
         <p>Cette surface est réservée aux profils authentifiés et admis. Elle ne lit jamais le Cartulaire maître.</p>
+        <a className="button button--quiet community-back-link" href="/#cover">Retour au Cartulaire</a>
       </main>
     );
   }
@@ -50,6 +51,7 @@ export const CommunityPage = () => {
           <span className="eyebrow">Cercle pilote · accès authentifié</span>
           <h1>Communauté Cartularia</h1>
           <p>Publications choisies, profils pseudonymes et échanges sans accès au dossier patrimonial.</p>
+          <a className="button button--quiet community-back-link" href="/#cover">Retour au Cartulaire</a>
         </div>
       </header>
 

@@ -1,23 +1,23 @@
 {
-  "version": "wave7-draft-1",
-  "status": "pending_legal_review",
+  "version": "corrective-wave2-product-decision-1",
+  "status": "product_decision_confirmed_legal_review_pending",
   "categories": [
     {
       "category": "account_private",
       "classification": "secret_personal",
-      "retention": null,
-      "deletionMode": "pending_legal_review"
+      "retention": "while_active_then_2_calendar_years_after_inactive",
+      "deletionMode": "user_initiated_or_scheduled_private_cascade"
     },
     {
       "category": "cartulary_master",
       "classification": "secret_patrimonial",
-      "retention": null,
+      "retention": "while_active_then_2_calendar_years_after_inactive",
       "deletionMode": "logical_then_controlled_cascade"
     },
     {
       "category": "audit_events",
       "classification": "secret_integrity",
-      "retention": null,
+      "retention": "while_active_then_2_calendar_years_after_inactive_subject_to_legal_hold",
       "deletionMode": "append_only_subject_to_legal_hold"
     },
     {
@@ -29,7 +29,7 @@
     {
       "category": "community_content",
       "classification": "community_pseudonymous",
-      "retention": null,
+      "retention": "while_active_then_2_calendar_years_after_inactive",
       "deletionMode": "suspend_then_policy_delete"
     },
     {

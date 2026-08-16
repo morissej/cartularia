@@ -16,8 +16,10 @@ export interface RegistryItemProjection {
   completenessLevel: string;
   primaryAssetId: string | null;
   sourceRevision: number;
-  projectionStatus: 'active';
+  projectionStatus: 'active' | 'withdrawn';
   contentHash: string;
+  generatedAt?: { seconds: number; nanoseconds: number };
+  updatedAt?: { seconds: number; nanoseconds: number };
 }
 
 export interface PublicDerivativeProjection {

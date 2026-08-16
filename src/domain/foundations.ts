@@ -1,12 +1,13 @@
 export const FOUNDATION_MODEL_VERSION = '1.0.0';
 
-export type AccountStatus = 'active' | 'suspended' | 'closed';
+export type AccountStatus = 'active' | 'inactive' | 'suspended' | 'closed';
 export type MembershipStatus = 'invited' | 'active' | 'suspended' | 'revoked';
 export type MembershipRole =
   | 'account_holder'
   | 'legal_owner'
   | 'manager'
   | 'payer'
+  | 'prescriber'
   | 'beneficiary'
   | 'community_member'
   | 'guest'
@@ -17,8 +18,11 @@ export type FoundationPermission =
   | 'organization.read'
   | 'membership.read'
   | 'registry.read'
+  | 'access.read'
   | 'cartulary.read'
   | 'cartulary.edit'
+  | 'cartulary.export'
+  | 'integrity.batch'
   | 'publication.manage'
   | 'billing.read';
 
@@ -35,6 +39,9 @@ export interface UserDocument {
   modelVersion: typeof FOUNDATION_MODEL_VERSION;
   createdAt: FirestoreTimestampValue;
   updatedAt: FirestoreTimestampValue;
+  lastActiveAt?: FirestoreTimestampValue;
+  inactiveAt?: FirestoreTimestampValue | null;
+  purgeAfter?: FirestoreTimestampValue | null;
 }
 
 export interface OrganizationDocument {

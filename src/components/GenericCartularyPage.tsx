@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react';
 import { loadPrivateCartulary, type PrivateCartularySnapshot } from '../services/cartularies.ts';
 import { loadVerticalSchema } from '../services/schemaCatalog.ts';
 import type { VerticalSchema } from '../schema/schemaTypes.ts';
+import { isRegistryReturnPath } from '../features/registry/registryCatalog.ts';
 import { GenericCartularyView } from './GenericCartularyView';
 
 export const GenericCartularyPage = () => {
-  const cartularyId = new URLSearchParams(window.location.search).get('cartularyId');
+  const parameters = new URLSearchParams(window.location.search);
+  const cartularyId = parameters.get('cartularyId');
+  const returnToParameter = parameters.get('returnTo');
+  const returnTo = isRegistryReturnPath(returnToParameter) ? returnToParameter : null;
   const [snapshot, setSnapshot] = useState<PrivateCartularySnapshot | null>(null);
   const [schema, setSchema] = useState<VerticalSchema | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'denied'>('loading');
@@ -43,7 +47,9 @@ export const GenericCartularyPage = () => {
     };
   }, [cartularyId]);
 
-  if (status === 'ready' && snapshot && schema) return <GenericCartularyView snapshot={snapshot} schema={schema} />;
+  if (status === 'ready' && snapshot && schema) {
+    return <GenericCartularyView snapshot={snapshot} schema={schema} returnHref={returnTo} />;
+  }
 
   return (
     <main className="generic-cartulary-state">

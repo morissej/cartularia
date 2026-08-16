@@ -46,6 +46,8 @@ export function MediaCarousel({
         >
           {current.type === 'document' ? (
             <span className="media-carousel__document"><FileText size={52} /><strong>{current.originalFileName || current.name}</strong><small>{current.mimeType || 'Document'}</small></span>
+          ) : current.type === 'video' ? (
+            <video src={current.url} poster={current.posterUrl || current.thumbnailUrl} preload="metadata" muted aria-label={current.name} />
           ) : (
             <img src={poster} alt={current.name} />
           )}
@@ -111,7 +113,11 @@ export function MediaCarousel({
                 aria-label={`${index + 1}. ${asset.name}`}
                 aria-current={index === currentIndex ? 'true' : undefined}
               >
-                {asset.type === 'document' ? <FileText size={20} aria-hidden="true" /> : <img src={thumbnail} alt="" />}
+                {asset.type === 'document'
+                  ? <FileText size={20} aria-hidden="true" />
+                  : asset.type === 'video'
+                    ? <video src={asset.url} poster={asset.posterUrl || asset.thumbnailUrl} preload="metadata" muted aria-hidden="true" />
+                    : <img src={thumbnail} alt="" />}
                 {asset.type === 'video' && <Play size={11} fill="currentColor" aria-hidden="true" />}
               </button>
             );

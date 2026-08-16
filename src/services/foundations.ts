@@ -2,10 +2,10 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  type NextOrObserver,
   type User,
 } from 'firebase/auth';
 import {
+  collection,
   collectionGroup,
   doc,
   documentId,
@@ -22,6 +22,13 @@ import type {
   RegistryDocument,
 } from '../domain/foundations';
 
+export const loadOrganizationMemberships = async (
+  organizationId: string,
+): Promise<MembershipDocument[]> => {
+  const snapshot = await getDocs(collection(db, 'organizations', organizationId, 'memberships'));
+  return snapshot.docs.map((membership) => membership.data() as MembershipDocument);
+};
+
 const loadRegistry = async (registryId: string): Promise<RegistryDocument | null> => {
   const snapshot = await getDoc(doc(db, 'registries', registryId));
   return snapshot.exists() ? (snapshot.data() as RegistryDocument) : null;
@@ -34,7 +41,7 @@ export const signInToCartularia = async (email: string, password: string): Promi
 
 export const signOutOfCartularia = () => signOut(auth);
 
-export const observeCartulariaSession = (observer: NextOrObserver<User>) => onAuthStateChanged(auth, observer);
+export const observeCartulariaSession = (observer: (user: User | null) => void) => onAuthStateChanged(auth, observer);
 
 export const loadAccountOrganizations = async (user: User): Promise<AccountOrganizationContext[]> => {
   const membershipsQuery = query(

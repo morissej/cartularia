@@ -1,55 +1,148 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { IntegrityJournal } from '../utils/integrityJournal';
-import type { AnchorReceipt } from '../utils/integrityJournal';
+import type {
+  AnchorReceipt,
+  IntegrityProofState,
+  IntegrityVerificationResult,
+} from '../utils/integrityJournal';
+import { isRfc3161Receipt } from '../utils/integrityJournal';
 import type { AuditEvent } from '../types';
-import { Check, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, AlertTriangle, ChevronDown, ChevronUp, Cloud, HardDrive, RefreshCw, Trash2, Clock3 } from 'lucide-react';
+import type { HybridPersistenceState } from '../persistence/useHybridPersistence';
+import { requestExternalTimestamp } from '../services/timestamping';
+import QRCode from 'qrcode';
 
 interface AuditPanelProps {
   journal: IntegrityJournal;
   language: 'FR' | 'EN';
-  sealHash?: string;
   sealSupportCode?: string;
+  snapshot: Record<string, unknown>;
+  publicShareUrl: string;
+  refreshToken: number;
+  persistence: HybridPersistenceState;
+  onDeleteAllData: () => Promise<void>;
+  onJournalUpdate: () => void;
 }
 
 export const AuditPanel: React.FC<AuditPanelProps> = ({
   journal,
   language,
-  sealHash = 'EA3B2D1C9F8E...',
-  sealSupportCode = '5489-210-987-XZ9'
+  sealSupportCode = '5489-210-987-XZ9',
+  snapshot,
+  publicShareUrl,
+  refreshToken,
+  persistence,
+  onDeleteAllData,
+  onJournalUpdate,
 }) => {
+  const tx = (french: string, english: string) => language === 'FR' ? french : english;
+  const deleteKeyword = language === 'FR' ? 'SUPPRIMER' : 'DELETE';
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [receipts, setReceipts] = useState<AnchorReceipt[]>([]);
-  const [integrityStatus, setIntegrityStatus] = useState<{ isValid: boolean; brokenSequence?: number }>({ isValid: true });
+  const [integrityStatus, setIntegrityStatus] = useState<IntegrityVerificationResult>({
+    isValid: true,
+    errors: [],
+    legacyStatuses: [],
+  });
+  const [proofState, setProofState] = useState<IntegrityProofState>(() => journal.getProofState());
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isTimestamping, setIsTimestamping] = useState(false);
+  const [timestampError, setTimestampError] = useState<string | null>(null);
+  const [timestampNotice, setTimestampNotice] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState('');
 
 
   // Onglet technique masqué par défaut (Règle 4)
   const [showTechnicalSim, setShowTechnicalSim] = useState(false);
 
   const refreshJournal = useCallback(async () => {
+    await journal.ready();
+    const status = await journal.verifyIntegrity();
     setEvents(journal.getEvents());
     setReceipts(journal.getReceipts());
-    const status = await journal.verifyIntegrity();
+    setProofState(journal.getProofState());
     setIntegrityStatus(status);
   }, [journal]);
 
   useEffect(() => {
     refreshJournal();
-  }, [refreshJournal]);
+  }, [refreshJournal, refreshToken]);
 
-  const handleTimestamp = async () => {
-    await journal.timestampBatch();
+  useEffect(() => {
+    let active = true;
+    void QRCode.toDataURL(publicShareUrl, {
+      width: 192,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#1a1815', light: '#ffffff' },
+    }).then((dataUrl) => {
+      if (active) setQrDataUrl(dataUrl);
+    }).catch(() => {
+      if (active) setQrDataUrl('');
+    });
+    return () => { active = false; };
+  }, [publicShareUrl]);
+
+  const handleExternalTimestamp = async () => {
+    setIsTimestamping(true);
+    setTimestampError(null);
+    setTimestampNotice(null);
+    try {
+      await journal.reconcileSnapshot(snapshot);
+      const merkleRoot = await journal.getMerkleRoot();
+      const existing = journal.getReceipts().find((receipt) => (
+        isRfc3161Receipt(receipt) && receipt.merkleRoot === merkleRoot
+      ));
+      if (existing) {
+        setTimestampNotice(language === 'FR' ? 'Ce lot possède déjà un horodatage externe.' : 'This batch already has an external timestamp.');
+      } else {
+        const receipt = await requestExternalTimestamp(merkleRoot);
+        await journal.attachExternalTimestamp(receipt);
+        setTimestampNotice(language === 'FR' ? 'Horodatage externe vérifié et conservé.' : 'External timestamp verified and saved.');
+      }
+      await refreshJournal();
+      onJournalUpdate();
+    } catch (error) {
+      setTimestampError(error instanceof Error ? error.message : tx('Horodatage externe impossible.', 'External timestamping failed.'));
+    } finally {
+      setIsTimestamping(false);
+    }
+  };
+
+  const handleLocalTestTimestamp = async () => {
+    await journal.createLocalTestTimestamp(snapshot);
     await refreshJournal();
+    onJournalUpdate();
   };
 
   const handleTamper = async (seq: number) => {
     journal.simulateTampering(seq, "FALSIFICATION : Prix d'achat modifié à 15 000 EUR");
     await refreshJournal();
+    onJournalUpdate();
   };
 
   const handleReset = async () => {
-    journal.clearJournal();
+    await journal.migrateBrokenJournal(snapshot);
     await refreshJournal();
+    onJournalUpdate();
   };
+
+  const handleExport = async () => {
+    const bundle = await journal.exportPortableBundle(snapshot);
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `preuve-integrite-${bundle.cartularyId}-r${bundle.revision}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    await refreshJournal();
+    onJournalUpdate();
+  };
+
+  const latestExternalReceipt = [...receipts].reverse().find(isRfc3161Receipt);
 
   return (
     <div style={{
@@ -62,6 +155,79 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
       backgroundColor: 'var(--sheet)',
       color: 'var(--ink)'
     }}>
+      <section aria-labelledby="persistence-title" style={{ borderBottom: '1px solid var(--rule)', paddingBottom: 'var(--s4)' }}>
+        <h4 id="persistence-title" style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 'var(--s3)' }}>
+          {language === 'FR' ? 'Conservation des données' : 'Data preservation'}
+        </h4>
+        <div style={{ display: 'grid', gap: 'var(--s2)', fontSize: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><HardDrive size={14} /> {language === 'FR' ? 'Coffre local' : 'Local vault'}</span>
+            <strong>{persistence.localStatus === 'saving' ? tx('Enregistrement…', 'Saving…') : persistence.localStatus === 'error' ? tx('Erreur', 'Error') : persistence.localStatus === 'deleted' ? tx('Supprimé', 'Deleted') : tx('À jour', 'Up to date')}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Cloud size={14} /> {language === 'FR' ? 'Copie privée cloud' : 'Private cloud copy'}</span>
+            <strong>{persistence.cloudStatus === 'signed-out'
+              ? (language === 'FR' ? 'Connexion requise' : 'Sign-in required')
+              : persistence.cloudStatus === 'syncing' ? tx('Synchronisation…', 'Syncing…')
+                : persistence.cloudStatus === 'synced' ? tx('À jour', 'Up to date')
+                  : persistence.cloudStatus === 'conflict' ? tx('Conflit à arbitrer', 'Conflict to resolve')
+                    : persistence.cloudStatus === 'remote-deleted' ? tx('Supprimée à distance', 'Deleted remotely')
+                      : tx('Erreur', 'Error')}</strong>
+          </div>
+          {persistence.accountLabel && <small style={{ color: 'var(--muted)', overflowWrap: 'anywhere' }}>{tx('Compte', 'Account')} : {persistence.accountLabel}</small>}
+          {persistence.lastSyncedAt && <small style={{ color: 'var(--muted)' }}>{tx('Dernière synchronisation', 'Last sync')} : {new Intl.DateTimeFormat(language === 'FR' ? 'fr-FR' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(persistence.lastSyncedAt))}</small>}
+          {persistence.conflicts.length > 0 && (
+            <div role="alert" style={{ padding: 'var(--s2)', border: '1px solid var(--mark)', color: 'var(--mark)' }}>
+              <strong>{language === 'FR' ? `${persistence.conflicts.length} conflit${persistence.conflicts.length > 1 ? 's' : ''} détecté${persistence.conflicts.length > 1 ? 's' : ''}.` : `${persistence.conflicts.length} conflict${persistence.conflicts.length === 1 ? '' : 's'} detected.`}</strong>
+              <p style={{ margin: '6px 0' }}>{tx('Aucune version n’a été écrasée. Choisissez explicitement la version à conserver.', 'No version was overwritten. Explicitly choose which version to keep.')}</p>
+              {persistence.conflicts.map((conflict) => (
+                <div key={`${conflict.kind}:${conflict.id}`} style={{ display: 'grid', gap: '6px', paddingTop: '6px', borderTop: '1px solid currentColor' }}>
+                  <code style={{ overflowWrap: 'anywhere' }}>{conflict.kind} · {conflict.id}</code>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    <button type="button" className="button button--quiet" disabled={persistence.cloudStatus === 'syncing'} onClick={() => void persistence.resolveConflict(conflict, 'keep-local')}>{tx('Conserver ma version', 'Keep my version')}</button>
+                    <button type="button" className="button button--quiet" disabled={persistence.cloudStatus === 'syncing'} onClick={() => void persistence.resolveConflict(conflict, 'take-cloud')}>{tx('Prendre la version cloud', 'Use cloud version')}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {persistence.error && <div role="alert" style={{ color: 'var(--mark)', overflowWrap: 'anywhere' }}>{persistence.error}</div>}
+          <p style={{ color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>
+            {persistence.authenticated
+              ? tx('Les originaux restent privés et liés à votre compte. La synchronisation ne publie aucun bloc.', 'Originals remain private and linked to your account. Synchronization publishes no blocks.')
+              : tx('Les données et originaux sont conservés dans ce navigateur. Connectez-vous au Registre pour activer la copie privée cloud.', 'Data and originals are stored in this browser. Sign in to the Registry to activate a private cloud copy.')}
+          </p>
+          {persistence.authenticated && (
+            <button type="button" className="button button--quiet" onClick={() => void persistence.syncNow()} disabled={persistence.cloudStatus === 'syncing'}>
+              <RefreshCw size={14} /> {tx('Synchroniser maintenant', 'Sync now')}
+            </button>
+          )}
+          {!showDeleteConfirmation ? (
+            <button type="button" className="button button--quiet" onClick={() => setShowDeleteConfirmation(true)}><Trash2 size={14} /> {tx('Supprimer mes données', 'Delete my data')}</button>
+          ) : (
+            <div role="alertdialog" aria-labelledby="delete-all-title" aria-describedby="delete-all-description" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s2)', border: '1px solid var(--mark)' }}>
+              <strong id="delete-all-title">{tx('Suppression définitive', 'Permanent deletion')}</strong>
+              <span id="delete-all-description">{language === 'FR'
+                ? `Tapez ${deleteKeyword} pour effacer ce coffre local et, si vous êtes connecté, sa copie privée cloud. Les publications déjà émises ne sont pas supprimées par cette action.`
+                : `Type ${deleteKeyword} to erase this local vault and, if signed in, its private cloud copy. Publications already issued are not deleted by this action.`}</span>
+              <label>{tx('Confirmation', 'Confirmation')}<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" autoFocus /></label>
+              <div style={{ display: 'flex', gap: 'var(--s2)' }}>
+                <button type="button" className="button button--quiet" onClick={() => { setShowDeleteConfirmation(false); setDeleteConfirmation(''); }}>{tx('Annuler', 'Cancel')}</button>
+                <button
+                  type="button"
+                  className="button button--primary"
+                  disabled={deleteConfirmation !== deleteKeyword || isDeleting}
+                  onClick={() => {
+                    setIsDeleting(true);
+                    void onDeleteAllData().catch(() => setIsDeleting(false));
+                  }}
+                >{isDeleting ? tx('Suppression…', 'Deleting…') : tx('Confirmer la suppression', 'Confirm deletion')}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* 1. Couche de Confiance / Sceau */}
       <div style={{
         borderBottom: '1px solid var(--rule)',
@@ -92,14 +258,18 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             <span style={{ fontWeight: 600, color: integrityStatus.isValid ? 'var(--ink)' : 'var(--mark)', display: 'flex', alignItems: 'center', gap: '4px' }}>
               {integrityStatus.isValid ? <Check size={12} /> : <AlertTriangle size={12} />}
               {integrityStatus.isValid
-                ? (language === 'FR' ? "Chaîne locale cohérente" : "Local chain consistent")
+                ? latestExternalReceipt
+                  ? (language === 'FR' ? "Chaîne cohérente · existence horodatée" : "Consistent chain · existence timestamped")
+                  : (language === 'FR' ? "Chaîne cohérente · non horodatée" : "Consistent chain · not timestamped")
                 : (language === 'FR' ? "Rupture détectée" : "Break detected")}
             </span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
             <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? "Portée du contrôle" : "Verification scope"}</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{language === 'FR' ? 'Session locale' : 'Local session'}</span>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>
+              {language === 'FR' ? `Révision locale ${proofState.revision}` : `Local revision ${proofState.revision}`}
+            </span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: 'var(--s1)' }}>
@@ -114,13 +284,46 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
               border: '1px solid var(--rule)',
               wordBreak: 'break-all'
             }}>
-              {sealHash.substring(0, 16)}...
+              {proofState.contentDigest.substring(0, 23)}...
             </span>
           </div>
+
+          {proofState.legacyStatuses.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)', fontSize: '11px' }}>
+              <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? 'Journal historique' : 'Legacy journal'}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
+                {proofState.legacyStatuses.join(', ')}
+              </span>
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center', marginTop: 'var(--s1)' }}>
             <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? "Code de Support" : "Support Code"}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{sealSupportCode}</span>
+          </div>
+
+          <div style={{ display: 'grid', gap: '8px', marginTop: 'var(--s2)', padding: 'var(--s3)', border: '1px solid var(--rule)', background: 'var(--paper)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Clock3 size={16} />
+              <strong style={{ fontSize: '12px' }}>{language === 'FR' ? 'Horodatage tiers RFC 3161' : 'Third-party RFC 3161 timestamp'}</strong>
+            </div>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: '11px', lineHeight: 1.45 }}>
+              {language === 'FR'
+                ? 'Seule la racine Merkle est transmise. Le jeton prouve son existence à la date signée par l’autorité ; il ne prouve pas la vérité des informations.'
+                : 'Only the Merkle root is sent. The token proves its existence at the authority-signed time; it does not prove that the information is true.'}
+            </p>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => void handleExternalTimestamp()}
+              disabled={!integrityStatus.isValid || proofState.revision === 0 || isTimestamping}
+            >
+              <Clock3 size={14} /> {isTimestamping
+                ? (language === 'FR' ? 'Horodatage en cours…' : 'Timestamping…')
+                : (language === 'FR' ? 'Horodater maintenant' : 'Timestamp now')}
+            </button>
+            {timestampNotice && <div role="status" style={{ color: 'var(--muted)', fontSize: '11px' }}>{timestampNotice}</div>}
+            {timestampError && <div role="alert" style={{ color: 'var(--mark)', fontSize: '11px' }}>{timestampError}</div>}
           </div>
         </div>
 
@@ -134,27 +337,11 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           padding: 'var(--s3)',
           border: '1px solid var(--rule)'
         }}>
-          {/* Mock QR mini */}
-          <div style={{
-            width: '64px',
-            height: '64px',
-            backgroundColor: '#FFFFFF',
-            border: '1px solid var(--ink)',
-            padding: '4px',
-            position: 'relative',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}>
-            <div style={{
-              width: '100%',
-              height: '100%',
-              backgroundImage: 'radial-gradient(var(--ink) 25%, transparent 25%), radial-gradient(var(--ink) 25%, transparent 25%)',
-              backgroundSize: '6px 6px',
-              backgroundPosition: '0 0, 3px 3px',
-              opacity: 0.8
-            }} />
-          </div>
+          <a href={publicShareUrl} target="_blank" rel="noreferrer" aria-label={language === 'FR' ? 'Ouvrir la fiche publique liée au QR code' : 'Open the public record linked to the QR code'}>
+            {qrDataUrl
+              ? <img src={qrDataUrl} width="64" height="64" alt={language === 'FR' ? 'QR code vers la fiche publique' : 'QR code to the public record'} style={{ display: 'block', border: '1px solid var(--ink)' }} />
+              : <span style={{ display: 'grid', width: '64px', height: '64px', placeItems: 'center', border: '1px solid var(--rule)', color: 'var(--muted)', fontSize: '9px' }}>QR</span>}
+          </a>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)' }}>
               {language === 'FR' ? "QR CODE DE PARTAGE" : "SHARE QR CODE"}
@@ -162,6 +349,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
               {language === 'FR' ? "Scannez pour ouvrir la fiche publique." : "Scan to open the public record."}
             </span>
+            <span style={{ maxWidth: '330px', overflowWrap: 'anywhere', fontSize: '8px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{publicShareUrl}</span>
           </div>
         </div>
       </div>
@@ -194,8 +382,12 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             <AlertTriangle size={14} />
             <span>
               {language === 'FR'
-                ? `Rupture de chaîne à la séquence #${integrityStatus.brokenSequence} !`
-                : `Chain broken at sequence #${integrityStatus.brokenSequence}!`}
+                ? (integrityStatus.brokenSequence === undefined
+                    ? 'Incohérence détectée dans la preuve.'
+                    : `Rupture de chaîne à la séquence #${integrityStatus.brokenSequence} !`)
+                : (integrityStatus.brokenSequence === undefined
+                    ? 'An inconsistency was detected in the proof.'
+                    : `Chain broken at sequence #${integrityStatus.brokenSequence}!`)}
             </span>
           </div>
         )}
@@ -236,36 +428,51 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           })}
         </div>
 
-        {/* Reçus d'horodatage local de test */}
+        {/* Reçus d'horodatage externes et fixtures locales explicitement séparés */}
         {receipts.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: 'var(--s1)' }}>
             <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {language === 'FR' ? "Reçus d’horodatage de test" : "Test timestamp receipts"}
+              {language === 'FR' ? "Reçus d’horodatage" : "Timestamp receipts"}
             </span>
-            {receipts.map((rec) => (
-              <div key={rec.receiptId} style={{
-                backgroundColor: 'var(--fill)',
-                padding: 'var(--s2)',
-                fontSize: '11px',
-                fontFamily: 'var(--font-mono)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                  <span style={{ fontSize: '10px' }}>{rec.provider}</span>
-                  <span style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '9px' }}>
-                    <Check size={8} /> {language === 'FR' ? 'NON QUALIFIÉ' : 'NON-QUALIFIED'}
-                  </span>
+            {receipts.map((rec) => {
+              const isExternal = isRfc3161Receipt(rec);
+              return (
+                <div key={rec.receiptId} style={{
+                  backgroundColor: 'var(--fill)',
+                  padding: 'var(--s2)',
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-mono)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  borderLeft: `3px solid ${isExternal ? 'var(--ink)' : 'var(--muted)'}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 600 }}>
+                    <span style={{ fontSize: '10px' }}>{rec.provider}</span>
+                    <span style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '9px', textAlign: 'right' }}>
+                      <Check size={8} /> {isExternal
+                        ? (language === 'FR' ? 'RFC 3161 VÉRIFIÉ' : 'VERIFIED RFC 3161')
+                        : (language === 'FR' ? 'TEST LOCAL' : 'LOCAL TEST')}
+                    </span>
+                  </div>
+                  <time dateTime={rec.timestamp} style={{ fontSize: '9px' }}>
+                    {new Intl.DateTimeFormat(language === 'FR' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'long', timeZone: 'UTC' }).format(new Date(rec.timestamp))}
+                  </time>
+                  <div style={{ fontSize: '8px', color: 'var(--muted)', wordBreak: 'break-all' }}>ROOT: {rec.merkleRoot}</div>
+                  {isExternal && <>
+                    <div style={{ fontSize: '8px', color: 'var(--muted)', wordBreak: 'break-all' }}>TOKEN: {rec.tokenSha256}</div>
+                    <div style={{ fontSize: '8px', color: 'var(--muted)' }}>
+                      {rec.qualified
+                        ? (language === 'FR' ? 'Qualification eIDAS : QTSA validée' : 'eIDAS qualification: validated QTSA')
+                        : (language === 'FR' ? 'Qualification eIDAS : non évaluée' : 'eIDAS qualification: not assessed')}
+                    </div>
+                  </>}
+                  <div style={{ fontSize: '8px', color: 'var(--muted)' }}>
+                    {language === 'FR' ? 'Ancrage blockchain public : différé' : 'Public blockchain anchoring: deferred'}
+                  </div>
                 </div>
-                <div style={{ fontSize: '8px', color: 'var(--muted)', wordBreak: 'break-all' }}>
-                  ROOT: {rec.merkleRoot.substring(0, 24)}...
-                </div>
-                <div style={{ fontSize: '8px', color: 'var(--muted)' }}>
-                  {language === 'FR' ? 'Ancrage public : différé' : 'Public anchoring: deferred'}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -277,7 +484,9 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
         marginTop: 'auto'
       }}>
         <button
+          type="button"
           onClick={() => setShowTechnicalSim(!showTechnicalSim)}
+          aria-expanded={showTechnicalSim}
           style={{
             display: 'flex',
             justifyContent: 'space-between',
@@ -309,10 +518,10 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           }}>
             <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: 'var(--s1)' }}>
               {language === 'FR'
-                ? "Simulation locale : testez la détection d’une altération et créez un reçu non qualifié. Aucun ancrage public n’est effectué."
-                : "Local simulation: test tamper detection and create a non-qualified receipt. No public anchoring is performed."}
+                ? "Simulation locale : testez la détection d’une altération ou créez une fixture. Cette fixture n’est jamais présentée comme un horodatage tiers."
+                : "Local simulation: test tamper detection or create a fixture. This fixture is never presented as a third-party timestamp."}
             </p>
-            <div style={{ display: 'flex', gap: 'var(--s2)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--s2)' }}>
               {integrityStatus.isValid && events.length > 1 ? (
                 <button
                   onClick={() => handleTamper(events[1].sequence)}
@@ -330,7 +539,9 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                     transition: 'var(--transition)'
                   }}
                 >
-                  {language === 'FR' ? "Falsifier Événement #1" : "Tamper Event #1"}
+                  {language === 'FR'
+                    ? `Falsifier événement #${events[1].sequence}`
+                    : `Tamper event #${events[1].sequence}`}
                 </button>
               ) : (
                 <button
@@ -349,12 +560,12 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                     transition: 'var(--transition)'
                   }}
                 >
-                  {language === 'FR' ? "Restaurer l'Intégrité" : "Restore Integrity"}
+                  {language === 'FR' ? "Migrer la chaîne rompue" : "Migrate broken chain"}
                 </button>
               )}
 
               <button
-                onClick={handleTimestamp}
+                onClick={() => void handleLocalTestTimestamp()}
                 disabled={!integrityStatus.isValid}
                 style={{
                   backgroundColor: integrityStatus.isValid ? 'var(--ink)' : 'var(--fill)',
@@ -368,7 +579,25 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                   transition: 'var(--transition)'
                 }}
               >
-                {language === 'FR' ? "Horodater le lot" : "Timestamp Batch"}
+                {language === 'FR' ? "Créer une fixture locale" : "Create local fixture"}
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={!integrityStatus.isValid || proofState.revision === 0}
+                style={{
+                  width: '100%',
+                  backgroundColor: 'transparent',
+                  border: '1px solid var(--ink)',
+                  color: 'var(--ink)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  padding: '8px 12px',
+                  cursor: integrityStatus.isValid && proofState.revision > 0 ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {language === 'FR' ? 'Exporter la preuve portable' : 'Export portable proof'}
               </button>
             </div>
           </div>

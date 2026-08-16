@@ -6,10 +6,12 @@ import { BrandLogo } from './BrandLogo';
 interface GenericCartularyViewProps {
   snapshot: PrivateCartularySnapshot;
   schema: VerticalSchema;
+  returnHref?: string | null;
 }
 
-export const GenericCartularyView = ({ snapshot, schema }: GenericCartularyViewProps) => (
+export const GenericCartularyView = ({ snapshot, schema, returnHref }: GenericCartularyViewProps) => (
   <div className="generic-cartulary">
+    {returnHref && <a className="generic-cartulary__return" href={returnHref}>← Retour au Registre</a>}
     <header className="generic-cartulary__header">
       <BrandLogo />
       <div>

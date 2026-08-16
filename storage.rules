@@ -35,6 +35,44 @@ service firebase.storage {
         ).data.moderationStatus == 'approved';
     }
 
+    function ownsPrivateDraft(uid, cartularyId) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && firestore.exists(
+          /databases/(default)/documents/users/$(uid)
+        )
+        && firestore.get(
+          /databases/(default)/documents/users/$(uid)
+        ).data.status == 'active'
+        && firestore.exists(
+          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)
+        ).data.status == 'active';
+    }
+
+    match /private-drafts/{uid}/{cartularyId}/{binaryId}/{digest}/original {
+      allow read: if ownsPrivateDraft(uid, cartularyId)
+        && firestore.exists(
+          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)/binaries/$(binaryId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)/binaries/$(binaryId)
+        ).data.deleted == false
+        && firestore.get(
+          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)/binaries/$(binaryId)
+        ).data.sha256 == 'sha256:' + digest;
+      allow create, update: if ownsPrivateDraft(uid, cartularyId)
+        && request.resource.size <= 524288000
+        && request.resource.metadata.ownerUid == uid
+        && request.resource.metadata.cartularyId == cartularyId
+        && request.resource.metadata.binaryId == binaryId
+        && request.resource.metadata.sha256 == 'sha256:' + digest
+        && request.resource.metadata.kind in ['media', 'owner_document', 'condition_attachment'];
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Seul l'objet dérivé physiquement copié dans l'espace public est lisible.
     // L'original, les dérivés privés et toutes les écritures client restent fermés.
     match /public/{publicCode}/{assetId}/{derivativeId} {

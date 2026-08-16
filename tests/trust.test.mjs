@@ -180,6 +180,28 @@ test('le reçu d’horodatage de test reste non qualifié et rejette un mauvais 
     requestId: 'wave6-valid-timestamp',
     issuedAt: '2026-08-14T16:11:00.000Z',
   });
+  await assert.rejects(
+    () => attachTimestampReceipt({
+      firestore: adminFirestore,
+      batchId: batch.batchId,
+      actorId: ownerUid,
+      requestId: 'wave6-false-qualified-timestamp',
+      receipt: {
+        ...receipt,
+        receiptId: 'tsr_false_qualified_wave6',
+        protocol: 'rfc3161-v1',
+        fixture: false,
+        verificationStatus: 'qualified_eidas',
+        signatureVerified: true,
+        chainVerified: true,
+        nonceMatched: true,
+        hashAlgorithm: 'sha256',
+        qualified: true,
+        qualificationStatus: 'QTSA',
+      },
+    }),
+    (error) => error.code === 'unproven_qualified_timestamp',
+  );
   const attached = await attachTimestampReceipt({
     firestore: adminFirestore,
     batchId: batch.batchId,

@@ -65,6 +65,9 @@ set(`users/${fixtures.owner.uid}`, {
   status: 'active',
   modelVersion: '1.0.0',
   createdAt: now,
+  lastActiveAt: now,
+  inactiveAt: null,
+  purgeAfter: null,
   updatedAt: now,
 });
 set(`users/${fixtures.outsider.uid}`, {
@@ -72,6 +75,9 @@ set(`users/${fixtures.outsider.uid}`, {
   status: 'active',
   modelVersion: '1.0.0',
   createdAt: now,
+  lastActiveAt: now,
+  inactiveAt: null,
+  purgeAfter: null,
   updatedAt: now,
 });
 
@@ -95,6 +101,7 @@ set(`organizations/${fixtures.organization.id}/memberships/${fixtures.owner.uid}
     'organization.read',
     'membership.read',
     'registry.read',
+    'access.read',
     'cartulary.read',
     'cartulary.edit',
     'cartulary.export',

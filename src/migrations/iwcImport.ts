@@ -4,9 +4,10 @@ import {
   type CartularyImportBundle,
   type CartularyVisibility,
 } from '../domain/cartulary.ts';
+import { IWC_CARTULARY_ID } from '../domain/cartularyIds.ts';
 import { importedProvenance } from './importHelpers.ts';
 
-export const IWC_CARTULARY_ID = 'cart_iwc_flieger_utc_2002';
+export { IWC_CARTULARY_ID };
 export const IWC_IMPORT_REQUEST_ID = 'wave2-import-iwc-v1';
 export const IWC_IMPORT_SOURCE_ID = 'source_prototype_mock_data';
 export const IWC_IMPORT_ACTOR_ID = 'wave1-owner';
@@ -285,11 +286,12 @@ export const buildIwcImportBundle = (): CartularyImportBundle => ({
     visibility: 'secret',
     reviewStatus: 'pending_human_review',
   })),
-  reminders: watch.reminders.map((reminder: { id: string; title: string; dueDate: string; status: string }) => ({
+  reminders: watch.reminders.map((reminder: { id: string; title: string; dueDate: string; status: string; category?: string }) => ({
     id: reminder.id,
     cartularyId: IWC_CARTULARY_ID,
     organizationId: 'org_demo',
     title: reminder.title,
+    category: reminder.category || 'custom',
     dueAt: `${reminder.dueDate}T00:00:00.000Z`,
     reminderStatus: reminder.status.toLowerCase(),
     visibility: 'secret',

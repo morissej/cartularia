@@ -196,6 +196,30 @@ export const attachTimestampReceipt = async ({ firestore, batchId, actorId, requ
   if (token.length === 0 || sha256Bytes(token) !== receipt.tokenSha256) {
     throw new TrustCommandError('invalid_timestamp_token', 'L’empreinte du jeton d’horodatage est invalide.');
   }
+  const isTestFixture = receipt.verificationStatus === 'test_fixture'
+    && receipt.fixture === true
+    && receipt.protocol === 'rfc3161-adapter-v1'
+    && receipt.qualified === false;
+  const isTrustedRfc3161 = receipt.protocol === 'rfc3161-v1'
+    && ['trusted_rfc3161', 'qualified_eidas'].includes(receipt.verificationStatus)
+    && receipt.signatureVerified === true
+    && receipt.chainVerified === true
+    && receipt.nonceMatched === true
+    && receipt.hashAlgorithm === 'sha256';
+  if (!isTestFixture && !isTrustedRfc3161) {
+    throw new TrustCommandError('unverified_timestamp_receipt', 'Le reçu ne porte aucune validation cryptographique reconnue.');
+  }
+  if (receipt.qualified === true && (
+    receipt.verificationStatus !== 'qualified_eidas'
+    || receipt.qualificationStatus !== 'QTSA'
+    || !receipt.validationEvidence?.trustedListServiceId
+    || !/^sha256:[a-f0-9]{64}$/.test(receipt.validationEvidence?.validationReportDigest || '')
+  )) {
+    throw new TrustCommandError('unproven_qualified_timestamp', 'La qualification eIDAS doit être démontrée par une validation de liste de confiance.');
+  }
+  if (receipt.qualified !== true && receipt.verificationStatus === 'qualified_eidas') {
+    throw new TrustCommandError('invalid_qualification_status', 'Le statut de qualification du reçu est contradictoire.');
+  }
   const inputDigest = sha256Digest({ command: 'attachTimestampReceipt', batchId, receipt });
   const batchRef = firestore.doc(`integrityBatches/${batchId}`);
   const receiptRef = batchRef.collection('timestampReceipts').doc(receipt.receiptId);

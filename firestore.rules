@@ -5,6 +5,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function accountIsActive(uid) {
+      return signedIn()
+        && request.auth.uid == uid
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && get(/databases/$(database)/documents/users/$(uid)).data.status == 'active';
+    }
+
     function membershipPath(organizationId) {
       return /databases/$(database)/documents/organizations/$(organizationId)/memberships/$(request.auth.uid);
     }
@@ -56,7 +63,13 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
-      allow list, create, update, delete: if false;
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActiveAt', 'updatedAt'])
+        && request.resource.data.lastActiveAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow list, create, delete: if false;
 
       match /private/{privateDocument} {
         allow get: if signedIn() && request.auth.uid == uid;
@@ -93,6 +106,17 @@ service cloud.firestore {
         );
         allow create, update, delete: if false;
       }
+
+      match /accesses/{accessId} {
+        allow get, list: if canReadRegistry(
+          get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+          registryId
+        ) && hasPermission(
+          get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+          'access.read'
+        );
+        allow create, update, delete: if false;
+      }
     }
 
     match /schemaCatalog/{assetType} {
@@ -116,6 +140,126 @@ service cloud.firestore {
         );
         allow create, update, delete: if false;
       }
+    }
+
+    // Copie privée de synchronisation du prototype. Elle appartient au compte,
+    // reste séparée du Cartulaire autoritaire et ne peut alimenter aucune publication.
+    match /privateDrafts/{uid} {
+      allow read, write: if false;
+
+      match /cartularies/{cartularyId} {
+        allow get, list: if accountIsActive(uid);
+        allow create: if accountIsActive(uid)
+          && request.resource.data.ownerUid == uid
+          && request.resource.data.cartularyId == cartularyId
+          && request.resource.data.status == 'active'
+          && request.resource.data.retentionPolicyVersion == 'inactive-plus-2y-v1';
+        allow update: if accountIsActive(uid)
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.ownerUid == uid
+          && request.resource.data.cartularyId == resource.data.cartularyId
+          && request.resource.data.cartularyId == cartularyId
+          && request.resource.data.retentionPolicyVersion == 'inactive-plus-2y-v1'
+          && (
+            (resource.data.status == 'active' && request.resource.data.status in ['active', 'deleted'])
+            || (resource.data.status == 'deleted' && request.resource.data.status == 'deleted')
+          );
+        allow delete: if signedIn() && request.auth.uid == uid && resource.data.ownerUid == uid;
+
+        match /state/{stateKey} {
+          allow get, list: if accountIsActive(uid)
+            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active';
+          allow create, update: if accountIsActive(uid)
+            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active'
+            && request.resource.data.keys().hasOnly([
+              'ownerUid', 'cartularyId', 'key', 'value', 'deleted', 'revision',
+              'clientUpdatedAt', 'updatedAt'
+            ])
+            && request.resource.data.ownerUid == uid
+            && request.resource.data.cartularyId == cartularyId
+            && request.resource.data.key == stateKey
+            && stateKey.matches('^cartularia-[A-Za-z0-9:_-]+$')
+            && request.resource.data.revision is int
+            && request.resource.data.revision > 0
+            && request.resource.data.clientUpdatedAt is number
+            && request.resource.data.deleted is bool
+            && (
+              (request.resource.data.deleted == true && request.resource.data.value == null)
+              || (
+                request.resource.data.deleted == false
+                && request.resource.data.value is string
+                && request.resource.data.value.size() <= 900000
+              )
+            );
+          allow delete: if signedIn() && request.auth.uid == uid;
+        }
+
+        match /binaries/{binaryId} {
+          allow get, list: if accountIsActive(uid)
+            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active';
+          allow create, update: if accountIsActive(uid)
+            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active'
+            && request.resource.data.keys().hasOnly([
+              'ownerUid', 'cartularyId', 'binaryId', 'deleted', 'revision', 'fileName',
+              'mimeType', 'size', 'sha256', 'kind', 'storagePath', 'clientUpdatedAt',
+              'uploadStatus', 'updatedAt'
+            ])
+            && request.resource.data.ownerUid == uid
+            && request.resource.data.cartularyId == cartularyId
+            && request.resource.data.binaryId == binaryId
+            && request.resource.data.revision is int
+            && request.resource.data.revision > 0
+            && request.resource.data.clientUpdatedAt is number
+            && request.resource.data.size is int
+            && request.resource.data.size >= 0
+            && request.resource.data.sha256.matches('^sha256:[a-f0-9]{64}$')
+            && request.resource.data.kind in ['media', 'owner_document', 'condition_attachment']
+            && (
+              (
+                request.resource.data.deleted == true
+                && request.resource.data.storagePath == null
+                && request.resource.data.uploadStatus == 'deleted'
+              )
+              || (
+                request.resource.data.deleted == false
+                && request.resource.data.storagePath is string
+                && request.resource.data.uploadStatus == 'ready'
+              )
+            );
+          allow delete: if signedIn() && request.auth.uid == uid;
+        }
+      }
+    }
+
+    // File d'intention minimale. Le navigateur ne peut modifier ni le Cartulaire
+    // autoritaire ni sa projection : une commande Admin valide et exécute la demande.
+    match /cartularySyncRequests/{requestDocumentId} {
+      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create, update: if accountIsActive(request.auth.uid)
+        && request.resource.data.keys().hasOnly([
+          'requestDocumentId', 'requestId', 'ownerUid', 'cartularyId', 'reason',
+          'status', 'requestedAt', 'updatedAt'
+        ])
+        && request.resource.data.requestDocumentId == requestDocumentId
+        && request.resource.data.cartularyId == requestDocumentId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.requestId is string
+        && request.resource.data.requestId.matches('^sync_[a-z0-9_]{16,96}$')
+        && request.resource.data.reason in ['private_draft_synchronized', 'manual_retry']
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/cartularies/$(requestDocumentId))
+        && get(/databases/$(database)/documents/cartularies/$(requestDocumentId)).data.accountHolderId == request.auth.uid
+        && hasPermission(
+          get(/databases/$(database)/documents/cartularies/$(requestDocumentId)).data.organizationId,
+          'cartulary.edit'
+        )
+        && registryIsInScope(
+          get(/databases/$(database)/documents/cartularies/$(requestDocumentId)).data.organizationId,
+          get(/databases/$(database)/documents/cartularies/$(requestDocumentId)).data.registryId
+        );
+      allow list, delete: if false;
     }
 
     match /publications/{publicCode} {

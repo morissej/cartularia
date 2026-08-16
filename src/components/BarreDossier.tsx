@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ListTodo, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { persistCartulariaJson } from '../persistence/localVault';
+import { useDialogFocus } from '../hooks/useDialogFocus';
+import { removeItemById, restoreItemAtIndex, type RemovedItem } from '../utils/undoableDeletion';
 
 interface TodoItem {
   id: string;
@@ -51,13 +54,18 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
   const [newTodo, setNewTodo] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [pendingTodoDeletion, setPendingTodoDeletion] = useState<TodoItem | null>(null);
+  const [deletedTodo, setDeletedTodo] = useState<RemovedItem<TodoItem> | null>(null);
   const todoContainerRef = useRef<HTMLDivElement>(null);
   const newTodoInputRef = useRef<HTMLInputElement>(null);
+  const todoDeletionDialogRef = useRef<HTMLDivElement>(null);
 
   const isFrench = language === 'FR';
 
+  useDialogFocus(Boolean(pendingTodoDeletion), todoDeletionDialogRef, () => setPendingTodoDeletion(null));
+
   useEffect(() => {
-    window.localStorage.setItem(TODO_STORAGE_KEY, JSON.stringify(todos));
+    void persistCartulariaJson(TODO_STORAGE_KEY, todos).catch((error: unknown) => console.error('Persistance des tâches impossible', error));
   }, [todos]);
 
   useEffect(() => {
@@ -87,6 +95,12 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
     };
   }, [isTodoOpen]);
 
+  useEffect(() => {
+    if (!deletedTodo) return;
+    const timeout = window.setTimeout(() => setDeletedTodo(null), 10_000);
+    return () => window.clearTimeout(timeout);
+  }, [deletedTodo]);
+
   const addTodo = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = newTodo.trim();
@@ -112,12 +126,26 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
     setEditingText('');
   };
 
-  const deleteTodo = (todoId: string) => {
-    setTodos((current) => current.filter((todo) => todo.id !== todoId));
-    if (editingId === todoId) {
+  const confirmTodoDeletion = () => {
+    if (!pendingTodoDeletion) return;
+    const removed = removeItemById(todos, pendingTodoDeletion.id);
+    if (!removed) {
+      setPendingTodoDeletion(null);
+      return;
+    }
+    setTodos(removed.remaining);
+    setDeletedTodo(removed);
+    if (editingId === pendingTodoDeletion.id) {
       setEditingId(null);
       setEditingText('');
     }
+    setPendingTodoDeletion(null);
+  };
+
+  const undoTodoDeletion = () => {
+    if (!deletedTodo) return;
+    setTodos((current) => restoreItemAtIndex(current, deletedTodo.item, deletedTodo.index));
+    setDeletedTodo(null);
   };
 
   return (
@@ -234,7 +262,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                             <span>{todo.text}</span>
                             <div className="todo-list__actions">
                               <button type="button" onClick={() => startEditing(todo)} aria-label={`${isFrench ? 'Modifier' : 'Edit'} : ${todo.text}`}><Pencil size={14} /></button>
-                              <button type="button" onClick={() => deleteTodo(todo.id)} aria-label={`${isFrench ? 'Supprimer' : 'Delete'} : ${todo.text}`}><Trash2 size={14} /></button>
+                              <button type="button" onClick={() => setPendingTodoDeletion(todo)} aria-label={`${isFrench ? 'Supprimer' : 'Delete'} : ${todo.text}`}><Trash2 size={14} /></button>
                             </div>
                           </>
                         )}
@@ -244,6 +272,18 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                 ) : (
                   <p className="todo-empty">{isFrench ? 'Aucune chose à faire pour le moment.' : 'Nothing to do for now.'}</p>
                 )}
+
+                {pendingTodoDeletion && (
+                  <div ref={todoDeletionDialogRef} className="todo-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="todo-delete-title" data-focus-layer="true" tabIndex={-1}>
+                    <span className="eyebrow">{isFrench ? 'Action destructive' : 'Destructive action'}</span>
+                    <h3 id="todo-delete-title">{isFrench ? 'Supprimer cette tâche ?' : 'Delete this task?'}</h3>
+                    <p>{pendingTodoDeletion.text}</p>
+                    <div>
+                      <button type="button" onClick={() => setPendingTodoDeletion(null)}>{isFrench ? 'Conserver' : 'Keep'}</button>
+                      <button type="button" className="is-danger" onClick={confirmTodoDeletion}>{isFrench ? 'Supprimer' : 'Delete'}</button>
+                    </div>
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -252,17 +292,12 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
           <div className="dossier-bar__languages" style={{ display: 'flex', gap: '6px' }}>
             {(['FR', 'EN'] as const).map((lang) => (
               <button
+                type="button"
                 key={lang}
+                className={`language-toggle${language === lang ? ' is-active' : ''}`}
                 onClick={() => setLanguage(lang)}
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  color: language === lang ? 'var(--ink)' : 'var(--muted)',
-                  transition: 'var(--transition)',
-                  padding: '2px'
-                }}
+                aria-label={lang === 'FR' ? 'Afficher l’interface en français' : 'Display the interface in English'}
+                aria-pressed={language === lang}
               >
                 {lang}
               </button>
@@ -270,6 +305,13 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
           </div>
         </div>
       </div>
+      {deletedTodo && (
+        <div className="undo-toast no-print" role="status" aria-live="assertive" aria-atomic="true">
+          <p>{isFrench ? `« ${deletedTodo.item.text} » a été supprimée.` : `“${deletedTodo.item.text}” was deleted.`}</p>
+          <button type="button" onClick={undoTodoDeletion}>{isFrench ? 'Annuler la suppression' : 'Undo deletion'}</button>
+          <button type="button" className="undo-toast__dismiss" onClick={() => setDeletedTodo(null)} aria-label={isFrench ? 'Fermer la notification' : 'Dismiss notification'}><X size={15} /></button>
+        </div>
+      )}
       <style>{`
         @media (max-width: 767px) {
           .header-watch-info {

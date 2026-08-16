@@ -1,4 +1,5 @@
 import type { Cartulary, WatchReference, WatchInstance, Asset, SpinSet, Observation, Valuation } from '../types';
+import { IWC_CARTULARY_ID } from '../domain/cartularyIds.ts';
 
 const watchReference: WatchReference = {
   brand: "IWC Schaffhausen",
@@ -292,18 +293,20 @@ const watchInstance: WatchInstance = {
       title: "Contrôle d'étanchéité périodique (6 ATM)",
       dueDate: "2027-03-08",
       status: "Planned",
+      category: "maintenance",
     },
     {
       id: "rem-2",
       title: "Renouvellement contrat assurance collection",
       dueDate: "2027-08-01",
       status: "Planned",
+      category: "insurance",
     }
   ],
 };
 
 export const mockCartulary: Cartulary = {
-  id: "cartulary-iwc-utc-01",
+  id: IWC_CARTULARY_ID,
   publicCode: "OP-4892-XZ9",
   watchInstance: watchInstance,
   sections: {

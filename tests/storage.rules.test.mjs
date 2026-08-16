@@ -19,6 +19,9 @@ const publicCode = 'PUBLIC-A1';
 const publicPath = `public/${publicCode}/asset-a/web-v1`;
 const communityPublicationId = 'community-pub-a1';
 const communityPath = `community/${communityPublicationId}/asset-a/community-v1`;
+const draftBinaryId = 'draft-binary-a1';
+const draftDigest = 'a'.repeat(64);
+const draftPath = `private-drafts/owner-a/cart-a/${draftBinaryId}/${draftDigest}/original`;
 
 let testEnvironment;
 
@@ -47,6 +50,10 @@ beforeEach(async () => {
   await testEnvironment.clearFirestore();
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await Promise.all([
+      setDoc(doc(context.firestore(), 'users', 'owner-a'), {
+        uid: 'owner-a',
+        status: 'active',
+      }),
       setDoc(doc(context.firestore(), 'publications', publicCode), {
         publicCode,
         status: 'published',
@@ -62,7 +69,38 @@ beforeEach(async () => {
         status: 'published',
         moderationStatus: 'approved',
       }),
+      setDoc(doc(context.firestore(), 'privateDrafts', 'owner-a', 'cartularies', 'cart-a'), {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        status: 'active',
+        retentionPolicyVersion: 'inactive-plus-2y-v1',
+      }),
+      setDoc(doc(context.firestore(), 'privateDrafts', 'owner-a', 'cartularies', 'cart-a', 'binaries', draftBinaryId), {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        binaryId: draftBinaryId,
+        deleted: false,
+        revision: 1,
+        fileName: 'original.mp4',
+        mimeType: 'video/mp4',
+        size: 8,
+        sha256: `sha256:${draftDigest}`,
+        kind: 'media',
+        storagePath: draftPath,
+        clientUpdatedAt: 1,
+        uploadStatus: 'ready',
+      }),
       context.storage(bucketUrl).ref(privatePath).putString('original privé'),
+      context.storage(bucketUrl).ref(draftPath).putString('original', 'raw', {
+        contentType: 'video/mp4',
+        customMetadata: {
+          ownerUid: 'owner-a',
+          cartularyId: 'cart-a',
+          binaryId: draftBinaryId,
+          sha256: `sha256:${draftDigest}`,
+          kind: 'media',
+        },
+      }),
       context.storage(bucketUrl).ref(publicPath).putString('dérivé web public', 'raw', {
         customMetadata: {
           publicCode,
@@ -94,6 +132,64 @@ test('un utilisateur authentifié ne peut pas lire un original privé pendant la
 test('un visiteur anonyme ne peut lire aucun original privé', async () => {
   const storage = testEnvironment.unauthenticatedContext().storage(bucketUrl);
   await assertFails(storage.ref(privatePath).getDownloadURL());
+});
+
+test('le propriétaire peut écrire et lire son original de brouillon privé', async () => {
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  const newDigest = 'b'.repeat(64);
+  const newPath = `private-drafts/owner-a/cart-a/new-binary-a1/${newDigest}/original`;
+  await assertSucceeds(ownerStorage.ref(newPath).putString('nouveau média', 'raw', {
+    contentType: 'video/mp4',
+    customMetadata: {
+      ownerUid: 'owner-a',
+      cartularyId: 'cart-a',
+      binaryId: 'new-binary-a1',
+      sha256: `sha256:${newDigest}`,
+      kind: 'media',
+    },
+  }));
+  await assertSucceeds(ownerStorage.ref(draftPath).getDownloadURL());
+});
+
+test('un autre compte et un visiteur ne peuvent ni lire ni écrire le brouillon privé', async () => {
+  const outsiderStorage = testEnvironment.authenticatedContext('owner-b').storage(bucketUrl);
+  const anonymousStorage = testEnvironment.unauthenticatedContext().storage(bucketUrl);
+  await assertFails(outsiderStorage.ref(draftPath).getDownloadURL());
+  await assertFails(anonymousStorage.ref(draftPath).getDownloadURL());
+  await assertFails(outsiderStorage.ref(draftPath).putString('écrasement', 'raw', {
+    customMetadata: {
+      ownerUid: 'owner-a', cartularyId: 'cart-a', binaryId: draftBinaryId,
+      sha256: `sha256:${draftDigest}`, kind: 'media',
+    },
+  }));
+});
+
+test('la suppression logique du brouillon coupe immédiatement la lecture Storage', async () => {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'privateDrafts', 'owner-a', 'cartularies', 'cart-a'), {
+      ownerUid: 'owner-a',
+      cartularyId: 'cart-a',
+      status: 'deleted',
+      retentionPolicyVersion: 'inactive-plus-2y-v1',
+    });
+  });
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  await assertFails(ownerStorage.ref(draftPath).getDownloadURL());
+});
+
+test('le passage du compte à inactif coupe immédiatement la lecture et les nouveaux dépôts privés', async () => {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', 'owner-a'), { uid: 'owner-a', status: 'inactive' });
+  });
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  await assertFails(ownerStorage.ref(draftPath).getDownloadURL());
+  const newDigest = 'e'.repeat(64);
+  await assertFails(ownerStorage.ref(`private-drafts/owner-a/cart-a/inactive-file/${newDigest}/original`).putString('refusé', 'raw', {
+    customMetadata: {
+      ownerUid: 'owner-a', cartularyId: 'cart-a', binaryId: 'inactive-file',
+      sha256: `sha256:${newDigest}`, kind: 'media',
+    },
+  }));
 });
 
 test('un visiteur anonyme lit uniquement le dérivé d’une publication active', async () => {

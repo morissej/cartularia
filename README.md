@@ -31,10 +31,22 @@ Copier `.env.example` vers `.env`, puis remplacer les valeurs par la configurati
 
 Les règles de développement sont présentes dans `firestore.rules` et `storage.rules`.
 
+Pour le raccordement local continu du Cartulaire au Registre, lancer les émulateurs puis le worker dans un second terminal :
+
+```bash
+npm run emulators
+FIREBASE_PROJECT_ID=<projet-local> npm run sync:worker
+```
+
+L'ingestion pilote des images IWC dans Storage se lance avec `npm run seed:iwc-media` lorsque les variables d'émulateur Firestore et Storage sont définies. `npm run verify:live-connection` contrôle ensuite, avec le compte propriétaire local, le chemin Cartulaire → projection Registre → original Storage. L'architecture et ses limites sont consignées dans [`docs/ADR-019-raccordement-cartulaire-registre.md`](docs/ADR-019-raccordement-cartulaire-registre.md).
+
 ## Contrôles
 
 ```bash
 npm run validate:ai
+npm run test:corrective-wave1
+npm run test:corrective-wave2
+npm run test:retention
 npm run test:wave7
 npm run lint
 npm run build
@@ -78,11 +90,33 @@ La sixième vague ajoute la canonisation `jcs-1`, la vérification du journal ch
 
 Le guide d’exécution se trouve dans [`docs/TRUST_WAVE_6.md`](docs/TRUST_WAVE_6.md) et la décision d’architecture dans [`docs/ADR-006-confiance-blockchain-ready.md`](docs/ADR-006-confiance-blockchain-ready.md).
 
+## Intégrité de l’interface locale — vague corrective 1
+
+Le Cartulaire React scelle désormais un instantané canonique de ses données métier et de ses sélections W/R/C dans un journal local révisionné. La chaîne gère la concurrence et les rejeux, conserve les journaux historiques sans les réécrire et produit un export JSON vérifiable indépendamment avec `npm run integrity:verify-local`.
+
+Cette couche détecte les incohérences mais ne revendique encore ni horodatage qualifié, ni ancrage blockchain, ni preuve de vérité des données. Le contrat, les tests et les limites sont décrits dans [`docs/CORRECTIVE_WAVE_1_INTEGRITY.md`](docs/CORRECTIVE_WAVE_1_INTEGRITY.md) et [`docs/ADR-012-journal-local-revisionne.md`](docs/ADR-012-journal-local-revisionne.md).
+
 ## Production et readiness — vague 7
 
 La septième vague ajoute la sauvegarde/restauration vérifiable, T-20 avec fichier binaire, les sondes de charge et volumétrie, un calculateur de coûts paramétrique, les contrôles privacy/credentials, l’observabilité expurgée et les runbooks d’exploitation. Le rapport sépare la construction terminée de l’autorisation effective de mise en service.
 
 Le guide se trouve dans [`docs/PRODUCTION_WAVE_7.md`](docs/PRODUCTION_WAVE_7.md) et la décision dans [`docs/ADR-007-production-readiness.md`](docs/ADR-007-production-readiness.md). Les décisions encore ouvertes sont versionnées dans `config/production-policy.json` et ne peuvent être contournées par le rapport automatique.
+
+## Persistance hybride — vague corrective 2
+
+Les formulaires sont désormais doublés dans IndexedDB et les originaux importés y sont conservés avec leur empreinte SHA-256. Une session Firebase existante active une synchronisation privée Firestore/Storage bornée au compte, avec détection de conflit sans écrasement silencieux. Le panneau Intégrité affiche séparément l’état du coffre local et celui de la copie cloud, et propose une suppression volontaire à confirmation textuelle.
+
+La conservation des brouillons privés suit la décision « compte actif, puis deux ans après passage inactif ». `npm run retention:private` est un dry-run ; toute purge exige `--execute`, et une purge distante exige en plus `--allow-remote --confirm-private-purge`. Le contrat et ses limites sont décrits dans [`docs/CORRECTIVE_WAVE_2_PERSISTENCE.md`](docs/CORRECTIVE_WAVE_2_PERSISTENCE.md).
+
+## Publication contrôlée — vague corrective 3
+
+Les marqueurs W/R/C ouvrent désormais un acte de validation explicite, conditionné par une marque, un modèle et une photo principale. Chaque décision est liée à une révision et à une empreinte de source ; une modification impose une nouvelle validation. Le contrat est décrit dans [`docs/CORRECTIVE_WAVE_3_PUBLICATION.md`](docs/CORRECTIVE_WAVE_3_PUBLICATION.md).
+
+## Horodatage externe — vague corrective 4
+
+Le panneau Intégrité peut obtenir un vrai jeton RFC 3161 sur la racine Merkle, vérifié côté serveur avec son nonce, sa signature et sa chaîne de certificats. Seule l'empreinte quitte le Cartulaire. Le QR de partage encode une URL réelle et le rapport R expose la preuve complète ou signale qu'elle ne couvre plus le contenu courant.
+
+Un jeton RFC 3161 vérifié n'est pas présenté comme qualifié eIDAS sans preuve `QTSA` issue d'une liste de confiance. L'ancrage blockchain public reste différé. Le contrat et les avertissements de déploiement se trouvent dans [`docs/CORRECTIVE_WAVE_4_TIMESTAMPING.md`](docs/CORRECTIVE_WAVE_4_TIMESTAMPING.md) et [`docs/ADR-017-horodatage-rfc3161-externe.md`](docs/ADR-017-horodatage-rfc3161-externe.md).
 
 ## Préparation au remplissage par IA
 

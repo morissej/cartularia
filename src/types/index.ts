@@ -87,6 +87,10 @@ export interface Asset {
   originalFileName?: string;
   metadataTimestamp?: string;
   timestampSource?: 'file.lastModified' | 'catalogue';
+  binaryId?: string;
+  localAvailability?: 'available' | 'missing';
+  cloudStoragePath?: string;
+  derivativeStatus?: 'not-required' | 'pending' | 'ready' | 'failed';
 }
 
 export interface SpinSet {
@@ -226,12 +230,23 @@ export interface Cartulary {
 // Interface pour le journal d'audit chaîné (Integrity Journal)
 export interface AuditEvent {
   id: string;
+  cartularyId: string;
   timestamp: string;
   action: string;
   actorId: string;
   details: string;
+  resource: {
+    type: string;
+    id: string;
+    changedSections?: string[];
+  };
+  revision: number;
+  beforeDigest: string | null;
+  afterDigest: string;
   previousHash: string;
   hash: string;
   sequence: number;
-  version: string;
+  version: '2.0';
+  canonicalizationVersion: 'jcs-1';
+  requestId: string;
 }

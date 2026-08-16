@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { getBlob, ref } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import type {
@@ -14,6 +14,16 @@ export const loadRegistryItems = async (registryId: string): Promise<RegistryIte
   const snapshot = await getDocs(query(collection(db, 'registries', registryId, 'items'), orderBy('updatedAt', 'desc')));
   return snapshot.docs.map((item) => item.data() as RegistryItemProjection);
 };
+
+export const observeRegistryItems = (
+  registryId: string,
+  onItems: (items: RegistryItemProjection[]) => void,
+  onError: (error: Error) => void,
+) => onSnapshot(
+  query(collection(db, 'registries', registryId, 'items'), orderBy('updatedAt', 'desc')),
+  (snapshot) => onItems(snapshot.docs.map((item) => item.data() as RegistryItemProjection)),
+  (error) => onError(error),
+);
 
 export const loadPublicProjection = async (publicCode: string): Promise<LoadedPublicProjection | null> => {
   const publicationRef = doc(db, 'publications', publicCode);
