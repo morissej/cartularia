@@ -30,7 +30,7 @@ test('le dépôt courant satisfait la matrice statique R8', () => {
   );
 });
 
-test('un pilote prêt ne fabrique pas une autorisation de production', () => {
+test('un pilote prêt ne fabrique pas les validations juridiques et tarifaires', () => {
   const readiness = evaluateRegistryPilotReadiness({
     checks: collectRegistryPilotChecks(rootDirectory),
     productionPolicy,
@@ -38,8 +38,9 @@ test('un pilote prêt ne fabrique pas une autorisation de production', () => {
   assert.equal(readiness.constructionStatus, 'complete');
   assert.equal(readiness.pilotStatus, 'ready');
   assert.equal(readiness.goLiveAuthorization, 'blocked');
-  assert.ok(readiness.productionBlockers.includes('D-01_region_firestore_storage'));
-  assert.ok(readiness.productionBlockers.includes('autorisation_deploiement_distant'));
+  assert.ok(readiness.productionBlockers.includes('D-06_evaluation_chiffrement_applicatif'));
+  assert.ok(readiness.productionBlockers.includes('D-07_conservation_suppression'));
+  assert.ok(readiness.productionBlockers.includes('grille_couts_regionale'));
   assert.match(readiness.reportDigest, /^sha256:[a-f0-9]{64}$/);
 });
 

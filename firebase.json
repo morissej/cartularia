@@ -6,6 +6,26 @@
   "storage": {
     "rules": "storage.rules"
   },
+  "functions": {
+    "source": ".",
+    "codebase": "cartularia-sync",
+    "runtime": "nodejs22",
+    "ignore": [
+      ".git",
+      ".firebase",
+      ".env",
+      ".env.*",
+      "node_modules",
+      "dist",
+      "public",
+      "src",
+      "tests",
+      "docs",
+      "firebase",
+      "config",
+      "*.log"
+    ]
+  },
   "hosting": {
     "public": "dist",
     "ignore": [

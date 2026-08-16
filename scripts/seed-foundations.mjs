@@ -1,6 +1,7 @@
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { randomBytes } from 'node:crypto';
 import {
   SCHEMA_CONTRACT_DIGEST_VERSION,
   schemaContractDigest,
@@ -10,6 +11,7 @@ import {
 const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || 'cartularia-wave1-local';
 const usesEmulators = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
 const allowRemote = process.argv.includes('--allow-remote');
+const includeIsolationFixtures = usesEmulators || process.argv.includes('--include-isolation-fixtures');
 
 if (!usesEmulators && !allowRemote) {
   throw new Error(
@@ -29,7 +31,9 @@ const firestore = getFirestore(app);
 const fixtures = {
   owner: {
     uid: 'wave1-owner',
-    email: 'owner.wave1@cartularia.test',
+    email: usesEmulators
+      ? 'owner.wave1@cartularia.test'
+      : process.env.CARTULARIA_ADMIN_EMAIL?.trim(),
     displayName: 'Propriétaire pilote',
   },
   outsider: {
@@ -43,16 +47,36 @@ const fixtures = {
   outsiderRegistry: { id: 'reg_isolation', name: 'Registre isolation' },
 };
 
-const ensureUser = async ({ uid, email, displayName }) => {
+if (!usesEmulators && !fixtures.owner.email) {
+  throw new Error('CARTULARIA_ADMIN_EMAIL est requis pour créer les fondations distantes.');
+}
+
+const generatedAdminPassword = usesEmulators
+  ? 'Cartularia-Wave1-Local!'
+  : `Ct1!${randomBytes(18).toString('base64url')}`;
+let createdAdminCredentials = null;
+
+const ensureUser = async ({ uid, email, displayName }, password) => {
   try {
     await auth.getUser(uid);
+    return false;
   } catch (error) {
     if (error?.code !== 'auth/user-not-found') throw error;
-    await auth.createUser({ uid, email, displayName, emailVerified: true, password: 'Cartularia-Wave1-Local!' });
+    await auth.createUser({ uid, email, displayName, emailVerified: true, password });
+    return true;
   }
 };
 
-await Promise.all([ensureUser(fixtures.owner), ensureUser(fixtures.outsider)]);
+if (await ensureUser(fixtures.owner, generatedAdminPassword)) {
+  createdAdminCredentials = {
+    uid: fixtures.owner.uid,
+    email: fixtures.owner.email,
+    temporaryPassword: generatedAdminPassword,
+  };
+}
+if (includeIsolationFixtures) {
+  await ensureUser(fixtures.outsider, 'Cartularia-Wave1-Local!');
+}
 
 const now = FieldValue.serverTimestamp();
 const batch = firestore.batch();
@@ -70,18 +94,23 @@ set(`users/${fixtures.owner.uid}`, {
   purgeAfter: null,
   updatedAt: now,
 });
-set(`users/${fixtures.outsider.uid}`, {
-  ...fixtures.outsider,
-  status: 'active',
-  modelVersion: '1.0.0',
-  createdAt: now,
-  lastActiveAt: now,
-  inactiveAt: null,
-  purgeAfter: null,
-  updatedAt: now,
-});
+if (includeIsolationFixtures) {
+  set(`users/${fixtures.outsider.uid}`, {
+    ...fixtures.outsider,
+    status: 'active',
+    modelVersion: '1.0.0',
+    createdAt: now,
+    lastActiveAt: now,
+    inactiveAt: null,
+    purgeAfter: null,
+    updatedAt: now,
+  });
+}
 
-for (const organization of [fixtures.organization, fixtures.outsiderOrganization]) {
+for (const organization of [
+  fixtures.organization,
+  ...(includeIsolationFixtures ? [fixtures.outsiderOrganization] : []),
+]) {
   set(`organizations/${organization.id}`, {
     ...organization,
     status: 'active',
@@ -111,16 +140,18 @@ set(`organizations/${fixtures.organization.id}/memberships/${fixtures.owner.uid}
   createdAt: now,
   revokedAt: null,
 });
-set(`organizations/${fixtures.outsiderOrganization.id}/memberships/${fixtures.outsider.uid}`, {
-  uid: fixtures.outsider.uid,
-  organizationId: fixtures.outsiderOrganization.id,
-  roles: ['account_holder'],
-  status: 'active',
-  scopes: { registryIds: [fixtures.outsiderRegistry.id] },
-  permissions: ['organization.read', 'membership.read', 'registry.read'],
-  createdAt: now,
-  revokedAt: null,
-});
+if (includeIsolationFixtures) {
+  set(`organizations/${fixtures.outsiderOrganization.id}/memberships/${fixtures.outsider.uid}`, {
+    uid: fixtures.outsider.uid,
+    organizationId: fixtures.outsiderOrganization.id,
+    roles: ['account_holder'],
+    status: 'active',
+    scopes: { registryIds: [fixtures.outsiderRegistry.id] },
+    permissions: ['organization.read', 'membership.read', 'registry.read'],
+    createdAt: now,
+    revokedAt: null,
+  });
+}
 
 set(`communityMemberships/${fixtures.owner.uid}`, {
   uid: fixtures.owner.uid,
@@ -150,7 +181,7 @@ set(`communityProfiles/${fixtures.owner.uid}`, {
 
 for (const [registry, organization] of [
   [fixtures.registry, fixtures.organization],
-  [fixtures.outsiderRegistry, fixtures.outsiderOrganization],
+  ...(includeIsolationFixtures ? [[fixtures.outsiderRegistry, fixtures.outsiderOrganization]] : []),
 ]) {
   set(`registries/${registry.id}`, {
     ...registry,
@@ -260,7 +291,11 @@ await batch.commit();
 
 console.log(
   `Fondations créées dans ${projectId}${usesEmulators ? ' (émulateurs)' : ' (distant explicitement autorisé)'} : ` +
-    `2 comptes, 2 organisations, 2 memberships, 2 registres, ` +
+    `${includeIsolationFixtures ? 2 : 1} compte(s), ${includeIsolationFixtures ? 2 : 1} organisation(s), ` +
+    `${includeIsolationFixtures ? 2 : 1} membership(s), ${includeIsolationFixtures ? 2 : 1} registre(s), ` +
     `1 admission communautaire pseudonyme, ` +
     `${schemas.map(({ schema }) => `${schema.schemaId}@${schema.version}`).join(', ')}.`,
 );
+if (createdAdminCredentials) {
+  console.log(JSON.stringify({ event: 'PRODUCTION_ADMIN_CREATED', ...createdAdminCredentials }, null, 2));
+}

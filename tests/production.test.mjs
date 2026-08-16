@@ -218,7 +218,9 @@ test('le gate ne confond jamais construction terminée et autorisation de mise e
   const blocked = evaluateProductionReadiness({ policy: basePolicy, checks });
   assert.equal(blocked.constructionStatus, 'complete');
   assert.equal(blocked.goLiveAuthorization, 'blocked');
-  assert.ok(blocked.blockers.includes('D-01_region_firestore_storage'));
+  assert.ok(blocked.blockers.includes('D-06_evaluation_chiffrement_applicatif'));
+  assert.ok(blocked.blockers.includes('D-07_conservation_suppression'));
+  assert.ok(blocked.blockers.includes('grille_couts_regionale'));
 
   const confirmed = structuredClone(basePolicy);
   confirmed.regions = { status: 'confirmed', firestore: 'test-region', storage: 'test-region' };

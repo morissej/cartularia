@@ -1,13 +1,13 @@
 {
-  "policyVersion": "wave7-1.0.0",
+  "policyVersion": "wave7-1.1.0",
   "target": {
     "projectId": "studio-2614005370-a3e51",
     "environment": "production"
   },
   "regions": {
-    "status": "pending_decision",
-    "firestore": null,
-    "storage": null
+    "status": "confirmed",
+    "firestore": "us-central1",
+    "storage": "us-central1"
   },
   "privacy": {
     "personalDataPublication": {
@@ -44,10 +44,12 @@
     }
   },
   "pricing": {
-    "status": "pending_region",
+    "status": "pending_pricing_review",
     "unitPrices": null
   },
   "release": {
-    "remoteDeploymentAuthorized": false
+    "remoteDeploymentAuthorized": true,
+    "authorizedAt": "2026-08-16",
+    "scope": "functions,firestore,storage,hosting,pilot-data"
   }
 }
