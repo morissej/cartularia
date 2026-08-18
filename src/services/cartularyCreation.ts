@@ -2,6 +2,7 @@ import type { User } from 'firebase/auth';
 import {
   doc,
   getDoc,
+  runTransaction,
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
@@ -39,9 +40,14 @@ export interface CartularyCreationProgress {
 }
 
 interface CreationRequestDocument {
-  status: 'pending' | 'processed' | 'failed';
+  status: 'pending' | 'processing' | 'processed' | 'failed';
+  requestDocumentId: string;
+  requestId: string;
   ownerUid: string;
   cartularyId: string;
+  organizationId: string;
+  registryId: string;
+  publicCode: string;
   errorCode?: string;
   errorMessage?: string;
 }
@@ -53,6 +59,15 @@ export class CartularyCreationFailedError extends Error {
 export class CartularyCreationTimeoutError extends Error {
   override name = 'CartularyCreationTimeoutError';
 }
+
+const CREATION_RETRY_DELAYS_MS = [1_000, 2_500] as const;
+const RETRYABLE_CREATION_ERROR_CODES = new Set([
+  'aborted',
+  'create_failed',
+  'deadline-exceeded',
+  'internal',
+  'unavailable',
+]);
 
 const slugify = (value: string) => value
   .normalize('NFD')
@@ -313,12 +328,38 @@ export const waitForCartularyCreation = async (
 ): Promise<void> => {
   const requestRef = doc(db, 'cartularyCreateRequests', cartularyId);
   const startedAt = Date.now();
+  let retryAttempt = 0;
   while (Date.now() - startedAt < timeoutMs) {
     const snapshot = await getDoc(requestRef);
     if (!snapshot.exists()) throw new Error('La demande de création a disparu.');
     const request = snapshot.data() as CreationRequestDocument;
     if (request.status === 'processed') return;
     if (request.status === 'failed') {
+      const errorCode = request.errorCode || 'create_failed';
+      const retryDelay = CREATION_RETRY_DELAYS_MS[retryAttempt];
+      if (retryDelay !== undefined && RETRYABLE_CREATION_ERROR_CODES.has(errorCode)) {
+        retryAttempt += 1;
+        await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
+        await runTransaction(db, async (transaction) => {
+          const currentSnapshot = await transaction.get(requestRef);
+          if (!currentSnapshot.exists()) throw new Error('La demande de création a disparu.');
+          const current = currentSnapshot.data() as CreationRequestDocument;
+          if (current.status !== 'failed') return;
+          transaction.set(requestRef, {
+            requestDocumentId: current.requestDocumentId,
+            requestId: current.requestId,
+            ownerUid: current.ownerUid,
+            cartularyId: current.cartularyId,
+            organizationId: current.organizationId,
+            registryId: current.registryId,
+            publicCode: current.publicCode,
+            status: 'pending',
+            requestedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        });
+        continue;
+      }
       throw new CartularyCreationFailedError(request.errorMessage || `Création refusée (${request.errorCode || 'erreur inconnue'}).`);
     }
     await new Promise((resolve) => window.setTimeout(resolve, 1_500));

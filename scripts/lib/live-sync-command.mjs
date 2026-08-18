@@ -1,6 +1,10 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { CANONICALIZATION_VERSION, sha256Digest } from './canonical-json.mjs';
 import { verifyAuditChain, ZERO_AUDIT_HASH } from './audit-verifier.mjs';
+import { claimQueuedOperation } from './operation-rate-limit.mjs';
+
+const SYNC_RATE_LIMIT_PER_HOUR = 120;
+const ONE_HOUR_MS = 60 * 60 * 1_000;
 
 export class LiveSyncCommandError extends Error {
   constructor(code, message) {
@@ -156,6 +160,7 @@ export const processCartularySyncRequest = async ({
   firestore,
   requestDocumentId,
   occurredAt = new Date().toISOString(),
+  rateLimitPerHour = SYNC_RATE_LIMIT_PER_HOUR,
 }) => {
   const requestRef = firestore.doc(`cartularySyncRequests/${requestDocumentId}`);
   const initialRequest = await requestRef.get();
@@ -167,6 +172,17 @@ export const processCartularySyncRequest = async ({
   if (requestDocumentId !== cartularyId || typeof ownerUid !== 'string' || typeof requestId !== 'string') {
     throw new LiveSyncCommandError('invalid_request', 'Demande de synchronisation incomplète.');
   }
+  const claim = await claimQueuedOperation({
+    firestore,
+    requestRef,
+    requestId,
+    ownerUid,
+    operation: 'cartulary_sync',
+    limit: rateLimitPerHour,
+    windowMs: ONE_HOUR_MS,
+    occurredAt,
+  });
+  if (!claim.claimed) return { requestDocumentId, status: 'ignored', reason: claim.reason };
 
   const rootRef = firestore.doc(`cartularies/${cartularyId}`);
   const [root, auditSnapshot, draft, existingAssetsSnapshot] = await Promise.all([
@@ -216,7 +232,7 @@ export const processCartularySyncRequest = async ({
       transaction.get(membershipRef),
       transaction.get(registryItemRef),
     ]);
-    if (!currentRequest.exists || currentRequest.data().status !== 'pending' || currentRequest.data().requestId !== requestId) {
+    if (!currentRequest.exists || currentRequest.data().status !== 'processing' || currentRequest.data().requestId !== requestId) {
       return { requestDocumentId, status: 'ignored', reason: 'superseded' };
     }
     if (!currentRoot.exists) throw new LiveSyncCommandError('cartulary_not_found', 'Cartulaire introuvable pendant la transaction.');
@@ -346,7 +362,11 @@ export const markCartularySyncRequestFailed = async ({ firestore, requestDocumen
   const requestRef = firestore.doc(`cartularySyncRequests/${requestDocumentId}`);
   await firestore.runTransaction(async (transaction) => {
     const current = await transaction.get(requestRef);
-    if (!current.exists || current.data().status !== 'pending' || current.data().requestId !== requestId) return;
+    if (
+      !current.exists
+      || !['pending', 'processing'].includes(current.data().status)
+      || current.data().requestId !== requestId
+    ) return;
     transaction.update(requestRef, {
       status: 'failed',
       errorCode: error?.code || 'sync_failed',

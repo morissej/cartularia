@@ -45,6 +45,7 @@
     "test:corrective-wave1": "node --test tests/local-integrity-journal.test.mjs",
     "test:corrective-wave2": "node --test tests/local-vault.test.mjs tests/hybrid-sync.test.mjs tests/retention-policy.test.mjs",
     "test:live-sync": "FIREBASE_CLI_DISABLE_UPDATE_CHECK=true firebase emulators:exec --project cartularia-live-sync-test --only firestore \"node --test tests/live-sync.test.mjs\"",
+    "test:security-wave2": "node --test tests/hybrid-sync.test.mjs && FIREBASE_CLI_DISABLE_UPDATE_CHECK=true firebase emulators:exec --config firebase.security-wave2-test.json --project cartularia-security-wave2-test --only firestore \"node --test tests/firestore.rules.test.mjs && node --test tests/live-sync.test.mjs\"",
     "test:create": "npm run test:create:unit && FIREBASE_CLI_DISABLE_UPDATE_CHECK=true firebase emulators:exec --config firebase.create-test.json --project cartularia-create-test --only firestore \"node --test tests/cartulary-create.test.mjs\"",
     "test:create:unit": "node --test tests/cartulary-create-wiring.test.mjs tests/new-cartulary-validation.test.mjs tests/valuation-performance.test.mjs",
     "test:corrective-wave3": "node --test tests/publication-validation.test.mjs",

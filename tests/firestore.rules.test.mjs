@@ -311,7 +311,37 @@ test('un propriétaire éditeur peut demander une création seulement depuis son
   };
   await assertSucceeds(setDoc(doc(ownerFirestore, ...requestPath), request));
   await assertSucceeds(getDoc(doc(ownerFirestore, ...requestPath)));
+  await assertFails(setDoc(doc(ownerFirestore, ...requestPath), {
+    ...request,
+    requestId: 'create_abcdef0123456789abcdef012345',
+  }));
   await assertFails(setDoc(doc(ownerFirestore, ...requestPath), { status: 'processed' }, { merge: true }));
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), ...requestPath), {
+      ...request,
+      status: 'failed',
+      errorCode: 'unavailable',
+    });
+  });
+  const retryRequest = {
+    ...request,
+  };
+  await assertFails(setDoc(doc(ownerFirestore, ...requestPath), {
+    ...retryRequest,
+    requestId: 'create_abcdef0123456789abcdef012345',
+  }));
+  await assertSucceeds(setDoc(doc(ownerFirestore, ...requestPath), retryRequest));
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), ...requestPath), {
+      ...retryRequest,
+      status: 'failed',
+      errorCode: 'unavailable',
+    });
+  });
+  await assertFails(setDoc(doc(ownerFirestore, ...requestPath), {
+    ...retryRequest,
+    publicCode: 'ROL-MUTATE',
+  }));
   await assertFails(getDocs(collection(ownerFirestore, 'cartularyCreateRequests')));
   await assertFails(setDoc(doc(outsiderFirestore, 'cartularyCreateRequests', 'cart-new-outsider-0001'), {
     ...request,
@@ -338,6 +368,22 @@ test('le propriétaire peut demander une synchronisation autoritaire sans écrir
   };
   await assertSucceeds(setDoc(doc(ownerFirestore, ...requestPath), validRequest));
   await assertSucceeds(getDoc(doc(ownerFirestore, ...requestPath)));
+  await assertFails(setDoc(doc(ownerFirestore, ...requestPath), {
+    ...validRequest,
+    requestId: 'sync_m1k2n3p4_abcdef1234567890',
+  }));
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), ...requestPath), {
+      ...validRequest,
+      status: 'processed',
+      sourceRevision: 2,
+    });
+  });
+  await assertSucceeds(setDoc(doc(ownerFirestore, ...requestPath), {
+    ...validRequest,
+    requestId: 'sync_m1k2n3p4_abcdef1234567890',
+    reason: 'manual_retry',
+  }));
   await assertFails(setDoc(doc(outsiderFirestore, ...requestPath), { ...validRequest, ownerUid: outsiderUid }));
   await assertFails(setDoc(doc(ownerFirestore, ...requestPath), {
     ...validRequest,

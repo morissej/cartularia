@@ -141,3 +141,51 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
   assert.equal(replay.outcome, 'no_change');
   assert.equal((await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data().revision, 2);
 });
+
+test('deux exécutions concurrentes ne produisent qu’une seule révision utile', async () => {
+  await writeDraftAndRequest('sync_test_live_0000000000000010');
+  const results = await Promise.all([
+    processCartularySyncRequest({
+      firestore,
+      requestDocumentId: IWC_CARTULARY_ID,
+      occurredAt: '2026-08-16T08:05:00.000Z',
+    }),
+    processCartularySyncRequest({
+      firestore,
+      requestDocumentId: IWC_CARTULARY_ID,
+      occurredAt: '2026-08-16T08:05:00.000Z',
+    }),
+  ]);
+  assert.equal(results.filter((result) => result.outcome === 'updated').length, 1);
+  assert.equal(results.filter((result) => result.status === 'ignored').length, 1);
+  assert.equal((await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data().revision, 2);
+  assert.equal((await firestore.collection(`cartularies/${IWC_CARTULARY_ID}/auditEvents`).get()).size, 2);
+});
+
+test('le quota serveur bloque une succession de requêtes distinctes', async () => {
+  await writeDraftAndRequest('sync_test_live_0000000000000020');
+  await processCartularySyncRequest({
+    firestore,
+    requestDocumentId: IWC_CARTULARY_ID,
+    occurredAt: '2026-08-16T08:10:00.000Z',
+    rateLimitPerHour: 1,
+  });
+  await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
+    requestDocumentId: IWC_CARTULARY_ID,
+    requestId: 'sync_test_live_0000000000000021',
+    ownerUid: 'wave1-owner',
+    cartularyId: IWC_CARTULARY_ID,
+    reason: 'manual_retry',
+    status: 'pending',
+  });
+  await assert.rejects(
+    processCartularySyncRequest({
+      firestore,
+      requestDocumentId: IWC_CARTULARY_ID,
+      occurredAt: '2026-08-16T08:11:00.000Z',
+      rateLimitPerHour: 1,
+    }),
+    (error) => error?.code === 'rate_limited',
+  );
+  assert.equal((await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).get()).data().status, 'pending');
+});

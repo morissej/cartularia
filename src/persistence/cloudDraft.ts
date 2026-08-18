@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   runTransaction,
   serverTimestamp,
   setDoc,
@@ -37,6 +38,8 @@ export interface SyncConflict {
 
 export interface CloudSyncReport {
   status: 'synced' | 'conflict' | 'remote_deleted';
+  authoritativeSyncStatus: 'not_requested' | 'requested' | 'in_progress';
+  authoritativeRequestId: string | null;
   pushed: number;
   pulled: number;
   pulledStateKeys: string[];
@@ -72,19 +75,56 @@ export const requestAuthoritativeCartularySync = async ({
   cartularyId: string;
   reason?: string;
 }) => {
-  const requestId = `sync_${Date.now().toString(36)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
-  await setDoc(authoritativeSyncRequestRef(cartularyId), {
-    requestDocumentId: cartularyId,
-    requestId,
-    ownerUid: uid,
-    cartularyId,
-    reason,
-    status: 'pending',
-    requestedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  const reference = authoritativeSyncRequestRef(cartularyId);
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const current = snapshot.data() as { requestId?: unknown; status?: unknown } | undefined;
+    if (current?.status === 'pending' || current?.status === 'processing') {
+      return {
+        requestId: typeof current.requestId === 'string' ? current.requestId : null,
+        status: 'in_progress' as const,
+      };
+    }
+
+    const requestId = `sync_${Date.now().toString(36)}_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
+    transaction.set(reference, {
+      requestDocumentId: cartularyId,
+      requestId,
+      ownerUid: uid,
+      cartularyId,
+      reason,
+      status: 'pending',
+      requestedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { requestId, status: 'requested' as const };
   });
-  return requestId;
 };
+
+export const waitForAuthoritativeSyncCycle = (
+  cartularyId: string,
+  requestId: string,
+  timeoutMs = 125_000,
+) => new Promise<void>((resolve, reject) => {
+  let unsubscribe: () => void = () => undefined;
+  let settled = false;
+  const finish = (error?: unknown) => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    unsubscribe();
+    if (error) reject(error);
+    else resolve();
+  };
+  const timeout = window.setTimeout(() => {
+    finish(new Error('La synchronisation autoritaire tarde à se terminer. Une reprise automatique est prévue.'));
+  }, timeoutMs);
+  unsubscribe = onSnapshot(authoritativeSyncRequestRef(cartularyId), (snapshot) => {
+    if (!snapshot.exists()) return finish();
+    const current = snapshot.data() as { requestId?: unknown; status?: unknown };
+    if (current.requestId !== requestId || !['pending', 'processing'].includes(String(current.status))) finish();
+  }, finish);
+});
 
 const parseCloudState = (key: string, data: Record<string, unknown>): CloudStateRecord => ({
   key,
@@ -318,6 +358,8 @@ export const synchronizePrivateDraft = async ({
   if (existingRoot.exists() && existingRoot.data().status === 'deleted') {
     return {
       status: 'remote_deleted',
+      authoritativeSyncStatus: 'not_requested',
+      authoritativeRequestId: null,
       pushed: 0,
       pulled: 0,
       pulledStateKeys: [],
@@ -389,6 +431,8 @@ export const synchronizePrivateDraft = async ({
 
   const report: CloudSyncReport = {
     status: conflicts.length > 0 ? 'conflict' : 'synced',
+    authoritativeSyncStatus: 'not_requested',
+    authoritativeRequestId: null,
     pushed,
     pulled,
     pulledStateKeys,
@@ -404,7 +448,9 @@ export const synchronizePrivateDraft = async ({
     updatedAt: serverTimestamp(),
   });
   if (report.status === 'synced') {
-    await requestAuthoritativeCartularySync({ uid, cartularyId });
+    const authoritativeRequest = await requestAuthoritativeCartularySync({ uid, cartularyId });
+    report.authoritativeSyncStatus = authoritativeRequest.status;
+    report.authoritativeRequestId = authoritativeRequest.requestId;
   }
   return report;
 };

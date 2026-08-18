@@ -5,6 +5,11 @@ import {
   decideBinarySync,
   decideStateSync,
 } from '../src/persistence/syncModel.ts';
+import {
+  CLOUD_SYNC_RETRY_DELAYS_MS,
+  cloudSyncRetryDelay,
+  LOCAL_CHANGE_COALESCE_DELAY_MS,
+} from '../src/persistence/syncQueuePolicy.ts';
 
 const localState = (patch = {}) => ({
   id: 'cart::cartularia-owner-fields',
@@ -61,4 +66,12 @@ test('un binaire modifié sur deux appareils ne peut pas être remplacé silenci
 
 test('une valeur trop grande est refusée avant Firestore', () => {
   assert.throws(() => assertCloudStateSize('123456', 5), /limite de synchronisation/);
+});
+
+test('les saisies rapprochées sont regroupées et les reprises restent bornées', () => {
+  assert.equal(LOCAL_CHANGE_COALESCE_DELAY_MS, 1_200);
+  assert.deepEqual(CLOUD_SYNC_RETRY_DELAYS_MS, [1_000, 2_500, 5_000, 10_000, 20_000]);
+  assert.equal(cloudSyncRetryDelay(0), 1_000);
+  assert.equal(cloudSyncRetryDelay(CLOUD_SYNC_RETRY_DELAYS_MS.length), null);
+  assert.equal(cloudSyncRetryDelay(-1), null);
 });

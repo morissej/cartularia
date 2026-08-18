@@ -7,6 +7,7 @@ import {
   markUserActivity,
   resolvePrivateDraftConflict,
   synchronizePrivateDraft,
+  waitForAuthoritativeSyncCycle,
   type CloudSyncReport,
 } from './cloudDraft';
 import {
@@ -14,6 +15,11 @@ import {
   DEFAULT_LOCAL_CARTULARY_ID,
   VAULT_UPDATED_EVENT,
 } from './localVault';
+import {
+  AUTHORITATIVE_SYNC_FOLLOW_UP_DELAY_MS,
+  cloudSyncRetryDelay,
+  LOCAL_CHANGE_COALESCE_DELAY_MS,
+} from './syncQueuePolicy';
 
 export type LocalPersistenceStatus = 'ready' | 'saving' | 'error' | 'deleted';
 export type CloudPersistenceStatus = 'signed-out' | 'syncing' | 'synced' | 'conflict' | 'remote-deleted' | 'error';
@@ -63,6 +69,10 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
   const [report, setReport] = useState(emptyReport);
   const [error, setError] = useState<string | null>(null);
   const syncInFlight = useRef<Promise<void> | null>(null);
+  const syncNowRef = useRef<() => Promise<void>>(async () => undefined);
+  const followUpTimer = useRef<number | undefined>(undefined);
+  const retryAttempt = useRef(0);
+  const rerunRequested = useRef(false);
 
   useEffect(() => onAuthStateChanged(auth, (nextUser) => {
     setUser(nextUser);
@@ -79,7 +89,14 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
       setCloudStatus('signed-out');
       return;
     }
-    if (syncInFlight.current) return syncInFlight.current;
+    if (syncInFlight.current) {
+      rerunRequested.current = true;
+      return syncInFlight.current;
+    }
+    if (followUpTimer.current !== undefined) {
+      window.clearTimeout(followUpTimer.current);
+      followUpTimer.current = undefined;
+    }
 
     const operation = (async () => {
       setCloudStatus('syncing');
@@ -101,16 +118,53 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
           stateKeys: nextReport.pulledStateKeys,
           binaryIds: nextReport.pulledBinaryIds,
         });
+        retryAttempt.current = 0;
+        if (
+          nextReport.authoritativeSyncStatus === 'in_progress'
+          && nextReport.authoritativeRequestId
+          && nextReport.pushed > 0
+        ) {
+          await waitForAuthoritativeSyncCycle(cartularyId, nextReport.authoritativeRequestId);
+          rerunRequested.current = true;
+        }
       } catch (syncError) {
-        setCloudStatus('error');
-        setError(messageFromError(syncError));
+        const retryDelay = cloudSyncRetryDelay(retryAttempt.current);
+        if (retryDelay === null) {
+          setCloudStatus('error');
+          setError(messageFromError(syncError));
+        } else {
+          retryAttempt.current += 1;
+          setCloudStatus('syncing');
+          followUpTimer.current = window.setTimeout(() => {
+            followUpTimer.current = undefined;
+            void syncNowRef.current();
+          }, retryDelay);
+        }
       }
     })();
     syncInFlight.current = operation;
     await operation.finally(() => {
       syncInFlight.current = null;
+      if (rerunRequested.current && followUpTimer.current === undefined) {
+        rerunRequested.current = false;
+        followUpTimer.current = window.setTimeout(() => {
+          followUpTimer.current = undefined;
+          void syncNowRef.current();
+        }, AUTHORITATIVE_SYNC_FOLLOW_UP_DELAY_MS);
+      }
     });
   }, [cartularyId, user]);
+
+  useEffect(() => {
+    syncNowRef.current = syncNow;
+  }, [syncNow]);
+
+  useEffect(() => () => {
+    if (followUpTimer.current !== undefined) window.clearTimeout(followUpTimer.current);
+    followUpTimer.current = undefined;
+    retryAttempt.current = 0;
+    rerunRequested.current = false;
+  }, [cartularyId, user?.uid]);
 
   useEffect(() => {
     if (!cartulariaLocalVault) return;
@@ -129,7 +183,7 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
             setLocalStatus('error');
             setError(messageFromError(localError));
           });
-      }, 800);
+      }, LOCAL_CHANGE_COALESCE_DELAY_MS);
     };
     window.addEventListener(VAULT_UPDATED_EVENT, handleUpdate);
     void syncNow();

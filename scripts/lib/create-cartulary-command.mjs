@@ -1,6 +1,10 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { importCartularyBundle } from './import-cartulary-command.mjs';
 import { projectRegistryItem } from './projection-command.mjs';
+import { claimQueuedOperation } from './operation-rate-limit.mjs';
+
+const CREATE_RATE_LIMIT_PER_DAY = 12;
+const ONE_DAY_MS = 24 * 60 * 60 * 1_000;
 
 export class CreateCartularyCommandError extends Error {
   constructor(code, message) {
@@ -364,6 +368,7 @@ export const processCartularyCreateRequest = async ({
   firestore,
   requestDocumentId,
   occurredAt = new Date().toISOString(),
+  rateLimitPerDay = CREATE_RATE_LIMIT_PER_DAY,
 }) => {
   const requestRef = firestore.doc(`cartularyCreateRequests/${requestDocumentId}`);
   const requestSnapshot = await requestRef.get();
@@ -382,6 +387,18 @@ export const processCartularyCreateRequest = async ({
   ) {
     throw new CreateCartularyCommandError('invalid_request', 'La demande de création est incomplète.');
   }
+  const claim = await claimQueuedOperation({
+    firestore,
+    requestRef,
+    requestId: requestData.requestId,
+    ownerUid: requestData.ownerUid,
+    operation: 'cartulary_create',
+    limit: rateLimitPerDay,
+    windowMs: ONE_DAY_MS,
+    occurredAt,
+  });
+  if (!claim.claimed) return { requestDocumentId, status: 'ignored', reason: claim.reason };
+
   const { profile, media } = await loadCreationDraft(firestore, requestData);
   const bundle = buildCreationBundle({ requestData, profile, media });
   const imported = await importCartularyBundle({
@@ -401,23 +418,42 @@ export const processCartularyCreateRequest = async ({
     occurredAt,
   });
   const syncRequestId = `sync_create_${requestData.requestId.slice('create_'.length)}`;
-  await firestore.doc(`cartularySyncRequests/${requestData.cartularyId}`).set({
-    requestDocumentId: requestData.cartularyId,
-    requestId: syncRequestId,
-    ownerUid: requestData.ownerUid,
-    cartularyId: requestData.cartularyId,
-    reason: 'private_draft_synchronized',
-    status: 'pending',
-    requestedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+  const syncRequestRef = firestore.doc(`cartularySyncRequests/${requestData.cartularyId}`);
+  const completion = await firestore.runTransaction(async (transaction) => {
+    const [currentRequest, currentSyncRequest] = await Promise.all([
+      transaction.get(requestRef),
+      transaction.get(syncRequestRef),
+    ]);
+    if (
+      !currentRequest.exists
+      || currentRequest.data().status !== 'processing'
+      || currentRequest.data().requestId !== requestData.requestId
+    ) return false;
+    if (
+      !currentSyncRequest.exists
+      || ['processed', 'failed'].includes(currentSyncRequest.data().status)
+    ) {
+      transaction.set(syncRequestRef, {
+        requestDocumentId: requestData.cartularyId,
+        requestId: syncRequestId,
+        ownerUid: requestData.ownerUid,
+        cartularyId: requestData.cartularyId,
+        reason: 'private_draft_synchronized',
+        status: 'pending',
+        requestedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    transaction.update(requestRef, {
+      status: 'processed',
+      revision: projected.revision,
+      sourceRevision: projected.sourceRevision,
+      processedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return true;
   });
-  await requestRef.update({
-    status: 'processed',
-    revision: projected.revision,
-    sourceRevision: projected.sourceRevision,
-    processedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  if (!completion) return { requestDocumentId, status: 'ignored', reason: 'superseded' };
   return {
     requestDocumentId,
     status: 'processed',
@@ -430,7 +466,11 @@ export const markCartularyCreateRequestFailed = async ({ firestore, requestDocum
   const requestRef = firestore.doc(`cartularyCreateRequests/${requestDocumentId}`);
   await firestore.runTransaction(async (transaction) => {
     const request = await transaction.get(requestRef);
-    if (!request.exists || request.data().status !== 'pending' || request.data().requestId !== requestId) return;
+    if (
+      !request.exists
+      || !['pending', 'processing'].includes(request.data().status)
+      || request.data().requestId !== requestId
+    ) return;
     transaction.update(requestRef, {
       status: 'failed',
       errorCode: error?.code || 'create_failed',
