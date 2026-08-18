@@ -164,6 +164,23 @@ test('un autre compte et un visiteur ne peuvent ni lire ni écrire le brouillon 
   }));
 });
 
+test('un objet dont les métadonnées ne correspondent pas au chemin reste illisible', async () => {
+  const inconsistentPath = `private-drafts/owner-a/cart-a/inconsistent-binary/${draftDigest}/original`;
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await context.storage(bucketUrl).ref(inconsistentPath).putString('objet incohérent', 'raw', {
+      customMetadata: {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        binaryId: 'autre-binaire',
+        sha256: `sha256:${draftDigest}`,
+        kind: 'media',
+      },
+    });
+  });
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  await assertFails(ownerStorage.ref(inconsistentPath).getDownloadURL());
+});
+
 test('la suppression logique du brouillon coupe immédiatement la lecture Storage', async () => {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'privateDrafts', 'owner-a', 'cartularies', 'cart-a'), {

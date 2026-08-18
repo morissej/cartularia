@@ -1,5 +1,5 @@
 import type { RegistryItemProjection } from '../../domain/projections.ts';
-import { IWC_CARTULARY_ID } from '../../domain/cartularyIds.ts';
+import { IWC_CARTULARY_ID, ROLEX_CARTULARY_ID } from '../../domain/cartularyIds.ts';
 
 export type RegistryCatalogSort = 'updated-desc' | 'title-asc' | 'year-desc';
 
@@ -65,9 +65,12 @@ export const filterAndSortRegistryItems = (
   });
 };
 
-export const buildCartularyHref = (cartularyId: string, returnTo: string) => {
+export const buildCartularyHref = (cartularyId: string, returnTo: string, assetType?: string) => {
   const params = new URLSearchParams({ cartularyId, returnTo });
-  return `${cartularyId === IWC_CARTULARY_ID ? '/' : '/cartulary-view'}?${params.toString()}`;
+  const usesFullCartulary = assetType === 'watch'
+    || cartularyId === IWC_CARTULARY_ID
+    || cartularyId === ROLEX_CARTULARY_ID;
+  return `${usesFullCartulary ? '/' : '/cartulary-view'}?${params.toString()}`;
 };
 
 export const isRegistryReturnPath = (value: string | null): value is string => Boolean(

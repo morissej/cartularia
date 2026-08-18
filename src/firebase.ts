@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
@@ -14,6 +15,17 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const usesFirebaseEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY?.trim();
+
+// App Check starts in monitoring mode: the SDK sends tokens, while enforcement
+// remains disabled service by service in the Firebase console.
+export const appCheck = !usesFirebaseEmulators && appCheckSiteKey
+  ? initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    })
+  : null;
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
@@ -23,7 +35,7 @@ const emulatorState = globalThis as typeof globalThis & {
   __cartulariaFirebaseEmulatorsConnected?: boolean;
 };
 
-if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true' && !emulatorState.__cartulariaFirebaseEmulatorsConnected) {
+if (usesFirebaseEmulators && !emulatorState.__cartulariaFirebaseEmulatorsConnected) {
   const host = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || '127.0.0.1';
   const authPort = Number(import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_PORT || 9099);
   const firestorePort = Number(import.meta.env.VITE_FIREBASE_FIRESTORE_EMULATOR_PORT || 8080);

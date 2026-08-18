@@ -70,8 +70,8 @@ const seedFoundations = async () => {
     adminFirestore.doc('schemaCatalog/watch/versions/1.3.0').set({
       schemaId: 'watch', assetType: 'watch', version: '1.3.0', status: 'baseline',
     }),
-    adminFirestore.doc('schemaCatalog/car/versions/1.0.0').set({
-      schemaId: 'car', assetType: 'car', version: '1.0.0', status: 'baseline',
+    adminFirestore.doc('schemaCatalog/car/versions/1.1.0').set({
+      schemaId: 'car', assetType: 'car', version: '1.1.0', status: 'active',
     }),
   ]);
 };

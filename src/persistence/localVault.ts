@@ -1,4 +1,4 @@
-import { IWC_CARTULARY_ID } from '../domain/cartularyIds.ts';
+import { ACTIVE_CARTULARY_ID, IWC_CARTULARY_ID } from '../domain/cartularyIds.ts';
 
 const DATABASE_NAME = 'cartularia-local-vault-v2';
 const DATABASE_VERSION = 1;
@@ -49,13 +49,62 @@ export interface VaultBackend {
   deleteCartulary(cartularyId: string): Promise<void>;
 }
 
-interface StorageLike {
+export interface StorageLike {
   readonly length: number;
   key(index: number): string | null;
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
 }
+
+const STORAGE_SCOPE_PREFIX = 'cartularia-scope::';
+
+export class ScopedStorage implements StorageLike {
+  private readonly prefix: string;
+  private readonly storage: StorageLike;
+
+  constructor(
+    storage: StorageLike,
+    cartularyId: string,
+  ) {
+    this.storage = storage;
+    this.prefix = `${STORAGE_SCOPE_PREFIX}${cartularyId}::`;
+  }
+
+  private scopedKey(key: string) {
+    return `${this.prefix}${key}`;
+  }
+
+  private logicalKeys() {
+    return Array.from({ length: this.storage.length }, (_, index) => this.storage.key(index))
+      .filter((key): key is string => Boolean(key?.startsWith(this.prefix)))
+      .map((key) => key.slice(this.prefix.length));
+  }
+
+  get length() {
+    return this.logicalKeys().length;
+  }
+
+  key(index: number) {
+    return this.logicalKeys()[index] ?? null;
+  }
+
+  getItem(key: string) {
+    return this.storage.getItem(this.scopedKey(key));
+  }
+
+  setItem(key: string, value: string) {
+    this.storage.setItem(this.scopedKey(key), value);
+  }
+
+  removeItem(key: string) {
+    this.storage.removeItem(this.scopedKey(key));
+  }
+}
+
+export const scopedStorageForCartulary = (storage: StorageLike, cartularyId: string) => (
+  new ScopedStorage(storage, cartularyId)
+);
 
 const stateId = (cartularyId: string, key: string) => `${cartularyId}::${key}`;
 const binaryRecordId = (cartularyId: string, binaryId: string) => `${cartularyId}::${binaryId}`;
@@ -252,6 +301,7 @@ export class CartulariaLocalVault {
 
   public writeRaw(key: string, value: string): Promise<void> {
     if (!isPersistableKey(key)) return Promise.reject(new Error(`Clé locale Cartularia invalide : ${key}`));
+    if (this.storage.getItem(key) === value) return Promise.resolve();
     const updatedAt = this.now();
     this.storage.setItem(key, value);
     const clocks = readClocks(this.storage);
@@ -483,7 +533,7 @@ export class CartulariaLocalVault {
 }
 
 export const LEGACY_LOCAL_CARTULARY_ID = 'cartulary-iwc-utc-01';
-export const DEFAULT_LOCAL_CARTULARY_ID = IWC_CARTULARY_ID;
+export const DEFAULT_LOCAL_CARTULARY_ID = ACTIVE_CARTULARY_ID;
 
 export const migrateLocalVaultCartularyId = async (
   backend: VaultBackend,
@@ -528,14 +578,44 @@ export const migrateLocalVaultCartularyId = async (
 };
 
 const defaultBackend = new IndexedDbVaultBackend();
+const copyLegacyIwcStorageIntoScope = () => {
+  if (typeof window === 'undefined' || ACTIVE_CARTULARY_ID !== IWC_CARTULARY_ID) return;
+  const scoped = scopedStorageForCartulary(window.localStorage, IWC_CARTULARY_ID);
+  const migrationKey = 'cartularia-iwc-scoped-storage-v1';
+  if (window.localStorage.getItem(migrationKey) === 'done') return;
+  const legacyKeys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+    .filter((key): key is string => Boolean(
+      key
+      && key.startsWith(CARTULARIA_KEY_PREFIX)
+      && !key.startsWith(STORAGE_SCOPE_PREFIX)
+      && key !== CARTULARY_ID_MIGRATION_KEY,
+    ));
+  legacyKeys.forEach((key) => {
+    if (scoped.getItem(key) === null) {
+      const value = window.localStorage.getItem(key);
+      if (value !== null) scoped.setItem(key, value);
+    }
+  });
+  window.localStorage.setItem(migrationKey, 'done');
+};
+
+copyLegacyIwcStorageIntoScope();
+
+export const cartulariaStorage = typeof window === 'undefined'
+  ? null
+  : scopedStorageForCartulary(window.localStorage, DEFAULT_LOCAL_CARTULARY_ID);
+
 export const cartulariaLocalVault = typeof window === 'undefined'
   ? null
-  : new CartulariaLocalVault(DEFAULT_LOCAL_CARTULARY_ID, defaultBackend, window.localStorage);
+  : new CartulariaLocalVault(DEFAULT_LOCAL_CARTULARY_ID, defaultBackend, cartulariaStorage!);
 
 export const restoreCartulariaLocalState = async () => {
   if (!cartulariaLocalVault) return;
   try {
-    if (window.localStorage.getItem(CARTULARY_ID_MIGRATION_KEY) !== DEFAULT_LOCAL_CARTULARY_ID) {
+    if (
+      DEFAULT_LOCAL_CARTULARY_ID === IWC_CARTULARY_ID
+      && window.localStorage.getItem(CARTULARY_ID_MIGRATION_KEY) !== DEFAULT_LOCAL_CARTULARY_ID
+    ) {
       await migrateLocalVaultCartularyId(
         defaultBackend,
         LEGACY_LOCAL_CARTULARY_ID,
@@ -553,5 +633,7 @@ export const persistCartulariaJson = (key: string, value: unknown) => {
   if (!cartulariaLocalVault) return Promise.resolve();
   return cartulariaLocalVault.writeJson(key, value);
 };
+
+export const readCartulariaStorage = (key: string) => cartulariaStorage?.getItem(key) ?? null;
 
 export const mirrorCartulariaLocalStorage = () => cartulariaLocalVault?.mirrorLocalStorage() ?? Promise.resolve();

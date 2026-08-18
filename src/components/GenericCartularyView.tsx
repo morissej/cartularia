@@ -9,8 +9,25 @@ interface GenericCartularyViewProps {
   returnHref?: string | null;
 }
 
-export const GenericCartularyView = ({ snapshot, schema, returnHref }: GenericCartularyViewProps) => (
-  <div className="generic-cartulary">
+export const GenericCartularyView = ({ snapshot, schema, returnHref }: GenericCartularyViewProps) => {
+  const ownershipSectionId = 'cover.ownership_history';
+  const exposesOwnershipHistory = schema.sections.includes(ownershipSectionId);
+  const hasOwnershipSection = snapshot.sections.some((section) => section.schemaSectionId === ownershipSectionId);
+  const sections = exposesOwnershipHistory && !hasOwnershipSection
+    ? [{
+        id: 'ownership.history',
+        schemaSectionId: ownershipSectionId,
+        schemaVersion: `${schema.schemaId}@${schema.version}`,
+        title: "Historique de l'objet - Propriétaires précédents",
+        visibility: 'secret' as const,
+        status: 'imported_unreviewed' as const,
+        fields: {},
+        revision: 1 as const,
+      }, ...snapshot.sections]
+    : snapshot.sections;
+
+  return (
+    <div className="generic-cartulary">
     {returnHref && <a className="generic-cartulary__return" href={returnHref}>← Retour au Registre</a>}
     <header className="generic-cartulary__header">
       <BrandLogo />
@@ -27,7 +44,7 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref }: GenericCa
     </header>
 
     <main className="generic-cartulary__sections">
-      {snapshot.sections.map((section) => {
+      {sections.map((section) => {
         const rows = buildGenericFieldRows(section, schema);
         return (
           <section key={section.id} className="generic-section">
@@ -56,5 +73,6 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref }: GenericCa
         );
       })}
     </main>
-  </div>
-);
+    </div>
+  );
+};

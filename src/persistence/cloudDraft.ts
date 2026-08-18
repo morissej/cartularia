@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import {
   deleteObject,
-  getBlob,
+  getDownloadURL,
   ref,
   uploadBytes,
 } from 'firebase/storage';
@@ -39,6 +39,8 @@ export interface CloudSyncReport {
   status: 'synced' | 'conflict' | 'remote_deleted';
   pushed: number;
   pulled: number;
+  pulledStateKeys: string[];
+  pulledBinaryIds: string[];
   conflicts: SyncConflict[];
   lastSyncedAt: string;
 }
@@ -116,6 +118,36 @@ const deleteStorageObjectIfPresent = async (storagePath: string) => {
   } catch (error) {
     if ((error as { code?: string })?.code !== 'storage/object-not-found') throw error;
   }
+};
+
+const downloadStorageBlob = async (storagePath: string) => {
+  const downloadUrl = await getDownloadURL(ref(storage, storagePath));
+  const response = await fetch(downloadUrl);
+  if (!response.ok) throw new Error(`Téléchargement Storage impossible (${response.status}) pour ${storagePath}.`);
+  return response.blob();
+};
+
+const applyCloudBinaryMetadata = async (
+  vault: CartulariaLocalVault,
+  cartularyId: string,
+  cloud: CloudBinaryRecord,
+) => {
+  await vault.applyCloudBinary({
+    id: '',
+    cartularyId,
+    binaryId: cloud.binaryId,
+    kind: cloud.kind,
+    fileName: cloud.fileName,
+    mimeType: cloud.mimeType,
+    size: cloud.size,
+    sha256: cloud.sha256,
+    blob: null,
+    updatedAt: cloud.clientUpdatedAt,
+    dirty: false,
+    deleted: cloud.deleted,
+    cloudRevision: cloud.revision,
+    cloudStoragePath: cloud.storagePath,
+  });
 };
 
 const syncStateRecord = async (
@@ -202,23 +234,10 @@ const syncBinaryRecord = async (
         updatedAt: knownCloud.clientUpdatedAt,
       });
     } else {
-      const blob = await getBlob(ref(storage, knownCloud.storagePath));
-      await vault.applyCloudBinary({
-        id: '',
-        cartularyId,
-        binaryId: knownCloud.binaryId,
-        kind: knownCloud.kind,
-        fileName: knownCloud.fileName,
-        mimeType: knownCloud.mimeType,
-        size: knownCloud.size,
-        sha256: knownCloud.sha256,
-        blob,
-        updatedAt: knownCloud.clientUpdatedAt,
-        dirty: false,
-        deleted: false,
-        cloudRevision: knownCloud.revision,
-        cloudStoragePath: knownCloud.storagePath,
-      });
+      // Les originaux peuvent représenter plusieurs centaines de Mo. La
+      // synchronisation de démarrage ne rapatrie que leur manifeste ; le corps
+      // binaire est chargé et mis en cache lorsqu'un média devient visible.
+      await applyCloudBinaryMetadata(vault, cartularyId, knownCloud);
     }
     return { decision: 'pull', cloud: knownCloud };
   }
@@ -297,7 +316,15 @@ export const synchronizePrivateDraft = async ({
   const root = draftRef(uid, cartularyId);
   const existingRoot = await getDoc(root);
   if (existingRoot.exists() && existingRoot.data().status === 'deleted') {
-    return { status: 'remote_deleted', pushed: 0, pulled: 0, conflicts: [], lastSyncedAt: new Date().toISOString() };
+    return {
+      status: 'remote_deleted',
+      pushed: 0,
+      pulled: 0,
+      pulledStateKeys: [],
+      pulledBinaryIds: [],
+      conflicts: [],
+      lastSyncedAt: new Date().toISOString(),
+    };
   }
   await setDoc(root, {
     ownerUid: uid,
@@ -318,13 +345,18 @@ export const synchronizePrivateDraft = async ({
   const cloudStates = new Map(cloudStatesSnapshot.docs.map((snapshot) => [snapshot.id, parseCloudState(snapshot.id, snapshot.data())]));
   const cloudBinaries = new Map(cloudBinariesSnapshot.docs.map((snapshot) => [snapshot.id, parseCloudBinary(snapshot.id, snapshot.data())]));
   const conflicts: SyncConflict[] = [];
+  const pulledStateKeys: string[] = [];
+  const pulledBinaryIds: string[] = [];
   let pushed = 0;
   let pulled = 0;
 
   for (const local of localStates) {
     const result = await syncStateRecord(uid, cartularyId, vault, local);
     if (result.decision === 'push') pushed += 1;
-    if (result.decision === 'pull') pulled += 1;
+    if (result.decision === 'pull') {
+      pulled += 1;
+      pulledStateKeys.push(local.key);
+    }
     if (result.decision === 'conflict') conflicts.push({
       kind: 'state', id: local.key, localRevision: local.cloudRevision, cloudRevision: result.cloud?.revision ?? 0,
     });
@@ -333,12 +365,16 @@ export const synchronizePrivateDraft = async ({
   for (const cloud of cloudStates.values()) {
     await pullCloudStateWithoutLocal(vault, cloud);
     pulled += 1;
+    pulledStateKeys.push(cloud.key);
   }
 
   for (const local of localBinaries) {
     const result = await syncBinaryRecord(uid, cartularyId, vault, local, cloudBinaries.get(local.binaryId) ?? null);
     if (result.decision === 'push') pushed += 1;
-    if (result.decision === 'pull') pulled += 1;
+    if (result.decision === 'pull') {
+      pulled += 1;
+      pulledBinaryIds.push(local.binaryId);
+    }
     if (result.decision === 'conflict') conflicts.push({
       kind: 'binary', id: local.binaryId, localRevision: local.cloudRevision, cloudRevision: result.cloud?.revision ?? 0,
     });
@@ -346,30 +382,17 @@ export const synchronizePrivateDraft = async ({
   }
   for (const cloud of cloudBinaries.values()) {
     if (cloud.deleted || !cloud.storagePath) continue;
-    const blob = await getBlob(ref(storage, cloud.storagePath));
-    await vault.applyCloudBinary({
-      id: '',
-      cartularyId,
-      binaryId: cloud.binaryId,
-      kind: cloud.kind,
-      fileName: cloud.fileName,
-      mimeType: cloud.mimeType,
-      size: cloud.size,
-      sha256: cloud.sha256,
-      blob,
-      updatedAt: cloud.clientUpdatedAt,
-      dirty: false,
-      deleted: false,
-      cloudRevision: cloud.revision,
-      cloudStoragePath: cloud.storagePath,
-    });
+    await applyCloudBinaryMetadata(vault, cartularyId, cloud);
     pulled += 1;
+    pulledBinaryIds.push(cloud.binaryId);
   }
 
   const report: CloudSyncReport = {
     status: conflicts.length > 0 ? 'conflict' : 'synced',
     pushed,
     pulled,
+    pulledStateKeys,
+    pulledBinaryIds,
     conflicts,
     lastSyncedAt: new Date().toISOString(),
   };
@@ -384,6 +407,29 @@ export const synchronizePrivateDraft = async ({
     await requestAuthoritativeCartularySync({ uid, cartularyId });
   }
   return report;
+};
+
+export const primePrivateDraftState = async ({
+  uid,
+  cartularyId,
+  vault,
+}: {
+  uid: string;
+  cartularyId: string;
+  vault: CartulariaLocalVault;
+}) => {
+  const localStates = new Map((await vault.listStateRecords()).map((record) => [record.key, record]));
+  const cloudStates = await getDocs(collection(draftRef(uid, cartularyId), 'state'));
+  let pulled = 0;
+  for (const snapshot of cloudStates.docs) {
+    const cloud = parseCloudState(snapshot.id, snapshot.data());
+    const local = localStates.get(cloud.key);
+    if (local?.dirty) continue;
+    if (local && local.cloudRevision >= cloud.revision) continue;
+    await pullCloudStateWithoutLocal(vault, cloud);
+    pulled += 1;
+  }
+  return pulled;
 };
 
 export const markUserActivity = async (uid: string) => {
@@ -423,7 +469,7 @@ export const resolvePrivateDraftConflict = async ({
       if (!local) throw new Error(`Original local absent pour ${conflict.id}.`);
       await vault.applyCloudBinary({ ...local, blob: null, deleted: true, dirty: false, cloudRevision: cloud.revision, cloudStoragePath: null, updatedAt: cloud.clientUpdatedAt });
     } else {
-      const blob = await getBlob(ref(storage, cloud.storagePath));
+      const blob = await downloadStorageBlob(cloud.storagePath);
       await vault.applyCloudBinary({
         id: '', cartularyId, binaryId: cloud.binaryId, kind: cloud.kind,
         fileName: cloud.fileName, mimeType: cloud.mimeType, size: cloud.size,

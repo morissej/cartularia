@@ -13,13 +13,18 @@ const exportedSchema = JSON.parse(
 const legacySchema = JSON.parse(
   readFileSync(new URL('../firebase/schema-catalog/watch/1.3.0.json', import.meta.url), 'utf8'),
 );
+const previousSchema = JSON.parse(
+  readFileSync(new URL('../firebase/schema-catalog/watch/1.4.0.json', import.meta.url), 'utf8'),
+);
 
-test('watch@1.4.0 dérive son compteur et ses sections du catalogue courant', () => {
-  assert.equal(WATCH_SCHEMA_VERSION, '1.4.0');
+test('watch@1.5.0 dérive son compteur et ses sections du catalogue courant', () => {
+  assert.equal(WATCH_SCHEMA_VERSION, '1.5.0');
   assert.equal(WATCH_SCHEMA_FIELDS.length, WATCH_SCHEMA.fieldCount);
   assert.equal(new Set(WATCH_SCHEMA_FIELDS.map((field) => field.fieldId)).size, WATCH_SCHEMA_FIELDS.length);
   assert.equal(WATCH_SCHEMA.sections.length, new Set(WATCH_SCHEMA_FIELDS.map((field) => field.sectionId)).size);
   assert.ok(WATCH_SCHEMA.sections.includes('value.sensitivity'));
+  assert.ok(WATCH_SCHEMA.sections.includes('cover.ownership_history'));
+  assert.ok(WATCH_SCHEMA.sections.includes('value.provenance'));
 });
 
 test('watch@1.3.0 reste un artefact historique distinct et lisible', () => {
@@ -28,6 +33,12 @@ test('watch@1.3.0 reste un artefact historique distinct et lisible', () => {
   assert.equal(new Set(legacySchema.fields.map((field) => field.fieldId)).size, legacySchema.fields.length);
   assert.ok(!legacySchema.sections.includes('value.sensitivity'));
   assert.ok(WATCH_SCHEMA.fieldCount > legacySchema.fieldCount);
+});
+
+test('watch@1.4.0 reste immuable après ajout de l’historique des propriétaires', () => {
+  assert.equal(previousSchema.version, '1.4.0');
+  assert.ok(!previousSchema.sections.includes('cover.ownership_history'));
+  assert.ok(WATCH_SCHEMA.fieldCount > previousSchema.fieldCount);
 });
 
 test('aucun champ Secret ne peut être projeté vers une audience', () => {

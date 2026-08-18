@@ -1,0 +1,2233 @@
+{
+  "schemaId": "watch",
+  "assetType": "watch",
+  "version": "1.5.0",
+  "status": "active",
+  "defaultVisibility": "secret",
+  "fieldCount": 97,
+  "sections": [
+    "condition.description",
+    "condition.documentation",
+    "condition.reports",
+    "condition.summary",
+    "cover.asset",
+    "cover.owner",
+    "cover.owner_documents",
+    "cover.ownership_history",
+    "cover.storage",
+    "cover.transmission",
+    "cover.watch",
+    "media.hero",
+    "media.library",
+    "publishing.selection",
+    "reference.checks",
+    "reference.origins",
+    "reference.popularity",
+    "reference.specifications",
+    "value.calculations",
+    "value.comparables",
+    "value.comparables_analysis",
+    "value.cost_basis",
+    "value.market_depth",
+    "value.market_history",
+    "value.performance",
+    "value.provenance",
+    "value.retained_value",
+    "value.sensitivity"
+  ],
+  "fields": [
+    {
+      "fieldId": "cover.asset.type",
+      "sectionId": "cover.asset",
+      "label": "Type de bien",
+      "purpose": "Qualifier la nature du bien documenté par le Cartulaire.",
+      "instructions": "Sélectionner uniquement la catégorie confirmée par le propriétaire. Utiliser Autre ou Autre art lorsqu’aucune catégorie plus précise ne convient.",
+      "dataType": "enum",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur comprise dans la liste autorisée et cohérente avec le bien décrit.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": true,
+      "allowedValues": [
+        "Montre",
+        "Voiture",
+        "Vin",
+        "Sculpture",
+        "Peinture",
+        "Photographie",
+        "Meuble",
+        "Autre art",
+        "Bien immobilier",
+        "Autre"
+      ]
+    },
+    {
+      "fieldId": "cover.watch.brand",
+      "sectionId": "cover.watch",
+      "label": "Marque",
+      "purpose": "Identifier le fabricant de la montre.",
+      "instructions": "Reprendre la marque telle qu’elle apparaît sur la montre, les papiers ou une archive fiable. Ne pas la déduire d’un simple nom de fichier.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Nom de marque sans slogan ni nom de modèle.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": true,
+      "examples": [
+        "IWC Schaffhausen"
+      ]
+    },
+    {
+      "fieldId": "cover.watch.model",
+      "sectionId": "cover.watch",
+      "label": "Nom de la montre",
+      "purpose": "Donner le nom commercial lisible de la montre.",
+      "instructions": "Utiliser le nom officiel du modèle ou de la collection. Conserver la référence dans le poste dédié.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Nom court, sans valeur, état ni argument commercial.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "manufacturer",
+        "document",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": true,
+      "examples": [
+        "Flieger UTC"
+      ]
+    },
+    {
+      "fieldId": "cover.watch.reference",
+      "sectionId": "cover.watch",
+      "label": "Numéro de référence",
+      "purpose": "Identifier précisément la variante de référence.",
+      "instructions": "Recopier la référence complète avec ses séparateurs. Signaler toute divergence entre boîtier, papiers et sources.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Référence exacte ; aucune normalisation destructive.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": true,
+      "examples": [
+        "IW3251-001"
+      ]
+    },
+    {
+      "fieldId": "cover.watch.status",
+      "sectionId": "cover.watch",
+      "label": "Statut patrimonial",
+      "purpose": "Exprimer l’intention actuelle du propriétaire pour la montre.",
+      "instructions": "Choisir uniquement le statut explicitement décidé par le propriétaire. Ne jamais déduire une intention de vente d’une valorisation ou d’une publication.",
+      "dataType": "enum",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur comprise dans la liste autorisée.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Patrimonial",
+        "À vendre",
+        "Ouvert à proposition"
+      ]
+    },
+    {
+      "fieldId": "cover.owner.type",
+      "sectionId": "cover.owner",
+      "label": "Type de propriétaire",
+      "purpose": "Adapter les données d’identification au détenteur.",
+      "instructions": "Choisir Personne physique ou Entreprise uniquement à partir des informations explicites du dossier.",
+      "dataType": "enum",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur comprise dans la liste autorisée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Personne physique",
+        "Entreprise"
+      ]
+    },
+    {
+      "fieldId": "cover.owner.customFields[].label",
+      "sectionId": "cover.owner",
+      "label": "Catégorie propriétaire",
+      "purpose": "Nommer une information d’identité ou de contact.",
+      "instructions": "Créer une catégorie courte et non ambiguë. Réutiliser une catégorie existante avant d’en créer une nouvelle.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Libellé unique dans la fiche propriétaire.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "Raison sociale",
+        "Numéro d’immatriculation"
+      ]
+    },
+    {
+      "fieldId": "cover.owner.customFields[].value",
+      "sectionId": "cover.owner",
+      "label": "Valeur propriétaire",
+      "purpose": "Conserver la valeur correspondant à une catégorie propriétaire.",
+      "instructions": "Transcrire fidèlement la source. Ne pas compléter une adresse, un email ou un téléphone par supposition.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "La valeur doit correspondre au libellé de la même instance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.owner.documents[].category",
+      "sectionId": "cover.owner_documents",
+      "label": "Catégorie du document propriétaire",
+      "purpose": "Qualifier une pièce confidentielle.",
+      "instructions": "Choisir une catégorie descriptive sans extraire plus de données personnelles que nécessaire.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Catégorie courte ; ne jamais rendre publique automatiquement.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "Passeport",
+        "Extrait Kbis"
+      ]
+    },
+    {
+      "fieldId": "cover.owner.documents[].fileName",
+      "sectionId": "cover.owner_documents",
+      "label": "Nom du fichier propriétaire",
+      "purpose": "Donner un nom exploitable à la pièce jointe.",
+      "instructions": "Conserver l’extension et éviter d’inscrire des données sensibles inutiles dans le nom.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Nom de fichier non vide avec extension si elle est connue.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "file_metadata",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.owner.documents[].file",
+      "sectionId": "cover.owner_documents",
+      "label": "Fichier propriétaire",
+      "purpose": "Associer la pièce source à la fiche du propriétaire.",
+      "instructions": "Importer le fichier original sans le modifier, calculer son empreinte et conserver le type MIME.",
+      "dataType": "file",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Fichier lisible, empreinte calculée, accès secret.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "file_metadata"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].fromYear",
+      "sectionId": "cover.ownership_history",
+      "label": "Année de début de propriété",
+      "purpose": "Dater le début d’une période de propriété antérieure de l’objet.",
+      "instructions": "Saisir l’année établie par un document ou déclarée par une source identifiée. Ne jamais déduire une année à partir d’une estimation vague.",
+      "dataType": "number",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Année sur quatre chiffres, antérieure ou égale à l’année de fin lorsqu’elle est connue.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].toYear",
+      "sectionId": "cover.ownership_history",
+      "label": "Année de fin de propriété",
+      "purpose": "Dater la fin d’une période de propriété antérieure de l’objet.",
+      "instructions": "Saisir l’année documentée ou déclarée de fin de période. Laisser vide plutôt que d’inventer une date de cession.",
+      "dataType": "number",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Année sur quatre chiffres, postérieure ou égale à l’année de début lorsqu’elle est connue.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].description",
+      "sectionId": "cover.ownership_history",
+      "label": "Description de la période de propriété",
+      "purpose": "Documenter le propriétaire précédent, le contexte de détention et les éléments de provenance utiles.",
+      "instructions": "Décrire uniquement les faits sourcés ou déclarés en distinguant identité, contexte, lieu, usage et documents disponibles. Ne pas transformer une déclaration en preuve.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Description rattachée à la bonne période et sans donnée personnelle inutile.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].firstOwner",
+      "sectionId": "cover.ownership_history",
+      "label": "Premier propriétaire",
+      "purpose": "Identifier la période correspondant au premier propriétaire connu de l’objet.",
+      "instructions": "Activer uniquement lorsqu’une source permet d’identifier cette période comme celle du premier propriétaire. Une seule période peut porter ce statut.",
+      "dataType": "boolean",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Au plus une période marquée Premier propriétaire dans le Cartulaire.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory.summary",
+      "sectionId": "cover.ownership_history",
+      "label": "Synthèse de l’historique des propriétaires",
+      "purpose": "Répercuter la chaîne de propriété dans les descriptions et résumés du Cartulaire.",
+      "instructions": "Générer uniquement à partir des périodes enregistrées, en signalant explicitement les lacunes et le statut déclaratif ou documentaire.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Synthèse reproductible à partir des périodes de propriété.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "cover.ownershipHistory[].fromYear",
+        "cover.ownershipHistory[].toYear",
+        "cover.ownershipHistory[].description",
+        "cover.ownershipHistory[].firstOwner"
+      ]
+    },
+    {
+      "fieldId": "cover.transmission.recipients[].firstName",
+      "sectionId": "cover.transmission",
+      "label": "Prénom de la personne désignée",
+      "purpose": "Identifier une personne envisagée pour la transmission.",
+      "instructions": "Transcrire uniquement le prénom fourni par le propriétaire ou une pièce autorisée.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Prénom rattaché à la bonne personne ; aucune identité déduite.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.transmission.recipients[].lastName",
+      "sectionId": "cover.transmission",
+      "label": "Nom de la personne désignée",
+      "purpose": "Identifier une personne envisagée pour la transmission.",
+      "instructions": "Transcrire uniquement le nom fourni par le propriétaire ou une pièce autorisée.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Nom rattaché à la bonne personne ; aucune identité déduite.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.transmission.recipients[].address",
+      "sectionId": "cover.transmission",
+      "label": "Adresse de la personne désignée",
+      "purpose": "Conserver l’adresse de contact utile au projet de transmission.",
+      "instructions": "Transcrire fidèlement l’adresse fournie sans compléter les éléments manquants par supposition.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Adresse rattachée à la bonne personne et conservée au niveau Secret par défaut.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.transmission.recipients[].email",
+      "sectionId": "cover.transmission",
+      "label": "Email de la personne désignée",
+      "purpose": "Conserver un moyen de contact électronique.",
+      "instructions": "Reprendre l’adresse email explicitement fournie ; ne pas reconstruire une adresse supposée.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Format email valide et rattachement à la bonne personne.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.transmission.recipients[].phone",
+      "sectionId": "cover.transmission",
+      "label": "Téléphone de la personne désignée",
+      "purpose": "Conserver un numéro de contact.",
+      "instructions": "Reprendre le numéro explicitement fourni, avec indicatif international lorsqu’il est disponible.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Numéro plausible et rattaché à la bonne personne.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.transmission.recipients[].percentage",
+      "sectionId": "cover.transmission",
+      "label": "Pourcentage donné",
+      "purpose": "Exprimer la part du bien que le propriétaire souhaite transmettre à cette personne.",
+      "instructions": "Utiliser uniquement le pourcentage décidé par le propriétaire. Ne pas interpréter ce champ comme un acte juridique exécuté.",
+      "dataType": "percentage",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Nombre compris entre 0 et 100 ; cohérence globale des parts à faire confirmer par le propriétaire.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.storage.locations[].name",
+      "sectionId": "cover.storage",
+      "label": "Lieu de stockage",
+      "purpose": "Identifier séparément chaque emplacement où un élément du dossier est conservé.",
+      "instructions": "Nommer le type de lieu et la zone utile sans révéler de code, de consigne d’accès ni d’adresse précise hors du niveau Secret.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Lieu distinct, compréhensible et rattaché à la bonne instance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "Coffre bancaire",
+        "Cave du domicile"
+      ]
+    },
+    {
+      "fieldId": "cover.storage.locations[].contents",
+      "sectionId": "cover.storage",
+      "label": "Contenu stocké",
+      "purpose": "Préciser ce qui est conservé dans chaque lieu.",
+      "instructions": "Lister uniquement les éléments réellement stockés dans cet emplacement, par exemple montre, boîte, papiers ou accessoires.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Contenu explicite et non dupliqué entre lieux sauf si la répartition est expliquée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "Montre",
+        "Boîte et surboîte"
+      ]
+    },
+    {
+      "fieldId": "cover.storage.locations[].description",
+      "sectionId": "cover.storage",
+      "label": "Description et conditions de stockage",
+      "purpose": "Documenter les conditions de conservation propres à chaque emplacement.",
+      "instructions": "Décrire la sécurité, l’accès, la température, l’humidité ou toute remarque utile sans enregistrer de secret opérationnel.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Texte factuel, sans code de sécurité ni instruction d’accès exploitable.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.assets[].file",
+      "sectionId": "media.library",
+      "label": "Actif média",
+      "purpose": "Importer une image, vidéo, séquence, archive ou document source.",
+      "instructions": "Conserver l’original, le type MIME, la taille, le nom, les métadonnées et une empreinte. Ne jamais modifier silencieusement le fichier.",
+      "dataType": "file",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Empreinte et métadonnées techniques disponibles ; type autorisé par le coffre média.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "file_metadata"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.assets[].name",
+      "sectionId": "media.library",
+      "label": "Nom de l’actif",
+      "purpose": "Identifier humainement un actif média.",
+      "instructions": "Créer un nom descriptif court à partir du contenu observé, sans modifier le nom de fichier original.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Nom distinct du fichier original et sans conclusion non vérifiée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "file_metadata",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.assets[].tags",
+      "sectionId": "media.library",
+      "label": "Catégories média",
+      "purpose": "Déterminer les emplacements du site où l’actif peut apparaître.",
+      "instructions": "Attribuer un ou plusieurs tags selon le contenu et l’usage voulu. Une seule photo principale et une seule vidéo principale doivent être proposées à la fois.",
+      "dataType": "media_tags",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Tags dans la liste autorisée ; conflits de rôle signalés.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "file_metadata"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Photo principale",
+        "Vidéo principale",
+        "Séquence 3D",
+        "Diaporama",
+        "Accessoires",
+        "Documentation",
+        "Autres"
+      ]
+    },
+    {
+      "fieldId": "media.assets[].metadataTimestamp",
+      "sectionId": "media.library",
+      "label": "Horodatage du média",
+      "purpose": "Dater la capture ou, à défaut, le fichier.",
+      "instructions": "Lire en priorité EXIF/QuickTime/XMP ; sinon utiliser lastModified et enregistrer la source exacte. Ne pas inventer une heure.",
+      "dataType": "date",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "ISO 8601 avec fuseau si connu et provenance conservée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "file_metadata"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.assets[].hash",
+      "sectionId": "media.library",
+      "label": "Empreinte du média",
+      "purpose": "Garantir l’identité binaire et détecter les doublons.",
+      "instructions": "Calculer l’empreinte sur les octets originaux ; ne jamais saisir ou extrapoler une empreinte.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Empreinte produite par le moteur d’intégrité.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.hero.summary",
+      "sectionId": "media.hero",
+      "label": "Présentation principale",
+      "purpose": "Résumer l’identité et les traits distinctifs de l’exemplaire.",
+      "instructions": "Rédiger 2 à 4 phrases factuelles à partir des champs validés. Séparer les faits établis des éléments à confirmer et ne jamais ajouter de valeur marketing non sourcée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Aucune contradiction avec la référence, l’état ou les documents.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "expert",
+        "manufacturer",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.origins.history[]",
+      "sectionId": "reference.origins",
+      "label": "Historique du modèle",
+      "purpose": "Présenter l’origine et la chronologie de la référence.",
+      "instructions": "Rédiger un texte continu couvrant début et fin de production, variantes, références et volume produit lorsque ces données sont sourcées. Qualifier toute estimation.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Dates et nombres cités par une source ; absence de source explicitement signalée.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "manufacturer",
+        "document",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.origins.knowledge",
+      "sectionId": "reference.origins",
+      "label": "À savoir",
+      "purpose": "Mettre en avant un fait utile à l’identification ou à l’authentification.",
+      "instructions": "Sélectionner un point spécifique au modèle et utile au lecteur. Éviter l’anecdote générale sans impact documentaire.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Fait vérifiable et cohérent avec les points de contrôle.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "manufacturer",
+        "expert",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.specifications[].label",
+      "sectionId": "reference.specifications",
+      "label": "Nom de spécification",
+      "purpose": "Nommer une caractéristique technique ou commerciale.",
+      "instructions": "Réutiliser les catégories usuelles Chrono24 lorsqu’elles conviennent, sinon créer un libellé précis et non redondant.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Libellé unique dans son groupe.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "manufacturer",
+        "document",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "Réserve de marche",
+        "Matériau de la lunette"
+      ]
+    },
+    {
+      "fieldId": "reference.specifications[].value",
+      "sectionId": "reference.specifications",
+      "label": "Valeur de spécification",
+      "purpose": "Renseigner la valeur correspondant à une caractéristique.",
+      "instructions": "Reprendre la valeur officielle avec son unité. En cas de divergence, conserver les sources et proposer la valeur la mieux étayée sans masquer le conflit.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Unité incluse lorsque nécessaire ; correspond au libellé de la même instance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "manufacturer",
+        "document",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.checks[].checked",
+      "sectionId": "reference.checks",
+      "label": "Résultat du contrôle",
+      "purpose": "Indiquer si un point spécifique à cette montre a été physiquement ou documentairement vérifié.",
+      "instructions": "Cocher seulement si une preuve directe permet de conclure. Une simple probabilité ou conformité attendue ne suffit pas.",
+      "dataType": "boolean",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Preuve référencée ; valeur fausse par défaut en l’absence de contrôle.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.checks[].title",
+      "sectionId": "reference.checks",
+      "label": "Point à contrôler",
+      "purpose": "Définir un critère d’identification propre à l’exemplaire.",
+      "instructions": "Formuler un contrôle précis, observable et spécifique à la référence ou au numéro de série.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Un seul critère par ligne ; pas de contrôle générique.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "manufacturer",
+        "expert",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.checks[].note",
+      "sectionId": "reference.checks",
+      "label": "Mode de contrôle",
+      "purpose": "Expliquer ce qui doit être observé et comment conclure.",
+      "instructions": "Décrire l’indice attendu, la méthode et, si utile, le motif d’échec. Ne pas présenter le résultat comme acquis.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Consigne testable et liée au titre de la même instance.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "manufacturer",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.popularity[].name",
+      "sectionId": "reference.popularity",
+      "label": "Nom du site ou forum",
+      "purpose": "Identifier une ressource consacrée au modèle ou à la marque.",
+      "instructions": "Utiliser le nom éditorial de la ressource, sans slogan.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Nom cohérent avec l’URL.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "manufacturer",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "reference.popularity[].type",
+      "sectionId": "reference.popularity",
+      "label": "Type de ressource",
+      "purpose": "Qualifier la nature de la ressource.",
+      "instructions": "Choisir le type selon la page cible et son éditeur, non selon sa popularité supposée.",
+      "dataType": "enum",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur comprise dans la liste autorisée.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Forum officiel",
+        "Discussion dédiée",
+        "Communauté",
+        "Base de données",
+        "Revue"
+      ]
+    },
+    {
+      "fieldId": "reference.popularity[].url",
+      "sectionId": "reference.popularity",
+      "label": "URL de la ressource",
+      "purpose": "Permettre l’accès direct à la ressource.",
+      "instructions": "Enregistrer l’URL canonique en HTTPS et vérifier qu’elle mène à la ressource décrite.",
+      "dataType": "url",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "URL absolue http(s), accessible et cohérente avec le nom.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.description.paragraphs[]",
+      "sectionId": "condition.description",
+      "label": "Description de la montre",
+      "purpose": "Décrire factuellement l’exemplaire observé.",
+      "instructions": "Décrire configuration, apparence et éléments présents sans conclure sur l’authenticité ou la valeur sauf preuve explicite.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Aucune contradiction avec les médias et spécifications validés.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.summary.paragraphs[]",
+      "sectionId": "condition.summary",
+      "label": "Synthèse de l’état actuel",
+      "purpose": "Résumer l’état de conservation et les points encore ouverts.",
+      "instructions": "Distinguer observations, contrôles effectués et réserves. Mentionner la date du rapport utilisé.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Appuyé sur le rapport de référence ou une revue datée.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.summary.lastCondition",
+      "sectionId": "condition.summary",
+      "label": "Dernier état",
+      "purpose": "Indiquer la date de la dernière revue pertinente.",
+      "instructions": "Utiliser la date du rapport de référence le plus récent, pas la date d’import.",
+      "dataType": "date",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Date ISO en stockage ; date non future sauf contrôle planifié explicitement.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.summary.conclusion",
+      "sectionId": "condition.summary",
+      "label": "Conclusion",
+      "purpose": "Donner une conclusion courte sur l’état de la montre.",
+      "instructions": "Résumer le niveau de conservation en quelques mots et garder les réserves dans le texte détaillé.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Conclusion issue d’un rapport daté, sans surpromesse.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.summary.openPoint",
+      "sectionId": "condition.summary",
+      "label": "Point ouvert",
+      "purpose": "Mettre en avant le principal contrôle restant.",
+      "instructions": "Choisir le point non résolu le plus important pour l’identification, l’état ou l’entretien.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Doit correspondre à une réserve documentée.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.documentation[].category",
+      "sectionId": "condition.documentation",
+      "label": "Catégorie de l’élément associé",
+      "purpose": "Classer papier, documentation, assurance, boîte ou accessoire.",
+      "instructions": "Choisir la catégorie qui décrit l’objet, indépendamment de son état.",
+      "dataType": "enum",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Valeur comprise dans la liste autorisée.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Facture",
+        "Garantie",
+        "Assurances",
+        "Boîte",
+        "Écrin",
+        "Manuel",
+        "Certificat",
+        "Accessoire",
+        "Autre"
+      ]
+    },
+    {
+      "fieldId": "condition.documentation[].description",
+      "sectionId": "condition.documentation",
+      "label": "Description de l’élément associé",
+      "purpose": "Identifier précisément l’objet ou le document.",
+      "instructions": "Décrire le contenu, les dates et les numéros utiles sans recopier des données personnelles inutiles.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Description cohérente avec les fichiers associés.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.documentation[].state",
+      "sectionId": "condition.documentation",
+      "label": "État de l’élément associé",
+      "purpose": "Qualifier la présence et la complétude.",
+      "instructions": "Choisir Présent ou Complet uniquement après contrôle ; utiliser À vérifier lorsqu’une preuve manque.",
+      "dataType": "enum",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Valeur comprise dans la liste autorisée.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Présent",
+        "Complet",
+        "Incomplet",
+        "Manquant",
+        "À vérifier"
+      ]
+    },
+    {
+      "fieldId": "condition.reports[].date",
+      "sectionId": "condition.reports",
+      "label": "Date du rapport ou de la revue",
+      "purpose": "Ordonner l’historique de l’état.",
+      "instructions": "Utiliser la date de l’examen ou du document, pas celle de son import.",
+      "dataType": "date",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Date ISO et cohérente avec les pièces jointes.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "expert",
+        "file_metadata"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.reports[].title",
+      "sectionId": "condition.reports",
+      "label": "Titre du rapport ou de la revue",
+      "purpose": "Identifier la nature et la période de l’entrée.",
+      "instructions": "Nommer le document ou l’examen de façon courte, sans intégrer la conclusion dans le titre.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Titre distinct et cohérent avec la date.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.reports[].note",
+      "sectionId": "condition.reports",
+      "label": "Note du rapport ou de la revue",
+      "purpose": "Conserver les observations et conclusions pertinentes.",
+      "instructions": "Résumer le document en séparant constats, mesures, interventions et réserves. Citer la pièce source.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Résumé fidèle ; pas de diagnostic ajouté sans source.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.reports[].documents",
+      "sectionId": "condition.reports",
+      "label": "Pièces jointes au rapport",
+      "purpose": "Associer les preuves au rapport ou à la revue.",
+      "instructions": "Importer les originaux, préserver métadonnées et empreintes, puis relier chaque pièce à la bonne entrée datée.",
+      "dataType": "file",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Fichier lisible et relié à une entrée existante.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "file_metadata"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.analysisDate",
+      "sectionId": "value.market_depth",
+      "label": "Date de l’analyse",
+      "purpose": "Dater la photographie du marché utilisée pour la valorisation.",
+      "instructions": "Utiliser la date d’arrêté de la collecte, pas la date de consultation ultérieure du dossier.",
+      "dataType": "date",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Date ISO, non postérieure aux observations utilisées.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.activeListings",
+      "sectionId": "value.market_depth",
+      "label": "Annonces actives",
+      "purpose": "Mesurer l’offre visible à la date d’analyse.",
+      "instructions": "Compter les annonces distinctes et actives après déduplication des republications.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Entier positif cohérent avec la liste des annonces sources.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.transactions12m",
+      "sectionId": "value.market_depth",
+      "label": "Transactions identifiées sur 12 mois",
+      "purpose": "Mesurer la profondeur du marché réalisé.",
+      "instructions": "Compter les transactions distinctes et vérifiables sur les douze mois précédant la date d’analyse. Dédupliquer les republications.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Entier positif avec liste des transactions sources.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.medianDaysOnMarket",
+      "sectionId": "value.market_depth",
+      "label": "Délai médian estimé",
+      "purpose": "Mesurer le délai d’écoulement observé ou estimé.",
+      "instructions": "Calculer sur les observations documentées et indiquer la méthode lorsque les dates de retrait ne sont pas directement disponibles.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Nombre de jours positif avec méthode documentée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.lowValue",
+      "sectionId": "value.market_depth",
+      "label": "Valeur basse actuelle",
+      "purpose": "Définir la borne basse de la fourchette de marché actuelle.",
+      "instructions": "Saisir une borne justifiée par les comparables et cohérente avec la date d’analyse.",
+      "dataType": "money",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Montant positif inférieur ou égal à la valeur médiane.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "calculation"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.midValue",
+      "sectionId": "value.market_depth",
+      "label": "Valeur médiane actuelle",
+      "purpose": "Définir le point central de la fourchette de marché actuelle.",
+      "instructions": "Saisir ou calculer un point central documenté sans le confondre avec la valeur retenue par le propriétaire.",
+      "dataType": "money",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Montant positif compris entre les bornes basse et haute.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "calculation"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.highValue",
+      "sectionId": "value.market_depth",
+      "label": "Valeur haute actuelle",
+      "purpose": "Définir la borne haute de la fourchette de marché actuelle.",
+      "instructions": "Saisir une borne justifiée par les comparables et cohérente avec la date d’analyse.",
+      "dataType": "money",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Montant positif supérieur ou égal à la valeur médiane.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "calculation"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.valuations[].date",
+      "sectionId": "value.market_history",
+      "label": "Date de valorisation",
+      "purpose": "Dater une observation de l’évolution du marché.",
+      "instructions": "Utiliser la date d’arrêté de l’échantillon correspondant.",
+      "dataType": "date",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Date ISO et antérieure ou égale à la date d’analyse.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.valuations[].lowValue",
+      "sectionId": "value.market_history",
+      "label": "Valeur basse datée",
+      "purpose": "Conserver la borne basse d’une estimation historique.",
+      "instructions": "Reprendre la borne datée issue de la même méthode et du même échantillon que les valeurs médiane et haute.",
+      "dataType": "money",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Montant positif inférieur ou égal à la valeur médiane.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "calculation"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.valuations[].midValue",
+      "sectionId": "value.market_history",
+      "label": "Valeur médiane",
+      "purpose": "Conserver le point central d’une estimation datée.",
+      "instructions": "Calculer à partir d’un échantillon documenté ou reprendre une évaluation datée ; ne pas confondre prix affiché et prix réalisé.",
+      "dataType": "money",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Montant positif avec devise et méthode.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "calculation"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.valuations[].highValue",
+      "sectionId": "value.market_history",
+      "label": "Valeur haute datée",
+      "purpose": "Conserver la borne haute d’une estimation historique.",
+      "instructions": "Reprendre la borne datée issue de la même méthode et du même échantillon que les valeurs basse et médiane.",
+      "dataType": "money",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Montant positif supérieur ou égal à la valeur médiane.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "calculation"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.valuations[].source",
+      "sectionId": "value.market_history",
+      "label": "Source de la valorisation datée",
+      "purpose": "Tracer la provenance et la méthode de chaque point d’évolution du marché.",
+      "instructions": "Nommer les sources, la méthode ou le document qui justifie les trois bornes de l’évaluation datée.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Source identifiable et cohérente avec la date.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.retained.amount",
+      "sectionId": "value.retained_value",
+      "label": "Valeur retenue",
+      "purpose": "Conserver le montant choisi par le propriétaire comme valeur de référence du bien.",
+      "instructions": "Initialiser avec la valeur actuelle, puis ne modifier que sur instruction explicite du propriétaire. Ne pas altérer les données de marché sous-jacentes.",
+      "dataType": "money",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Montant positif dans la devise du dossier ; tout écart avec la valeur actuelle doit pouvoir être expliqué.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "market"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.retained.explanation",
+      "sectionId": "value.retained_value",
+      "label": "Explication de la valeur retenue",
+      "purpose": "Documenter la logique, les ajustements et les réserves qui conduisent au montant retenu.",
+      "instructions": "Expliquer les écarts par rapport à la valeur actuelle en distinguant état, complétude, liquidité, canal et décision patrimoniale.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Texte cohérent avec le montant retenu et les données de marché visibles.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "market",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.provenance.ownershipAssessment",
+      "sectionId": "value.provenance",
+      "label": "Appréciation de la provenance propriétaire",
+      "purpose": "Faire de la continuité de propriété un critère explicite de l’évaluation de l’objet.",
+      "instructions": "Qualifier la continuité, l’identification du premier propriétaire et les lacunes documentaires sans appliquer automatiquement une prime ou une décote chiffrée.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Appréciation reproductible à partir de l’historique des propriétaires ; aucun ajustement monétaire automatique.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "cover.ownershipHistory.summary",
+        "cover.ownershipHistory[].firstOwner"
+      ]
+    },
+    {
+      "fieldId": "value.comparables[].date",
+      "sectionId": "value.comparables",
+      "label": "Date du comparable",
+      "purpose": "Dater l’annonce ou la transaction.",
+      "instructions": "Utiliser la date de publication pour une annonce et la date de vente pour une transaction.",
+      "dataType": "date",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Date ISO avec nature de date cohérente avec le canal.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables[].description",
+      "sectionId": "value.comparables",
+      "label": "Description du comparable",
+      "purpose": "Identifier la montre comparable et ses différences pertinentes.",
+      "instructions": "Inclure marque, modèle, référence, année, état et contenu livré lorsqu’ils sont connus. Ne pas masquer les écarts avec l’exemplaire.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Description suffisante pour apprécier la comparabilité.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables[].source",
+      "sectionId": "value.comparables",
+      "label": "Source du comparable",
+      "purpose": "Conserver la provenance vérifiable de l’observation.",
+      "instructions": "Enregistrer le nom de la plateforme, maison de vente ou professionnel et l’URL ou identifiant source dans la provenance.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Source nommée et traçable.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables[].sourceType",
+      "sectionId": "value.comparables",
+      "label": "Nature du comparable",
+      "purpose": "Séparer annonces en cours et transactions réalisées.",
+      "instructions": "Classer en Annonce uniquement si le prix est demandé ; classer en Transaction uniquement si le résultat de vente est confirmé.",
+      "dataType": "enum",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Valeur comprise dans la liste autorisée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Annonce",
+        "Transaction"
+      ]
+    },
+    {
+      "fieldId": "value.comparables[].channel",
+      "sectionId": "value.comparables",
+      "label": "Canal de vente",
+      "purpose": "Qualifier le mécanisme de commercialisation.",
+      "instructions": "Identifier le canal réellement utilisé, indépendamment de la source qui relaie le résultat.",
+      "dataType": "enum",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Canal précis et cohérent avec la source.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Enchère",
+        "Annonce",
+        "Marchand",
+        "Privé",
+        "Autre"
+      ]
+    },
+    {
+      "fieldId": "value.comparables[].condition",
+      "sectionId": "value.comparables",
+      "label": "État du comparable",
+      "purpose": "Mesurer l’impact de l’état et de la complétude sur le prix.",
+      "instructions": "Reprendre l’état observé ou déclaré et préciser les papiers, boîte et service lorsqu’ils influencent la comparabilité.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Distinguer l’état déclaré de l’état expertisé.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables[].amount",
+      "sectionId": "value.comparables",
+      "label": "Montant du comparable",
+      "purpose": "Conserver le prix demandé ou réalisé.",
+      "instructions": "Saisir le montant brut observé et préciser dans la provenance si les frais acheteur, taxes ou commissions sont inclus.",
+      "dataType": "money",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Montant positif avec devise et statut demandé/réalisé.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables[].currency",
+      "sectionId": "value.comparables",
+      "label": "Devise du comparable",
+      "purpose": "Éviter toute ambiguïté de conversion.",
+      "instructions": "Conserver la devise d’origine selon ISO 4217 ; effectuer toute conversion dans un champ ou calcul séparé et daté.",
+      "dataType": "enum",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Code devise ISO 4217.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "EUR",
+        "CHF",
+        "USD"
+      ]
+    },
+    {
+      "fieldId": "value.comparables.analysis[]",
+      "sectionId": "value.comparables_analysis",
+      "label": "Réflexion de marché",
+      "purpose": "Synthétiser les enseignements sur les prix, canaux et liquidité.",
+      "instructions": "Fonder chaque constat sur l’échantillon disponible, quantifier lorsque possible et expliciter les limites. Séparer prix affichés et réalisés.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Chaque conclusion renvoie aux observations utilisées.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation",
+        "market",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables.analysis[].angle",
+      "sectionId": "value.comparables_analysis",
+      "label": "Angle d’analyse",
+      "purpose": "Nommer le thème d’une ligne de synthèse des comparables.",
+      "instructions": "Utiliser un intitulé court et non ambigu, par exemple prix affichés, prix réalisés ou liquidité.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Intitulé non vide et distinct.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables.analysis[].finding",
+      "sectionId": "value.comparables_analysis",
+      "label": "Constat d’analyse",
+      "purpose": "Conserver la mesure ou le constat central d’une ligne d’analyse.",
+      "instructions": "Saisir une valeur ou une conclusion courte, cohérente avec les comparables utilisés.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Constat cohérent avec la lecture détaillée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation",
+        "market",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.comparables.analysis[].reading",
+      "sectionId": "value.comparables_analysis",
+      "label": "Lecture d’analyse",
+      "purpose": "Expliquer la portée et les limites du constat.",
+      "instructions": "Relier la conclusion à l’échantillon, au canal et aux réserves méthodologiques.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Texte cohérent avec le constat et les sources.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.purchase.date",
+      "sectionId": "value.cost_basis",
+      "label": "Date d’achat",
+      "purpose": "Dater le décaissement initial.",
+      "instructions": "Reprendre la date de transfert ou de facture retenue pour le calcul, selon la politique du dossier.",
+      "dataType": "date",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Date ISO et cohérente avec la facture.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.purchase.price",
+      "sectionId": "value.cost_basis",
+      "label": "Valeur d’achat",
+      "purpose": "Conserver le prix d’acquisition initial.",
+      "instructions": "Saisir le montant effectivement payé pour la montre, hors dépenses postérieures déjà enregistrées séparément.",
+      "dataType": "money",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Montant positif, devise du dossier et rapprochement avec la facture.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.expenses[].kind",
+      "sectionId": "value.cost_basis",
+      "label": "Type de dépense",
+      "purpose": "Classer les coûts de détention et de conservation.",
+      "instructions": "Choisir la catégorie économique principale de la dépense.",
+      "dataType": "enum",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Valeur comprise dans la liste autorisée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Révision",
+        "Assurance",
+        "Coûts de conservation",
+        "Autre"
+      ]
+    },
+    {
+      "fieldId": "value.expenses[].date",
+      "sectionId": "value.cost_basis",
+      "label": "Date de dépense",
+      "purpose": "Dater le flux utilisé dans le prix de revient et le TRI.",
+      "instructions": "Utiliser la date de paiement ou de facture selon la convention appliquée de manière constante.",
+      "dataType": "date",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Date ISO et pièce source conservée.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.expenses[].label",
+      "sectionId": "value.cost_basis",
+      "label": "Libellé de dépense",
+      "purpose": "Expliquer précisément la nature du coût.",
+      "instructions": "Nommer le fournisseur, la période ou l’objet utile sans recopier une phrase commerciale.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Libellé distinct et cohérent avec le type.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.expenses[].amount",
+      "sectionId": "value.cost_basis",
+      "label": "Montant de dépense",
+      "purpose": "Inclure le coût dans le prix de revient.",
+      "instructions": "Saisir le montant effectivement payé, net des remboursements, dans la devise du dossier.",
+      "dataType": "money",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Montant positif et rapproché d’une pièce ou d’une déclaration.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.exit.saleDate",
+      "sectionId": "value.performance",
+      "label": "Date de vente",
+      "purpose": "Fixer la date du flux de cession pour le TRI.",
+      "instructions": "Utiliser la date d’une vente réalisée ou une date d’hypothèse explicitement qualifiée comme telle.",
+      "dataType": "date",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Date postérieure ou égale à la date d’achat.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.exit.salePrice",
+      "sectionId": "value.performance",
+      "label": "Prix de vente",
+      "purpose": "Fixer le produit brut de cession.",
+      "instructions": "Utiliser le prix réalisé ou une hypothèse issue de la valorisation, en conservant clairement son statut.",
+      "dataType": "money",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Montant positif dans la devise du dossier.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "market",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.exit.disposalCostPct",
+      "sectionId": "value.performance",
+      "label": "Coût de cession",
+      "purpose": "Modéliser commissions et frais de vente en pourcentage.",
+      "instructions": "Utiliser le taux contractuel du canal envisagé ou une hypothèse documentée. Indiquer clairement ce qui est inclus.",
+      "dataType": "percentage",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Pourcentage compris entre 0 et 100.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "market",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.sensitivity.prices[]",
+      "sectionId": "value.sensitivity",
+      "label": "Prix de vente testé",
+      "purpose": "Définir manuellement un scénario de prix utilisé dans les tables de sensibilité.",
+      "instructions": "Saisir un prix de vente plausible et distinct des autres scénarios.",
+      "dataType": "money",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Montant positif dans la devise du dossier.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "market"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.sensitivity.costs[]",
+      "sectionId": "value.sensitivity",
+      "label": "Coût de cession testé",
+      "purpose": "Définir manuellement un scénario de coût utilisé dans les tables de sensibilité.",
+      "instructions": "Saisir un taux plausible correspondant à un canal ou une hypothèse identifiable.",
+      "dataType": "percentage",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Pourcentage compris entre 0 et 100.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "market"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.computed.costBasis",
+      "sectionId": "value.calculations",
+      "label": "Prix de revient",
+      "purpose": "Additionner prix d’achat et dépenses retenues.",
+      "instructions": "Calculer uniquement à partir des entrées validées ; ne jamais proposer une valeur indépendante.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Somme reproductible des flux inclus.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "value.purchase.price",
+        "value.expenses[].amount"
+      ]
+    },
+    {
+      "fieldId": "value.computed.capitalGainLoss",
+      "sectionId": "value.calculations",
+      "label": "Plus-value ou moins-value nette",
+      "purpose": "Mesurer la différence entre produit net et prix de revient.",
+      "instructions": "Calculer automatiquement à partir du prix de vente, du coût de cession et du prix de revient.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Calcul reproductible avec signe conservé.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "value.exit.salePrice",
+        "value.exit.disposalCostPct",
+        "value.computed.costBasis"
+      ]
+    },
+    {
+      "fieldId": "value.computed.irr",
+      "sectionId": "value.calculations",
+      "label": "TRI annualisé",
+      "purpose": "Mesurer la performance annualisée sur des flux datés.",
+      "instructions": "Calculer par XIRR sur les flux validés ; retourner non calculable si les conditions mathématiques ne sont pas réunies.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Au moins un flux négatif, un flux positif et des dates valides.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "value.purchase.date",
+        "value.purchase.price",
+        "value.expenses[].date",
+        "value.expenses[].amount",
+        "value.exit.saleDate",
+        "value.exit.salePrice",
+        "value.exit.disposalCostPct"
+      ]
+    },
+    {
+      "fieldId": "value.computed.sensitivity",
+      "sectionId": "value.calculations",
+      "label": "Tableaux de sensibilité",
+      "purpose": "Comparer plus-value et TRI selon prix de vente et coût de cession.",
+      "instructions": "Recalculer chaque cellule à partir des hypothèses de ligne et colonne ; ne jamais saisir les résultats manuellement.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Chaque cellule est reproductible par la même formule.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "value.computed.costBasis",
+        "value.exit.saleDate"
+      ]
+    },
+    {
+      "fieldId": "publishing.blocks.website",
+      "sectionId": "publishing.selection",
+      "label": "Sélection Watch website",
+      "purpose": "Choisir les blocs visibles sur l’URL publique indépendante.",
+      "instructions": "Décision exclusivement humaine. L’IA peut signaler les risques de confidentialité mais ne doit jamais activer W.",
+      "dataType": "boolean",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Activation explicite par un utilisateur autorisé.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "publishing.blocks.report",
+      "sectionId": "publishing.selection",
+      "label": "Sélection Rapport PDF",
+      "purpose": "Choisir les blocs inclus dans le rapport imprimable.",
+      "instructions": "Décision exclusivement humaine. L’IA peut recommander une sélection mais ne doit jamais activer R.",
+      "dataType": "boolean",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Activation explicite par un utilisateur autorisé.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    }
+  ]
+}

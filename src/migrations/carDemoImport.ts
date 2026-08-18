@@ -25,7 +25,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     collectionId: 'col_vehicles',
     assetType: 'car',
     schemaId: 'car',
-    schemaVersion: '1.0.0',
+    schemaVersion: '1.1.0',
     publicCode: 'CAR-DEMO-01',
     displayTitle: 'Voiture pilote multi-actifs',
     makerName: 'Constructeur Démonstration',
@@ -51,7 +51,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     {
       id: 'identity.summary',
       schemaSectionId: 'cover.car',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'Identité du véhicule',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -65,9 +65,19 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
       revision: 1,
     },
     {
+      id: 'ownership.history',
+      schemaSectionId: 'cover.ownership_history',
+      schemaVersion: 'car@1.1.0',
+      title: "Historique de l'objet - Propriétaires précédents",
+      visibility: 'secret',
+      status: 'imported_unreviewed',
+      fields: {},
+      revision: 1,
+    },
+    {
       id: 'identity.private',
       schemaSectionId: 'identity.private',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'Identifiants confidentiels',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -80,7 +90,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     {
       id: 'technical.powertrain',
       schemaSectionId: 'technical.powertrain',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'Motorisation et transmission',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -98,7 +108,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     {
       id: 'technical.chassis',
       schemaSectionId: 'technical.chassis',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'Châssis et carrosserie',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -114,7 +124,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     {
       id: 'usage.current',
       schemaSectionId: 'usage.current',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'Usage courant',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -129,7 +139,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     {
       id: 'condition.current',
       schemaSectionId: 'condition.current',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'État du véhicule',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -146,7 +156,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     {
       id: 'history.service',
       schemaSectionId: 'history.service',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'Historique d’entretien',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -162,7 +172,7 @@ export const buildCarDemoImportBundle = (): CartularyImportBundle => ({
     {
       id: 'value.retained',
       schemaSectionId: 'value.retained',
-      schemaVersion: 'car@1.0.0',
+      schemaVersion: 'car@1.1.0',
       title: 'Valeur de travail',
       visibility: 'secret',
       status: 'imported_unreviewed',

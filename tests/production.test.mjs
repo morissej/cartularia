@@ -62,6 +62,9 @@ const seedSource = async () => {
     sourceFirestore.doc('schemaCatalog/car/versions/1.0.0').set({
       schemaId: 'car', assetType: 'car', version: '1.0.0', status: 'baseline',
     }),
+    sourceFirestore.doc('schemaCatalog/car/versions/1.1.0').set({
+      schemaId: 'car', assetType: 'car', version: '1.1.0', status: 'active',
+    }),
     sourceFirestore.doc('communityProfiles/wave1-owner').set({
       uid: ownerUid, pseudonym: 'Pilote', bio: '', status: 'active', visibility: 'community',
     }),

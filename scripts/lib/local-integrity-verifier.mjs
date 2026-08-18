@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { canonicalize, sha256Digest } from './canonical-json.mjs';
+import { verifyPortableCartularyExport } from './portable-integrity-verifier.mjs';
+import { verifyPortableRfc3161Receipts } from './rfc3161-verifier.mjs';
 
 const ZERO_HASH = `sha256:${'0'.repeat(64)}`;
 
@@ -208,5 +210,19 @@ export const verifyLocalIntegrityBundle = (bundle) => {
       }
     })(),
     errors,
+  };
+};
+
+export const verifyIndependentIntegrityBundle = async (bundle, options = {}) => {
+  if (bundle?.manifest?.exportVersion === 'cartularia-portable-1') {
+    return verifyPortableCartularyExport(bundle, options);
+  }
+  const localResult = verifyLocalIntegrityBundle(bundle);
+  const timestampResult = await verifyPortableRfc3161Receipts(bundle);
+  return {
+    ...localResult,
+    valid: localResult.valid && timestampResult.valid,
+    externalTimestamps: timestampResult,
+    errors: [...localResult.errors, ...timestampResult.errors],
   };
 };

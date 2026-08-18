@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import {
   ArrowLeft,
@@ -22,24 +22,34 @@ import {
   Video,
   X,
 } from 'lucide-react';
-import { mockCartulary } from './data/mockData';
+import {
+  activeCartulary as mockCartulary,
+  activeCreationProfile,
+  isIwcCartulary,
+  isRolexCartulary,
+} from './data/activeCartulary';
 import type { Asset, ComparableTransaction, MediaTag, Valuation, VisibilityLevel } from './types';
 import { BarreDossier } from './components/BarreDossier';
 import { BrandLogo } from './components/BrandLogo';
 import { MediaCarousel } from './components/MediaCarousel';
-import { Spin360 } from './components/Spin360';
-import { AuditPanel } from './components/AuditPanel';
 import { computeHash, IntegrityJournal, isRfc3161Receipt } from './utils/integrityJournal';
-import { AI_SCHEMA_VERSION, aiFieldProps, type AIFieldId } from './ai/fieldCatalog';
+import { AI_SCHEMA_VERSION, aiFieldProps } from './ai/fieldCatalog';
 import { ProjectedPublicBlock } from './components/ProjectedPublicBlock';
+import { PrivateMediaImage } from './components/PrivateMediaImage';
 import { loadPublicProjection } from './services/projections';
 import type { LoadedPublicProjection } from './domain/projections';
 import {
   cartulariaLocalVault,
+  cartulariaStorage,
   mirrorCartulariaLocalStorage,
   persistCartulariaJson,
 } from './persistence/localVault';
-import { useHybridPersistence } from './persistence/useHybridPersistence';
+import { readValidatedStoredJson } from './persistence/storedStateValidation';
+import {
+  CLOUD_PULL_APPLIED_EVENT,
+  useHybridPersistence,
+  type CloudPullAppliedDetail,
+} from './persistence/useHybridPersistence';
 import {
   PUBLISHED_BLOCK_IDS,
   applyPublicationDecision,
@@ -70,7 +80,80 @@ import {
 } from './utils/interfaceState';
 import { useDialogFocus } from './hooks/useDialogFocus';
 import { removeItemById, restoreItemAtIndex } from './utils/undoableDeletion';
+import { horizontalNavigationDirection, targetConsumesHorizontalNavigation } from './utils/horizontalNavigation';
+import {
+  formatDate,
+  formatDateTime,
+  formatFileSize,
+  formatMoney,
+  formatPercent,
+} from './utils/formatting';
+import {
+  AccessRestricted,
+  BlockMarkers,
+  ComparableTable,
+  EditableParagraphs,
+  PageIntroduction,
+  SectionTitle,
+  VideoPoster,
+  type BlockMarkerState,
+} from './features/cartulary/components/CartularyPresentation';
+import {
+  DeletionDialog,
+  MarketHistoryDialog,
+  MediaViewerModal,
+  SpinViewerModal,
+  UndoToast,
+  type PendingDeletion,
+  type UndoNotice,
+} from './features/cartulary/modals/CartularyModals';
+import {
+  ConditionPage,
+  CoverPage,
+  MediaPage,
+  ReferencePage,
+  ValuePage,
+} from './features/cartulary/pages/CartularyPages';
+import { useCartularyMediaState } from './features/cartulary/state/useCartularyMediaState';
+import { useCartularyConditionState } from './features/cartulary/state/useCartularyConditionState';
+import { useCartularyOwnerState } from './features/cartulary/state/useCartularyOwnerState';
+import { useCartularyValuationState } from './features/cartulary/state/useCartularyValuationState';
+import { useCartularyPublicationState } from './features/cartulary/state/useCartularyPublicationState';
+import type {
+  AssetKind,
+  ComparableAnalysisEntry,
+  ConditionAttachment,
+  ConditionEntry,
+  DocumentationCategory,
+  DocumentationItem,
+  DocumentationState,
+  IdentificationCheck,
+  MarketDepthState,
+  OwnerDocument,
+  OwnerField,
+  OwnerType,
+  PublicationSourceBinding,
+  PurchaseExpense,
+  StorageLocation,
+  TransmissionRecipient,
+  WatchPatrimonialStatus,
+} from './features/cartulary/state/cartularyStateTypes';
 import { isRegistryReturnPath } from './features/registry/registryCatalog';
+import {
+  normalizeOwnershipHistory,
+  ownershipHistorySummary,
+  ownershipValuationAssessment,
+  type OwnershipHistoryEntry,
+} from './domain/ownershipHistory';
+import {
+  calculateXirr,
+  hasMinimumSaleHorizon,
+  todayIsoDate,
+  type DatedCashFlow,
+} from './domain/valuationPerformance';
+
+const Spin360 = lazy(() => import('./components/Spin360.tsx').then((module) => ({ default: module.Spin360 })));
+const AuditPanel = lazy(() => import('./components/AuditPanel.tsx').then((module) => ({ default: module.AuditPanel })));
 
 interface PublicationIntent {
   requestId: string;
@@ -82,114 +165,6 @@ interface PublicationIntent {
   policy: PublicationPolicyResult;
 }
 
-interface PublicationSourceBinding {
-  revision: number;
-  digest: string;
-  updatedAt: string;
-}
-
-interface UndoNotice {
-  id: string;
-  message: string;
-  onUndo: () => void | Promise<void>;
-  onExpire?: () => void | Promise<void>;
-}
-
-interface PendingDeletion {
-  title: string;
-  description: string;
-  targetLabel: string;
-  onConfirm: () => UndoNotice | Promise<UndoNotice>;
-}
-
-interface IdentificationCheck {
-  id: string;
-  title: string;
-  note: string;
-  checked: boolean;
-}
-
-interface ConditionAttachment {
-  id?: string;
-  name: string;
-  size?: number;
-  type?: string;
-  url?: string;
-  binaryId?: string;
-  sha256?: string;
-}
-
-interface ConditionEntry {
-  id: string;
-  date: string;
-  title: string;
-  note: string;
-  attachments: ConditionAttachment[];
-}
-
-type DocumentationCategory = 'Facture' | 'Garantie' | 'Assurances' | 'Boîte' | 'Écrin' | 'Manuel' | 'Certificat' | 'Accessoire' | 'Autre';
-type DocumentationState = 'Présent' | 'Complet' | 'Incomplet' | 'Manquant' | 'À vérifier';
-
-interface DocumentationItem {
-  id: string;
-  category: DocumentationCategory;
-  description: string;
-  state: DocumentationState;
-}
-
-interface OwnerField {
-  id: string;
-  label: string;
-  value: string;
-}
-
-type OwnerType = 'Personne physique' | 'Entreprise';
-type WatchPatrimonialStatus = 'Patrimonial' | 'À vendre' | 'Ouvert à proposition';
-type AssetKind = 'Montre' | 'Voiture' | 'Vin' | 'Sculpture' | 'Peinture' | 'Photographie' | 'Meuble' | 'Autre art' | 'Bien immobilier' | 'Autre';
-
-interface TransmissionRecipient {
-  id: string;
-  firstName: string;
-  lastName: string;
-  address: string;
-  email: string;
-  phone: string;
-  percentage: number | '';
-}
-
-interface OwnerDocument {
-  id: string;
-  category: string;
-  fileName: string;
-  size: number;
-  type: string;
-  url?: string;
-  binaryId?: string;
-  sha256?: string;
-}
-
-interface MarketDepthState {
-  analysisDate: string;
-  activeListings: number;
-  transactions12m: number;
-  medianDaysOnMarket: number;
-  lowValue: number;
-  midValue: number;
-  highValue: number;
-}
-
-interface RetainedValuationState {
-  amount: number;
-  explanation: string;
-}
-
-interface StorageLocation {
-  id: string;
-  name: string;
-  contents: string;
-  description: string;
-}
-
 type PopularityResourceType = 'Forum officiel' | 'Discussion dédiée' | 'Communauté' | 'Base de données' | 'Revue';
 
 interface PopularityResource {
@@ -197,37 +172,6 @@ interface PopularityResource {
   name: string;
   type: PopularityResourceType;
   url: string;
-}
-
-interface PurchaseState {
-  date: string;
-  purchasePrice: number;
-}
-
-interface PurchaseExpense {
-  id: string;
-  kind: 'Révision' | 'Assurance' | 'Coûts de conservation' | 'Autre';
-  date: string;
-  label: string;
-  amount: number;
-}
-
-interface ExitAssumptions {
-  saleDate: string;
-  salePrice: number;
-  disposalCostPct: number;
-}
-
-interface DatedCashFlow {
-  date: string;
-  amount: number;
-}
-
-interface ComparableAnalysisEntry {
-  id: string;
-  angle: string;
-  finding: string;
-  reading: string;
 }
 
 interface SpecificationDatum {
@@ -257,6 +201,7 @@ interface EditableCopyData {
 
 const journal = new IntegrityJournal({
   cartularyId: mockCartulary.id,
+  storage: cartulariaStorage ?? undefined,
   onUpdate: () => {
     void mirrorCartulariaLocalStorage().catch((error: unknown) => console.error('Miroir local du journal impossible', error));
   },
@@ -286,8 +231,13 @@ const MEDIA_TAGS: Array<{ id: MediaTag; label: string }> = [
   { id: 'other', label: 'Autres' },
 ];
 const LOCAL_MEDIA_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+const creationBrand = activeCreationProfile?.brand || mockCartulary.watchInstance.reference.brand || 'Marque à documenter';
+const creationModel = activeCreationProfile?.model || mockCartulary.watchInstance.reference.model || 'Modèle à documenter';
+const creationReference = activeCreationProfile?.reference || mockCartulary.watchInstance.reference.reference || 'Référence à documenter';
+const creationYear = activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : 'À documenter';
+const creationCaliber = activeCreationProfile?.caliber || 'Calibre à documenter';
 
-const DEFAULT_CHECKS: IdentificationCheck[] = [
+const DEFAULT_CHECKS: IdentificationCheck[] = isIwcCartulary ? [
   {
     id: 'dial-tzc',
     title: 'Cadran noir IW3251-001',
@@ -324,6 +274,80 @@ const DEFAULT_CHECKS: IdentificationCheck[] = [
     note: 'Numéro 2715537 cohérent avec la référence IW3251-001, la facture d’origine et la carte de garantie.',
     checked: true,
   },
+] : isRolexCartulary ? [
+  {
+    id: 'dial-long-e',
+    title: 'Cadran mat Mark I « Long E »',
+    note: 'Typographie du E de ROLEX, couronne fine et marquage SWISS – T < 25 à contrôler sur les vues macro.',
+    checked: false,
+  },
+  {
+    id: 'serial-period',
+    title: 'Série et millésime 1969',
+    note: `Numéro ${mockCartulary.watchInstance.serialNumber || 'à documenter'} à rapprocher de la période de production de la référence 1675.`,
+    checked: false,
+  },
+  {
+    id: 'case-geometry',
+    title: 'Boîtier et protège-couronne',
+    note: 'Géométrie du boîtier, épaisseur des cornes, arêtes et éventuelles reprises de polissage à examiner.',
+    checked: false,
+  },
+  {
+    id: 'fuchsia-insert',
+    title: 'Insert Pepsi fuchsia',
+    note: 'Insert déclaré d’époque ; teinte, typographie, usure et cohérence avec le millésime doivent être revues.',
+    checked: false,
+  },
+  {
+    id: 'caliber-1575',
+    title: 'Calibre Rolex 1575',
+    note: 'Mouvement, pont marqué 1570 le cas échéant, numéro et fonctionnement GMT à confirmer montre ouverte.',
+    checked: false,
+  },
+  {
+    id: 'bracelet-jubilee',
+    title: 'Bracelet Jubilee',
+    note: 'Références de bracelet et d’end-links, date de fermoir, allongement et cohérence avec la montre à documenter.',
+    checked: false,
+  },
+] : [
+  {
+    id: 'identity-reference',
+    title: 'Marque, modèle et référence',
+    note: `${creationBrand} ${creationModel} · référence ${creationReference}. À rapprocher des marquages et des documents versés.`,
+    checked: false,
+  },
+  {
+    id: 'serial-period',
+    title: 'Numéro de série et période',
+    note: `Numéro ${mockCartulary.watchInstance.serialNumber || 'à documenter'} et année ${creationYear} à vérifier sur pièces.`,
+    checked: false,
+  },
+  {
+    id: 'case-condition',
+    title: 'Boîtier et état de conservation',
+    note: 'Matériau, dimensions, géométrie et éventuelles reprises de polissage à documenter.',
+    checked: false,
+  },
+  {
+    id: 'dial-hands',
+    title: 'Cadran, aiguilles et affichages',
+    note: 'Configuration, marquages, matière lumineuse et cohérence avec la référence à contrôler.',
+    checked: false,
+  },
+  {
+    id: 'movement-caliber',
+    title: 'Mouvement et calibre',
+    note: `${creationCaliber}. Identification, numéro, état et fonctionnement à confirmer lors d’un contrôle adapté.`,
+    checked: false,
+  },
+  {
+    id: 'bracelet-accessories',
+    title: 'Bracelet et accessoires',
+    note: 'Type, matière, références, état et cohérence avec la montre à documenter.',
+    checked: false,
+  },
 ];
 
 const DEFAULT_CONDITION_ENTRIES: ConditionEntry[] = mockCartulary.conditionReports.map((report, index) => ({
@@ -331,16 +355,35 @@ const DEFAULT_CONDITION_ENTRIES: ConditionEntry[] = mockCartulary.conditionRepor
   date: report.date,
   title: report.title,
   note: report.summary,
-  attachments: index === 0
+  attachments: isIwcCartulary && index === 0
     ? [{ name: 'Rapport_etat_2026-08-08.pdf' }, { name: 'Fiche_controle_fonctionnel.pdf' }]
-    : [{ name: 'Revue_visuelle_2024-02-15.pdf' }],
+    : isIwcCartulary
+      ? [{ name: 'Revue_visuelle_2024-02-15.pdf' }]
+      : [],
 }));
 
-const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = [
+const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isIwcCartulary ? [
   { id: 'doc-invoice', category: 'Facture', description: 'Facture originale nominative du 08.03.2002, boutique Aldebert à Paris.', state: 'Présent' },
   { id: 'doc-warranty', category: 'Garantie', description: 'Carte de garantie IWC portant la référence et le numéro de série de l’exemplaire.', state: 'Présent' },
   { id: 'doc-box', category: 'Boîte', description: 'Boîte extérieure et écrin IWC associés à la montre.', state: 'Complet' },
   { id: 'doc-manual', category: 'Manuel', description: 'Livret utilisateur et documentation de la fonction UTC.', state: 'À vérifier' },
+] : isRolexCartulary ? [
+  { id: 'doc-purchase', category: 'Facture', description: `Acquisition du ${activeCreationProfile?.purchaseDate || '23.07.2026'} auprès de ${activeCreationProfile?.seller || 'L’Atelier du Temps'}. Pièce à identifier dans les documents importés.`, state: 'À vérifier' },
+  { id: 'doc-seller', category: 'Garantie', description: 'Garantie vendeur de cinq ans déclarée dans le dossier. Étendue et conditions à confirmer.', state: 'À vérifier' },
+  { id: 'doc-box', category: 'Boîte', description: 'Boîte et accessoires non confirmés à ce stade.', state: 'À vérifier' },
+  { id: 'doc-expertise', category: 'Certificat', description: 'Notes d’expertise et sources de marché importées ; revue humaine requise avant validation.', state: 'À vérifier' },
+] : [
+  {
+    id: 'doc-purchase',
+    category: 'Facture',
+    description: activeCreationProfile?.purchaseDate || activeCreationProfile?.seller
+      ? `Acquisition${activeCreationProfile.purchaseDate ? ` du ${activeCreationProfile.purchaseDate}` : ''}${activeCreationProfile.seller ? ` auprès de ${activeCreationProfile.seller}` : ''}. Pièce justificative à identifier.`
+      : 'Facture ou preuve d’acquisition à documenter.',
+    state: 'À vérifier',
+  },
+  { id: 'doc-warranty', category: 'Garantie', description: 'Garantie de la montre à documenter si elle existe.', state: 'À vérifier' },
+  { id: 'doc-box', category: 'Boîte', description: 'Boîte et accessoires à inventorier.', state: 'À vérifier' },
+  { id: 'doc-expertise', category: 'Certificat', description: 'Certificat, expertise ou rapport de contrôle à documenter.', state: 'À vérifier' },
 ];
 
 const DEFAULT_OWNER_FIELDS: OwnerField[] = [
@@ -376,45 +419,52 @@ const OWNER_DOCUMENT_CATEGORIES: Record<OwnerType, string[]> = {
   ],
 };
 
-const DEFAULT_STORAGE_DESCRIPTION = `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}. Accès contrôlé et conditions de conservation à documenter.`;
+const DEFAULT_STORAGE_DESCRIPTION = isIwcCartulary
+  ? `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}. Accès contrôlé et conditions de conservation à documenter.`
+  : 'Emplacement, sécurité et conditions de conservation à renseigner par le propriétaire.';
 
 const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de la montre, de la complétude de son dossier et du canal de cession.';
 
-const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = [
+const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isIwcCartulary ? [
   { id: 'pop-iwc-forum', name: 'IWC Collectors Forum', type: 'Forum officiel', url: 'https://forum.iwc.com/' },
   { id: 'pop-iwc-3251-thread', name: 'IWC Die Fliegeruhr UTC Ref. 3251', type: 'Discussion dédiée', url: 'https://forum.iwc.com/t/iwc-die-fliegeruhr-utc-ref3251/30513/' },
   { id: 'pop-watchbase', name: 'WatchBase · IW3251-01', type: 'Base de données', url: 'https://watchbase.com/iwc/pilot/iw3251-01' },
   { id: 'pop-reddit', name: 'r/IWCschaffhausen', type: 'Communauté', url: 'https://www.reddit.com/r/IWCschaffhausen/' },
   { id: 'pop-timezone', name: 'TimeZone · IWC 3251 Review', type: 'Revue', url: 'https://forums.timezone.com/index.php?goto=594&rid=0&t=tree' },
-];
+] : [];
 
-const DEFAULT_EXPENSES: PurchaseExpense[] = [
+const DEFAULT_EXPENSES: PurchaseExpense[] = isIwcCartulary ? [
   { id: 'revision-2008', kind: 'Révision', date: '2008-05-16', label: 'Révision complète IWC', amount: 620 },
   { id: 'insurance-2026', kind: 'Assurance', date: '2026-08-01', label: 'Prime collection 2026–2027', amount: 180 },
-];
+] : [];
 
-const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = [
+const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isIwcCartulary ? [
   { id: 'analysis-listings', angle: 'Prix affichés', finding: '4 150 €', reading: 'Deux annonces observées ; ce niveau reste un prix demandé et non un prix encaissé.' },
   { id: 'analysis-transactions', angle: 'Prix réalisés', finding: '3 450 €', reading: 'Une transaction observée ; ce point dispose d’une valeur probante supérieure mais l’échantillon reste limité.' },
   { id: 'analysis-gap', angle: 'Écart annonce / transaction', finding: '20,3 %', reading: 'L’écart mesure la prime d’affichage observée. Il doit couvrir la négociation, le délai et les frais de cession.' },
   { id: 'analysis-price-channel', angle: 'Canal de prix', finding: 'Annonce spécialisée', reading: 'Canal à privilégier pour défendre le prix d’un exemplaire complet, avec un délai de commercialisation plus long.' },
   { id: 'analysis-liquidity-channel', angle: 'Canal de liquidité', finding: 'Enchère', reading: 'Exécution plus rapide et prix public, mais résultat plus volatil et frais généralement plus élevés.' },
-];
+] : isRolexCartulary ? [
+  { id: 'analysis-listings', angle: 'Prix affichés', finding: '16 958 € à 21 774 €', reading: 'Trois annonces 1969 relevées dans le dossier. Ce sont des prix demandés, non des transactions réalisées.' },
+  { id: 'analysis-pivot', angle: 'Niveau de travail', finding: '21 000 € à 25 000 €', reading: 'Fourchette de travail pour l’exemplaire déclaré, à revalider après contrôle du cadran, de l’insert, du boîtier et du bracelet.' },
+  { id: 'analysis-liquidity', angle: 'Liquidité', finding: 'Marché international', reading: 'La profondeur observée facilite la comparaison, mais la dispersion des configurations vintage impose une sélection stricte.' },
+  { id: 'analysis-premium', angle: 'Facteurs de prime', finding: 'Long E · fuchsia · patine', reading: 'Ces caractéristiques ne justifient une prime qu’après confirmation de leur authenticité et de leur cohérence.' },
+] : [];
 
 const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   {
     id: 'basic', title: 'Données de base', items: [
       ['ad-code', 'Code annonce', `Non applicable · dossier ${mockCartulary.publicCode}`],
       ['brand', 'Marque', mockCartulary.watchInstance.reference.brand],
-      ['collection', 'Collection', 'Pilot’s Watches'],
+      ['collection', 'Collection', isRolexCartulary ? 'GMT-Master' : isIwcCartulary ? 'Pilot’s Watches' : 'Collection à documenter'],
       ['model', 'Modèle', mockCartulary.watchInstance.reference.model],
       ['reference', 'Numéro de référence', mockCartulary.watchInstance.reference.reference],
-      ['movement', 'Mouvement', 'Remontage automatique'],
+      ['movement', 'Mouvement', isIwcCartulary || isRolexCartulary ? 'Remontage automatique' : 'Type de mouvement à documenter'],
       ['case', 'Boîtier', mockCartulary.watchInstance.reference.material],
-      ['bracelet', 'Matière du bracelet', 'Cuir'],
-      ['year', 'Année de fabrication', '2002'],
+      ['bracelet', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
+      ['year', 'Année de fabrication', activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : isIwcCartulary ? '2002' : 'À documenter'],
       ['condition', 'État', 'Voir 03 · État de la montre'],
-      ['delivered', 'Contenu livré', 'Montre, boîte, écrin, facture et carte de garantie'],
+      ['delivered', 'Contenu livré', isRolexCartulary ? 'Montre et bracelet Jubilee · accessoires à documenter' : isIwcCartulary ? 'Montre, boîte, écrin, facture et carte de garantie' : 'Montre et accessoires à inventorier'],
       ['gender', 'Sexe', 'Montre homme / Unisexe'],
       ['location', 'Emplacement', 'Accès restreint'],
       ['price', 'Prix', 'Voir 04 · Valorisation'],
@@ -423,50 +473,50 @@ const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   },
   {
     id: 'caliber', title: 'Calibre', items: [
-      ['cal-movement', 'Mouvement', 'Remontage automatique'],
+      ['cal-movement', 'Mouvement', isIwcCartulary || isRolexCartulary ? 'Remontage automatique' : 'À documenter'],
       ['caliber', 'Calibre', mockCartulary.watchInstance.reference.caliber],
-      ['base-caliber', 'Calibre de base', 'À documenter'],
+      ['base-caliber', 'Calibre de base', isRolexCartulary ? 'Rolex 1570 · pont pouvant être marqué 1570' : 'À documenter'],
       ['power-reserve', 'Réserve de marche', mockCartulary.watchInstance.reference.powerReserve],
-      ['jewels', 'Nombre de pierres', 'À documenter'],
+      ['jewels', 'Nombre de pierres', isRolexCartulary ? '26' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'case', title: 'Boîtier', items: [
       ['case-material', 'Boîtier', mockCartulary.watchInstance.reference.material],
-      ['diameter', 'Diamètre', `${mockCartulary.watchInstance.reference.diameter.toFixed(1)} mm`],
-      ['height', 'Hauteur', `${mockCartulary.watchInstance.reference.thickness.toFixed(1)} mm`],
-      ['water', 'Étanche', mockCartulary.watchInstance.reference.waterResistance],
-      ['bezel', 'Matériau de la lunette', 'Acier'],
-      ['crystal', 'Verre', 'Saphir'],
-      ['dial', 'Cadran', 'Noir'],
-      ['numerals', 'Chiffres du cadran', 'Arabes'],
+      ['diameter', 'Diamètre', isIwcCartulary || isRolexCartulary ? `${mockCartulary.watchInstance.reference.diameter.toFixed(1)} mm` : 'À documenter'],
+      ['height', 'Hauteur', isIwcCartulary || isRolexCartulary ? `${mockCartulary.watchInstance.reference.thickness.toFixed(1)} mm` : 'À documenter'],
+      ['water', 'Étanche', isIwcCartulary || isRolexCartulary ? mockCartulary.watchInstance.reference.waterResistance : 'À documenter'],
+      ['bezel', 'Matériau de la lunette', isRolexCartulary ? 'Insert aluminium Pepsi fuchsia déclaré' : isIwcCartulary ? 'Acier' : 'À documenter'],
+      ['crystal', 'Verre', isRolexCartulary ? 'Plexiglas' : isIwcCartulary ? 'Saphir' : 'À documenter'],
+      ['dial', 'Cadran', isIwcCartulary || isRolexCartulary ? 'Noir' : 'Couleur et finition à documenter'],
+      ['numerals', 'Chiffres du cadran', isRolexCartulary ? 'Index appliqués au tritium' : isIwcCartulary ? 'Arabes' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'bracelet', title: 'Bracelet', items: [
-      ['strap-material', 'Matière du bracelet', 'Cuir'],
-      ['strap-color', 'Couleur du bracelet', 'Noir'],
-      ['clasp', 'Boucle', 'Ardillon IWC'],
+      ['strap-material', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
+      ['strap-color', 'Couleur du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Noir' : 'À documenter'],
+      ['clasp', 'Boucle', isRolexCartulary ? 'Boucle déployante Rolex · référence à documenter' : isIwcCartulary ? 'Ardillon IWC' : 'À documenter'],
       ['clasp-material', 'Matière de la boucle', 'Acier'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'functions', title: 'Fonctions', items: [
-      ['date', 'Date', 'Guichet à 3 heures'],
-      ['gmt', 'GMT', 'Disque UTC 24 heures'],
-      ['timezone', 'Second fuseau horaire', 'Réglage par module TZC'],
+      ['date', 'Date', isRolexCartulary ? 'Guichet à 3 heures · réglage non rapide' : isIwcCartulary ? 'Guichet à 3 heures' : 'À documenter'],
+      ['gmt', 'GMT', isRolexCartulary ? 'Aiguille GMT 24 heures' : isIwcCartulary ? 'Disque UTC 24 heures' : 'À documenter'],
+      ['timezone', 'Second fuseau horaire', isRolexCartulary ? 'Lunette bidirectionnelle 24 heures' : isIwcCartulary ? 'Réglage par module TZC' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'other', title: 'Autres', items: [
-      ['seconds', 'Seconde', 'Seconde centrale'],
-      ['crown', 'Couronne', 'Couronne « poisson »'],
-      ['caseback', 'Fond', 'Fond plein vissé'],
+      ['seconds', 'Seconde', isIwcCartulary || isRolexCartulary ? 'Seconde centrale' : 'À documenter'],
+      ['crown', 'Couronne', isRolexCartulary ? 'Couronne Rolex déclarée d’origine' : isIwcCartulary ? 'Couronne « poisson »' : 'À documenter'],
+      ['caseback', 'Fond', isIwcCartulary || isRolexCartulary ? 'Fond plein vissé' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
 ];
 
-const DEFAULT_EDITABLE_COPY: EditableCopyData = {
+const DEFAULT_EDITABLE_COPY: EditableCopyData = isIwcCartulary ? {
   heroSummary: 'Flieger UTC en acier de 39 mm, acquise neuve en 2002. L’exemplaire conserve son cadran TZC, sa couronne poisson et son ensemble documentaire d’origine.',
   originParagraphs: [
     'La Flieger UTC associe la lisibilité des montres d’aviateur IWC à un disque 24 heures qui conserve l’heure du domicile pendant les déplacements. La génération IW3251 a été introduite en 1998 et sa production s’est poursuivie jusqu’en 2005 environ.',
@@ -487,9 +537,60 @@ const DEFAULT_EDITABLE_COPY: EditableCopyData = {
     conclusion: 'Bon état cohérent',
     openPoint: 'Mouvement et service',
   },
+} : isRolexCartulary ? {
+  heroSummary: activeCreationProfile?.description || 'GMT-Master 1675 de 1969, cadran mat Mark I « Long E », insert Pepsi fuchsia et bracelet Jubilee.',
+  originParagraphs: [
+    'La GMT-Master référence 1675 appartient à la génération vintage produite par Rolex de la fin des années 1950 au début des années 1980. Son aiguille 24 heures et sa lunette graduée permettent la lecture d’un second fuseau horaire.',
+    'Le présent dossier décrit un exemplaire de 1969 avec cadran mat Mark I dit « Long E ». Cette qualification repose sur la typographie du mot ROLEX et doit être confirmée sur les vues macro versées au Cartulaire.',
+    'L’insert Pepsi à décoloration fuchsia, le tritium à patine coquille d’œuf et le bracelet Jubilee sont déclarés dans les pièces sources. Leur période, leur authenticité et leur association à l’exemplaire restent soumises à revue.',
+  ],
+  originKnowledge: 'Sur une 1675 vintage, la valeur dépend fortement du cadran, de l’insert, de la géométrie du boîtier, du mouvement et de la cohérence du bracelet. Toute conclusion doit être rattachée à une preuve datée.',
+  watchDescription: [
+    activeCreationProfile?.description || 'Rolex GMT-Master réf. 1675 de 1969 en acier, cadran mat Mark I « Long E », aiguille GMT et insert Pepsi fuchsia déclaré.',
+    'L’exemplaire porte le numéro de série 1 982 530 et est présenté sur bracelet Jubilee déclaré d’origine. Le calibre indiqué au dossier est le Rolex 1575.',
+  ],
+  conditionSummary: [
+    activeCreationProfile?.conditionSummary || 'L’état a été déclaré lors de la création du Cartulaire et n’a pas encore été confirmé par une revue indépendante.',
+    'Points ouverts : authenticité et période du cadran et de l’insert, niveau de polissage du boîtier, références du bracelet, inspection du mouvement et contrôle d’étanchéité.',
+  ],
+  conditionFacts: {
+    lastCondition: 'À revoir',
+    conclusion: 'État déclaré · non validé',
+    openPoint: 'Authenticité et configuration',
+  },
+} : {
+  heroSummary: activeCreationProfile?.description
+    || `${creationBrand} ${creationModel}, référence ${creationReference}. Dossier créé depuis le Registre et à compléter sur pièces.`,
+  originParagraphs: [
+    `Ce Cartulaire concerne une ${creationBrand} ${creationModel}, référence ${creationReference}. L’historique du modèle reste à documenter à partir de sources identifiées.`,
+    `Les caractéristiques de la référence et de l’exemplaire ne sont pas présumées. Chaque information doit être rapprochée d’une photographie, d’un document, d’une expertise ou d’une source datée.`,
+  ],
+  originKnowledge: 'Les données saisies lors de la création sont déclaratives. Elles doivent être confirmées avant toute diffusion ou conclusion sur l’authenticité, l’état ou la valeur.',
+  watchDescription: [
+    activeCreationProfile?.description
+      || `${creationBrand} ${creationModel}, référence ${creationReference}, année ${creationYear}.`,
+    `Calibre indiqué : ${creationCaliber}. Numéro de série : ${mockCartulary.watchInstance.serialNumber || 'à documenter'}. Configuration et accessoires à inventorier.`,
+  ],
+  conditionSummary: [
+    activeCreationProfile?.conditionSummary || 'L’état de la montre est à documenter par une revue visuelle et, si nécessaire, un contrôle technique.',
+    'Points ouverts : identité de l’exemplaire, configuration, état du boîtier et du bracelet, mouvement, fonctionnement et étanchéité.',
+  ],
+  conditionFacts: {
+    lastCondition: 'À documenter',
+    conclusion: 'Revue requise',
+    openPoint: 'Identification et état',
+  },
 };
 
-const DEFAULT_SENSITIVITY_PRICES = [3200, 3600, 4000, 4400, 4800];
+const DEFAULT_SENSITIVITY_PRICES = isIwcCartulary
+  ? [3200, 3600, 4000, 4400, 4800]
+  : [
+      mockCartulary.marketSnapshot.lowValue,
+      Math.round((mockCartulary.marketSnapshot.lowValue + mockCartulary.marketSnapshot.midValue) / 2),
+      mockCartulary.marketSnapshot.midValue,
+      Math.round((mockCartulary.marketSnapshot.midValue + mockCartulary.marketSnapshot.highValue) / 2),
+      mockCartulary.marketSnapshot.highValue,
+    ];
 const DEFAULT_SENSITIVITY_COSTS = [0, 5, 10, 15, 20];
 
 const pageFromHash = (): CartularyPage => {
@@ -509,12 +610,12 @@ const publicCodeFromUrl = (): string | null => {
 };
 
 const readStored = <T,>(key: string, fallback: T): T => {
-  try {
-    const value = window.localStorage.getItem(key);
-    return value ? JSON.parse(value) as T : fallback;
-  } catch {
-    return fallback;
-  }
+  return readValidatedStoredJson({
+    storage: cartulariaStorage,
+    key,
+    fallback,
+    onRepair: ({ reason }) => console.warn(`État persistant réparé pour ${key} (${reason}).`),
+  });
 };
 
 const loadMarketDepth = (): MarketDepthState => ({
@@ -535,7 +636,9 @@ const loadStorageLocations = (): StorageLocation[] => {
   const legacyDescription = readStored('cartularia-storage-description', DEFAULT_STORAGE_DESCRIPTION);
   return [{
     id: 'storage-main',
-    name: `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}`,
+    name: isIwcCartulary
+      ? `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}`
+      : 'Emplacement privé à documenter',
     contents: 'Montre',
     description: legacyDescription,
   }];
@@ -611,10 +714,19 @@ const loadPublicationSourceBinding = (): PublicationSourceBinding => {
 
 const loadSpecificationGroups = (): SpecificationGroupData[] => {
   const stored = readStored<SpecificationGroupData[] | null>('cartularia-specification-groups', null);
-  if (stored?.length) return stored.map((group) => ({
-    ...group,
-    items: group.items.map((item) => ({ ...item, value: item.value === 'Voir 04 · Valeur' ? 'Voir 04 · Valorisation' : item.value })),
-  }));
+  if (stored?.length) {
+    if (!isIwcCartulary) {
+      const storedValues = new Map(stored.flatMap((group) => group.items || []).map((item) => [item.id, item.value]));
+      return DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.map((item) => ({ ...item, value: storedValues.get(item.id) || item.value })),
+      }));
+    }
+    return stored.map((group) => ({
+      ...group,
+      items: group.items.map((item) => ({ ...item, value: item.value === 'Voir 04 · Valeur' ? 'Voir 04 · Valorisation' : item.value })),
+    }));
+  }
   const legacy = readStored<Record<string, string> | null>('cartularia-basic-watch-data', null);
   if (!legacy) return DEFAULT_SPECIFICATION_GROUPS;
   const legacyMap: Record<string, string> = {
@@ -678,9 +790,15 @@ const loadMediaAssets = (): Asset[] => {
   const current = readStored<Asset[] | null>('cartularia-media-assets-v3', null);
   if (current) return current.map((asset) => ({
     ...asset,
+    name: asset.name || asset.originalFileName || 'Média importé',
     url: asset.binaryId && (!asset.url || asset.url.startsWith('blob:')) ? LOCAL_MEDIA_PLACEHOLDER : asset.url,
+    hash: asset.hash || '',
+    status: asset.status || 'Archived',
+    visibility: asset.visibility || 'Secret',
     tags: normalizeMediaTags(asset.tags),
+    metadataTimestamp: asset.metadataTimestamp ?? asset.capturedAt,
     localAvailability: asset.binaryId ? 'missing' : asset.localAvailability,
+    derivativeStatus: asset.derivativeStatus || 'not-required',
   }));
   const saved = readStored<Array<{ id: string; tags: unknown }>>('cartularia-media-tags-v2', []);
   return mockCartulary.assets.map((asset) => {
@@ -689,7 +807,9 @@ const loadMediaAssets = (): Asset[] => {
     return {
       ...asset,
       tags: normalizeMediaTags(storedTags ?? asset.tags),
-      metadataTimestamp: asset.metadataTimestamp ?? `${capturedAt}T12:00:00+02:00`,
+      metadataTimestamp: asset.metadataTimestamp ?? (/^\d{4}-\d{2}-\d{2}$/.test(capturedAt)
+        ? `${capturedAt}T12:00:00+02:00`
+        : capturedAt),
       timestampSource: asset.timestampSource ?? 'catalogue',
     };
   });
@@ -705,296 +825,6 @@ const persistJson = (key: string, value: unknown) => {
 };
 
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const formatDate = (value: string) => new Intl.DateTimeFormat('fr-FR').format(new Date(value));
-const formatDateTime = (value: string) => new Intl.DateTimeFormat('fr-FR', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-}).format(new Date(value));
-const formatMoney = (value: number, currency = 'EUR') =>
-  new Intl.NumberFormat('fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
-const formatFileSize = (value: number) => value >= 1024 * 1024
-  ? `${(value / (1024 * 1024)).toFixed(1)} Mo`
-  : `${Math.ceil(value / 1024)} ko`;
-const formatPercent = (value: number | null) => value === null
-  ? 'N/A'
-  : new Intl.NumberFormat('fr-FR', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
-
-const calculateXirr = (cashFlows: DatedCashFlow[]): number | null => {
-  const validFlows = cashFlows
-    .filter((cashFlow) => cashFlow.date && Number.isFinite(cashFlow.amount))
-    .sort((a, b) => a.date.localeCompare(b.date));
-  if (validFlows.length < 2 || !validFlows.some((flow) => flow.amount < 0) || !validFlows.some((flow) => flow.amount > 0)) {
-    return null;
-  }
-
-  const firstDate = new Date(validFlows[0].date).getTime();
-  const withYears = validFlows.map((flow) => ({
-    amount: flow.amount,
-    years: (new Date(flow.date).getTime() - firstDate) / (365.25 * 24 * 60 * 60 * 1000),
-  }));
-  const npv = (rate: number) => withYears.reduce(
-    (sum, flow) => sum + flow.amount / Math.pow(1 + rate, flow.years),
-    0,
-  );
-
-  let low = -0.9999;
-  let high = 10;
-  let lowValue = npv(low);
-  let highValue = npv(high);
-  while (lowValue * highValue > 0 && high < 10000) {
-    high *= 2;
-    highValue = npv(high);
-  }
-  if (!Number.isFinite(lowValue) || !Number.isFinite(highValue) || lowValue * highValue > 0) return null;
-
-  for (let iteration = 0; iteration < 160; iteration += 1) {
-    const middle = (low + high) / 2;
-    const middleValue = npv(middle);
-    if (Math.abs(middleValue) < 0.001) return middle;
-    if (lowValue * middleValue <= 0) {
-      high = middle;
-      highValue = middleValue;
-    } else {
-      low = middle;
-      lowValue = middleValue;
-    }
-  }
-  return (low + high) / 2;
-};
-
-function PageIntroduction({ number, title }: { number: string; title: string }) {
-  return (
-    <header className="page-intro">
-      <span className="page-intro__number">{number}</span>
-      <h1>{title}</h1>
-    </header>
-  );
-}
-
-interface MarkerState {
-  active: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-}
-
-interface PublicationMarkerState {
-  active: boolean;
-  pendingValidation: boolean;
-  onToggle: (label: string) => void;
-  disabled?: boolean;
-}
-
-interface BlockMarkerState {
-  blockId: PublishedBlockId;
-  language: InterfaceLanguage;
-  website: PublicationMarkerState;
-  report: PublicationMarkerState;
-  community: PublicationMarkerState;
-  edit?: MarkerState;
-}
-
-function ContentMarker({
-  marker,
-  active,
-  label,
-  onToggle,
-  instance,
-  pendingValidation = false,
-  disabled = false,
-  language,
-}: {
-  marker: 'W' | 'R' | 'C';
-  active: boolean;
-  label: string;
-  onToggle: (label: string) => void;
-  instance: PublishedBlockId;
-  pendingValidation?: boolean;
-  disabled?: boolean;
-  language: InterfaceLanguage;
-}) {
-  const isFrench = language === 'FR';
-  const destination = marker === 'W' ? 'Watch website' : marker === 'R' ? 'rapport PDF' : 'Cercle';
-  const translatedDestination = marker === 'W' ? 'Watch website' : marker === 'R' ? 'PDF report' : 'Circle';
-  const markerClass = marker === 'W' ? 'website' : marker === 'R' ? 'report' : 'community';
-  const aiBinding = marker === 'W'
-    ? aiFieldProps('publishing.blocks.website', instance)
-    : marker === 'R'
-      ? aiFieldProps('publishing.blocks.report', instance)
-      : {};
-  return (
-    <button
-      type="button"
-      {...aiBinding}
-      className={`content-marker content-marker--${markerClass} no-print ${active ? 'is-active' : ''} ${pendingValidation ? 'is-pending-validation' : ''}`}
-      onClick={() => onToggle(label)}
-      disabled={disabled}
-      aria-pressed={active}
-      aria-label={pendingValidation
-        ? (isFrench ? `Valider la sélection historique de ${label} pour ${destination}` : `Validate the previous ${label} selection for ${translatedDestination}`)
-        : (isFrench
-          ? `${active ? 'Retirer' : 'Ajouter'} ${label} ${active ? 'du' : 'au'} ${destination}`
-          : `${active ? 'Remove' : 'Add'} ${label} ${active ? 'from' : 'to'} ${translatedDestination}`)}
-      title={disabled
-        ? (isFrench ? 'Sélection modifiable par le propriétaire' : 'Selection can only be changed by the owner')
-        : pendingValidation ? `${marker} · ${isFrench ? 'sélection à valider' : 'selection awaiting validation'}` : `${marker} · ${isFrench ? destination : translatedDestination}`}
-    ><span aria-hidden="true">{marker}</span></button>
-  );
-}
-
-function BlockMarkers({ selection, label }: { selection: BlockMarkerState; label: string }) {
-  return (
-    <div className="content-markers">
-      <ContentMarker marker="W" active={selection.website.active} pendingValidation={selection.website.pendingValidation} label={label} instance={selection.blockId} onToggle={selection.website.onToggle} disabled={selection.website.disabled} language={selection.language} />
-      <ContentMarker marker="R" active={selection.report.active} pendingValidation={selection.report.pendingValidation} label={label} instance={selection.blockId} onToggle={selection.report.onToggle} disabled={selection.report.disabled} language={selection.language} />
-      <ContentMarker marker="C" active={selection.community.active} pendingValidation={selection.community.pendingValidation} label={label} instance={selection.blockId} onToggle={selection.community.onToggle} disabled={selection.community.disabled} language={selection.language} />
-      {selection.edit && (
-        <button
-          type="button"
-          className={`content-marker content-marker--edit no-print ${selection.edit.active ? 'is-active' : ''}`}
-          onClick={selection.edit.onToggle}
-          disabled={selection.edit.disabled}
-          aria-pressed={selection.edit.active}
-          aria-label={`${selection.language === 'FR' ? (selection.edit.active ? 'Terminer la modification de' : 'Modifier') : (selection.edit.active ? 'Finish editing' : 'Edit')} ${label}`}
-          title={selection.language === 'FR' ? 'Modifier le texte' : 'Edit text'}
-        ><Pencil size={15} aria-hidden="true" /></button>
-      )}
-    </div>
-  );
-}
-
-function SectionTitle({
-  eyebrow,
-  title,
-  publish,
-}: {
-  eyebrow: string;
-  title: string;
-  publish?: BlockMarkerState;
-}) {
-  return (
-    <div className="section-title">
-      <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>
-      {publish && <BlockMarkers selection={publish} label={title} />}
-    </div>
-  );
-}
-
-function EditableParagraphs({
-  values,
-  editing,
-  onChange,
-  className,
-  onActivate,
-  aiField,
-  language = 'FR',
-}: {
-  values: string[];
-  editing: boolean;
-  onChange: (index: number, value: string) => void;
-  className?: string;
-  onActivate?: () => void;
-  aiField?: AIFieldId;
-  language?: InterfaceLanguage;
-}) {
-  return (
-    <div
-      {...(aiField ? aiFieldProps(aiField) : {})}
-      className={`${className || ''} ${editing ? 'editable-copy-fields' : onActivate ? 'editable-click-target' : ''}`.trim()}
-      onClick={!editing ? onActivate : undefined}
-      onKeyDown={!editing && onActivate ? (event) => { if (event.key === 'Enter') onActivate(); } : undefined}
-      tabIndex={!editing && onActivate ? 0 : undefined}
-      role={!editing && onActivate ? 'button' : undefined}
-      title={!editing && onActivate ? (language === 'FR' ? 'Cliquer pour modifier' : 'Click to edit') : undefined}
-    >
-      {values.map((value, index) => editing ? (
-        <textarea key={index} {...(aiField ? aiFieldProps(aiField, index) : {})} value={value} rows={4} onChange={(event) => onChange(index, event.target.value)} aria-label={language === 'FR' ? `Modifier le paragraphe ${index + 1}` : `Edit paragraph ${index + 1}`} />
-      ) : <p key={index} {...(aiField ? aiFieldProps(aiField, index) : {})}>{value}</p>)}
-    </div>
-  );
-}
-
-function VideoPoster({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset) => void }) {
-  return (
-    <button type="button" className="video-poster" onClick={() => onOpen(asset)}>
-      <img src={asset.posterUrl || asset.thumbnailUrl || asset.url} alt="" />
-      <span className="video-poster__play" aria-hidden="true"><Play size={24} fill="currentColor" /></span>
-    </button>
-  );
-}
-
-function ComparableTable({
-  title,
-  items,
-  selection,
-  hideHeading = false,
-  onUpdate,
-  onDelete,
-  onAdd,
-  language = 'FR',
-}: {
-  title: string;
-  items: ComparableTransaction[];
-  selection?: BlockMarkerState;
-  hideHeading?: boolean;
-  onUpdate?: (id: string, patch: Partial<ComparableTransaction>) => void;
-  onDelete?: (id: string) => void;
-  onAdd?: () => void;
-  language?: InterfaceLanguage;
-}) {
-  const isFrench = language === 'FR';
-  const editable = Boolean(onUpdate);
-  return (
-    <div className="comparable-group">
-      {!hideHeading && <div className="comparable-group__heading">
-        <div><h3>{title}</h3><span>{items.length} {isFrench ? `observation${items.length > 1 ? 's' : ''}` : `observation${items.length === 1 ? '' : 's'}`}</span></div>
-        <div className="comparable-group__actions">
-          {onAdd && <button type="button" className="button button--quiet no-print" onClick={onAdd}><Plus size={14} /> {isFrench ? 'Ajouter' : 'Add'}</button>}
-          {selection && <BlockMarkers selection={selection} label={title} />}
-        </div>
-      </div>}
-      <div className={`comparables-table ${editable ? 'comparables-table--editable' : ''}`} role="table" aria-label={title}>
-        <div className="comparables-table__head" role="row">
-          <span role="columnheader">Date</span><span role="columnheader">{isFrench ? 'Comparable' : 'Comparable item'}</span><span role="columnheader">Source</span><span role="columnheader">{isFrench ? 'Canal' : 'Channel'}</span><span role="columnheader">{isFrench ? 'État' : 'Condition'}</span><span role="columnheader">{isFrench ? 'Valeur' : 'Value'}</span>{editable && <span role="columnheader" aria-label="Actions" />}
-        </div>
-        {items.map((comparable) => (
-          <div role="row" key={comparable.id} data-ai-scope="value.comparables[]" data-ai-instance={comparable.id}>
-            <span hidden {...aiFieldProps('value.comparables[].sourceType', comparable.id)}>{comparable.sourceType}</span>
-            <span hidden {...aiFieldProps('value.comparables[].currency', comparable.id)}>{comparable.currency}</span>
-            {editable && onUpdate ? <>
-              <input data-column-label="Date" {...aiFieldProps('value.comparables[].date', comparable.id)} type="date" value={comparable.date} onChange={(event) => onUpdate(comparable.id, { date: event.target.value })} aria-label={isFrench ? `Date de ${comparable.description || 'ce comparable'}` : `Date of ${comparable.description || 'this comparable item'}`} />
-              <textarea data-column-label={isFrench ? 'Comparable' : 'Comparable item'} {...aiFieldProps('value.comparables[].description', comparable.id)} value={comparable.description} rows={2} onChange={(event) => onUpdate(comparable.id, { description: event.target.value })} aria-label={isFrench ? 'Description du comparable' : 'Comparable item description'} />
-              <input data-column-label="Source" {...aiFieldProps('value.comparables[].source', comparable.id)} type="text" value={comparable.source} onChange={(event) => onUpdate(comparable.id, { source: event.target.value })} aria-label={isFrench ? 'Source du comparable' : 'Comparable item source'} />
-              <select data-column-label={isFrench ? 'Canal' : 'Channel'} {...aiFieldProps('value.comparables[].channel', comparable.id)} value={comparable.saleChannel} onChange={(event) => onUpdate(comparable.id, { saleChannel: event.target.value as ComparableTransaction['saleChannel'] })} aria-label={isFrench ? 'Canal du comparable' : 'Comparable item channel'}>
-                <option value="Annonce">{isFrench ? 'Annonce' : 'Listing'}</option><option value="Enchère">{isFrench ? 'Enchère' : 'Auction'}</option><option value="Vente privée">{isFrench ? 'Vente privée' : 'Private sale'}</option><option value="Marchand">{isFrench ? 'Marchand' : 'Dealer'}</option>
-              </select>
-              <input data-column-label={isFrench ? 'État' : 'Condition'} {...aiFieldProps('value.comparables[].condition', comparable.id)} type="text" value={comparable.condition} onChange={(event) => onUpdate(comparable.id, { condition: event.target.value })} aria-label={isFrench ? 'État du comparable' : 'Comparable item condition'} />
-              <input data-column-label={isFrench ? 'Valeur' : 'Value'} {...aiFieldProps('value.comparables[].amount', comparable.id)} data-ai-currency={comparable.currency} type="number" min="0" step="1" value={comparable.amount} onChange={(event) => onUpdate(comparable.id, { amount: Math.max(0, Number(event.target.value)) })} aria-label={isFrench ? 'Valeur du comparable' : 'Comparable item value'} />
-              <button data-column-label={isFrench ? 'Action' : 'Action'} type="button" className="icon-button no-print" onClick={() => onDelete?.(comparable.id)} aria-label={isFrench ? `Supprimer ${comparable.description || 'le comparable'}` : `Delete ${comparable.description || 'the comparable item'}`}><Trash2 size={15} /></button>
-            </> : <>
-              <time data-column-label="Date" role="cell" {...aiFieldProps('value.comparables[].date', comparable.id)}>{formatDate(comparable.date)}</time>
-              <span data-column-label="Comparable" role="cell" {...aiFieldProps('value.comparables[].description', comparable.id)}><strong>{comparable.description}</strong></span>
-              <span data-column-label="Source" role="cell" {...aiFieldProps('value.comparables[].source', comparable.id)}>{comparable.source}</span>
-              <span data-column-label="Canal" role="cell" {...aiFieldProps('value.comparables[].channel', comparable.id)}>{comparable.saleChannel}</span>
-              <span data-column-label="État" role="cell" {...aiFieldProps('value.comparables[].condition', comparable.id)}>{comparable.condition}</span>
-              <strong data-column-label="Valeur" role="cell" {...aiFieldProps('value.comparables[].amount', comparable.id)} data-ai-currency={comparable.currency}>{formatMoney(comparable.amount, comparable.currency)}</strong>
-            </>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AccessRestricted({ title, language = 'FR' }: { title: string; language?: InterfaceLanguage }) {
-  return (
-    <div className="restricted-card">
-      <Lock size={18} />
-      <span className="eyebrow">{language === 'FR' ? 'Accès restreint' : 'Restricted access'}</span>
-      <h3>{title}</h3>
-    </div>
-  );
-}
-
 function App() {
   const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
   const routeParameters = new URLSearchParams(window.location.search);
@@ -1003,6 +833,12 @@ function App() {
   const registryReturnHref = isRegistryReturnPath(requestedRegistryReturn) ? requestedRegistryReturn : null;
   const requestedPublicCode = publicCodeFromUrl();
   const invalidPublicCode = hasPublicCodeParameter && !requestedPublicCode;
+  useEffect(() => {
+    if (!isWatchWebsite) {
+      const reference = mockCartulary.watchInstance.reference;
+      document.title = `Cartulaire ${reference.brand} ${reference.model} · Cartularia`;
+    }
+  }, [isWatchWebsite]);
   const [language, setLanguage] = useState<InterfaceLanguage>(() => normalizeInterfaceLanguage(
     readStored<unknown>(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR'),
   ));
@@ -1020,87 +856,109 @@ function App() {
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
   const [editingBlock, setEditingBlock] = useState<PublishedBlockId | null>(null);
-  const [mediaAssets, setMediaAssets] = useState<Asset[]>(loadMediaAssets);
+  const mediaState = useCartularyMediaState({ loadAssets: loadMediaAssets });
+  const { mediaAssets, reloadMediaState, commands: mediaCommands } = mediaState;
+  const setMediaAssets = mediaCommands.replaceAssets;
   const [mediaUploadTags, setMediaUploadTags] = useState<MediaTag[]>([]);
   const [isEditingChecks, setIsEditingChecks] = useState(false);
-  const [identificationChecks, setIdentificationChecks] = useState<IdentificationCheck[]>(() =>
-    readStored('cartularia-identification-checks', DEFAULT_CHECKS),
-  );
-  const [conditionEntries, setConditionEntries] = useState<ConditionEntry[]>(loadConditionEntries);
-  const [documentationItems, setDocumentationItems] = useState<DocumentationItem[]>(() =>
-    readStored('cartularia-documentation-items', DEFAULT_DOCUMENTATION_ITEMS),
-  );
-  const [ownerFields, setOwnerFields] = useState<OwnerField[]>(() =>
-    readStored('cartularia-owner-fields', DEFAULT_OWNER_FIELDS),
-  );
-  const [ownerType, setOwnerType] = useState<OwnerType>(() =>
-    readStored<OwnerType>('cartularia-owner-type', 'Personne physique'),
-  );
-  const [ownerDocuments, setOwnerDocuments] = useState<OwnerDocument[]>(loadOwnerDocuments);
-  const [assetKind, setAssetKind] = useState<AssetKind>(() =>
-    readStored<AssetKind>('cartularia-asset-kind', 'Montre'),
-  );
-  const [watchStatus, setWatchStatus] = useState<WatchPatrimonialStatus>(() =>
-    readStored<WatchPatrimonialStatus>('cartularia-watch-status', 'Patrimonial'),
-  );
-  const [transmissionRecipients, setTransmissionRecipients] = useState<TransmissionRecipient[]>(() =>
-    readStored<TransmissionRecipient[]>('cartularia-transmission-recipients', []),
-  );
-  const [storageLocations, setStorageLocations] = useState<StorageLocation[]>(loadStorageLocations);
-  const [marketHistory, setMarketHistory] = useState<Valuation[]>(() =>
-    readStored('cartularia-market-history', mockCartulary.watchInstance.valuations),
-  );
-  const [marketDepth, setMarketDepth] = useState<MarketDepthState>(loadMarketDepth);
-  const [comparables, setComparables] = useState<ComparableTransaction[]>(() =>
-    readStored('cartularia-comparables', mockCartulary.comparables),
-  );
-  const [comparableAnalysis, setComparableAnalysis] = useState<ComparableAnalysisEntry[]>(() =>
-    readStored('cartularia-comparable-analysis', DEFAULT_COMPARABLE_ANALYSIS),
-  );
-  const [sensitivityPrices, setSensitivityPrices] = useState<number[]>(() =>
-    readStored('cartularia-sensitivity-prices', DEFAULT_SENSITIVITY_PRICES),
-  );
-  const [sensitivityCosts, setSensitivityCosts] = useState<number[]>(() =>
-    readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
-  );
-  const [retainedValuation, setRetainedValuation] = useState<RetainedValuationState>(() =>
-    readStored('cartularia-retained-valuation', {
+  const conditionState = useCartularyConditionState({
+    loadChecks: () => readStored('cartularia-identification-checks', DEFAULT_CHECKS),
+    loadEntries: loadConditionEntries,
+    loadDocumentation: () => readStored('cartularia-documentation-items', DEFAULT_DOCUMENTATION_ITEMS),
+  });
+  const { identificationChecks, conditionEntries, documentationItems, reloadConditionState, commands: conditionCommands } = conditionState;
+  const setIdentificationChecks = conditionCommands.replaceChecks;
+  const setConditionEntries = conditionCommands.replaceEntries;
+  const setDocumentationItems = conditionCommands.replaceDocumentation;
+  const ownerState = useCartularyOwnerState({
+    loadFields: () => readStored('cartularia-owner-fields', DEFAULT_OWNER_FIELDS),
+    loadType: () => readStored<OwnerType>('cartularia-owner-type', 'Personne physique'),
+    loadDocuments: loadOwnerDocuments,
+    loadHistory: () => normalizeOwnershipHistory(readStored<unknown>('cartularia-ownership-history', [])),
+    loadAssetKind: () => readStored<AssetKind>('cartularia-asset-kind', 'Montre'),
+    loadWatchStatus: () => readStored<WatchPatrimonialStatus>('cartularia-watch-status', 'Patrimonial'),
+    loadRecipients: () => readStored<TransmissionRecipient[]>('cartularia-transmission-recipients', []),
+    loadLocations: loadStorageLocations,
+  });
+  const {
+    ownerFields, ownerType, ownerDocuments, ownershipHistory, assetKind, watchStatus,
+    transmissionRecipients, storageLocations, reloadOwnerState, commands: ownerCommands,
+  } = ownerState;
+  const setOwnerFields = ownerCommands.replaceFields;
+  const setOwnerType = ownerCommands.setOwnerType;
+  const setOwnerDocuments = ownerCommands.replaceDocuments;
+  const setOwnershipHistory = ownerCommands.replaceHistory;
+  const setAssetKind = ownerCommands.setAssetKind;
+  const setWatchStatus = ownerCommands.setWatchStatus;
+  const setTransmissionRecipients = ownerCommands.replaceRecipients;
+  const setStorageLocations = ownerCommands.replaceLocations;
+  const valuationState = useCartularyValuationState({
+    loadMarketHistory: () => readStored('cartularia-market-history', mockCartulary.watchInstance.valuations),
+    loadMarketDepth,
+    loadComparables: () => readStored('cartularia-comparables', mockCartulary.comparables),
+    loadComparableAnalysis: () => readStored('cartularia-comparable-analysis', DEFAULT_COMPARABLE_ANALYSIS),
+    loadSensitivityPrices: () => readStored('cartularia-sensitivity-prices', DEFAULT_SENSITIVITY_PRICES),
+    loadSensitivityCosts: () => readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
+    loadRetainedValuation: () => readStored('cartularia-retained-valuation', {
       amount: mockCartulary.marketSnapshot.midValue,
       explanation: DEFAULT_RETAINED_VALUE_EXPLANATION,
     }),
-  );
+    loadPurchase: () => readStored('cartularia-purchase', {
+      date: mockCartulary.watchInstance.acquisitionDate,
+      purchasePrice: mockCartulary.watchInstance.acquisitionPrice ?? 0,
+    }),
+    loadPurchaseExpenses: () => readStored('cartularia-purchase-expenses', DEFAULT_EXPENSES),
+    loadExitAssumptions: () => readStored('cartularia-exit-assumptions', {
+      saleDate: todayIsoDate(),
+      salePrice: mockCartulary.marketSnapshot.midValue,
+      disposalCostPct: 10,
+    }),
+  });
+  const {
+    marketHistory, marketDepth, comparables, comparableAnalysis, sensitivityPrices,
+    sensitivityCosts, retainedValuation, purchase, purchaseExpenses, exitAssumptions,
+    reloadValuationState, commands: valuationCommands,
+  } = valuationState;
+  const setMarketHistory = valuationCommands.replaceMarketHistory;
+  const setMarketDepth = valuationCommands.setMarketDepth;
+  const setComparables = valuationCommands.replaceComparables;
+  const setComparableAnalysis = valuationCommands.replaceComparableAnalysis;
+  const setSensitivityPrices = valuationCommands.setSensitivityPrices;
+  const setSensitivityCosts = valuationCommands.setSensitivityCosts;
+  const setRetainedValuation = valuationCommands.setRetainedValuation;
+  const setPurchase = valuationCommands.setPurchase;
+  const setPurchaseExpenses = valuationCommands.replacePurchaseExpenses;
+  const setExitAssumptions = valuationCommands.setExitAssumptions;
   const [popularityResources, setPopularityResources] = useState<PopularityResource[]>(() =>
     readStored('cartularia-popularity-resources', DEFAULT_POPULARITY_RESOURCES),
   );
-  const [publishedBlocks, setPublishedBlocks] = useState<PublishedBlockId[]>(loadPublishedBlocks);
-  const [reportBlocks, setReportBlocks] = useState<PublishedBlockId[]>(loadReportBlocks);
-  const [communityBlocks, setCommunityBlocks] = useState<PublishedBlockId[]>(loadCommunityBlocks);
-  const [publicationDecisions, setPublicationDecisions] = useState<PublicationDecision[]>(loadPublicationDecisions);
+  const publicationState = useCartularyPublicationState({
+    loadWebsiteBlocks: loadPublishedBlocks,
+    loadReportBlocks,
+    loadCommunityBlocks,
+    loadDecisions: loadPublicationDecisions,
+    loadSourceBinding: loadPublicationSourceBinding,
+  });
+  const {
+    publishedBlocks, reportBlocks, communityBlocks, publicationDecisions,
+    publicationSourceBinding, reloadPublicationState, commands: publicationCommands,
+  } = publicationState;
+  const setPublishedBlocks = publicationCommands.replaceWebsiteBlocks;
+  const setReportBlocks = publicationCommands.replaceReportBlocks;
+  const setCommunityBlocks = publicationCommands.replaceCommunityBlocks;
+  const setPublicationDecisions = publicationCommands.replaceDecisions;
+  const setPublicationSourceBinding = publicationCommands.setSourceBinding;
   const [publicationIntent, setPublicationIntent] = useState<PublicationIntent | null>(null);
   const [publicationAcknowledged, setPublicationAcknowledged] = useState(false);
   const [publicationError, setPublicationError] = useState<string | null>(null);
   const [isPublicationSubmitting, setIsPublicationSubmitting] = useState(false);
   const [publicationSourceDigest, setPublicationSourceDigest] = useState('');
-  const [publicationSourceBinding, setPublicationSourceBinding] = useState<PublicationSourceBinding>(loadPublicationSourceBinding);
   const publicationSourceSnapshotRef = useRef<Record<string, unknown> | null>(null);
   const publicationSubmissionRef = useRef(false);
   const publicationDialogOpenedAtRef = useRef(0);
   const [specificationGroups, setSpecificationGroups] = useState<SpecificationGroupData[]>(loadSpecificationGroups);
   const [editableCopy, setEditableCopy] = useState<EditableCopyData>(loadEditableCopy);
-  const [purchase, setPurchase] = useState<PurchaseState>(() => readStored('cartularia-purchase', {
-    date: mockCartulary.watchInstance.acquisitionDate,
-    purchasePrice: mockCartulary.watchInstance.acquisitionPrice ?? 0,
-  }));
-  const [purchaseExpenses, setPurchaseExpenses] = useState<PurchaseExpense[]>(() =>
-    readStored('cartularia-purchase-expenses', DEFAULT_EXPENSES),
-  );
-  const [exitAssumptions, setExitAssumptions] = useState<ExitAssumptions>(() =>
-    readStored('cartularia-exit-assumptions', {
-      saleDate: '2026-08-13',
-      salePrice: mockCartulary.marketSnapshot.midValue,
-      disposalCostPct: 10,
-    }),
-  );
+  const [cloudRefreshVersion, setCloudRefreshVersion] = useState(0);
   const [publicProjection, setPublicProjection] = useState<LoadedPublicProjection | null>(null);
   const [publicProjectionLoading, setPublicProjectionLoading] = useState(Boolean(isWatchWebsite && requestedPublicCode));
   const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
@@ -1125,6 +983,29 @@ function App() {
   useDialogFocus(isMarketHistoryEditorOpen, marketHistoryDialogRef, () => setIsMarketHistoryEditorOpen(false));
   useDialogFocus(isSpinOpen, spinDialogRef, () => setIsSpinOpen(false));
   useDialogFocus(Boolean(selectedAsset), mediaDialogRef, () => setSelectedAsset(null));
+
+  useEffect(() => {
+    const handleCloudPull = (event: Event) => {
+      const detail = (event as CustomEvent<CloudPullAppliedDetail>).detail;
+      if (!detail || detail.cartularyId !== mockCartulary.id) return;
+      const keys = new Set(detail.stateKeys);
+      if (keys.has(INTERFACE_LANGUAGE_STORAGE_KEY)) setLanguage(normalizeInterfaceLanguage(readStored(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR')));
+      if (keys.has(AUDIENCE_STORAGE_KEY)) setAudience(normalizeAudience(readStored(AUDIENCE_STORAGE_KEY, 'Secret')));
+      reloadMediaState(keys);
+      reloadConditionState(keys);
+      reloadOwnerState(keys);
+      reloadValuationState(keys);
+      reloadPublicationState(keys);
+      if (keys.has('cartularia-popularity-resources')) setPopularityResources(readStored('cartularia-popularity-resources', DEFAULT_POPULARITY_RESOURCES));
+      if (keys.has('cartularia-specification-groups')) setSpecificationGroups(loadSpecificationGroups());
+      if (keys.has('cartularia-editable-copy')) setEditableCopy(loadEditableCopy());
+      if (detail.binaryIds.length > 0 || keys.has('cartularia-media-assets-v3') || keys.has('cartularia-owner-documents') || keys.has('cartularia-condition-entries')) {
+        setCloudRefreshVersion((current) => current + 1);
+      }
+    };
+    window.addEventListener(CLOUD_PULL_APPLIED_EVENT, handleCloudPull);
+    return () => window.removeEventListener(CLOUD_PULL_APPLIED_EVENT, handleCloudPull);
+  }, [reloadConditionState, reloadMediaState, reloadOwnerState, reloadPublicationState, reloadValuationState]);
   const publicationSourceSnapshot = useMemo<Record<string, unknown>>(() => ({
     identity: {
       assetKind,
@@ -1132,6 +1013,7 @@ function App() {
       ownerType,
       ownerFields,
       ownerDocuments: ownerDocuments.map(({ id, category, fileName, size, type, binaryId, sha256 }) => ({ id, category, fileName, size, type, binaryId: binaryId ?? null, sha256: sha256 ?? null })),
+      ownershipHistory,
       transmissionRecipients,
       storageLocations,
     },
@@ -1180,6 +1062,7 @@ function App() {
     ownerType,
     ownerFields,
     ownerDocuments,
+    ownershipHistory,
     transmissionRecipients,
     storageLocations,
     mediaAssets,
@@ -1234,7 +1117,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [publicationSourceSnapshot]);
+  }, [publicationSourceSnapshot, setPublicationSourceBinding]);
 
   useEffect(() => {
     if (window.location.pathname.replace(/\/$/, '') === '/watch-website') return;
@@ -1340,7 +1223,7 @@ function App() {
     const vault = cartulariaLocalVault;
     let active = true;
     const createdUrls = new Set<string>();
-    const hydrateUrl = async (binaryId?: string) => {
+    const hydrateBinary = async (binaryId?: string) => {
       if (!binaryId) return undefined;
       const record = await vault.getBinary(binaryId);
       if (!record?.blob || record.deleted) return undefined;
@@ -1350,18 +1233,25 @@ function App() {
         return undefined;
       }
       createdUrls.add(url);
-      return url;
+      return { record, url };
     };
 
     void Promise.all(mediaAssets.map(async (asset) => {
       if (!asset.binaryId || (asset.url && asset.url !== LOCAL_MEDIA_PLACEHOLDER)) return asset;
-      const url = await hydrateUrl(asset.binaryId);
-      return { ...asset, url: url ?? '', localAvailability: url ? 'available' as const : 'missing' as const };
+      const hydrated = await hydrateBinary(asset.binaryId);
+      return {
+        ...asset,
+        url: hydrated?.url ?? '',
+        hash: asset.hash || hydrated?.record.sha256 || '',
+        mimeType: asset.mimeType || hydrated?.record.mimeType,
+        fileSize: asset.fileSize || (hydrated ? formatFileSize(hydrated.record.size) : undefined),
+        localAvailability: hydrated ? 'available' as const : 'missing' as const,
+      };
     })).then((hydrated) => active && setMediaAssets(hydrated));
 
     void Promise.all(ownerDocuments.map(async (document) => {
       if (!document.binaryId || document.url) return document;
-      return { ...document, url: await hydrateUrl(document.binaryId) };
+      return { ...document, url: (await hydrateBinary(document.binaryId))?.url };
     })).then((hydrated) => active && setOwnerDocuments(hydrated));
 
     void Promise.all(conditionEntries.map(async (entry) => ({
@@ -1369,7 +1259,7 @@ function App() {
       attachments: await Promise.all(entry.attachments.map(async (attachment) => (
         !attachment.binaryId || attachment.url
           ? attachment
-          : { ...attachment, url: await hydrateUrl(attachment.binaryId) }
+          : { ...attachment, url: (await hydrateBinary(attachment.binaryId))?.url }
       ))),
     }))).then((hydrated) => active && setConditionEntries(hydrated));
 
@@ -1377,117 +1267,17 @@ function App() {
       active = false;
       createdUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-    // The cloud synchronizer reloads after a remote pull; one hydration pass is enough per document lifetime.
+    // A remote pull increments cloudRefreshVersion so only media object URLs are rehydrated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cloudRefreshVersion]);
 
   useEffect(() => {
-    persistJson('cartularia-media-assets-v3', mediaAssets.map((asset) => ({
-      ...asset,
-      url: asset.binaryId ? '' : asset.url,
-      thumbnailUrl: asset.thumbnailUrl?.startsWith('blob:') ? undefined : asset.thumbnailUrl,
-      posterUrl: asset.posterUrl?.startsWith('blob:') ? undefined : asset.posterUrl,
-    })));
     setSelectedAsset((current) => current ? mediaAssets.find((asset) => asset.id === current.id) ?? null : null);
   }, [mediaAssets]);
 
   useEffect(() => {
-    persistJson('cartularia-identification-checks', identificationChecks);
-  }, [identificationChecks]);
-
-  useEffect(() => {
-    persistJson('cartularia-condition-entries', conditionEntries.map((entry) => ({
-      ...entry,
-      attachments: entry.attachments.map((attachment) => ({
-        ...attachment,
-        url: attachment.url?.startsWith('blob:') ? undefined : attachment.url,
-      })),
-    })));
-  }, [conditionEntries]);
-
-  useEffect(() => {
-    persistJson('cartularia-documentation-items', documentationItems);
-  }, [documentationItems]);
-
-  useEffect(() => {
-    persistJson('cartularia-owner-fields', ownerFields);
-  }, [ownerFields]);
-
-  useEffect(() => {
-    persistJson('cartularia-owner-type', ownerType);
-  }, [ownerType]);
-
-  useEffect(() => {
-    persistJson('cartularia-owner-documents', ownerDocuments.map((document) => ({
-      ...document,
-      url: document.url?.startsWith('blob:') ? undefined : document.url,
-    })));
-  }, [ownerDocuments]);
-
-  useEffect(() => {
-    persistJson('cartularia-asset-kind', assetKind);
-  }, [assetKind]);
-
-  useEffect(() => {
-    persistJson('cartularia-watch-status', watchStatus);
-  }, [watchStatus]);
-
-  useEffect(() => {
-    persistJson('cartularia-transmission-recipients', transmissionRecipients);
-  }, [transmissionRecipients]);
-
-  useEffect(() => {
-    persistJson('cartularia-storage-locations', storageLocations);
-  }, [storageLocations]);
-
-  useEffect(() => {
-    persistJson('cartularia-market-depth', marketDepth);
-  }, [marketDepth]);
-
-  useEffect(() => {
-    persistJson('cartularia-market-history', marketHistory);
-  }, [marketHistory]);
-
-  useEffect(() => {
-    persistJson('cartularia-comparables', comparables);
-  }, [comparables]);
-
-  useEffect(() => {
-    persistJson('cartularia-comparable-analysis', comparableAnalysis);
-  }, [comparableAnalysis]);
-
-  useEffect(() => {
-    persistJson('cartularia-sensitivity-prices', sensitivityPrices);
-    persistJson('cartularia-sensitivity-costs', sensitivityCosts);
-  }, [sensitivityPrices, sensitivityCosts]);
-
-  useEffect(() => {
-    persistJson('cartularia-retained-valuation', retainedValuation);
-  }, [retainedValuation]);
-
-  useEffect(() => {
     persistJson('cartularia-popularity-resources', popularityResources);
   }, [popularityResources]);
-
-  useEffect(() => {
-    persistJson('cartularia-published-blocks', publishedBlocks);
-  }, [publishedBlocks]);
-
-  useEffect(() => {
-    persistJson('cartularia-report-blocks', reportBlocks);
-  }, [reportBlocks]);
-
-  useEffect(() => {
-    persistJson('cartularia-community-blocks', communityBlocks);
-  }, [communityBlocks]);
-
-  useEffect(() => {
-    persistJson('cartularia-publication-decisions-v1', publicationDecisions);
-  }, [publicationDecisions]);
-
-  useEffect(() => {
-    if (publicationSourceBinding.digest) persistJson('cartularia-publication-source-v1', publicationSourceBinding);
-  }, [publicationSourceBinding]);
 
   useEffect(() => {
     persistJson('cartularia-specification-groups', specificationGroups);
@@ -1496,15 +1286,6 @@ function App() {
   useEffect(() => {
     persistJson('cartularia-editable-copy', editableCopy);
   }, [editableCopy]);
-
-  useEffect(() => {
-    persistJson('cartularia-purchase', purchase);
-    persistJson('cartularia-purchase-expenses', purchaseExpenses);
-  }, [purchase, purchaseExpenses]);
-
-  useEffect(() => {
-    persistJson('cartularia-exit-assumptions', exitAssumptions);
-  }, [exitAssumptions]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1530,6 +1311,29 @@ function App() {
   const spinAssets = renderedAssets.filter((asset) => asset.tags.includes('spin-3d') && asset.type === 'image');
   const presentationAssets = renderedAssets.filter((asset) => asset.tags.includes('slideshow'));
   const documentationAssets = renderedAssets.filter((asset) => asset.tags.includes('documentation') || asset.tags.includes('accessories'));
+  const selectedAssetPosition = selectedAsset
+    ? renderedAssets.findIndex((asset) => asset.id === selectedAsset.id)
+    : -1;
+  const moveSelectedAsset = useCallback((direction: -1 | 1) => {
+    setSelectedAsset((current) => {
+      if (!current || renderedAssets.length < 2) return current;
+      const currentIndex = renderedAssets.findIndex((asset) => asset.id === current.id);
+      const nextIndex = (Math.max(0, currentIndex) + direction + renderedAssets.length) % renderedAssets.length;
+      return renderedAssets[nextIndex];
+    });
+  }, [renderedAssets]);
+
+  useEffect(() => {
+    if (!selectedAsset || renderedAssets.length < 2) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const direction = horizontalNavigationDirection(event.key);
+      if (!direction || targetConsumesHorizontalNavigation(event.target)) return;
+      event.preventDefault();
+      moveSelectedAsset(direction);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [moveSelectedAsset, renderedAssets.length, selectedAsset]);
   const publicationMainPhoto = mediaAssets.find((asset) => asset.tags.includes('main-photo'));
   const referenceConditionReport = conditionEntries.find((entry) => entry.id === 'report-2026-08-08') ?? conditionEntries[0];
   const priorConditionReviews = conditionEntries.filter((entry) => entry.id !== referenceConditionReport?.id);
@@ -1751,22 +1555,28 @@ function App() {
   const netSaleProceeds = exitAssumptions.salePrice - disposalCost;
   const capitalGainLoss = netSaleProceeds - costBasis;
   const capitalGainLossPct = costBasis > 0 ? capitalGainLoss / costBasis : 0;
-  const holdingIrr = useMemo(() => calculateXirr([
-    ...datedAcquisitionCashFlows,
-    { date: exitAssumptions.saleDate, amount: netSaleProceeds },
-  ]), [datedAcquisitionCashFlows, exitAssumptions.saleDate, netSaleProceeds]);
+  const holdingIrr = useMemo(() => hasMinimumSaleHorizon(purchase.date, exitAssumptions.saleDate)
+    ? calculateXirr([
+        ...datedAcquisitionCashFlows,
+        { date: exitAssumptions.saleDate, amount: netSaleProceeds },
+      ])
+    : null, [datedAcquisitionCashFlows, exitAssumptions.saleDate, netSaleProceeds, purchase.date]);
   const scenarioPerformance = (salePrice: number, disposalCostPct: number) => {
     const netProceeds = salePrice * (1 - disposalCostPct / 100);
     return {
       gainLoss: netProceeds - costBasis,
-      irr: calculateXirr([
-        ...datedAcquisitionCashFlows,
-        { date: exitAssumptions.saleDate, amount: netProceeds },
-      ]),
+      irr: hasMinimumSaleHorizon(purchase.date, exitAssumptions.saleDate)
+        ? calculateXirr([
+            ...datedAcquisitionCashFlows,
+            { date: exitAssumptions.saleDate, amount: netProceeds },
+          ])
+        : null,
     };
   };
 
   const tx = (french: string, english: string) => language === 'FR' ? french : english;
+  const ownershipSummary = ownershipHistorySummary(ownershipHistory, language);
+  const ownershipAssessment = ownershipValuationAssessment(ownershipHistory, language);
   const interfaceLocale = language === 'FR' ? 'fr-FR' : 'en-GB';
   const mediaTagLabel = (tag: { id: MediaTag; label: string }) => language === 'FR' ? tag.label : ({
     'main-photo': 'Main photo',
@@ -1931,15 +1741,7 @@ function App() {
 
   const toggleMediaTag = (assetId: string, tag: MediaTag) => {
     if (audience !== 'Secret') return;
-    setMediaAssets((current) => current.map((asset) => {
-      if (asset.id !== assetId) return asset;
-      return {
-        ...asset,
-        tags: asset.tags.includes(tag)
-          ? asset.tags.filter((existing) => existing !== tag)
-          : [...asset.tags, tag],
-      };
-    }));
+    mediaCommands.toggleAssetTag(assetId, tag);
   };
 
   const deleteMediaAsset = (id: string) => {
@@ -1983,14 +1785,11 @@ function App() {
   };
 
   const updateCheck = (id: string, patch: Partial<IdentificationCheck>) => {
-    setIdentificationChecks((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+    conditionCommands.updateCheck(id, patch);
   };
 
   const addCheck = () => {
-    setIdentificationChecks((current) => [
-      ...current,
-      { id: newId('check'), title: 'Nouveau point de contrôle', note: '', checked: false },
-    ]);
+    conditionCommands.addCheck({ id: newId('check'), title: 'Nouveau point de contrôle', note: '', checked: false });
     setIsEditingChecks(true);
   };
 
@@ -2025,7 +1824,7 @@ function App() {
       note,
       attachments,
     };
-    setConditionEntries((current) => [entry, ...current].sort((a, b) => b.date.localeCompare(a.date)));
+    conditionCommands.addEntry(entry);
     form.reset();
   };
 
@@ -2073,7 +1872,7 @@ function App() {
       };
     }));
 
-    setMediaAssets((current) => [...current, ...importedAssets]);
+    mediaCommands.appendAssets(importedAssets);
     form.reset();
     setMediaUploadTags([]);
   };
@@ -2083,15 +1882,36 @@ function App() {
     key: K,
     value: DocumentationItem[K],
   ) => {
-    setDocumentationItems((current) => current.map((item) => item.id === id ? { ...item, [key]: value } : item));
+    conditionCommands.updateDocumentation(id, key, value);
   };
 
   const updateOwnerField = (id: string, patch: Partial<OwnerField>) => {
-    setOwnerFields((current) => current.map((field) => field.id === id ? { ...field, ...patch } : field));
+    ownerCommands.updateField(id, patch);
+  };
+
+  const updateOwnershipHistory = (id: string, patch: Partial<OwnershipHistoryEntry>) => {
+    ownerCommands.updateHistory(id, patch);
+  };
+
+  const selectFirstOwner = (id: string, selected: boolean) => {
+    setOwnershipHistory((current) => current.map((entry) => ({
+      ...entry,
+      firstOwner: selected ? entry.id === id : entry.id === id ? false : entry.firstOwner,
+    })));
+  };
+
+  const addOwnershipHistory = () => {
+    setOwnershipHistory((current) => [...current, {
+      id: newId('ownership-history'),
+      fromYear: '',
+      toYear: '',
+      description: '',
+      firstOwner: false,
+    }]);
   };
 
   const updateTransmissionRecipient = (id: string, patch: Partial<TransmissionRecipient>) => {
-    setTransmissionRecipients((current) => current.map((recipient) => recipient.id === id ? { ...recipient, ...patch } : recipient));
+    ownerCommands.updateRecipient(id, patch);
   };
 
   const addTransmissionRecipient = () => {
@@ -2107,7 +1927,7 @@ function App() {
   };
 
   const updateStorageLocation = (id: string, patch: Partial<StorageLocation>) => {
-    setStorageLocations((current) => current.map((location) => location.id === id ? { ...location, ...patch } : location));
+    ownerCommands.updateLocation(id, patch);
   };
 
   const addStorageLocation = () => {
@@ -2120,7 +1940,7 @@ function App() {
   };
 
   const updateOwnerDocument = (id: string, patch: Partial<OwnerDocument>) => {
-    setOwnerDocuments((current) => current.map((document) => document.id === id ? { ...document, ...patch } : document));
+    ownerCommands.updateDocument(id, patch);
   };
 
   const deleteOwnerDocument = (id: string) => {
@@ -2247,11 +2067,11 @@ function App() {
   };
 
   const updateExpense = <K extends keyof PurchaseExpense>(id: string, key: K, value: PurchaseExpense[K]) => {
-    setPurchaseExpenses((current) => current.map((expense) => expense.id === id ? { ...expense, [key]: value } : expense));
+    valuationCommands.updateExpense(id, key, value);
   };
 
   const updateMarketHistory = (id: string, patch: Partial<Valuation>) => {
-    setMarketHistory((current) => current.map((valuation) => valuation.id === id ? { ...valuation, ...patch } : valuation));
+    valuationCommands.updateMarketHistory(id, patch);
   };
 
   const addMarketHistoryEntry = () => {
@@ -2269,7 +2089,7 @@ function App() {
   };
 
   const updateComparable = (id: string, patch: Partial<ComparableTransaction>) => {
-    setComparables((current) => current.map((comparable) => comparable.id === id ? { ...comparable, ...patch } : comparable));
+    valuationCommands.updateComparable(id, patch);
   };
 
   const addComparable = (sourceType: ComparableTransaction['sourceType']) => {
@@ -2288,7 +2108,7 @@ function App() {
   };
 
   const updateComparableAnalysis = (id: string, patch: Partial<ComparableAnalysisEntry>) => {
-    setComparableAnalysis((current) => current.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
+    valuationCommands.updateComparableAnalysis(id, patch);
   };
 
   const updateSpecification = (groupId: string, itemId: string, patch: Partial<SpecificationDatum>) => {
@@ -2357,7 +2177,7 @@ function App() {
             </div>
             <div className="cover-sheet__photo">
               {mainPhoto
-                ? <img src={mainPhoto.url} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} />
+                ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} eager />
                 : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
             </div>
           </section>
@@ -2377,6 +2197,25 @@ function App() {
                   {ownerDocuments.map((document) => <div key={document.id}><FileText size={16} /><span>{ownerDocumentCategoryLabel(document.category)}</span><strong>{document.fileName}</strong></div>)}
                 </div>
               )}
+            </article>
+          </section>
+        );
+      case 'cover-ownership-history':
+        return (
+          <section>
+            <SectionTitle eyebrow={tx('Provenance privée', 'Private provenance')} title={tx("Historique de l'objet - Propriétaires précédents", 'Object history - Previous owners')} />
+            <article className="ownership-history-card ownership-history-card--published">
+              {ownershipHistory.length > 0 ? (
+                <div className="ownership-history-list">
+                  {ownershipHistory.map((entry) => (
+                    <article className="ownership-period ownership-period--published" key={entry.id}>
+                      <header><strong>{tx('De', 'From')} {entry.fromYear || '—'} {tx('à', 'to')} {entry.toYear || '—'}</strong>{entry.firstOwner && <span>{tx('Premier propriétaire', 'First owner')}</span>}</header>
+                      <p>{entry.description || tx('Description non renseignée.', 'Description not provided.')}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="ownership-history-empty">{tx('Aucun propriétaire précédent renseigné.', 'No previous owner entered.')}</p>}
+              <div className="ownership-history-summary" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Synthèse de provenance', 'Provenance summary')}</strong><p>{ownershipSummary}</p></div>
             </article>
           </section>
         );
@@ -2429,7 +2268,7 @@ function App() {
       case 'media-hero':
         return (
           <section className="watch-website__hero">
-            {mainPhoto && <img src={mainPhoto.url} alt={`${watch.reference.brand} ${watch.reference.model}`} />}
+            {mainPhoto && <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} eager />}
             <div>
               <span className="eyebrow">{watch.reference.reference}</span>
               <h2>{watch.reference.brand}<br />{watch.reference.model}</h2>
@@ -2449,7 +2288,9 @@ function App() {
             <SectionTitle eyebrow={tx('Vidéo principale', 'Main video')} title={tx('La montre en mouvement', 'The watch in motion')} />
             {mainVideo ? (
               <a className="video-poster watch-website__media-link" href={mainVideo.url} target="_blank" rel="noreferrer">
-                <img src={mainVideo.posterUrl || mainVideo.thumbnailUrl || mainVideo.url} alt={tx('La montre en mouvement', 'The watch in motion')} />
+                {mainVideo.posterUrl || mainVideo.thumbnailUrl
+                  ? <PrivateMediaImage asset={mainVideo} alt={tx('La montre en mouvement', 'The watch in motion')} />
+                  : <span className="video-poster__placeholder"><Video size={38} /><small>{mainVideo.name}</small></span>}
                 <span className="video-poster__play" aria-hidden="true"><Play size={24} fill="currentColor" /></span>
               </a>
             ) : <p className="watch-website__empty">{tx('Vidéo non disponible.', 'Video unavailable.')}</p>}
@@ -2460,7 +2301,7 @@ function App() {
           <section>
             <SectionTitle eyebrow={tx('Séquence 3D', '3D sequence')} title={tx('Revue à 360°', '360° review')} />
             {spinAssets.length > 0
-              ? <Spin360 images={spinAssets} posterImageUrl={spinAssets[0].url} language={language} />
+              ? <Suspense fallback={<div className="media-empty" role="status">{tx('Chargement de la séquence 360°…', 'Loading 360° sequence…')}</div>}><Spin360 images={spinAssets} posterImageUrl={spinAssets[0].url} language={language} /></Suspense>
               : <p className="watch-website__empty">{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}
           </section>
         );
@@ -2479,7 +2320,11 @@ function App() {
               {renderedAssets.map((asset) => (
                 <a key={asset.id} href={asset.url} target="_blank" rel="noreferrer">
                   <span className="media-library__preview">
-                    {asset.type === 'document' ? <FileText size={28} /> : <img src={asset.posterUrl || asset.thumbnailUrl || asset.url} alt="" />}
+                    {asset.type === 'document'
+                      ? <FileText size={28} />
+                      : asset.type === 'video'
+                        ? <><Video size={28} /><small>VIDEO</small></>
+                        : <PrivateMediaImage asset={asset} alt="" />}
                   </span>
                   <strong>{asset.name}</strong>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
@@ -2561,7 +2406,11 @@ function App() {
             <div className="documentation-media__grid watch-website__document-media">
               {documentationAssets.map((asset) => (
                 <a key={asset.id} href={asset.url} target="_blank" rel="noreferrer">
-                  <span className="documentation-media__preview">{asset.type === 'document' ? <FileText size={28} /> : <img src={asset.posterUrl || asset.thumbnailUrl || asset.url} alt="" />}</span>
+                  <span className="documentation-media__preview">{asset.type === 'document'
+                    ? <FileText size={28} />
+                    : asset.type === 'video'
+                      ? <Video size={28} />
+                      : <PrivateMediaImage asset={asset} alt="" />}</span>
                   <strong>{asset.name}</strong><small>{asset.tags.includes('documentation') ? 'Documentation' : tx('Accessoires', 'Accessories')}</small>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
                 </a>
@@ -2785,7 +2634,7 @@ function App() {
           </button>
           <button type="button" className="page-tabs__audit" onClick={() => setIsDrawerOpen(true)}>
             <ShieldCheck size={14} />
-            {language === 'FR' ? 'Intégrité' : 'Integrity'}
+            {language === 'FR' ? 'Preuves' : 'Proofs'}
           </button>
         </div>
       </nav>
@@ -2816,8 +2665,7 @@ function App() {
       </section>
 
       <main id="cartulary-content" className="container cartulary-main" tabIndex={-1}>
-        {activePage === 'cover' && (
-          <div className="page-view cover-page">
+        <CoverPage active={activePage === 'cover'}>
             <section className="cover-sheet publishable-block">
               <BlockMarkers selection={publishProps('cover-watch', true)} label={tx('Accueil de la montre', 'Watch cover')} />
               <div className="cover-sheet__identity">
@@ -2856,7 +2704,7 @@ function App() {
                 aria-label={tx('Agrandir la photo principale', 'Enlarge main photo')}
               >
                 {mainPhoto
-                  ? <img src={mainPhoto.url} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} />
+                  ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} eager />
                   : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
               </button>
             </section>
@@ -2917,6 +2765,52 @@ function App() {
                       <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter un ou plusieurs documents', 'Add one or more documents')}</span><small>{tx('PDF, images ou autres formats', 'PDF, images or other formats')}</small><input {...aiFieldProps('cover.owner.documents[].file', 'new')} type="file" name="owner-documents" multiple /></label>
                       <button type="submit" className="button button--primary">{tx('Ajouter les documents', 'Add documents')}</button>
                     </form>
+                  </div>
+                </article>
+              </section>
+
+              <section>
+                <SectionTitle eyebrow={tx('Provenance privée', 'Private provenance')} title={tx("Historique de l'objet - Propriétaires précédents", 'Object history - Previous owners')} publish={publishProps('cover-ownership-history')} />
+                <article className="ownership-history-card">
+                  <header className="ownership-history-card__heading">
+                    <div>
+                      <span className="eyebrow">{tx('Chaîne de propriété', 'Ownership chain')}</span>
+                      <p>{tx("Documentez chaque période connue. Cette rubrique reste déclarative et distincte du journal serveur de cession ; elle n’en remplace jamais les événements vérifiés. L’identification du premier propriétaire alimente les résumés et l’appréciation de la valeur.", 'Document each known period. This section remains declared provenance and is separate from the server transfer journal; it never replaces verified transfer events. Identifying the first owner feeds summaries and the valuation assessment.')}</p>
+                    </div>
+                    <span>{ownershipHistory.length} {language === 'FR' ? `période${ownershipHistory.length > 1 ? 's' : ''}` : `period${ownershipHistory.length === 1 ? '' : 's'}`}</span>
+                  </header>
+
+                  {ownershipHistory.length > 0 ? (
+                    <div className="ownership-history-list">
+                      {ownershipHistory.map((entry, index) => {
+                        const yearsAreInvalid = Boolean(entry.fromYear && entry.toYear && Number(entry.fromYear) > Number(entry.toYear));
+                        return (
+                          <article className="ownership-period" key={entry.id} data-ai-scope="cover.ownershipHistory[]" data-ai-instance={entry.id}>
+                            <header>
+                              <span className="eyebrow">{tx('Période', 'Period')} {String(index + 1).padStart(2, '0')}</span>
+                              <label className="ownership-first-owner-selector">
+                                <input {...aiFieldProps('cover.ownershipHistory[].firstOwner', entry.id)} type="checkbox" checked={entry.firstOwner} onChange={(event) => selectFirstOwner(entry.id, event.target.checked)} />
+                                <span>{tx('Premier propriétaire', 'First owner')}</span>
+                              </label>
+                              <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: ownershipHistory, setItems: setOwnershipHistory, id: entry.id, targetLabel: tx(`la période ${entry.fromYear || '—'} à ${entry.toYear || '—'}`, `period ${entry.fromYear || '—'} to ${entry.toYear || '—'}`) })} aria-label={tx('Supprimer cette période de propriété', 'Delete this ownership period')}><Trash2 size={15} /></button>
+                            </header>
+                            <div className="ownership-period__years">
+                              <label>{tx('De (année)', 'From (year)')}<input {...aiFieldProps('cover.ownershipHistory[].fromYear', entry.id)} type="number" min="1000" max="2200" step="1" value={entry.fromYear} onChange={(event) => updateOwnershipHistory(entry.id, { fromYear: event.target.value })} aria-invalid={yearsAreInvalid} placeholder="YYYY" /></label>
+                              <span aria-hidden="true">→</span>
+                              <label>{tx('À (année)', 'To (year)')}<input {...aiFieldProps('cover.ownershipHistory[].toYear', entry.id)} type="number" min="1000" max="2200" step="1" value={entry.toYear} onChange={(event) => updateOwnershipHistory(entry.id, { toYear: event.target.value })} aria-invalid={yearsAreInvalid} placeholder="YYYY" /></label>
+                            </div>
+                            <label className="ownership-period__description">{tx('Description', 'Description')}<textarea {...aiFieldProps('cover.ownershipHistory[].description', entry.id)} value={entry.description} rows={4} onChange={(event) => updateOwnershipHistory(entry.id, { description: event.target.value })} placeholder={tx('Propriétaire, contexte de détention, documents et éléments de provenance disponibles…', 'Owner, holding context, documents and available provenance evidence…')} /></label>
+                            {yearsAreInvalid && <p className="ownership-period__error" role="alert">{tx("L’année de fin doit être postérieure ou égale à l’année de début.", 'The end year must be greater than or equal to the start year.')}</p>}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="ownership-history-empty">{tx("Aucun propriétaire précédent renseigné. La provenance antérieure sera signalée comme non documentée dans les résumés et l’évaluation.", 'No previous owner entered. Earlier provenance will be flagged as undocumented in summaries and valuation.')}</p>}
+
+                  <button type="button" className="button button--quiet no-print" onClick={addOwnershipHistory}><Plus size={14} /> {tx('Ajouter une période', 'Add period')}</button>
+                  <div className="ownership-history-summary" {...aiFieldProps('cover.ownershipHistory.summary')}>
+                    <strong>{tx('Synthèse de provenance', 'Provenance summary')}</strong>
+                    <p>{ownershipSummary}</p>
                   </div>
                 </article>
               </section>
@@ -2991,11 +2885,9 @@ function App() {
               </section>
               </>
             ) : <AccessRestricted title={tx('Informations du propriétaire', 'Owner information')} language={language} />}
-          </div>
-        )}
+        </CoverPage>
 
-        {activePage === 'media' && (
-          <div className="page-view">
+        <MediaPage active={activePage === 'media'}>
             <section className="watch-hero publishable-block">
               <BlockMarkers selection={publishProps('media-hero', true)} label={tx('Présentation principale', 'Main presentation')} />
               <button
@@ -3006,7 +2898,7 @@ function App() {
               >
                 {mainPhoto ? (
                   <span className="watch-hero__image-visual">
-                    <img src={mainPhoto.url} alt={`${watch.reference.brand} ${watch.reference.model}`} />
+                    <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} eager />
                   </span>
                 ) : (
                   <span className="watch-hero__image-visual empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>
@@ -3021,6 +2913,7 @@ function App() {
                 {editingBlock === 'media-hero' ? (
                   <textarea {...aiFieldProps('media.hero.summary')} className="editable-copy-single" value={editableCopy.heroSummary} rows={5} onChange={(event) => setEditableCopy((current) => ({ ...current, heroSummary: event.target.value }))} aria-label={tx('Modifier la présentation principale', 'Edit main presentation')} />
                 ) : <p {...aiFieldProps('media.hero.summary')} className="watch-hero__summary editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('media-hero')} tabIndex={audience === 'Secret' ? 0 : undefined} onKeyDown={(event) => { if (event.key === 'Enter' && audience === 'Secret') setEditingBlock('media-hero'); }} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
+                {audience === 'Secret' && <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance propriétaire', 'Ownership provenance')}</strong><p>{ownershipSummary}</p></aside>}
                 <dl className="hero-facts">
                   <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
                   <div><dt>{tx('Dernier contrôle', 'Last inspection')}</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
@@ -3043,7 +2936,7 @@ function App() {
               <SectionTitle eyebrow={tx('03 · Séquence 3D', '03 · 3D sequence')} title={tx('Revue à 360°', '360° review')} publish={publishProps('media-spin')} />
               {spinAssets.length > 0 ? (
                 <button type="button" className="spin-callout" onClick={() => setIsSpinOpen(true)}>
-                  <img src={spinAssets[0].url} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} />
+                  <PrivateMediaImage asset={spinAssets[0]} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} />
                   <span className="spin-callout__icon"><RotateCw size={23} /></span>
                   <span><strong>{spinAssets.length} {tx('vues ordonnées', 'ordered views')}</strong></span>
                 </button>
@@ -3067,8 +2960,10 @@ function App() {
                         <span className="media-library__preview">
                           {asset.type === 'document' ? (
                             <><FileText size={28} /><small>{asset.mimeType?.split('/').pop()?.toUpperCase() || tx('FICHIER', 'FILE')}</small></>
+                          ) : asset.type === 'video' ? (
+                            <><Video size={28} /><small>VIDEO</small></>
                           ) : (
-                            <img src={asset.posterUrl || asset.thumbnailUrl || asset.url} alt="" />
+                            <PrivateMediaImage asset={asset} alt="" />
                           )}
                         </span>
                         <strong {...aiFieldProps('media.assets[].name', asset.id)}>{asset.name}</strong>
@@ -3114,11 +3009,9 @@ function App() {
                 </div>
               </section>
             )}
-          </div>
-        )}
+        </MediaPage>
 
-        {activePage === 'reference' && (
-          <div className="page-view">
+        <ReferencePage active={activePage === 'reference'}>
             <PageIntroduction number="02" title={tx('Caractéristiques générales', 'General characteristics')} />
 
             <section>
@@ -3126,7 +3019,11 @@ function App() {
               <div className="reference-story-grid">
                 <article className="editorial-card editorial-card--large">
                 <span className="eyebrow">{tx('Historique du modèle', 'Model history')}</span>
-                <h2>Une montre de pilote pensée pour voyager</h2>
+                <h2>{isRolexCartulary
+                  ? 'La référence qui a défini la GMT vintage'
+                  : isIwcCartulary
+                    ? 'Une montre de pilote pensée pour voyager'
+                    : `Histoire de la référence ${creationReference}`}</h2>
                 <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={() => audience === 'Secret' && setEditingBlock('reference-history')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
                 </article>
                 <aside className="quote-card">
@@ -3209,7 +3106,7 @@ function App() {
               {audience === 'Secret' && (
                 <button type="button" className="button button--quiet no-print" onClick={addCheck}><Plus size={14} /> {tx('Ajouter un point', 'Add point')}</button>
               )}
-              <p className="method-note">{tx('Le Sceau atteste l’intégrité du dossier enregistré. Il ne remplace ni l’examen physique ni la conclusion d’un expert.', 'The Seal attests to the integrity of the recorded file. It does not replace a physical examination or an expert opinion.')}</p>
+              <p className="method-note">{tx('Le Sceau public identifie une projection W émise par le serveur. La chaîne serveur se vérifie dans « Preuves ». Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert.', 'The public Seal identifies a server-issued W projection. The server chain is checked under “Proofs”. Neither indicator replaces a physical examination or an expert opinion.')}</p>
             </section>
 
             <section>
@@ -3249,11 +3146,9 @@ function App() {
                 <button type="button" className="button button--quiet no-print" onClick={() => setPopularityResources((current) => [...current, { id: newId('popularity'), name: '', type: 'Communauté', url: '' }])}><Plus size={14} /> {tx('Ajouter un site ou forum', 'Add a website or forum')}</button>
               )}
             </section>
-          </div>
-        )}
+        </ReferencePage>
 
-        {activePage === 'condition' && (
-          <div className="page-view">
+        <ConditionPage active={activePage === 'condition'}>
             <PageIntroduction number="03" title={tx('État de la montre', 'Watch condition')} />
 
             {isVisible('Communauté') ? (
@@ -3262,6 +3157,7 @@ function App() {
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx('Description de la montre', 'Watch description')} publish={publishProps('condition-description', true)} />
                   <article className="watch-description-card">
                     <EditableParagraphs aiField="condition.description.paragraphs[]" values={editableCopy.watchDescription} editing={editingBlock === 'condition-description'} onActivate={() => audience === 'Secret' && setEditingBlock('condition-description')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, watchDescription: current.watchDescription.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
+                    <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance prise en compte', 'Provenance considered')}</strong><p>{ownershipSummary}</p></aside>
                   </article>
                 </section>
 
@@ -3309,7 +3205,9 @@ function App() {
                             <span className="documentation-media__preview">
                               {asset.type === 'document'
                                 ? <FileText size={28} aria-hidden="true" />
-                                : <img src={asset.posterUrl || asset.thumbnailUrl || asset.url} alt="" />}
+                                : asset.type === 'video'
+                                  ? <Video size={28} aria-hidden="true" />
+                                : <PrivateMediaImage asset={asset} alt="" />}
                               {asset.type === 'video' && <Play size={13} fill="currentColor" aria-hidden="true" />}
                             </span>
                             <strong>{asset.name}</strong>
@@ -3394,11 +3292,9 @@ function App() {
             ) : (
               <AccessRestricted title={tx('Rapports et notes de la montre', 'Watch reports and notes')} language={language} />
             )}
-          </div>
-        )}
+        </ConditionPage>
 
-        {activePage === 'value' && (
-          <div className="page-view">
+        <ValuePage active={activePage === 'value'}>
             <PageIntroduction number="04" title={tx('Valorisation', 'Valuation')} />
 
             {isVisible('Secret') ? (
@@ -3455,6 +3351,10 @@ function App() {
                     <label className="retained-value-card__explanation">{tx('Explication de la valeur retenue', 'Retained value explanation')}
                       <textarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder={tx('Expliquez le montant retenu, les ajustements et les réserves éventuelles.', 'Explain the retained amount, adjustments and any reservations.')} />
                     </label>
+                    <aside className="ownership-valuation-note" {...aiFieldProps('value.provenance.ownershipAssessment')}>
+                      <strong>{tx('Critère de provenance', 'Provenance criterion')}</strong>
+                      <p>{ownershipAssessment}</p>
+                    </aside>
                   </article>
                 </div>
               </section>
@@ -3596,8 +3496,7 @@ function App() {
                 </div>
               </section>
             )}
-          </div>
-        )}
+        </ValuePage>
 
         <nav className="page-turner no-print" aria-label={language === 'FR' ? 'Navigation entre les pages' : 'Page navigation'}>
           {adjacentCartularyPage(activePage, 'previous') ? (
@@ -3635,9 +3534,9 @@ function App() {
               <div><dt>{tx('Blocs sélectionnés', 'Selected blocks')}</dt><dd>{orderedReportBlocks.length}</dd></div>
             </dl>
           </header>
-          <section className="report-print-view__integrity" aria-label={tx('Preuve d’intégrité du rapport', 'Report integrity evidence')}>
-            <span className="eyebrow">{tx('Preuve d’intégrité', 'Integrity evidence')}</span>
-            <h2>{reportTimestampCoversContent ? tx('Contenu couvert par un horodatage tiers', 'Content covered by a third-party timestamp') : tx('Contenu non encore couvert par un horodatage tiers', 'Content not yet covered by a third-party timestamp')}</h2>
+          <section className="report-print-view__integrity" aria-label={tx('Trace locale du rapport', 'Local report trace')}>
+            <span className="eyebrow">{tx('Trace locale exportée', 'Exported local trace')}</span>
+            <h2>{reportTimestampCoversContent ? tx('Instantané local couvert par un horodatage tiers', 'Local snapshot covered by a third-party timestamp') : tx('Instantané local non encore horodaté par un tiers', 'Local snapshot not yet third-party timestamped')}</h2>
             <dl>
               <div><dt>{tx('Révision du dossier', 'Record revision')}</dt><dd>{reportProofState.revision}</dd></div>
               <div><dt>{tx('Empreinte du contenu', 'Content digest')}</dt><dd>{reportProofState.contentDigest}</dd></div>
@@ -3648,9 +3547,9 @@ function App() {
                 <div><dt>{tx('Racine Merkle horodatée', 'Timestamped Merkle root')}</dt><dd>{reportTimestampReceipt.merkleRoot}</dd></div>
                 <div><dt>{tx('Empreinte du jeton', 'Token digest')}</dt><dd>{reportTimestampReceipt.tokenSha256}</dd></div>
                 <div><dt>{tx('Qualification eIDAS', 'eIDAS qualification')}</dt><dd>{reportTimestampReceipt.qualified ? tx('QTSA validée', 'Validated QTSA') : tx('Non évaluée — aucune présomption qualifiée revendiquée', 'Not assessed — no qualified presumption claimed')}</dd></div>
-              </> : <div><dt>{tx('Horodatage externe', 'External timestamp')}</dt><dd>{tx('Absent — la cohérence locale seule ne prouve pas une date d’existence auprès d’un tiers.', 'Absent — local consistency alone does not prove a date of existence to a third party.')}</dd></div>}
+              </> : <div><dt>{tx('Horodatage externe', 'External timestamp')}</dt><dd>{tx('Absent — cette trace reste locale et ne remplace pas la chaîne serveur du Cartulaire.', 'Absent — this trace remains local and does not replace the Cartulary server chain.')}</dd></div>}
             </dl>
-            <p>{tx('Cette preuve détecte une altération et, lorsqu’un jeton est présent, établit l’existence de l’empreinte à la date signée. Elle ne certifie ni l’authenticité de l’objet, ni la vérité des informations, ni la propriété juridique.', 'This evidence detects alteration and, when a token is present, establishes that the digest existed at the signed date. It certifies neither the authenticity of the object, the truth of the information, nor legal ownership.')}</p>
+            <p>{tx('Cette trace locale détecte une altération de l’export et, lorsqu’un jeton est présent, date son empreinte. L’autorité partagée demeure la chaîne serveur ; aucune de ces preuves ne certifie l’authenticité de l’objet, la vérité des informations ou la propriété juridique.', 'This local trace detects changes to the export and, when a token is present, dates its digest. The shared authority remains the server chain; neither proof certifies object authenticity, factual truth or legal ownership.')}</p>
           </section>
           <main>
             {orderedReportBlocks.map((blockId) => (
@@ -3673,20 +3572,23 @@ function App() {
           tabIndex={-1}
         >
           <div className="drawer-header">
-            <span id="integrity-drawer-title">{tx('Intégrité et partage', 'Integrity and sharing')}</span>
+            <span id="integrity-drawer-title">{tx('Preuves du Cartulaire', 'Cartulary proofs')}</span>
             <button type="button" onClick={() => setIsDrawerOpen(false)} aria-label={tx('Fermer', 'Close')}><X size={18} /></button>
           </div>
-          <AuditPanel
-            journal={journal}
-            language={language}
-            sealSupportCode={mockCartulary.seal?.supportCode}
-            snapshot={integritySnapshot}
-            publicShareUrl={publicShareUrl}
-            refreshToken={eventTrigger}
-            persistence={persistence}
-            onDeleteAllData={handleDeleteAllData}
-            onJournalUpdate={() => setEventTrigger((previous) => previous + 1)}
-          />
+          <Suspense fallback={<div className="audit-panel" role="status">{tx('Chargement des preuves…', 'Loading proofs…')}</div>}>
+            <AuditPanel
+              journal={journal}
+              cartularyId={mockCartulary.id}
+              language={language}
+              publicShareCode={mockCartulary.seal?.supportCode}
+              snapshot={integritySnapshot}
+              publicShareUrl={publicShareUrl}
+              refreshToken={eventTrigger}
+              persistence={persistence}
+              onDeleteAllData={handleDeleteAllData}
+              onJournalUpdate={() => setEventTrigger((previous) => previous + 1)}
+            />
+          </Suspense>
         </aside>
       </>}
 
@@ -3806,152 +3708,48 @@ function App() {
         </div>
       )}
 
-      {isMarketHistoryEditorOpen && (
-        <div className="modal-overlay" onClick={() => setIsMarketHistoryEditorOpen(false)}>
-          <div
-            ref={marketHistoryDialogRef}
-            className="modal-content modal-content--market-history"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="market-history-dialog-title"
-            data-focus-layer="true"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div><span className="eyebrow">04 · {tx('Valorisation', 'Valuation')}</span><strong id="market-history-dialog-title">{tx('Évolution du marché', 'Market trend')}</strong></div>
-              <button type="button" onClick={() => setIsMarketHistoryEditorOpen(false)} aria-label={tx('Fermer l’éditeur de l’évolution du marché', 'Close the market trend editor')}><X size={18} /></button>
-            </div>
-            <div className="market-history-dialog__body">
-              <div className="market-history-dialog__intro">
-                <div><h3>{tx('Évaluations datées', 'Dated valuations')}</h3><p>{tx('Ajoutez ou modifiez les bornes et la source de chaque point du graphique.', 'Add or edit the bounds and source for each point on the chart.')}</p></div>
-                <button type="button" className="button button--primary" onClick={addMarketHistoryEntry}><Plus size={14} /> {tx('Ajouter une ligne', 'Add row')}</button>
-              </div>
-              <div className="market-history-editor" role="table" aria-label={tx('Saisie manuelle de l’évolution du marché', 'Manual market trend entry')}>
-                <div className="market-history-editor__head" role="row"><span>Date</span><span>{tx('Basse', 'Low')}</span><span>{tx('Médiane', 'Median')}</span><span>{tx('Haute', 'High')}</span><span>Source</span><span /></div>
-                {marketValues.map((valuation) => (
-                  <div role="row" key={`editor-${valuation.id}`} data-ai-scope="value.market.valuations[]" data-ai-instance={valuation.id}>
-                    <input {...aiFieldProps('value.market.valuations[].date', valuation.id)} type="date" value={valuation.date} onChange={(event) => updateMarketHistory(valuation.id, { date: event.target.value })} aria-label={tx('Date de valorisation', 'Valuation date')} />
-                    <input {...aiFieldProps('value.market.valuations[].lowValue', valuation.id)} type="number" min="0" step="100" value={valuation.lowValue} onChange={(event) => updateMarketHistory(valuation.id, { lowValue: Math.max(0, Number(event.target.value)) })} aria-label={tx('Valeur basse', 'Low value')} />
-                    <input {...aiFieldProps('value.market.valuations[].midValue', valuation.id)} type="number" min="0" step="100" value={valuation.midValue} onChange={(event) => updateMarketHistory(valuation.id, { midValue: Math.max(0, Number(event.target.value)) })} aria-label={tx('Valeur médiane', 'Median value')} />
-                    <input {...aiFieldProps('value.market.valuations[].highValue', valuation.id)} type="number" min="0" step="100" value={valuation.highValue} onChange={(event) => updateMarketHistory(valuation.id, { highValue: Math.max(0, Number(event.target.value)) })} aria-label={tx('Valeur haute', 'High value')} />
-                    <input {...aiFieldProps('value.market.valuations[].source', valuation.id)} type="text" value={valuation.source} onChange={(event) => updateMarketHistory(valuation.id, { source: event.target.value })} aria-label={tx('Source de la valorisation', 'Valuation source')} />
-                    <button type="button" className="icon-button" onClick={() => requestCollectionDeletion({ items: marketHistory, setItems: setMarketHistory, id: valuation.id, targetLabel: tx(`Évaluation du ${formatDate(valuation.date)}`, `Valuation dated ${formatDate(valuation.date)}`) })} aria-label={tx('Supprimer l’évaluation', 'Delete valuation')}><Trash2 size={15} /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {isMarketHistoryEditorOpen && <MarketHistoryDialog
+        values={marketValues}
+        language={language}
+        dialogRef={marketHistoryDialogRef}
+        onClose={() => setIsMarketHistoryEditorOpen(false)}
+        onAdd={addMarketHistoryEntry}
+        onUpdate={updateMarketHistory}
+        onDelete={(valuation) => requestCollectionDeletion({ items: marketHistory, setItems: setMarketHistory, id: valuation.id, targetLabel: tx(`Évaluation du ${formatDate(valuation.date)}`, `Valuation dated ${formatDate(valuation.date)}`) })}
+      />}
 
-      {isSpinOpen && spinAssets.length > 0 && (
-        <div className="modal-overlay" onClick={() => setIsSpinOpen(false)}>
-          <div ref={spinDialogRef} className="modal-content modal-content--spin" role="dialog" aria-modal="true" aria-labelledby="spin-dialog-title" data-focus-layer="true" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <div><span className="eyebrow">03 · {tx('Séquence 3D', '3D sequence')}</span><strong id="spin-dialog-title">{tx('Revue à 360°', '360° review')}</strong></div>
-              <button type="button" onClick={() => setIsSpinOpen(false)} aria-label={tx('Fermer', 'Close')}><X size={18} /></button>
-            </div>
-            <Spin360 images={spinAssets} posterImageUrl={spinAssets[0].url} language={language} />
-          </div>
-        </div>
-      )}
+      {isSpinOpen && spinAssets.length > 0 && <SpinViewerModal assets={spinAssets} language={language} dialogRef={spinDialogRef} onClose={() => setIsSpinOpen(false)} />}
 
-      {selectedAsset && (
-        <div className="modal-overlay" onClick={() => setSelectedAsset(null)}>
-          <div ref={mediaDialogRef} className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-dialog-title" data-focus-layer="true" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="media-modal__close" onClick={() => setSelectedAsset(null)} aria-label={tx('Fermer', 'Close')}><X size={18} /></button>
-            <div className="media-modal__visual">
-              {selectedAsset.type === 'document' ? (
-                <div className="media-modal__document">
-                  <FileText size={56} />
-                  <strong>{selectedAsset.originalFileName || selectedAsset.name}</strong>
-                  <small>{selectedAsset.mimeType || 'Document'} · {selectedAsset.fileSize || tx('taille non renseignée', 'size not provided')}</small>
-                  {selectedAsset.mimeType === 'application/pdf' && (
-                    <a href={selectedAsset.url} target="_blank" rel="noreferrer">{tx('Ouvrir le PDF', 'Open PDF')}</a>
-                  )}
-                </div>
-              ) : selectedAsset.type === 'video' ? (
-                <video src={selectedAsset.url} poster={selectedAsset.posterUrl || selectedAsset.thumbnailUrl} controls preload="metadata">
-                  {tx('Votre navigateur ne peut pas lire cette vidéo.', 'Your browser cannot play this video.')}
-                </video>
-              ) : (
-                <img src={selectedAsset.posterUrl || selectedAsset.thumbnailUrl || selectedAsset.url} alt={selectedAsset.name} />
-              )}
-            </div>
-            <div className="media-modal__caption">
-              <div>
-                <span className="eyebrow">{selectedAsset.type === 'video' ? tx('Vidéo indexée', 'Indexed video') : selectedAsset.type === 'document' ? tx('Document indexé', 'Indexed document') : tx('Photographie indexée', 'Indexed photograph')}</span>
-                <h2 id="media-dialog-title" {...aiFieldProps('media.assets[].name', selectedAsset.id)}>{selectedAsset.name}</h2>
-              </div>
-              <fieldset className="media-tag-editor">
-                <legend>{tx('Catégories', 'Categories')}</legend>
-                {MEDIA_TAGS.map((tag) => (
-                  <button
-                    type="button"
-                    key={tag.id}
-                    {...aiFieldProps('media.assets[].tags', `${selectedAsset.id}:${tag.id}`)}
-                    className={selectedAsset.tags.includes(tag.id) ? 'is-active' : ''}
-                    onClick={() => toggleMediaTag(selectedAsset.id, tag.id)}
-                    disabled={audience !== 'Secret'}
-                    aria-pressed={selectedAsset.tags.includes(tag.id)}
-                  >{mediaTagLabel(tag)}</button>
-                ))}
-              </fieldset>
-              <dl>
-                <div><dt>{tx('Horodatage', 'Timestamp')}</dt><dd {...aiFieldProps('media.assets[].metadataTimestamp', selectedAsset.id)}>{selectedAsset.metadataTimestamp ? formatDateTime(selectedAsset.metadataTimestamp) : '—'}</dd></div>
-                <div><dt>Source</dt><dd>{selectedAsset.timestampSource === 'file.lastModified' ? tx('Métadonnée du fichier', 'File metadata') : tx('Métadonnée du catalogue', 'Catalogue metadata')}</dd></div>
-                <div><dt>{tx('Visibilité', 'Visibility')}</dt><dd>{selectedAsset.visibility}</dd></div>
-                <div><dt>Format</dt><dd>{selectedAsset.mimeType || selectedAsset.type}</dd></div>
-                <div><dt>{tx('Empreinte', 'Digest')}</dt><dd {...aiFieldProps('media.assets[].hash', selectedAsset.id)}>{selectedAsset.hash.slice(0, 16)}…</dd></div>
-                {selectedAsset.type === 'video' && <div><dt>Original</dt><dd>{selectedAsset.duration} · {selectedAsset.fileSize}</dd></div>}
-              </dl>
-              {selectedAsset.type === 'video' && <small className="vault-note"><Video size={14} /> {tx('Original haute définition conservé dans le coffre média.', 'High-definition original kept in the media vault.')}</small>}
-              <button type="button" className="button button--quiet no-print" onClick={() => deleteMediaAsset(selectedAsset.id)}><Trash2 size={14} /> {tx('Supprimer ce fichier', 'Delete this file')}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {selectedAsset && <MediaViewerModal
+        asset={selectedAsset}
+        assetCount={renderedAssets.length}
+        position={selectedAssetPosition}
+        audience={audience}
+        language={language}
+        mediaTags={MEDIA_TAGS.map((tag) => ({ id: tag.id, label: mediaTagLabel(tag) }))}
+        dialogRef={mediaDialogRef}
+        onClose={() => setSelectedAsset(null)}
+        onMove={moveSelectedAsset}
+        onToggleTag={toggleMediaTag}
+        onDelete={deleteMediaAsset}
+      />}
 
-      {pendingDeletion && (
-        <div className="modal-overlay" onClick={() => { if (!isDeletingItem) setPendingDeletion(null); }}>
-          <div
-            ref={deletionDialogRef}
-            className="modal-content modal-content--deletion"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="deletion-dialog-title"
-            aria-describedby="deletion-dialog-description"
-            data-focus-layer="true"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div><span className="eyebrow">{tx('Action destructive', 'Destructive action')}</span><strong id="deletion-dialog-title">{pendingDeletion.title}</strong></div>
-              <button type="button" onClick={() => setPendingDeletion(null)} disabled={isDeletingItem} aria-label={tx('Annuler et fermer', 'Cancel and close')}><X size={18} /></button>
-            </div>
-            <div className="deletion-dialog__body">
-              <strong>{pendingDeletion.targetLabel}</strong>
-              <p id="deletion-dialog-description">{pendingDeletion.description}</p>
-              {deletionError && <p className="deletion-dialog__error" role="alert">{deletionError}</p>}
-              <div className="deletion-dialog__actions">
-                <button type="button" className="button button--quiet" onClick={() => setPendingDeletion(null)} disabled={isDeletingItem}>{tx('Conserver', 'Keep')}</button>
-                <button type="button" className="button button--danger" onClick={() => void confirmDeletion()} disabled={isDeletingItem}>
-                  {isDeletingItem ? tx('Suppression…', 'Deleting…') : tx('Confirmer la suppression', 'Confirm deletion')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {pendingDeletion && <DeletionDialog
+        deletion={pendingDeletion}
+        error={deletionError}
+        submitting={isDeletingItem}
+        language={language}
+        dialogRef={deletionDialogRef}
+        onCancel={() => setPendingDeletion(null)}
+        onConfirm={confirmDeletion}
+      />}
 
-      {undoNotice && (
-        <div className="undo-toast no-print" role="status" aria-live="assertive" aria-atomic="true">
-          <p>{undoNotice.message}</p>
-          <button type="button" onClick={() => void undoDeletion()}>{tx('Annuler la suppression', 'Undo deletion')}</button>
-          <button type="button" className="undo-toast__dismiss" onClick={() => { void undoNotice.onExpire?.(); setUndoNotice(null); }} aria-label={tx('Fermer la notification', 'Dismiss notification')}><X size={15} /></button>
-        </div>
-      )}
+      {undoNotice && <UndoToast
+        notice={undoNotice}
+        language={language}
+        onUndo={undoDeletion}
+        onDismiss={async () => { await undoNotice.onExpire?.(); setUndoNotice(null); }}
+      />}
       {deletionError && !pendingDeletion && <div className="deletion-error-toast no-print" role="alert">{deletionError}</div>}
     </div>
   );

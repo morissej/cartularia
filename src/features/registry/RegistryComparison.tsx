@@ -161,7 +161,7 @@ export function RegistryComparison({ registry }: { registry: RegistryDocument })
             <thead>
               <tr>
                 <th scope="col">Critère</th>
-                {selectedItems.map((item) => <th scope="col" key={item.cartularyId}><span><AssetIcon assetType={item.assetType} />{assetTypeLabel(item.assetType)}</span><strong>{item.displayTitle}</strong><a href={buildCartularyHref(item.cartularyId, window.location.pathname + window.location.search)}>Ouvrir <ExternalLink aria-hidden="true" /></a></th>)}
+                {selectedItems.map((item) => <th scope="col" key={item.cartularyId}><span><AssetIcon assetType={item.assetType} />{assetTypeLabel(item.assetType)}</span><strong>{item.displayTitle}</strong><a href={buildCartularyHref(item.cartularyId, window.location.pathname + window.location.search, item.assetType)}>Ouvrir <ExternalLink aria-hidden="true" /></a></th>)}
               </tr>
             </thead>
             <tbody>

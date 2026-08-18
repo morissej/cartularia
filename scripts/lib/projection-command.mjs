@@ -23,6 +23,7 @@ export const PUBLIC_BLOCK_ALLOWLIST = Object.freeze([
 export const REPORT_BLOCK_ALLOWLIST = Object.freeze([
   ...PUBLIC_BLOCK_ALLOWLIST,
   'cover-owner',
+  'cover-ownership-history',
   'cover-transmission',
   'cover-storage',
   'condition-documentation',
@@ -88,6 +89,7 @@ const assertPublisher = (membership, rootData, actorId) => {
   const data = membership.exists ? membership.data() : null;
   if (
     !data ||
+    rootData.accountHolderId !== actorId ||
     membership.id !== actorId ||
     data.uid !== actorId ||
     data.status !== 'active' ||

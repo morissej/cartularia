@@ -38,7 +38,7 @@ export const filterRegistryGallery = (
     if (filters.assetType !== 'all' && item.assetType !== filters.assetType) return false;
     if (filters.collectionId !== 'all' && item.collectionId !== filters.collectionId) return false;
     if (filters.makerName !== 'all' && item.makerName !== filters.makerName) return false;
-    if (gallerySlidesForCategory(entry, filters.category).length === 0) return false;
+    if (filters.category !== 'all' && gallerySlidesForCategory(entry, filters.category).length === 0) return false;
     const haystack = normalize([
       item.displayTitle,
       item.makerName,

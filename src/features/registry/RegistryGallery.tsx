@@ -19,6 +19,7 @@ import type { RegistryDocument } from '../../domain/foundations.ts';
 import {
   loadRegistryGallery,
   observeRegistryGallery,
+  resolveRegistryGallerySlide,
   revokeRegistryGalleryObjectUrls,
 } from '../../services/registryGallery.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
@@ -55,8 +56,10 @@ export function RegistryGallery({ registry, canReadCartularies }: {
   const [category, setCategory] = useState(DEFAULT_REGISTRY_GALLERY_FILTERS.category);
   const [selectedCartularyId, setSelectedCartularyId] = useState<string | null>(null);
   const [slideIndex, setSlideIndex] = useState(0);
+  const [loadingSlideId, setLoadingSlideId] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
+  const entriesRef = useRef<RegistryGalleryEntry[]>([]);
 
   const reload = useCallback(async () => {
     if (!canReadCartularies) return;
@@ -82,7 +85,33 @@ export function RegistryGallery({ registry, canReadCartularies }: {
     });
   }, [canReadCartularies, registry.id]);
 
-  useEffect(() => () => revokeRegistryGalleryObjectUrls(entries), [entries]);
+  useEffect(() => {
+    entriesRef.current = entries;
+  }, [entries]);
+
+  useEffect(() => () => revokeRegistryGalleryObjectUrls(entriesRef.current), []);
+
+  useEffect(() => {
+    const unresolvedCovers = entries.flatMap((entry) => {
+      const slides = gallerySlidesForCategory(entry, 'all');
+      const cover = slides.find((slide) => slide.assetId === entry.primaryAssetId) || slides[0];
+      return cover && cover.source !== 'error' && !cover.url && cover.storagePath ? [cover] : [];
+    });
+    if (unresolvedCovers.length === 0) return undefined;
+    let active = true;
+    void Promise.all(unresolvedCovers.map(resolveRegistryGallerySlide))
+      .then((resolvedCovers) => {
+        if (!active) return;
+        const resolvedById = new Map(resolvedCovers.map((slide) => [`${slide.cartularyId}:${slide.assetId}`, slide]));
+        setEntries((current) => current.map((entry) => ({
+          ...entry,
+          slides: entry.slides.map((slide) => resolvedById.get(`${slide.cartularyId}:${slide.assetId}`) ?? slide),
+        })));
+      });
+    return () => {
+      active = false;
+    };
+  }, [entries]);
 
   const filteredEntries = useMemo(() => filterRegistryGallery(entries, {
     query,
@@ -111,6 +140,25 @@ export function RegistryGallery({ registry, canReadCartularies }: {
   }, []);
 
   useDialogFocus(Boolean(selectedEntry && selectedSlide), lightboxRef, closeLightbox);
+
+  useEffect(() => {
+    if (!selectedSlide || selectedSlide.source === 'error' || selectedSlide.url || !selectedSlide.storagePath) return undefined;
+    let active = true;
+    setLoadingSlideId(selectedSlide.assetId);
+    void resolveRegistryGallerySlide(selectedSlide)
+      .then((resolved) => {
+        if (!active) return;
+        setEntries((current) => current.map((entry) => entry.item.cartularyId === resolved.cartularyId
+          ? { ...entry, slides: entry.slides.map((slide) => slide.assetId === resolved.assetId ? resolved : slide) }
+          : entry));
+      })
+      .finally(() => {
+        if (active) setLoadingSlideId(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedSlide]);
 
   const moveSlide = useCallback((direction: number) => {
     setSlideIndex((current) => selectedSlides.length
@@ -204,19 +252,34 @@ export function RegistryGallery({ registry, canReadCartularies }: {
           {filteredEntries.map((entry) => {
             const slides = gallerySlidesForCategory(entry, category);
             const cover = slides.find((slide) => slide.assetId === entry.primaryAssetId) || slides[0];
+            const cartularyHref = buildCartularyHref(entry.item.cartularyId, window.location.pathname + window.location.search, entry.item.assetType);
             return (
               <article className="registry-gallery-card" key={entry.item.cartularyId}>
-                <button type="button" className="registry-gallery-card__visual" onClick={() => { setSelectedCartularyId(entry.item.cartularyId); setSlideIndex(0); }} aria-label={`Ouvrir le diaporama de ${entry.item.displayTitle}`}>
-                  <img src={cover.thumbnailUrl} alt={`Vue principale — ${entry.item.displayTitle}`} loading="lazy" />
-                  <span className="registry-gallery-card__zoom"><ZoomIn aria-hidden="true" />Ouvrir</span>
-                  <span className="registry-gallery-card__count"><Images aria-hidden="true" />{slides.length} photo{slides.length > 1 ? 's' : ''}</span>
-                </button>
+                {cover ? (
+                  <button type="button" className="registry-gallery-card__visual" onClick={() => { setSelectedCartularyId(entry.item.cartularyId); setSlideIndex(0); }} aria-label={`Ouvrir le diaporama de ${entry.item.displayTitle}`}>
+                    {cover.thumbnailUrl
+                      ? <img src={cover.thumbnailUrl} alt={`Vue principale — ${entry.item.displayTitle}`} loading="lazy" />
+                      : cover.source === 'error'
+                        ? <span className="registry-gallery-card__pending"><ImageOff aria-hidden="true" /><span>Aperçu privé non accessible</span></span>
+                      : <span className="registry-gallery-card__pending"><LoaderCircle className="registry-spinner" aria-hidden="true" /><span>Aperçu à charger</span></span>}
+                    <span className="registry-gallery-card__zoom"><ZoomIn aria-hidden="true" />Ouvrir</span>
+                    <span className="registry-gallery-card__count"><Images aria-hidden="true" />{slides.length} photo{slides.length > 1 ? 's' : ''}</span>
+                  </button>
+                ) : (
+                  <div className="registry-gallery-card__visual registry-gallery-card__visual--empty">
+                    <ImageOff aria-hidden="true" />
+                    <span>Image indisponible</span>
+                  </div>
+                )}
                 <div className="registry-gallery-card__body">
                   <span>{ASSET_TYPE_LABELS[entry.item.assetType] || labelFromIdentifier(entry.item.assetType)} · {labelFromIdentifier(entry.item.collectionId)}</span>
                   <h2>{entry.item.displayTitle}</h2>
                   <p>{entry.item.makerName} · {entry.item.modelName}</p>
-                  {cover.source === 'local_prototype' && <small>Aperçu local du Cartulaire pilote</small>}
-                  {cover.source === 'firebase_storage' && <small>Original privé lu depuis Firebase Storage</small>}
+                  {cover?.source === 'prototype_bundle' && <small>Aperçu intégré du Cartulaire pilote</small>}
+                  {cover?.source === 'firebase_storage' && <small>Original privé lu depuis Firebase Storage</small>}
+                  {cover?.source === 'error' && <small>Aperçu protégé : ouvrez le Cartulaire avec le compte propriétaire ou ajoutez une dérivée autorisée.</small>}
+                  {!cover && <small>Le Cartulaire reste accessible même si son aperçu média ne l’est pas.</small>}
+                  <a className="registry-gallery-card__link" href={cartularyHref}>Ouvrir le Cartulaire <ExternalLink aria-hidden="true" /></a>
                 </div>
               </article>
             );
@@ -233,11 +296,15 @@ export function RegistryGallery({ registry, canReadCartularies }: {
             </header>
             <div className="registry-lightbox__stage">
               {selectedSlides.length > 1 && <button type="button" className="registry-lightbox__arrow registry-lightbox__arrow--previous" onClick={() => moveSlide(-1)} aria-label="Photo précédente"><ChevronLeft aria-hidden="true" /></button>}
-              <figure><img src={selectedSlide.url} alt={`${selectedSlide.displayName} — ${selectedEntry.item.displayTitle}`} /><figcaption><strong>{selectedSlide.displayName}</strong><span>{labelFromIdentifier(selectedSlide.category)} · {formatDate(selectedSlide.capturedAt)}</span></figcaption></figure>
+              <figure>{selectedSlide.url
+                ? <img src={selectedSlide.url} alt={`${selectedSlide.displayName} — ${selectedEntry.item.displayTitle}`} />
+                : selectedSlide.source === 'error'
+                  ? <span className="registry-lightbox__loading"><ImageOff aria-hidden="true" /><strong>Photo privée non accessible avec ce compte</strong></span>
+                : <span className="registry-lightbox__loading"><LoaderCircle className="registry-spinner" aria-hidden="true" /><strong>{loadingSlideId === selectedSlide.assetId ? 'Chargement de la photo…' : 'Photo à charger'}</strong></span>}<figcaption><strong>{selectedSlide.displayName}</strong><span>{labelFromIdentifier(selectedSlide.category)} · {formatDate(selectedSlide.capturedAt)}</span></figcaption></figure>
               {selectedSlides.length > 1 && <button type="button" className="registry-lightbox__arrow registry-lightbox__arrow--next" onClick={() => moveSlide(1)} aria-label="Photo suivante"><ChevronRight aria-hidden="true" /></button>}
             </div>
-            {selectedSlides.length > 1 && <div className="registry-lightbox__thumbnails" aria-label="Photos du diaporama">{selectedSlides.map((slide, index) => <button type="button" aria-current={index === slideIndex ? 'true' : undefined} onClick={() => setSlideIndex(index)} key={slide.assetId}><img src={slide.thumbnailUrl} alt="" /><span>{index + 1}</span></button>)}</div>}
-            <footer><span><ShieldCheck aria-hidden="true" />Média lu depuis le Cartulaire</span><a href={buildCartularyHref(selectedEntry.item.cartularyId, window.location.pathname + window.location.search)}>Ouvrir le Cartulaire <ExternalLink aria-hidden="true" /></a></footer>
+            {selectedSlides.length > 1 && <div className="registry-lightbox__thumbnails" aria-label="Photos du diaporama">{selectedSlides.map((slide, index) => <button type="button" aria-current={index === slideIndex ? 'true' : undefined} onClick={() => setSlideIndex(index)} key={slide.assetId}>{slide.thumbnailUrl ? <img src={slide.thumbnailUrl} alt="" /> : <ImageOff aria-hidden="true" />}<span>{index + 1}</span></button>)}</div>}
+            <footer><span><ShieldCheck aria-hidden="true" />Média lu depuis le Cartulaire</span><a href={buildCartularyHref(selectedEntry.item.cartularyId, window.location.pathname + window.location.search, selectedEntry.item.assetType)}>Ouvrir le Cartulaire <ExternalLink aria-hidden="true" /></a></footer>
           </div>
         </div>
       )}

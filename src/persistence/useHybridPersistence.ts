@@ -17,6 +17,18 @@ import {
 
 export type LocalPersistenceStatus = 'ready' | 'saving' | 'error' | 'deleted';
 export type CloudPersistenceStatus = 'signed-out' | 'syncing' | 'synced' | 'conflict' | 'remote-deleted' | 'error';
+export const CLOUD_PULL_APPLIED_EVENT = 'cartularia:cloud-pull-applied';
+
+export interface CloudPullAppliedDetail {
+  cartularyId: string;
+  stateKeys: string[];
+  binaryIds: string[];
+}
+
+const notifyCloudPullApplied = (detail: CloudPullAppliedDetail) => {
+  if (detail.stateKeys.length === 0 && detail.binaryIds.length === 0) return;
+  window.dispatchEvent(new CustomEvent<CloudPullAppliedDetail>(CLOUD_PULL_APPLIED_EVENT, { detail }));
+};
 
 export interface HybridPersistenceState {
   localStatus: LocalPersistenceStatus;
@@ -84,7 +96,11 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
           ? 'remote-deleted'
           : nextReport.status);
         setLocalStatus('ready');
-        if (nextReport.pulled > 0) window.location.reload();
+        notifyCloudPullApplied({
+          cartularyId,
+          stateKeys: nextReport.pulledStateKeys,
+          binaryIds: nextReport.pulledBinaryIds,
+        });
       } catch (syncError) {
         setCloudStatus('error');
         setError(messageFromError(syncError));
@@ -158,7 +174,17 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
         conflicts: nextReport.conflicts,
       });
       setCloudStatus(nextReport.status === 'remote_deleted' ? 'remote-deleted' : nextReport.status);
-      if (strategy === 'take-cloud' || nextReport.pulled > 0) window.location.reload();
+      notifyCloudPullApplied({
+        cartularyId,
+        stateKeys: [
+          ...nextReport.pulledStateKeys,
+          ...(strategy === 'take-cloud' && conflict.kind === 'state' ? [conflict.id] : []),
+        ],
+        binaryIds: [
+          ...nextReport.pulledBinaryIds,
+          ...(strategy === 'take-cloud' && conflict.kind === 'binary' ? [conflict.id] : []),
+        ],
+      });
     } catch (resolutionError) {
       setCloudStatus('error');
       setError(messageFromError(resolutionError));

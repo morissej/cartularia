@@ -71,7 +71,6 @@ const formatDate = (item: RegistryFollowUpItem) => {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
-    timeZone: 'UTC',
   }).format(date);
 };
 
@@ -240,7 +239,7 @@ export function RegistryFollowUp({ registry, canReadCartularies }: {
                   <p>{item.displayTitle}</p>
                 </div>
                 <div className="registry-follow-up-item__date"><Clock3 aria-hidden="true" /><span>{TIME_STATUS_LABELS[status]}</span><time dateTime={Number.isNaN(dueDate.getTime()) ? undefined : dueDate.toISOString()}>{formatDate(item)}</time></div>
-                <a href={buildCartularyHref(item.cartularyId, returnTo)}>Gérer dans le Cartulaire <ExternalLink aria-hidden="true" /><ChevronRight aria-hidden="true" /></a>
+                <a href={buildCartularyHref(item.cartularyId, returnTo, item.assetType)}>Gérer dans le Cartulaire <ExternalLink aria-hidden="true" /><ChevronRight aria-hidden="true" /></a>
               </article>
             );
           })}

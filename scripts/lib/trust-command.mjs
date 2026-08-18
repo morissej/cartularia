@@ -38,6 +38,7 @@ const assertPermission = (membership, rootData, actorId, permission) => {
   const data = membership.exists ? membership.data() : null;
   if (
     !data ||
+    rootData.accountHolderId !== actorId ||
     membership.id !== actorId ||
     data.uid !== actorId ||
     data.status !== 'active' ||
@@ -148,7 +149,7 @@ export const createIntegrityBatch = async ({
       leafCount: merkle.leafCount,
       status: 'pending_timestamp',
       timestampStatus: 'not_requested',
-      publicAnchoringStatus: 'deferred',
+      publicAnchoringStatus: 'not_requested',
       readerUids: [actorId],
       requestId,
       inputDigest,
@@ -254,7 +255,7 @@ export const attachTimestampReceipt = async ({ firestore, batchId, actorId, requ
       status: 'timestamped',
       verificationStatus: receipt.verificationStatus,
       qualified: receipt.qualified === true,
-      publicAnchoringStatus: 'deferred',
+      publicAnchoringStatus: 'not_requested',
     };
     transaction.create(receiptRef, {
       ...receipt,
@@ -267,7 +268,7 @@ export const attachTimestampReceipt = async ({ firestore, batchId, actorId, requ
       timestampStatus: receipt.verificationStatus,
       timestampReceiptId: receipt.receiptId,
       timestampQualified: receipt.qualified === true,
-      publicAnchoringStatus: 'deferred',
+      publicAnchoringStatus: 'not_requested',
       updatedAt: FieldValue.serverTimestamp(),
     });
     transaction.create(commandReceiptRef, {
@@ -310,6 +311,7 @@ export const applyRevisionedIntegrityProjection = async ({
       sourceRevision,
       integrityHead,
       batchId,
+      publicAnchoringStatus: 'not_requested',
       updatedAt: FieldValue.serverTimestamp(),
     });
     return { cartularyId, sourceRevision, applied: true, reason: 'newer_revision' };
@@ -331,6 +333,39 @@ const toPortable = (value) => {
     return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined).map(([key, child]) => [key, toPortable(child)]));
   }
   throw new TrustCommandError('unsupported_export_value', 'Valeur non exportable détectée.');
+};
+
+const loadPortableIntegrityProofs = async ({ firestore, cartularyId }) => {
+  const matchingReceipts = await firestore.collectionGroup('receipts').where('cartularyId', '==', cartularyId).get();
+  const integrityReceipts = matchingReceipts.docs.filter((document) => (
+    document.ref.parent.parent?.parent?.id === 'integrityBatches'
+  ));
+  const proofs = await Promise.all(integrityReceipts.map(async (receiptDocument) => {
+    const batchRef = receiptDocument.ref.parent.parent;
+    const [batch, timestampReceipts, publicAnchors] = await Promise.all([
+      batchRef.get(),
+      batchRef.collection('timestampReceipts').get(),
+      batchRef.collection('publicAnchors').get(),
+    ]);
+    if (!batch.exists) return null;
+    const batchData = batch.data();
+    return {
+      batch: toPortable({
+        batchId: batch.id,
+        algorithm: batchData.algorithm,
+        canonicalizationVersion: batchData.canonicalizationVersion,
+        merkleRoot: batchData.merkleRoot,
+        leafCount: batchData.leafCount,
+        status: batchData.status,
+        timestampStatus: batchData.timestampStatus,
+        publicAnchoringStatus: batchData.publicAnchoringStatus,
+      }),
+      inclusion: toPortable(receiptDocument.data()),
+      timestampReceipts: timestampReceipts.docs.map((document) => toPortable(document.data())),
+      publicAnchors: publicAnchors.docs.map((document) => toPortable(document.data())),
+    };
+  }));
+  return proofs.filter(Boolean).sort((left, right) => left.batch.batchId.localeCompare(right.batch.batchId));
 };
 
 const readReadyExport = async (jobRef) => {
@@ -453,8 +488,9 @@ export const createCartularyExport = async ({
   const currentJob = await jobRef.get();
   if (currentJob.data()?.status === 'ready') return { ...(await readReadyExport(jobRef)), replayed: true };
 
-  const [root, ...collectionSnapshots] = await Promise.all([
+  const [root, integrityProofs, ...collectionSnapshots] = await Promise.all([
     rootRef.get(),
+    loadPortableIntegrityProofs({ firestore, cartularyId }),
     ...EXPORT_COLLECTIONS.map((collectionName) => rootRef.collection(collectionName).get()),
   ]);
   if (!root.exists || root.data().revision !== requestResult.sourceRevision) {
@@ -473,6 +509,11 @@ export const createCartularyExport = async ({
       data: toPortable(document.data()),
     }));
   });
+  integrityProofs.forEach((proof) => portableRecords.push({
+    collectionName: 'integrityProofs',
+    documentId: proof.batch.batchId,
+    data: proof,
+  }));
   const auditEvents = portableRecords.filter((record) => record.collectionName === 'auditEvents').map((record) => record.data);
   const chainVerification = verifyAuditChain({
     events: auditEvents,
@@ -488,7 +529,7 @@ export const createCartularyExport = async ({
   })).sort((left, right) => left.recordKey.localeCompare(right.recordKey));
   if (records.length > 430) throw new TrustCommandError('export_too_large', 'Export trop volumineux pour le lot transactionnel pilote.');
   const pendingAssets = records.filter((record) => record.collectionName === 'assets' && record.data.processingState !== 'ready').length;
-  const recordCounts = Object.fromEntries(EXPORT_COLLECTIONS.concat('cartularies').map((collectionName) => [
+  const recordCounts = Object.fromEntries(EXPORT_COLLECTIONS.concat('cartularies', 'integrityProofs').map((collectionName) => [
     collectionName,
     records.filter((record) => record.collectionName === collectionName).length,
   ]).filter(([, count]) => count > 0));

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ListTodo, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { persistCartulariaJson } from '../persistence/localVault';
+import { persistCartulariaJson, readCartulariaStorage } from '../persistence/localVault';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { removeItemById, restoreItemAtIndex, type RemovedItem } from '../utils/undoableDeletion';
 
@@ -14,7 +14,7 @@ const TODO_STORAGE_KEY = 'cartularia-todos';
 
 const readStoredTodos = (): TodoItem[] => {
   try {
-    const stored = window.localStorage.getItem(TODO_STORAGE_KEY);
+    const stored = readCartulariaStorage(TODO_STORAGE_KEY);
     if (!stored) return [];
 
     const parsed = JSON.parse(stored) as unknown;

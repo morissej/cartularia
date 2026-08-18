@@ -31,11 +31,12 @@ Copier `.env.example` vers `.env`, puis remplacer les valeurs par la configurati
 
 Les règles de développement sont présentes dans `firestore.rules` et `storage.rules`.
 
-Pour le raccordement local continu du Cartulaire au Registre, lancer les émulateurs puis le worker dans un second terminal :
+Pour créer un Cartulaire puis assurer son raccordement local continu au Registre, lancer les émulateurs et les deux workers. Le worker de création est obligatoire : sans lui, une demande reste `pending` lorsque l’émulateur Functions n’est pas lancé.
 
 ```bash
 npm run emulators
-FIREBASE_PROJECT_ID=<projet-local> npm run sync:worker
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_PROJECT_ID=<projet-local> npm run create:worker
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_PROJECT_ID=<projet-local> npm run sync:worker
 ```
 
 L'ingestion pilote des images IWC dans Storage se lance avec `npm run seed:iwc-media` lorsque les variables d'émulateur Firestore et Storage sont définies. `npm run verify:live-connection` contrôle ensuite, avec le compte propriétaire local, le chemin Cartulaire → projection Registre → original Storage. L'architecture et ses limites sont consignées dans [`docs/ADR-019-raccordement-cartulaire-registre.md`](docs/ADR-019-raccordement-cartulaire-registre.md).

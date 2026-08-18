@@ -60,9 +60,12 @@ test('la visibilité de la photo est contrôlée selon W, C et R', () => {
 test('la liste blanche W du client reste identique à la commande serveur', () => {
   assert.deepEqual([...WEBSITE_BLOCK_ALLOWLIST].sort(), [...PUBLIC_BLOCK_ALLOWLIST].sort());
   assert.equal(getPublicationPolicy('website', 'cover-owner').allowed, false);
+  assert.equal(getPublicationPolicy('website', 'cover-ownership-history').allowed, false);
   assert.equal(getPublicationPolicy('website', 'value-market').allowed, false);
   assert.equal(getPublicationPolicy('report', 'cover-owner').allowed, true);
+  assert.equal(getPublicationPolicy('report', 'cover-ownership-history').allowed, true);
   assert.equal(getPublicationPolicy('community', 'cover-owner').allowed, false);
+  assert.equal(getPublicationPolicy('community', 'cover-ownership-history').allowed, false);
 });
 
 test('une sélection historique sans décision humaine reste en attente de validation', () => {

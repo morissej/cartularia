@@ -30,15 +30,23 @@ const loadIntegrityEntry = async (
   item: Awaited<ReturnType<typeof loadRegistryItems>>[number],
 ): Promise<RegistryIntegrityEntry> => {
   const cartularyRef = doc(db, 'cartularies', item.cartularyId);
-  const [rootSnapshot, eventsSnapshot] = await Promise.all([
+  const [rootSnapshot, eventsSnapshot, projectionSnapshot] = await Promise.all([
     getDoc(cartularyRef),
     getDocs(query(collection(cartularyRef, 'auditEvents'), orderBy('sequence', 'asc'))),
+    getDoc(doc(db, 'integrityProjections', item.cartularyId)),
   ]);
   if (!rootSnapshot.exists()) throw new Error(`Cartulaire ${item.cartularyId} introuvable.`);
   const root = rootSnapshot.data();
   const events = eventsSnapshot.docs.map((event) => toAuditEvent(event.id, event.data()));
   const integrityHead = String(root.integrityHead || '');
   const integritySequence = Number(root.integritySequence || 0);
+  const projection = projectionSnapshot.exists() ? projectionSnapshot.data() : {};
+  const rawAnchoringStatus = String(projection.publicAnchoringStatus || 'not_requested');
+  const publicAnchoringStatus = (
+    ['processing', 'pending_confirmation', 'anchored', 'failed'].includes(rawAnchoringStatus)
+      ? rawAnchoringStatus
+      : 'not_requested'
+  ) as RegistryIntegrityEntry['publicAnchoringStatus'];
   return {
     item,
     sourceRevision: Number(root.revision || item.sourceRevision),
@@ -46,7 +54,17 @@ const loadIntegrityEntry = async (
     integritySequence,
     events,
     verification: await verifyRegistryAuditChain(events, integrityHead, integritySequence),
-    publicAnchoringStatus: 'deferred',
+    publicAnchoringStatus,
+    publicAnchorBlockHeight: Number.isInteger(projection.publicAnchorBlockHeight)
+      ? Number(projection.publicAnchorBlockHeight)
+      : null,
+    publicAnchorConfirmedAtIso: typeof projection.publicAnchorConfirmedAtIso === 'string'
+      ? projection.publicAnchorConfirmedAtIso
+      : null,
+    ownershipTransferCount: Number(root.ownershipTransferCount || 0),
+    inheritedHead: typeof root.ownershipRollover?.inheritedHead === 'string'
+      ? root.ownershipRollover.inheritedHead
+      : null,
   };
 };
 

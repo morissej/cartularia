@@ -12,6 +12,7 @@ import {
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
+  Plus,
 } from 'lucide-react';
 import type {
   MembershipDocument,
@@ -34,7 +35,7 @@ import {
 
 type OverviewLoadState = 'loading' | 'ready' | 'error';
 
-const registrySectionHref = (registryId: string, section: 'items' | 'follow-up') =>
+const registrySectionHref = (registryId: string, section: 'items' | 'new' | 'follow-up') =>
   `/registry/${encodeURIComponent(registryId)}/${section}`;
 
 function AggregateRows({ rows, total, label }: {
@@ -66,6 +67,7 @@ export function RegistryOverview({ registry, organization, membership }: {
   const [loadState, setLoadState] = useState<OverviewLoadState>('loading');
   const roles = membership.roles.map((role) => ROLE_LABELS[role] || role);
   const canReadCartularies = membership.permissions.includes('cartulary.read');
+  const canCreateCartularies = membership.permissions.includes('cartulary.edit');
 
   const reload = useCallback(async () => {
     setLoadState('loading');
@@ -134,6 +136,7 @@ export function RegistryOverview({ registry, organization, membership }: {
           <span className={`registry-status registry-status--${registry.status}`}>
             {registry.status === 'active' ? 'Actif' : 'Archivé'}
           </span>
+          {canCreateCartularies && <a href={registrySectionHref(registry.id, 'new')}><Plus aria-hidden="true" /> Nouveau cartulaire</a>}
           <a href={registrySectionHref(registry.id, 'items')}>Voir le catalogue <ArrowRight aria-hidden="true" /></a>
         </div>
       </section>

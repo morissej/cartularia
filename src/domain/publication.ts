@@ -3,6 +3,7 @@ export const PUBLICATION_POLICY_VERSION = 'publication-policy-v1' as const;
 export const PUBLISHED_BLOCK_IDS = [
   'cover-watch',
   'cover-owner',
+  'cover-ownership-history',
   'cover-transmission',
   'cover-storage',
   'media-hero',
@@ -54,6 +55,7 @@ export const WEBSITE_BLOCK_ALLOWLIST: readonly PublishedBlockId[] = [
 
 const COMMUNITY_FORBIDDEN_BLOCKS: readonly PublishedBlockId[] = [
   'cover-owner',
+  'cover-ownership-history',
   'cover-transmission',
   'cover-storage',
   'value-cost-basis',

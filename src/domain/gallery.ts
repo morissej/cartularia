@@ -9,8 +9,14 @@ export interface RegistryGallerySlide {
   category: string;
   capturedAt: string | null;
   tags: string[];
-  source: 'local_prototype' | 'authorized_derivative' | 'firebase_storage';
+  source: 'prototype_bundle' | 'authorized_derivative' | 'firebase_storage' | 'error';
+  storagePath?: string | null;
 }
+
+export const ownerUidFromPrivateDraftStoragePath = (storagePath: string): string | null => {
+  const match = /^private-drafts\/([^/]+)\/[^/]+\/[^/]+\/[a-f0-9]{64}\/original$/.exec(storagePath);
+  return match?.[1] ?? null;
+};
 
 export interface RegistryGalleryEntry {
   item: RegistryItemProjection;

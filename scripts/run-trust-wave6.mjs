@@ -98,6 +98,6 @@ console.log(JSON.stringify({
     merkleRoot: batch.merkleRoot,
     leafCount: batch.leafCount,
   }),
-  publicAnchoringStatus: 'deferred',
+  publicAnchoringStatus: 'not_requested',
   projections,
 }, null, 2));

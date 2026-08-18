@@ -115,6 +115,16 @@ test('le Cartulaire IWC du pilote ouvre l’interface complète existante', () =
   assert.equal(url.searchParams.get('returnTo'), '/registry/reg_demo/gallery');
 });
 
+test('le Cartulaire Rolex ouvre la même interface complète que l’IWC', () => {
+  const href = buildCartularyHref('cart_rolex_gmt_master_mark_i_long_e_1675_642cf3adba60', '/registry/reg_demo/items');
+  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/');
+});
+
+test('toute nouvelle montre est dirigée vers le Cartulaire complet', () => {
+  const href = buildCartularyHref('cart_watch_future_0001', '/registry/reg_demo/items', 'watch');
+  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/');
+});
+
 test('le retour n’accepte qu’un chemin interne du Registre', () => {
   assert.equal(isRegistryReturnPath('/registry/reg_demo/items?q=iwc'), true);
   assert.equal(isRegistryReturnPath('//example.com/registry/reg_demo'), false);

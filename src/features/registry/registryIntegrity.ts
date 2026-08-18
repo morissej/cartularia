@@ -9,6 +9,11 @@ export const REGISTRY_AUDIT_ACTION_LABELS: Record<string, string> = {
   'community.published': 'Publication Communauté réalisée',
   'publication.suspended': 'Publication suspendue',
   'cartulary.export.requested': 'Export propriétaire préparé',
+  'cartulary.transfer.proposed': 'Cession proposée par le propriétaire',
+  'cartulary.transfer.accepted': 'Cession acceptée par l’acquéreur',
+  'cartulary.transfer.completed': 'Changement de propriétaire effectif',
+  'cartulary.transfer.rejected': 'Cession refusée par l’acquéreur',
+  'cartulary.transfer.expired': 'Proposition de cession expirée',
 };
 
 export const auditActionLabel = (action: string) => REGISTRY_AUDIT_ACTION_LABELS[action]

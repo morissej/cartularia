@@ -102,6 +102,7 @@ export const issueRfc3161Timestamp = async ({
   provider = process.env.CARTULARIA_TSA_PROVIDER || 'DigiCert RFC 3161 TSA',
   timeoutMs = Number(process.env.CARTULARIA_TSA_TIMEOUT_MS || 20_000),
   fetchImpl = globalThis.fetch,
+  trustStorePem = `${rootCertificates.join('\n')}\n`,
 }) => {
   const request = validateTimestampRequest({ digest, requestId });
   if (typeof fetchImpl !== 'function') throw new TimestampGatewayError('transport_unavailable', 'Transport HTTP indisponible.', 500);
@@ -150,7 +151,7 @@ export const issueRfc3161Timestamp = async ({
     await runOpenSsl(['pkcs7', '-inform', 'DER', '-in', tokenPath, '-print_certs', '-out', certificatesPath]);
     const certificateBundle = await readFile(certificatesPath, 'utf8');
     await writeFile(signerPath, extractFirstCertificate(certificateBundle), { flag: 'wx' });
-    await writeFile(trustStorePath, `${rootCertificates.join('\n')}\n`, { flag: 'wx', mode: 0o600 });
+    await writeFile(trustStorePath, trustStorePem, { flag: 'wx', mode: 0o600 });
     await runOpenSsl([
       'ts', '-verify', '-queryfile', queryPath, '-in', responsePath,
       '-CAfile', trustStorePath, '-untrusted', certificatesPath,

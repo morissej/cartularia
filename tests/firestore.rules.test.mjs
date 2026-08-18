@@ -282,6 +282,46 @@ test('un brouillon cloud privé est modifiable uniquement par son compte propri�
   }));
 });
 
+test('un propriétaire éditeur peut demander une création seulement depuis son brouillon et son Registre', async () => {
+  const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const outsiderFirestore = testEnvironment.authenticatedContext(outsiderUid).firestore();
+  const cartularyId = 'cart-new-rolex-0001';
+  const rootPath = ['privateDrafts', ownerUid, 'cartularies', cartularyId];
+  await assertSucceeds(setDoc(doc(ownerFirestore, ...rootPath), {
+    ownerUid,
+    cartularyId,
+    status: 'active',
+    retentionPolicyVersion: 'inactive-plus-2y-v1',
+    purgeAfter: null,
+    lastActiveAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+  const requestPath = ['cartularyCreateRequests', cartularyId];
+  const request = {
+    requestDocumentId: cartularyId,
+    requestId: 'create_0123456789abcdef0123456789ab',
+    ownerUid,
+    cartularyId,
+    organizationId: ownerOrganizationId,
+    registryId: ownerRegistryId,
+    publicCode: 'ROL-TEST01',
+    status: 'pending',
+    requestedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(setDoc(doc(ownerFirestore, ...requestPath), request));
+  await assertSucceeds(getDoc(doc(ownerFirestore, ...requestPath)));
+  await assertFails(setDoc(doc(ownerFirestore, ...requestPath), { status: 'processed' }, { merge: true }));
+  await assertFails(getDocs(collection(ownerFirestore, 'cartularyCreateRequests')));
+  await assertFails(setDoc(doc(outsiderFirestore, 'cartularyCreateRequests', 'cart-new-outsider-0001'), {
+    ...request,
+    requestDocumentId: 'cart-new-outsider-0001',
+    cartularyId: 'cart-new-outsider-0001',
+    ownerUid: outsiderUid,
+    organizationId: ownerOrganizationId,
+  }));
+});
+
 test('le propriétaire peut demander une synchronisation autoritaire sans écrire directement le Cartulaire', async () => {
   const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
   const outsiderFirestore = testEnvironment.authenticatedContext(outsiderUid).firestore();

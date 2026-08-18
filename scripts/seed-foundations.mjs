@@ -4,6 +4,7 @@ import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { randomBytes } from 'node:crypto';
 import {
   SCHEMA_CONTRACT_DIGEST_VERSION,
+  readSchemaCatalogManifest,
   schemaContractDigest,
   verifySchemaCatalog,
 } from './lib/schema-catalog-files.mjs';
@@ -11,6 +12,7 @@ import {
 const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || 'cartularia-wave1-local';
 const usesEmulators = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
 const allowRemote = process.argv.includes('--allow-remote');
+const schemasOnly = process.argv.includes('--schemas-only');
 const includeIsolationFixtures = usesEmulators || process.argv.includes('--include-isolation-fixtures');
 
 if (!usesEmulators && !allowRemote) {
@@ -47,7 +49,7 @@ const fixtures = {
   outsiderRegistry: { id: 'reg_isolation', name: 'Registre isolation' },
 };
 
-if (!usesEmulators && !fixtures.owner.email) {
+if (!usesEmulators && !schemasOnly && !fixtures.owner.email) {
   throw new Error('CARTULARIA_ADMIN_EMAIL est requis pour créer les fondations distantes.');
 }
 
@@ -67,15 +69,17 @@ const ensureUser = async ({ uid, email, displayName }, password) => {
   }
 };
 
-if (await ensureUser(fixtures.owner, generatedAdminPassword)) {
-  createdAdminCredentials = {
-    uid: fixtures.owner.uid,
-    email: fixtures.owner.email,
-    temporaryPassword: generatedAdminPassword,
-  };
-}
-if (includeIsolationFixtures) {
-  await ensureUser(fixtures.outsider, 'Cartularia-Wave1-Local!');
+if (!schemasOnly) {
+  if (await ensureUser(fixtures.owner, generatedAdminPassword)) {
+    createdAdminCredentials = {
+      uid: fixtures.owner.uid,
+      email: fixtures.owner.email,
+      temporaryPassword: generatedAdminPassword,
+    };
+  }
+  if (includeIsolationFixtures) {
+    await ensureUser(fixtures.outsider, 'Cartularia-Wave1-Local!');
+  }
 }
 
 const now = FieldValue.serverTimestamp();
@@ -84,6 +88,7 @@ const batch = firestore.batch();
 const set = (path, data) => batch.set(firestore.doc(path), data, { merge: true });
 const create = (path, data) => batch.create(firestore.doc(path), data);
 
+if (!schemasOnly) {
 set(`users/${fixtures.owner.uid}`, {
   ...fixtures.owner,
   status: 'active',
@@ -194,9 +199,12 @@ for (const [registry, organization] of [
     updatedAt: now,
   });
 }
+}
 
-const catalogArtifacts = verifySchemaCatalog(new URL('../firebase/schema-catalog/', import.meta.url));
+const catalogDirectoryUrl = new URL('../firebase/schema-catalog/', import.meta.url);
+const catalogArtifacts = verifySchemaCatalog(catalogDirectoryUrl);
 const schemas = catalogArtifacts.map(({ schema, contractDigest }) => ({ schema, contractDigest }));
+const declaredActiveVersions = readSchemaCatalogManifest(catalogDirectoryUrl)?.activeVersions ?? {};
 
 const readDeployedContract = async (versionRef, versionData) => {
   const sectionIds = Array.isArray(versionData.sectionIds) ? [...versionData.sectionIds].sort() : [];
@@ -271,17 +279,24 @@ for (const { schema, contractDigest } of schemas) {
 
 const schemasById = Map.groupBy(schemas.map(({ schema }) => schema), (schema) => schema.schemaId);
 for (const [schemaId, versions] of schemasById) {
-  const activeVersions = versions.filter((schema) => schema.status === 'active');
-  if (activeVersions.length > 1) {
-    throw new Error(`Le catalogue ${schemaId} contient plusieurs versions actives : ${activeVersions.map(({ version }) => version).join(', ')}.`);
+  // La version active est désignée par le manifeste, pas déduite du champ `status` des artefacts :
+  // ceux-ci sont immuables, donc une version publiée ne peut pas être rétrogradée.
+  const declaredActiveVersion = declaredActiveVersions[schemaId] ?? null;
+  const activeSchema = declaredActiveVersion
+    ? versions.find((schema) => schema.version === declaredActiveVersion)
+    : null;
+  if (declaredActiveVersion && !activeSchema) {
+    throw new Error(
+      `Le manifeste désigne ${schemaId}@${declaredActiveVersion} comme version active alors que ce profil est absent du catalogue.`,
+    );
   }
-  const latestSchema = activeVersions[0] ?? [...versions]
+  const latestSchema = activeSchema ?? [...versions]
     .sort((left, right) => left.version.localeCompare(right.version, undefined, { numeric: true }))
     .at(-1);
   set(`schemaCatalog/${schemaId}`, {
     assetType: latestSchema.assetType,
     latestVersion: latestSchema.version,
-    activeVersion: activeVersions[0]?.version ?? null,
+    activeVersion: activeSchema?.version ?? null,
     status: 'active',
     updatedAt: now,
   });
@@ -289,8 +304,10 @@ for (const [schemaId, versions] of schemasById) {
 
 await batch.commit();
 
-console.log(
-  `Fondations créées dans ${projectId}${usesEmulators ? ' (émulateurs)' : ' (distant explicitement autorisé)'} : ` +
+console.log(schemasOnly
+  ? `Catalogue publié dans ${projectId}${usesEmulators ? ' (émulateurs)' : ' (distant explicitement autorisé)'} : ` +
+    `${schemas.map(({ schema }) => `${schema.schemaId}@${schema.version}`).join(', ')}.`
+  : `Fondations créées dans ${projectId}${usesEmulators ? ' (émulateurs)' : ' (distant explicitement autorisé)'} : ` +
     `${includeIsolationFixtures ? 2 : 1} compte(s), ${includeIsolationFixtures ? 2 : 1} organisation(s), ` +
     `${includeIsolationFixtures ? 2 : 1} membership(s), ${includeIsolationFixtures ? 2 : 1} registre(s), ` +
     `1 admission communautaire pseudonyme, ` +

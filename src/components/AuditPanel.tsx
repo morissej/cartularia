@@ -10,12 +10,22 @@ import type { AuditEvent } from '../types';
 import { Check, AlertTriangle, ChevronDown, ChevronUp, Cloud, HardDrive, RefreshCw, Trash2, Clock3 } from 'lucide-react';
 import type { HybridPersistenceState } from '../persistence/useHybridPersistence';
 import { requestExternalTimestamp } from '../services/timestamping';
+import {
+  observeAuthoritativeCartularyIntegrity,
+  type AuthoritativeCartularyIntegrity,
+} from '../services/cartularyIntegrity';
+import {
+  deriveAuthoritativeIntegrityLevel,
+  deriveLocalWorkJournalLevel,
+} from '../domain/integrityPresentation';
 import QRCode from 'qrcode';
+import { CartularyTransferPanel } from './CartularyTransferPanel';
 
 interface AuditPanelProps {
   journal: IntegrityJournal;
+  cartularyId: string;
   language: 'FR' | 'EN';
-  sealSupportCode?: string;
+  publicShareCode?: string;
   snapshot: Record<string, unknown>;
   publicShareUrl: string;
   refreshToken: number;
@@ -26,8 +36,9 @@ interface AuditPanelProps {
 
 export const AuditPanel: React.FC<AuditPanelProps> = ({
   journal,
+  cartularyId,
   language,
-  sealSupportCode = '5489-210-987-XZ9',
+  publicShareCode = language === 'FR' ? 'Non émis' : 'Not issued',
   snapshot,
   publicShareUrl,
   refreshToken,
@@ -52,6 +63,8 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   const [timestampError, setTimestampError] = useState<string | null>(null);
   const [timestampNotice, setTimestampNotice] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
+  const [authorityLoadState, setAuthorityLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [authorityIntegrity, setAuthorityIntegrity] = useState<AuthoritativeCartularyIntegrity | null>(null);
 
 
   // Onglet technique masqué par défaut (Règle 4)
@@ -85,6 +98,23 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
     return () => { active = false; };
   }, [publicShareUrl]);
 
+  useEffect(() => {
+    if (!persistence.authenticated) {
+      setAuthorityLoadState('idle');
+      setAuthorityIntegrity(null);
+      return undefined;
+    }
+    setAuthorityLoadState('loading');
+    setAuthorityIntegrity(null);
+    return observeAuthoritativeCartularyIntegrity(cartularyId, (state) => {
+      setAuthorityIntegrity(state);
+      setAuthorityLoadState('ready');
+    }, () => {
+      setAuthorityIntegrity(null);
+      setAuthorityLoadState('error');
+    });
+  }, [cartularyId, persistence.authenticated]);
+
   const handleExternalTimestamp = async () => {
     setIsTimestamping(true);
     setTimestampError(null);
@@ -98,7 +128,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
       if (existing) {
         setTimestampNotice(language === 'FR' ? 'Ce lot possède déjà un horodatage externe.' : 'This batch already has an external timestamp.');
       } else {
-        const receipt = await requestExternalTimestamp(merkleRoot);
+        const receipt = await requestExternalTimestamp(merkleRoot, cartularyId);
         await journal.attachExternalTimestamp(receipt);
         setTimestampNotice(language === 'FR' ? 'Horodatage externe vérifié et conservé.' : 'External timestamp verified and saved.');
       }
@@ -135,14 +165,36 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `preuve-integrite-${bundle.cartularyId}-r${bundle.revision}.json`;
+    link.download = `carnet-local-${bundle.cartularyId}-r${bundle.revision}.json`;
     link.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
     await refreshJournal();
     onJournalUpdate();
   };
 
   const latestExternalReceipt = [...receipts].reverse().find(isRfc3161Receipt);
+  const authorityLevel = deriveAuthoritativeIntegrityLevel({
+    authenticated: persistence.authenticated,
+    loadState: authorityLoadState,
+    verificationValid: authorityIntegrity?.verification.valid,
+    timestampStatus: authorityIntegrity?.timestampStatus,
+    publicAnchoringStatus: authorityIntegrity?.publicAnchoringStatus,
+  });
+  const localJournalLevel = deriveLocalWorkJournalLevel({
+    verificationValid: integrityStatus.isValid,
+    hasExternalTimestamp: Boolean(latestExternalReceipt),
+  });
+  const authorityStatusLabel = {
+    sign_in_required: tx('Connexion requise', 'Sign-in required'),
+    loading: tx('Vérification serveur…', 'Checking server proof…'),
+    unavailable: tx('Preuve serveur indisponible', 'Server proof unavailable'),
+    broken: tx('Rupture de la chaîne serveur', 'Server chain break detected'),
+    chain_only: tx('Chaîne serveur cohérente · non scellée extérieurement', 'Consistent server chain · no external seal'),
+    timestamped: tx('Chaîne serveur horodatée par un tiers', 'Third-party timestamped server chain'),
+    anchor_pending: tx('Ancrage Bitcoin soumis · confirmation en attente', 'Bitcoin anchor submitted · confirmation pending'),
+    anchor_failed: tx('Ancrage public en échec temporaire', 'Temporary public anchoring failure'),
+    anchored: tx('Ancrage OpenTimestamps confirmé sur Bitcoin', 'OpenTimestamps anchor confirmed on Bitcoin'),
+  }[authorityLevel];
 
   return (
     <div style={{
@@ -228,7 +280,33 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
         </div>
       </section>
 
-      {/* 1. Couche de Confiance / Sceau */}
+      <CartularyTransferPanel cartularyId={cartularyId} language={language} />
+
+      <section aria-labelledby="server-proof-title" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s3)', border: '1px solid var(--ink)', background: 'var(--paper)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--s2)' }}>
+          <h4 id="server-proof-title" style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            {tx('Preuve serveur du Cartulaire', 'Cartulary server proof')}
+          </h4>
+          <strong style={{ fontSize: '11px', color: authorityLevel === 'broken' || authorityLevel === 'unavailable' ? 'var(--mark)' : 'var(--ink)', textAlign: 'right' }}>{authorityStatusLabel}</strong>
+        </div>
+        {authorityIntegrity && authorityLoadState === 'ready' && <dl style={{ display: 'grid', gap: '6px', margin: 0, fontSize: '11px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}><dt>{tx('Révision autoritaire', 'Authoritative revision')}</dt><dd>R{authorityIntegrity.sourceRevision}</dd></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}><dt>{tx('Événements serveur', 'Server events')}</dt><dd>{authorityIntegrity.integritySequence}</dd></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}><dt>{tx('Tête de chaîne', 'Chain head')}</dt><dd title={authorityIntegrity.integrityHead} style={{ fontFamily: 'var(--font-mono)' }}>{authorityIntegrity.integrityHead.slice(0, 20)}…</dd></div>
+          {authorityIntegrity.batchId && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}><dt>{tx('Lot de preuve', 'Proof batch')}</dt><dd style={{ fontFamily: 'var(--font-mono)' }}>{authorityIntegrity.batchId}</dd></div>}
+          {authorityIntegrity.timestampStatus && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}><dt>{tx('Horodatage du lot', 'Batch timestamp')}</dt><dd>{authorityIntegrity.timestampStatus === 'qualified_eidas' ? tx('Qualifié eIDAS · QTSA démontrée', 'Qualified eIDAS · QTSA demonstrated') : authorityIntegrity.timestampStatus === 'trusted_rfc3161' ? tx('RFC 3161 vérifié · non qualifié', 'Verified RFC 3161 · not qualified') : authorityIntegrity.timestampStatus === 'test_fixture' ? tx('Fixture de test · simulation', 'Test fixture · simulation') : authorityIntegrity.timestampStatus}</dd></div>}
+          {authorityIntegrity.publicAnchorBlockHeight !== null && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)' }}><dt>{tx('Bloc Bitcoin', 'Bitcoin block')}</dt><dd>{authorityIntegrity.publicAnchorBlockHeight}</dd></div>}
+        </dl>}
+        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '11px', lineHeight: 1.5 }}>
+          {authorityLevel === 'sign_in_required'
+            ? tx('Connectez-vous pour lire la chaîne transactionnelle du serveur. Le carnet local présenté plus bas reste un cache de travail et ne la remplace pas.', 'Sign in to read the transactional server chain. The local work journal below remains a cache and does not replace it.')
+            : authorityLevel === 'unavailable'
+              ? tx('Aucun repli local n’est présenté comme preuve serveur. Réessayez lorsque le service autoritaire est disponible.', 'No local fallback is presented as server proof. Retry when the authoritative service is available.')
+              : tx('Cette chaîne serveur est l’unique autorité d’intégrité affichée pour les opérations partagées, les cessions et les preuves exportables. Elle détecte les modifications ; elle ne prouve ni l’authenticité physique, ni la vérité des déclarations, ni la propriété juridique.', 'This server chain is the only displayed integrity authority for shared operations, transfers and portable proofs. It detects changes; it proves neither physical authenticity, factual truth nor legal ownership.')}
+        </p>
+      </section>
+
+      {/* Carnet local conservé comme cache de travail hors ligne. */}
       <div style={{
         borderBottom: '1px solid var(--rule)',
         paddingBottom: 'var(--s4)'
@@ -247,21 +325,25 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             textTransform: 'uppercase',
             letterSpacing: '0.1em'
           }}>
-            {language === 'FR' ? "Preuve d'intégrité" : "Integrity Proof"}
+            {language === 'FR' ? 'Carnet local de travail' : 'Local work journal'}
           </h4>
         </div>
 
-        {/* Détails du Sceau compacts (Règle 3) */}
+        <p style={{ margin: '0 0 var(--s2)', color: 'var(--muted)', fontSize: '11px', lineHeight: 1.5 }}>
+          {tx('Cache hors ligne conservé sans réécriture, avec ses anciens journaux archivés. Il aide à retrouver les modifications effectuées dans ce navigateur, mais ne commande ni cession, ni publication, ni Sceau public et ne remplace jamais la preuve serveur.', 'Offline cache preserved without rewriting, including archived legacy journals. It helps track changes made in this browser, but controls no transfer, publication or public Seal and never replaces the server proof.')}
+        </p>
+
+        {/* État compact du carnet local conservé. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)', marginTop: 'var(--s2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-            <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? "Statut Sceau" : "Seal Status"}</span>
+            <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? 'État du carnet' : 'Journal status'}</span>
             <span style={{ fontWeight: 600, color: integrityStatus.isValid ? 'var(--ink)' : 'var(--mark)', display: 'flex', alignItems: 'center', gap: '4px' }}>
               {integrityStatus.isValid ? <Check size={12} /> : <AlertTriangle size={12} />}
-              {integrityStatus.isValid
-                ? latestExternalReceipt
-                  ? (language === 'FR' ? "Chaîne cohérente · existence horodatée" : "Consistent chain · existence timestamped")
-                  : (language === 'FR' ? "Chaîne cohérente · non horodatée" : "Consistent chain · not timestamped")
-                : (language === 'FR' ? "Rupture détectée" : "Break detected")}
+              {localJournalLevel === 'timestamped_local'
+                ? tx('Cache cohérent · instantané local horodaté', 'Consistent cache · local snapshot timestamped')
+                : localJournalLevel === 'local_only'
+                  ? tx('Cache cohérent · garantie locale seulement', 'Consistent cache · local assurance only')
+                  : tx('Rupture locale détectée', 'Local break detected')}
             </span>
           </div>
 
@@ -292,35 +374,41 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--s2)', fontSize: '11px' }}>
               <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? 'Journal historique' : 'Legacy journal'}</span>
               <span style={{ fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
-                {proofState.legacyStatuses.join(', ')}
+                {proofState.legacyStatuses.map((status) => ({
+                  legacy_valid: tx('archive vérifiable', 'verifiable archive'),
+                  legacy_broken: tx('archive rompue conservée', 'preserved broken archive'),
+                  legacy_unverifiable: tx('archive invérifiable conservée', 'preserved unverifiable archive'),
+                }[status])).join(', ')}
               </span>
             </div>
           )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center', marginTop: 'var(--s1)' }}>
-            <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? "Code de Support" : "Support Code"}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{sealSupportCode}</span>
+            <span style={{ color: 'var(--muted)' }}>{language === 'FR' ? 'Code public du Cartulaire' : 'Public Cartulary code'}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{publicShareCode}</span>
           </div>
 
           <div style={{ display: 'grid', gap: '8px', marginTop: 'var(--s2)', padding: 'var(--s3)', border: '1px solid var(--rule)', background: 'var(--paper)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Clock3 size={16} />
-              <strong style={{ fontSize: '12px' }}>{language === 'FR' ? 'Horodatage tiers RFC 3161' : 'Third-party RFC 3161 timestamp'}</strong>
+              <strong style={{ fontSize: '12px' }}>{language === 'FR' ? 'Horodatage du carnet local' : 'Local journal timestamp'}</strong>
             </div>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: '11px', lineHeight: 1.45 }}>
               {language === 'FR'
-                ? 'Seule la racine Merkle est transmise. Le jeton prouve son existence à la date signée par l’autorité ; il ne prouve pas la vérité des informations.'
-                : 'Only the Merkle root is sent. The token proves its existence at the authority-signed time; it does not prove that the information is true.'}
+                ? 'Seule la racine Merkle du carnet local est transmise. Le jeton date cet instantané local ; il ne le transforme pas en chaîne serveur et ne prouve pas la vérité des informations.'
+                : 'Only the local journal Merkle root is sent. The token dates that local snapshot; it does not turn it into the server chain or prove that the information is true.'}
             </p>
             <button
               type="button"
               className="button button--primary"
               onClick={() => void handleExternalTimestamp()}
-              disabled={!integrityStatus.isValid || proofState.revision === 0 || isTimestamping}
+              disabled={!persistence.authenticated || !integrityStatus.isValid || proofState.revision === 0 || isTimestamping}
             >
               <Clock3 size={14} /> {isTimestamping
                 ? (language === 'FR' ? 'Horodatage en cours…' : 'Timestamping…')
-                : (language === 'FR' ? 'Horodater maintenant' : 'Timestamp now')}
+                : !persistence.authenticated
+                  ? (language === 'FR' ? 'Connexion propriétaire requise' : 'Owner sign-in required')
+                  : (language === 'FR' ? 'Horodater le carnet local' : 'Timestamp local journal')}
             </button>
             {timestampNotice && <div role="status" style={{ color: 'var(--muted)', fontSize: '11px' }}>{timestampNotice}</div>}
             {timestampError && <div role="alert" style={{ color: 'var(--mark)', fontSize: '11px' }}>{timestampError}</div>}
@@ -363,7 +451,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           textTransform: 'uppercase',
           letterSpacing: '0.1em'
         }}>
-          {language === 'FR' ? "Journal d'intégrité" : "Integrity Journal"}
+          {language === 'FR' ? 'Historique local conservé' : 'Preserved local history'}
         </h4>
 
         {/* Alerte de rupture */}
@@ -383,10 +471,10 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             <span>
               {language === 'FR'
                 ? (integrityStatus.brokenSequence === undefined
-                    ? 'Incohérence détectée dans la preuve.'
+                    ? 'Incohérence détectée dans le carnet local.'
                     : `Rupture de chaîne à la séquence #${integrityStatus.brokenSequence} !`)
                 : (integrityStatus.brokenSequence === undefined
-                    ? 'An inconsistency was detected in the proof.'
+                    ? 'An inconsistency was detected in the local journal.'
                     : `Chain broken at sequence #${integrityStatus.brokenSequence}!`)}
             </span>
           </div>
@@ -468,7 +556,9 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                     </div>
                   </>}
                   <div style={{ fontSize: '8px', color: 'var(--muted)' }}>
-                    {language === 'FR' ? 'Ancrage blockchain public : différé' : 'Public blockchain anchoring: deferred'}
+                    {rec.publicAnchoringStatus === 'deferred'
+                      ? tx('Ancrage public de ce carnet : non demandé', 'Public anchoring for this journal: not requested')
+                      : tx(`Ancrage public de ce carnet : ${rec.publicAnchoringStatus}`, `Public anchoring for this journal: ${rec.publicAnchoringStatus}`)}
                   </div>
                 </div>
               );
@@ -597,7 +687,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                   cursor: integrityStatus.isValid && proofState.revision > 0 ? 'pointer' : 'not-allowed',
                 }}
               >
-                {language === 'FR' ? 'Exporter la preuve portable' : 'Export portable proof'}
+                {language === 'FR' ? 'Exporter le carnet local' : 'Export local journal'}
               </button>
             </div>
           </div>

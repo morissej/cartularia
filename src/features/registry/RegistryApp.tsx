@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent, MouseEventHandler } from 'react';
 import type { User } from 'firebase/auth';
 import {
   Bell,
@@ -30,21 +31,25 @@ import {
   signInToCartularia,
   signOutOfCartularia,
 } from '../../services/foundations';
-import { RegistryItems } from './RegistryItems.tsx';
-import { RegistryComparison } from './RegistryComparison.tsx';
-import { RegistryAdministration } from './RegistryAdministration.tsx';
-import { RegistryAccessCenter } from './RegistryAccessCenter.tsx';
-import { RegistryFollowUp } from './RegistryFollowUp.tsx';
-import { RegistryGallery } from './RegistryGallery.tsx';
-import { RegistryIntegrity } from './RegistryIntegrity.tsx';
 import { RegistryOverview } from './RegistryOverview.tsx';
 import { ROLE_LABELS } from './registryAdministration.ts';
 import {
   parseRegistryRoute,
   registryHref,
+  registryNavigationTarget,
+  shouldInterceptRegistryNavigation,
   type RegistrySection,
 } from './registryRouting.ts';
 import './registry.css';
+
+const RegistryItems = lazy(() => import('./RegistryItems.tsx').then((module) => ({ default: module.RegistryItems })));
+const RegistryComparison = lazy(() => import('./RegistryComparison.tsx').then((module) => ({ default: module.RegistryComparison })));
+const RegistryAdministration = lazy(() => import('./RegistryAdministration.tsx').then((module) => ({ default: module.RegistryAdministration })));
+const RegistryAccessCenter = lazy(() => import('./RegistryAccessCenter.tsx').then((module) => ({ default: module.RegistryAccessCenter })));
+const RegistryFollowUp = lazy(() => import('./RegistryFollowUp.tsx').then((module) => ({ default: module.RegistryFollowUp })));
+const RegistryGallery = lazy(() => import('./RegistryGallery.tsx').then((module) => ({ default: module.RegistryGallery })));
+const RegistryIntegrity = lazy(() => import('./RegistryIntegrity.tsx').then((module) => ({ default: module.RegistryIntegrity })));
+const NewCartularyPage = lazy(() => import('./NewCartularyPage.tsx').then((module) => ({ default: module.NewCartularyPage })));
 
 interface RegistryChoice {
   registry: RegistryDocument;
@@ -52,8 +57,18 @@ interface RegistryChoice {
   membership: MembershipDocument;
 }
 
+type NavigateRegistry = (href: string, options?: { replace?: boolean; focus?: boolean }) => void;
+
+const focusRegistryMainContent = () => {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById('registry-main-content')?.focus({ preventScroll: true });
+    });
+  });
+};
+
 const SECTION_META: Array<{
-  section: Exclude<RegistrySection, 'compare'>;
+  section: Exclude<RegistrySection, 'compare' | 'new'>;
   label: string;
   icon: typeof BookOpen;
 }> = [
@@ -62,7 +77,7 @@ const SECTION_META: Array<{
   { section: 'gallery', label: 'Galerie', icon: Images },
   { section: 'follow-up', label: 'Suivi', icon: Bell },
   { section: 'access', label: 'Accès', icon: KeyRound },
-  { section: 'integrity', label: 'Intégrité', icon: Fingerprint },
+  { section: 'integrity', label: 'Preuves', icon: Fingerprint },
   { section: 'admin', label: 'Administration', icon: Settings },
 ];
 
@@ -82,6 +97,10 @@ function RegistryLoading({ message = 'Chargement de votre Registre…' }: { mess
       <p>{message}</p>
     </main>
   );
+}
+
+function RegistrySectionLoading() {
+  return <div className="registry-state-page" role="status" aria-live="polite"><LoaderCircle className="registry-spinner" aria-hidden="true" /><p>Chargement de cette vue…</p></div>;
 }
 
 function RegistrySignIn() {
@@ -157,13 +176,17 @@ function RegistrySignIn() {
   );
 }
 
-function RegistryChooser({ choices, user }: { choices: RegistryChoice[]; user: User }) {
+function RegistryChooser({ choices, user, onRegistryClick }: {
+  choices: RegistryChoice[];
+  user: User;
+  onRegistryClick: MouseEventHandler<HTMLElement>;
+}) {
   const handleSignOut = async () => {
     await signOutOfCartularia();
   };
 
   return (
-    <div className="registry-app">
+    <div className="registry-app" onClick={onRegistryClick}>
       <header className="registry-topbar registry-topbar--chooser">
         <a href="/" className="registry-brand" aria-label="Retour à Cartularia"><BrandLogo /></a>
         <button type="button" className="registry-signout" onClick={handleSignOut}>
@@ -214,19 +237,21 @@ function RegistryNoAccess({ user }: { user: User }) {
   );
 }
 
-function RegistryShell({ choice, choices, section, user }: {
+function RegistryShell({ choice, choices, section, user, navigateRegistry, onRegistryClick }: {
   choice: RegistryChoice;
   choices: RegistryChoice[];
   section: RegistrySection;
   user: User;
+  navigateRegistry: NavigateRegistry;
+  onRegistryClick: MouseEventHandler<HTMLElement>;
 }) {
   const { registry, organization } = choice;
   const handleRegistryChange = (registryId: string) => {
-    window.location.assign(registryHref(registryId));
+    navigateRegistry(registryHref(registryId));
   };
 
   return (
-    <div className="registry-app">
+    <div className="registry-app" onClick={onRegistryClick}>
       <a className="registry-skip-link" href="#registry-main-content">Aller au contenu principal</a>
       <header className="registry-topbar">
         <a href="/" className="registry-brand" aria-label="Retour à Cartularia"><BrandLogo /></a>
@@ -288,46 +313,59 @@ function RegistryShell({ choice, choices, section, user }: {
         </aside>
 
         <main className="registry-main" id="registry-main-content" tabIndex={-1}>
-          {section === 'overview' && (
-            <RegistryOverview registry={registry} organization={organization} membership={choice.membership} />
-          )}
-          {section === 'items' && <RegistryItems registry={registry} />}
-          {section === 'gallery' && (
-            <RegistryGallery
-              registry={registry}
-              canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
-            />
-          )}
-          {section === 'compare' && <RegistryComparison registry={registry} />}
-          {section === 'follow-up' && (
-            <RegistryFollowUp
-              registry={registry}
-              canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
-            />
-          )}
-          {section === 'access' && (
-            <RegistryAccessCenter
-              registry={registry}
-              canReadAccesses={choice.membership.permissions.includes('access.read')}
-            />
-          )}
-          {section === 'integrity' && (
-            <RegistryIntegrity
-              registry={registry}
-              canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
-            />
-          )}
-          {section === 'admin' && (
-            <RegistryAdministration
-              registry={registry}
-              organization={organization}
-              membership={choice.membership}
-              organizationRegistries={choices
-                .filter((candidate) => candidate.organization.id === organization.id)
-                .map((candidate) => candidate.registry)}
-              currentUid={user.uid}
-            />
-          )}
+          <Suspense fallback={<RegistrySectionLoading />}>
+            {section === 'overview' && (
+              <RegistryOverview registry={registry} organization={organization} membership={choice.membership} />
+            )}
+            {section === 'items' && (
+              <RegistryItems
+                registry={registry}
+                canCreateCartularies={choice.membership.permissions.includes('cartulary.edit')}
+              />
+            )}
+            {section === 'new' && choice.membership.permissions.includes('cartulary.edit') && (
+              <NewCartularyPage user={user} organization={organization} registry={registry} />
+            )}
+            {section === 'new' && !choice.membership.permissions.includes('cartulary.edit') && (
+              <section className="registry-create-denied"><LockKeyhole aria-hidden="true" /><h1>Création non autorisée</h1><p>Votre rôle permet de consulter ce Registre, mais pas d’y créer un Cartulaire.</p></section>
+            )}
+            {section === 'gallery' && (
+              <RegistryGallery
+                registry={registry}
+                canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
+              />
+            )}
+            {section === 'compare' && <RegistryComparison registry={registry} />}
+            {section === 'follow-up' && (
+              <RegistryFollowUp
+                registry={registry}
+                canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
+              />
+            )}
+            {section === 'access' && (
+              <RegistryAccessCenter
+                registry={registry}
+                canReadAccesses={choice.membership.permissions.includes('access.read')}
+              />
+            )}
+            {section === 'integrity' && (
+              <RegistryIntegrity
+                registry={registry}
+                canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
+              />
+            )}
+            {section === 'admin' && (
+              <RegistryAdministration
+                registry={registry}
+                organization={organization}
+                membership={choice.membership}
+                organizationRegistries={choices
+                  .filter((candidate) => candidate.organization.id === organization.id)
+                  .map((candidate) => candidate.registry)}
+                currentUid={user.uid}
+              />
+            )}
+          </Suspense>
         </main>
       </div>
     </div>
@@ -339,8 +377,51 @@ export function RegistryApp() {
   const [contexts, setContexts] = useState<AccountOrganizationContext[]>([]);
   const [loadingContexts, setLoadingContexts] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
-  const route = useMemo(() => parseRegistryRoute(window.location.pathname), []);
+  const [route, setRoute] = useState(() => parseRegistryRoute(window.location.pathname));
   const choices = useMemo(() => flattenRegistryChoices(contexts), [contexts]);
+
+  const navigateRegistry = useCallback<NavigateRegistry>((href, options = {}) => {
+    const target = registryNavigationTarget(href, window.location.href);
+    if (!target) {
+      window.location.assign(href);
+      return;
+    }
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (target !== current) {
+      if (options.replace) window.history.replaceState(window.history.state, '', target);
+      else window.history.pushState(window.history.state, '', target);
+    }
+    setRoute(parseRegistryRoute(new URL(target, window.location.href).pathname));
+    if (options.focus !== false) focusRegistryMainContent();
+  }, []);
+
+  const handleRegistryClick = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+    const element = event.target instanceof Element ? event.target : null;
+    const anchor = element?.closest<HTMLAnchorElement>('a[href]');
+    if (!anchor || !shouldInterceptRegistryNavigation({
+      defaultPrevented: event.defaultPrevented,
+      button: event.button,
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      target: anchor.getAttribute('target'),
+      download: anchor.hasAttribute('download'),
+    })) return;
+    const href = anchor.getAttribute('href') || '';
+    if (!registryNavigationTarget(href, window.location.href)) return;
+    event.preventDefault();
+    navigateRegistry(href);
+  }, [navigateRegistry]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setRoute(parseRegistryRoute(window.location.pathname));
+      focusRegistryMainContent();
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -388,8 +469,8 @@ export function RegistryApp() {
 
   useEffect(() => {
     if (!user || loadingContexts || contextError || route.registryId || choices.length !== 1) return;
-    window.location.replace(registryHref(choices[0].registry.id));
-  }, [choices, contextError, loadingContexts, route.registryId, user]);
+    navigateRegistry(registryHref(choices[0].registry.id), { replace: true, focus: false });
+  }, [choices, contextError, loadingContexts, navigateRegistry, route.registryId, user]);
 
   if (user === undefined) return <RegistryLoading message="Vérification de la session…" />;
   if (!user) return <RegistrySignIn />;
@@ -405,7 +486,9 @@ export function RegistryApp() {
     );
   }
   if (choices.length === 0) return <RegistryNoAccess user={user} />;
-  if (!route.registryId) return choices.length === 1 ? <RegistryLoading message="Ouverture du Registre…" /> : <RegistryChooser choices={choices} user={user} />;
+  if (!route.registryId) return choices.length === 1
+    ? <RegistryLoading message="Ouverture du Registre…" />
+    : <RegistryChooser choices={choices} user={user} onRegistryClick={handleRegistryClick} />;
 
   const selectedChoice = choices.find(({ registry }) => registry.id === route.registryId);
   if (!selectedChoice) {
@@ -414,10 +497,19 @@ export function RegistryApp() {
         <LockKeyhole aria-hidden="true" />
         <h1>Contexte non autorisé</h1>
         <p>Ce Registre n’est pas accessible avec le compte actuellement connecté.</p>
-        <a href="/registry">Choisir un autre Registre</a>
+        <a href="/registry" onClick={handleRegistryClick}>Choisir un autre Registre</a>
       </main>
     );
   }
 
-  return <RegistryShell choice={selectedChoice} choices={choices} section={route.section} user={user} />;
+  return (
+    <RegistryShell
+      choice={selectedChoice}
+      choices={choices}
+      section={route.section}
+      user={user}
+      navigateRegistry={navigateRegistry}
+      onRegistryClick={handleRegistryClick}
+    />
+  );
 }

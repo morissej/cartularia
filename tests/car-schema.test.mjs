@@ -7,18 +7,32 @@ import {
   CAR_SCHEMA_VERSION,
 } from '../src/schema/carSchema.ts';
 import { defineVerticalSchema } from '../src/schema/schemaTypes.ts';
+import { OWNERSHIP_HISTORY_FIELD_IDS } from '../src/domain/ownershipHistory.ts';
 
 const exportedSchema = JSON.parse(
+  readFileSync(new URL(`../firebase/schema-catalog/car/${CAR_SCHEMA_VERSION}.json`, import.meta.url), 'utf8'),
+);
+const legacySchema = JSON.parse(
   readFileSync(new URL('../firebase/schema-catalog/car/1.0.0.json', import.meta.url), 'utf8'),
 );
 
-test('car@1.0.0 représente exactement les 40 champs de la verticale pilote', () => {
-  assert.equal(CAR_SCHEMA_VERSION, '1.0.0');
+test('car@1.1.0 ajoute le contrat générique de propriété à la verticale pilote', () => {
+  assert.equal(CAR_SCHEMA_VERSION, '1.1.0');
   assert.equal(CAR_SCHEMA_FIELDS.length, CAR_SCHEMA.fieldCount);
   assert.equal(new Set(CAR_SCHEMA_FIELDS.map((field) => field.fieldId)).size, CAR_SCHEMA_FIELDS.length);
   assert.equal(CAR_SCHEMA.assetType, 'car');
   assert.ok(CAR_SCHEMA.sections.includes('technical.powertrain'));
   assert.ok(CAR_SCHEMA.sections.includes('history.service'));
+  assert.ok(CAR_SCHEMA.sections.includes('cover.ownership_history'));
+  for (const fieldId of Object.values(OWNERSHIP_HISTORY_FIELD_IDS)) {
+    assert.ok(CAR_SCHEMA_FIELDS.some((field) => field.fieldId === fieldId));
+  }
+});
+
+test('car@1.0.0 reste un artefact historique de 40 champs', () => {
+  assert.equal(legacySchema.version, '1.0.0');
+  assert.equal(legacySchema.fieldCount, 40);
+  assert.ok(!legacySchema.sections.includes('cover.ownership_history'));
 });
 
 test('chaque champ car porte le contrat vertical complet et protège Secret', () => {

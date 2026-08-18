@@ -1,11 +1,19 @@
 {
   "manifestVersion": 1,
   "contractDigestVersion": "schema-contract-jcs-1",
+  "activeVersions": {
+    "watch": "1.5.0"
+  },
   "schemas": {
     "car@1.0.0": {
       "path": "car/1.0.0.json",
       "artifactDigest": "sha256:112d4264b482d70611efeea1b3c7f62c7e0baac23a5a2a0b006b086cc011cd30",
       "contractDigest": "sha256:c4ab2bdb943b8e389ddc3d6046d7b89262d3f72ddae882111cbfc6126e05df7b"
+    },
+    "car@1.1.0": {
+      "path": "car/1.1.0.json",
+      "artifactDigest": "sha256:a925de2d6a9cc0236186c2728b09166ae1d0d9958f44c22432dff98c49278008",
+      "contractDigest": "sha256:e00093f6f531df7134b7cad17e42b04e68367636bfe7545f87ef94a947decd0c"
     },
     "watch@1.3.0": {
       "path": "watch/1.3.0.json",
@@ -16,6 +24,11 @@
       "path": "watch/1.4.0.json",
       "artifactDigest": "sha256:07bda0de6ec16416f99e7c7c858a6ca0e5f8b3572772c537f7286abcb424109b",
       "contractDigest": "sha256:108cbb05970434d536ae8349439806eb45bb9b235f65f2a8a511dae2ba4392ca"
+    },
+    "watch@1.5.0": {
+      "path": "watch/1.5.0.json",
+      "artifactDigest": "sha256:bda7bd21caa1919abdd10e17c33ea0a2a698b6f8cf7334fd72afc0ea0def0541",
+      "contractDigest": "sha256:a5cfc9b46e78e8fd173ef795cd55ce5666c06f18f9b9a94d83902da75187c44b"
     }
   }
 }

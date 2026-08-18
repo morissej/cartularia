@@ -3,6 +3,7 @@ import type {
   AIFieldDataType,
   AIFieldSourceKind,
 } from '../ai/fieldCatalog.ts';
+import { OWNERSHIP_HISTORY_FIELD_IDS } from '../domain/ownershipHistory.ts';
 import {
   defineVerticalSchema,
   publishTargetsFor,
@@ -11,7 +12,7 @@ import {
 } from './schemaTypes.ts';
 
 export const CAR_SCHEMA_ID = 'car';
-export const CAR_SCHEMA_VERSION = '1.0.0';
+export const CAR_SCHEMA_VERSION = '1.1.0';
 
 interface CarFieldDefinition {
   fieldId: string;
@@ -78,6 +79,32 @@ export const CAR_SCHEMA_FIELDS = [
   carField({
     fieldId: 'cover.car.year', sectionId: 'cover.car', label: 'Année modèle', dataType: 'number', required: true,
     visibility: 'public', registryFacet: true, validation: 'Entier compris entre 1886 et l’année courante plus un.',
+  }),
+  carField({
+    fieldId: OWNERSHIP_HISTORY_FIELD_IDS.fromYear, sectionId: 'cover.ownership_history', label: 'Année de début de propriété', dataType: 'number',
+    cardinality: 'repeatable', visibility: 'secret', sourcePriority: ['document', 'user', 'expert'],
+    validation: 'Année sur quatre chiffres, antérieure ou égale à l’année de fin lorsqu’elle est connue.',
+  }),
+  carField({
+    fieldId: OWNERSHIP_HISTORY_FIELD_IDS.toYear, sectionId: 'cover.ownership_history', label: 'Année de fin de propriété', dataType: 'number',
+    cardinality: 'repeatable', visibility: 'secret', sourcePriority: ['document', 'user', 'expert'],
+    validation: 'Année sur quatre chiffres, postérieure ou égale à l’année de début lorsqu’elle est connue.',
+  }),
+  carField({
+    fieldId: OWNERSHIP_HISTORY_FIELD_IDS.description, sectionId: 'cover.ownership_history', label: 'Description de la période de propriété', dataType: 'long_text',
+    cardinality: 'repeatable', visibility: 'secret', sourcePriority: ['document', 'user', 'expert'],
+    validation: 'Description factuelle rattachée à la bonne période et sans donnée personnelle inutile.',
+  }),
+  carField({
+    fieldId: OWNERSHIP_HISTORY_FIELD_IDS.firstOwner, sectionId: 'cover.ownership_history', label: 'Premier propriétaire', dataType: 'boolean',
+    cardinality: 'repeatable', visibility: 'secret', sourcePriority: ['document', 'user', 'expert'],
+    validation: 'Au plus une période marquée Premier propriétaire dans le Cartulaire.',
+  }),
+  carField({
+    fieldId: OWNERSHIP_HISTORY_FIELD_IDS.summary, sectionId: 'cover.ownership_history', label: 'Synthèse de l’historique des propriétaires', dataType: 'computed',
+    cardinality: 'computed', required: true, visibility: 'secret', sourcePriority: ['calculation'], aiWritable: false, humanReviewRequired: false,
+    validation: 'Synthèse reproductible à partir des périodes de propriété.',
+    dependencies: [OWNERSHIP_HISTORY_FIELD_IDS.fromYear, OWNERSHIP_HISTORY_FIELD_IDS.toYear, OWNERSHIP_HISTORY_FIELD_IDS.description, OWNERSHIP_HISTORY_FIELD_IDS.firstOwner],
   }),
   carField({
     fieldId: 'identity.car.vin', sectionId: 'identity.private', label: 'VIN', dataType: 'text', required: true,
@@ -213,6 +240,12 @@ export const CAR_SCHEMA_FIELDS = [
   carField({
     fieldId: 'value.retained.explanation', sectionId: 'value.retained', label: 'Explication de la valeur retenue', dataType: 'long_text',
     visibility: 'secret', sourcePriority: ['user', 'market', 'expert'],
+  }),
+  carField({
+    fieldId: OWNERSHIP_HISTORY_FIELD_IDS.valuationAssessment, sectionId: 'value.provenance', label: 'Appréciation de la provenance propriétaire', dataType: 'computed',
+    cardinality: 'computed', required: true, visibility: 'secret', sourcePriority: ['calculation'], aiWritable: false, humanReviewRequired: false,
+    validation: 'Appréciation reproductible à partir de l’historique des propriétaires ; aucun ajustement monétaire automatique.',
+    dependencies: [OWNERSHIP_HISTORY_FIELD_IDS.summary, OWNERSHIP_HISTORY_FIELD_IDS.firstOwner],
   }),
   carField({
     fieldId: 'publishing.blocks.website', sectionId: 'publishing.selection', label: 'Sélection site public', dataType: 'boolean',

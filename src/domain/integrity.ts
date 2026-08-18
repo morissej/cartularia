@@ -30,5 +30,9 @@ export interface RegistryIntegrityEntry {
   integritySequence: number;
   events: RegistryAuditEvent[];
   verification: RegistryAuditVerification;
-  publicAnchoringStatus: 'deferred' | 'anchored';
+  publicAnchoringStatus: 'not_requested' | 'processing' | 'pending_confirmation' | 'anchored' | 'failed';
+  publicAnchorBlockHeight: number | null;
+  publicAnchorConfirmedAtIso: string | null;
+  ownershipTransferCount: number;
+  inheritedHead: string | null;
 }

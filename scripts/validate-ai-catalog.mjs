@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 
 const catalogSource = readFileSync(new URL('../src/ai/fieldCatalog.ts', import.meta.url), 'utf8');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const cartularyComponentSource = readFileSync(new URL('../src/features/cartulary/components/CartularyPresentation.tsx', import.meta.url), 'utf8');
+const cartularyModalSource = readFileSync(new URL('../src/features/cartulary/modals/CartularyModals.tsx', import.meta.url), 'utf8');
+const uiSource = [appSource, cartularyComponentSource, cartularyModalSource].join('\n');
 
 const collect = (source, pattern) => [...source.matchAll(pattern)].map((match) => match[1]);
 const catalogIds = collect(catalogSource, /field\(\{ id: '([^']+)'/g);
-const helperBindings = collect(appSource, /aiFieldProps\(\s*'([^']+)'/g);
-const componentBindings = collect(appSource, /aiField="([^"]+)"/g);
+const helperBindings = collect(uiSource, /aiFieldProps\(\s*'([^']+)'/g);
+const componentBindings = collect(uiSource, /aiField="([^"]+)"/g);
 const dynamicBindings = ['publishing.blocks.website', 'publishing.blocks.report'];
 const boundIds = new Set([...helperBindings, ...componentBindings, ...dynamicBindings]);
 

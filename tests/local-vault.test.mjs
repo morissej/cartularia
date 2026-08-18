@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   CartulariaLocalVault,
   MemoryVaultBackend,
+  ScopedStorage,
   migrateLocalVaultCartularyId,
 } from '../src/persistence/localVault.ts';
 
@@ -29,6 +30,22 @@ class MemoryStorage {
     this.values.delete(key);
   }
 }
+
+test('deux Cartulaires restent isolés dans le même localStorage', () => {
+  const backing = new MemoryStorage();
+  const iwc = new ScopedStorage(backing, 'cart_iwc_flieger_utc_2002');
+  const rolex = new ScopedStorage(backing, 'cart_rolex_gmt_master_1675');
+  iwc.setItem('cartularia-owner-fields', JSON.stringify([{ value: 'IWC' }]));
+  rolex.setItem('cartularia-owner-fields', JSON.stringify([{ value: 'Rolex' }]));
+
+  assert.deepEqual(JSON.parse(iwc.getItem('cartularia-owner-fields')), [{ value: 'IWC' }]);
+  assert.deepEqual(JSON.parse(rolex.getItem('cartularia-owner-fields')), [{ value: 'Rolex' }]);
+  assert.equal(iwc.length, 1);
+  assert.equal(rolex.length, 1);
+  iwc.removeItem('cartularia-owner-fields');
+  assert.equal(iwc.getItem('cartularia-owner-fields'), null);
+  assert.notEqual(rolex.getItem('cartularia-owner-fields'), null);
+});
 
 test('les valeurs localStorage migrées survivent à une perte du cache synchrone', async () => {
   const backend = new MemoryVaultBackend();
@@ -74,6 +91,38 @@ test('un original binaire est conservé avec son empreinte complète', async () 
   assert.equal(stored?.mimeType, 'video/mp4');
   assert.equal(stored?.sha256, `sha256:${'a'.repeat(64)}`);
   assert.equal(await stored?.blob?.text(), 'original-media');
+});
+
+test('un manifeste cloud peut être conservé sans télécharger immédiatement son original', async () => {
+  const backend = new MemoryVaultBackend();
+  const vault = new CartulariaLocalVault('cart-progressive', backend, new MemoryStorage(), () => 100);
+  await vault.applyCloudBinary({
+    id: '', cartularyId: 'cart-progressive', binaryId: 'large-video', kind: 'media',
+    fileName: 'large.mov', mimeType: 'video/quicktime', size: 132_000_000,
+    sha256: `sha256:${'f'.repeat(64)}`, blob: null, updatedAt: 90, dirty: false,
+    deleted: false, cloudRevision: 2, cloudStoragePath: 'private-drafts/owner/cart-progressive/large-video/hash/original',
+  });
+  const stored = await vault.getBinary('large-video');
+  assert.equal(stored?.blob, null);
+  assert.equal(stored?.dirty, false);
+  assert.equal(stored?.cloudRevision, 2);
+  assert.match(stored?.cloudStoragePath ?? '', /large-video/);
+});
+
+test('une réhydratation React identique ne retransforme pas un état cloud en écriture locale', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const vault = new CartulariaLocalVault('cart-reactive-pull', backend, storage, () => 200);
+  const value = JSON.stringify([{ value: 'cloud' }]);
+  await vault.applyCloudState({
+    id: '', cartularyId: 'cart-reactive-pull', key: 'cartularia-owner-fields', value,
+    updatedAt: 100, dirty: false, deleted: false, cloudRevision: 3,
+  });
+  await vault.writeRaw('cartularia-owner-fields', value);
+  const [record] = await vault.listStateRecords();
+  assert.equal(record.dirty, false);
+  assert.equal(record.updatedAt, 100);
+  assert.equal(record.cloudRevision, 3);
 });
 
 test('la suppression d’un binaire conserve une intention de suppression synchronisable', async () => {

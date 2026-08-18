@@ -97,10 +97,34 @@ const manifestEntryFor = (schema, relativePath) => ({
   contractDigest: schemaContractDigest(schema),
 });
 
-const sortedManifest = (schemas) => ({
+const sortedEntries = (entries) =>
+  Object.fromEntries(Object.entries(entries).sort(([left], [right]) => left.localeCompare(right)));
+
+// Le pointeur « version active » est mutable : il vit dans le manifeste, jamais dans l'artefact
+// publié, dont l'empreinte est figée. C'est ce qui permet de publier une nouvelle version active
+// sans avoir à rétrograder — donc à réécrire — la précédente.
+export const activeVersionsFrom = (schemas) => {
+  const active = {};
+  for (const schema of schemas) {
+    if (schema.status !== 'active') continue;
+    const declared = active[schema.schemaId];
+    if (declared && declared !== schema.version) {
+      throw new Error(
+        `Deux versions actives déclarées pour ${schema.schemaId} : ${declared} et ${schema.version}.`,
+      );
+    }
+    active[schema.schemaId] = schema.version;
+  }
+  return sortedEntries(active);
+};
+
+export const readSchemaCatalogManifest = (catalogDirectoryUrl) => readManifest(catalogDirectoryUrl);
+
+const sortedManifest = (schemas, activeVersions) => ({
   manifestVersion: SCHEMA_CATALOG_MANIFEST_VERSION,
   contractDigestVersion: SCHEMA_CONTRACT_DIGEST_VERSION,
-  schemas: Object.fromEntries(Object.entries(schemas).sort(([left], [right]) => left.localeCompare(right))),
+  activeVersions: sortedEntries(activeVersions),
+  schemas: sortedEntries(schemas),
 });
 
 export const verifySchemaCatalog = (catalogDirectoryUrl) => {
@@ -130,6 +154,13 @@ export const verifySchemaCatalog = (catalogDirectoryUrl) => {
   if (missingArtifacts.length > 0) {
     throw new Error(`Le manifeste référence des profils absents : ${missingArtifacts.join(', ')}.`);
   }
+
+  for (const [schemaId, version] of Object.entries(manifest.activeVersions ?? {})) {
+    const key = `${schemaId}@${version}`;
+    if (!artifactKeys.has(key)) {
+      throw new Error(`Le manifeste désigne ${key} comme version active alors que ce profil est absent du catalogue.`);
+    }
+  }
   return artifacts;
 };
 
@@ -158,7 +189,23 @@ export const synchronizeSchemaCatalog = ({ catalogDirectoryUrl, schemas, checkOn
     }
   }
 
-  if (checkOnly) return verifySchemaCatalog(catalogDirectoryUrl);
+  const expectedActiveVersions = activeVersionsFrom(schemas);
+
+  if (checkOnly) {
+    const artifacts = verifySchemaCatalog(catalogDirectoryUrl);
+    const scopedIds = new Set(schemas.map((schema) => schema.schemaId));
+    const publishedActiveVersions = sortedEntries(Object.fromEntries(
+      Object.entries(publishedManifest?.activeVersions ?? {}).filter(([schemaId]) => scopedIds.has(schemaId)),
+    ));
+    if (canonicalize(publishedActiveVersions) !== canonicalize(expectedActiveVersions)) {
+      throw new Error(
+        `Le manifeste désigne ${canonicalize(publishedActiveVersions)} comme versions actives ` +
+          `alors que les profils courants déclarent ${canonicalize(expectedActiveVersions)}. ` +
+          'Exécutez npm run schema:export pour republier le pointeur.',
+      );
+    }
+    return artifacts;
+  }
 
   const currentManifest = publishedManifest;
   const nextEntries = { ...(currentManifest?.schemas ?? {}) };
@@ -174,7 +221,10 @@ export const synchronizeSchemaCatalog = ({ catalogDirectoryUrl, schemas, checkOn
     nextEntries[key] = nextEntry;
   }
 
-  const nextManifest = sortedManifest(nextEntries);
+  const nextManifest = sortedManifest(nextEntries, {
+    ...(currentManifest?.activeVersions ?? {}),
+    ...expectedActiveVersions,
+  });
   const manifestUrl = manifestUrlFor(catalogDirectoryUrl);
   if (!currentManifest || canonicalize(currentManifest) !== canonicalize(nextManifest)) {
     const manifestPath = fileURLToPath(manifestUrl);

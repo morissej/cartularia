@@ -60,6 +60,20 @@ export interface CartularyEnvelope {
   integritySequence: 0;
   modelVersion: typeof CARTULARY_MODEL_VERSION;
   deletedAt: null;
+  currentTransferId?: string | null;
+  transferStatus?: 'proposed' | 'accepted_pending_seal' | 'completed' | 'rejected' | 'expired';
+  ownershipTransferCount?: number;
+  ownershipRollover?: {
+    transferId: string;
+    inheritedHead: string;
+    inheritedSequence: number;
+    sealingBatchId: string;
+    timestampReceiptId: string;
+    publicAnchoringStatus: 'pending_confirmation' | 'anchored';
+    archiveManifestDigest: string;
+    decisionSource: 'human_confirmed';
+    transferredAtIso: string;
+  };
 }
 
 export interface CartularySectionDocument {

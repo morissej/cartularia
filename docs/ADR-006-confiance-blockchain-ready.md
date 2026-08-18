@@ -10,7 +10,9 @@ Les événements patrimoniaux sont sérialisés selon le profil `jcs-1`, chaîn�
 
 Les têtes intègres de plusieurs Cartulaires sont agrégées dans un arbre de Merkle binaire déterministe. Chaque Cartulaire reçoit une preuve d’inclusion privée. La charge destinée à un futur ancrage public contient seulement l’algorithme, la version de canonisation, la racine et le nombre de feuilles ; elle exclut identités, numéros de série, documents, valeurs, localisations et identifiants de Cartulaire.
 
-L’interface d’horodatage accepte des reçus séparés du lot. Le pilote fournit uniquement `cartularia-test-tsa`, une fixture déterministe, non qualifiée et explicitement marquée comme telle. L’adaptateur d’ancrage public retourne `anchoring_deferred` : aucune blockchain et aucun prestataire eIDAS ne sont activés par cette vague.
+L’interface d’horodatage accepte des reçus séparés du lot. Cette vague historique fournissait uniquement `cartularia-test-tsa`, une fixture déterministe, non qualifiée et explicitement marquée comme telle. L’activation ultérieure d’un adaptateur public devait conserver le contrat multi-fournisseurs défini ici.
+
+Depuis ADR-022, OpenTimestamps est le premier adaptateur public actif du code pilote ; le statut différé de cette vague n’est plus le comportement courant.
 
 L’export propriétaire est une commande serveur observable et idempotente. Elle ajoute une seule révision et un seul événement, vérifie le journal, puis produit un manifeste et des enregistrements JSON portables. Les métadonnées des médias en attente sont exportées, mais aucun binaire absent n’est présenté comme inclus.
 

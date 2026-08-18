@@ -1,10 +1,10 @@
 import { collection, getDocs } from 'firebase/firestore';
-import { getBlob, ref } from 'firebase/storage';
 import { mockCartulary } from '../data/mockData.ts';
 import { IWC_CARTULARY_ID } from '../domain/cartularyIds.ts';
 import type { RegistryGalleryEntry, RegistryGallerySlide } from '../domain/gallery.ts';
-import { db, storage } from '../firebase.ts';
+import { db } from '../firebase.ts';
 import { loadRegistryItems, observeRegistryItems } from './projections.ts';
+import { loadPrivateStorageObjectUrl, releasePrivateMediaObjectUrl } from './privateMedia.ts';
 
 interface ReadableAssetDocument {
   id?: string;
@@ -49,35 +49,58 @@ const resolveAssetPreview = async (
     };
   }
 
-  if (typeof asset.storagePath === 'string' && asset.storagePath.startsWith('private-drafts/')) {
-    try {
-      const blob = await getBlob(ref(storage, asset.storagePath));
-      const url = URL.createObjectURL(blob);
-      return { url, thumbnailUrl: url, source: 'firebase_storage' };
-    } catch {
-      // Le repli local ci-dessous reste disponible dans le seul environnement pilote.
-    }
+  // Les médias du Cartulaire IWC existent déjà dans le bundle Hosting. Les
+  // utiliser évite tout téléchargement Storage au chargement de la Galerie.
+  if (cartularyId === IWC_CARTULARY_ID) {
+    const preview = prototypePreviewByAssetId.get(assetId);
+    if (preview) return { ...preview, source: 'prototype_bundle' };
   }
 
-  // Le prototype IWC conserve encore ses binaires dans public/assets. Cette
-  // résolution est volontairement limitée à l'émulateur et ne crée aucune
-  // copie dans le Registre.
-  if (import.meta.env.VITE_USE_FIREBASE_EMULATORS !== 'true' || cartularyId !== IWC_CARTULARY_ID) return null;
-  const preview = prototypePreviewByAssetId.get(assetId);
-  return preview ? { ...preview, source: 'local_prototype' } : null;
+  if (typeof asset.storagePath === 'string' && asset.storagePath.startsWith('private-drafts/')) {
+    try {
+      const url = await loadPrivateStorageObjectUrl(asset.storagePath);
+      return { url, thumbnailUrl: url, source: 'firebase_storage' };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+export const resolveRegistryGallerySlide = async (
+  slide: RegistryGallerySlide,
+): Promise<RegistryGallerySlide> => {
+  if (slide.url || slide.source === 'error' || !slide.storagePath?.startsWith('private-drafts/')) return slide;
+  try {
+    const url = await loadPrivateStorageObjectUrl(slide.storagePath);
+    return { ...slide, url, thumbnailUrl: url, source: 'firebase_storage' };
+  } catch {
+    return { ...slide, url: '', thumbnailUrl: '', source: 'error' };
+  }
 };
 
 const loadEntry = async (
   item: Awaited<ReturnType<typeof loadRegistryItems>>[number],
 ): Promise<RegistryGalleryEntry> => {
   const assetsSnapshot = await getDocs(collection(db, 'cartularies', item.cartularyId, 'assets'));
-  const slides = (await Promise.all(assetsSnapshot.docs.map(async (document): Promise<RegistryGallerySlide | null> => {
+  const candidates = assetsSnapshot.docs.map((document) => {
     const asset = document.data() as ReadableAssetDocument;
     const assetId = asset.id || document.id;
     if (asset.mediaKind !== 'image' || asset.projectionStatus === 'withdrawn') return null;
     if (assetId !== item.primaryAssetId && !asset.tags?.includes('slideshow')) return null;
-    const preview = await resolveAssetPreview(item.cartularyId, assetId, asset);
-    if (!preview) return null;
+    return { assetId, asset };
+  }).filter((candidate): candidate is { assetId: string; asset: ReadableAssetDocument } => Boolean(candidate));
+  const slides = (await Promise.all(candidates.map(async ({ assetId, asset }): Promise<RegistryGallerySlide | null> => {
+    const hasAuthorizedDerivative = safeSameOriginPath(asset.presentationDerivative?.url);
+    const shouldResolveNow = item.cartularyId === IWC_CARTULARY_ID
+      || hasAuthorizedDerivative;
+    const preview = shouldResolveNow
+      ? await resolveAssetPreview(item.cartularyId, assetId, asset)
+      : null;
+    const storagePath = typeof asset.storagePath === 'string' && asset.storagePath.startsWith('private-drafts/')
+      ? asset.storagePath
+      : null;
+    if (!preview && !storagePath) return null;
     return {
       assetId,
       cartularyId: item.cartularyId,
@@ -85,7 +108,10 @@ const loadEntry = async (
       category: asset.componentCode || 'ensemble',
       capturedAt: asset.capturedAt || null,
       tags: Array.isArray(asset.tags) ? asset.tags : [],
-      ...preview,
+      url: preview?.url ?? '',
+      thumbnailUrl: preview?.thumbnailUrl ?? '',
+      source: preview?.source ?? 'firebase_storage',
+      storagePath,
     };
   }))).filter((slide): slide is RegistryGallerySlide => Boolean(slide));
 
@@ -121,8 +147,8 @@ export const observeRegistryGallery = (
 };
 
 export const revokeRegistryGalleryObjectUrls = (entries: RegistryGalleryEntry[]) => {
-  const urls = new Set(entries.flatMap((entry) => entry.slides.flatMap((slide) => [slide.url, slide.thumbnailUrl])));
+  const urls = new Set(entries.flatMap((entry) => entry.slides.map((slide) => slide.url || slide.thumbnailUrl)));
   urls.forEach((url) => {
-    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+    if (url.startsWith('blob:') && !releasePrivateMediaObjectUrl(url)) URL.revokeObjectURL(url);
   });
 };

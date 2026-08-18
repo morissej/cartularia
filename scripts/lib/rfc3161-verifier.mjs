@@ -18,7 +18,21 @@ const decodeBase64 = (value) => {
   return bytes;
 };
 
-export const verifyPortableRfc3161Receipt = async (receipt) => {
+const messageImprintFromQueryText = (text) => {
+  const hashAlgorithm = text.match(/^Hash Algorithm:\s*(.+)$/mi)?.[1]?.trim().toLowerCase();
+  const block = text.match(/^Message data:\s*\n([\s\S]*?)^Policy OID:/mi)?.[1] || '';
+  const digest = block.split('\n').map((line) => (
+    line.match(/^\s*[0-9a-f]{4}\s*-\s*(.*?)\s{2,}/i)?.[1]?.replace(/[^a-f0-9]/gi, '') || ''
+  )).join('').toLowerCase();
+  if (hashAlgorithm !== 'sha256' || !/^[a-f0-9]{64}$/.test(digest)) {
+    throw new TypeError('empreinte de requête RFC 3161 illisible');
+  }
+  return `sha256:${digest}`;
+};
+
+export const verifyPortableRfc3161Receipt = async (receipt, {
+  trustStorePem = `${rootCertificates.join('\n')}\n`,
+} = {}) => {
   const errors = [];
   if (receipt?.protocol !== 'rfc3161-v1') return { valid: true, errors };
   const workingDirectory = await mkdtemp(join(tmpdir(), 'cartularia-rfc3161-verify-'));
@@ -36,8 +50,14 @@ export const verifyPortableRfc3161Receipt = async (receipt) => {
     await Promise.all([
       writeFile(queryPath, query, { flag: 'wx' }),
       writeFile(responsePath, response, { flag: 'wx' }),
-      writeFile(trustStorePath, `${rootCertificates.join('\n')}\n`, { flag: 'wx', mode: 0o600 }),
+      writeFile(trustStorePath, trustStorePem, { flag: 'wx', mode: 0o600 }),
     ]);
+    const { stdout: queryText } = await execFileAsync('openssl', [
+      'ts', '-query', '-in', queryPath, '-text',
+    ], { maxBuffer: 2 * 1024 * 1024 });
+    if (messageImprintFromQueryText(queryText) !== receipt.digest) {
+      errors.push({ code: 'timestamp_message_imprint_mismatch' });
+    }
     await execFileAsync('openssl', ['ts', '-reply', '-in', responsePath, '-token_out', '-out', tokenPath], { maxBuffer: 2 * 1024 * 1024 });
     await execFileAsync('openssl', ['pkcs7', '-inform', 'DER', '-in', tokenPath, '-print_certs', '-out', certificatesPath], { maxBuffer: 2 * 1024 * 1024 });
     await execFileAsync('openssl', [

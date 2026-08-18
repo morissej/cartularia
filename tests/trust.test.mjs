@@ -12,8 +12,9 @@ import { canonicalize } from '../scripts/lib/canonical-json.mjs';
 import { importCartularyBundle } from '../scripts/lib/import-cartulary-command.mjs';
 import { verifyMerkleProof } from '../scripts/lib/merkle.mjs';
 import {
-  DeferredPublicAnchorAdapter,
   DeterministicTimestampAdapter,
+  OpenTimestampsPublicAnchorAdapter,
+  publicAnchorPayloadDigest,
   toPublicAnchorPayload,
 } from '../scripts/lib/trust-adapters.mjs';
 import {
@@ -58,8 +59,8 @@ const seedFoundations = async () => {
     adminFirestore.doc('schemaCatalog/watch/versions/1.3.0').set({
       schemaId: 'watch', assetType: 'watch', version: '1.3.0', status: 'baseline',
     }),
-    adminFirestore.doc('schemaCatalog/car/versions/1.0.0').set({
-      schemaId: 'car', assetType: 'car', version: '1.0.0', status: 'baseline',
+    adminFirestore.doc('schemaCatalog/car/versions/1.1.0').set({
+      schemaId: 'car', assetType: 'car', version: '1.1.0', status: 'active',
     }),
   ]);
 };
@@ -211,7 +212,7 @@ test('le reçu d’horodatage de test reste non qualifié et rejette un mauvais 
   });
   assert.equal(attached.qualified, false);
   assert.equal(attached.verificationStatus, 'test_fixture');
-  assert.equal(attached.publicAnchoringStatus, 'deferred');
+  assert.equal(attached.publicAnchoringStatus, 'not_requested');
 });
 
 test('T-15 — l’export propriétaire est portable, en lecture seule et idempotent', async () => {
@@ -272,7 +273,7 @@ test('T-11 — une projection arrivée en retard ne remplace pas la révision la
   assert.equal(projection.data().integrityHead, `sha256:${'8'.repeat(64)}`);
 });
 
-test('la charge d’ancrage ne contient aucun secret et l’adaptateur public reste différé', async () => {
+test('la charge d’ancrage ne contient aucun secret et l’adaptateur public est substituable', async () => {
   const payload = toPublicAnchorPayload({
     algorithm: 'sha256-binary-merkle-v1',
     canonicalizationVersion: 'jcs-1',
@@ -287,5 +288,21 @@ test('la charge d’ancrage ne contient aucun secret et l’adaptateur public re
   assert.equal(serialized.includes('SECRET-SERIAL'), false);
   assert.equal(serialized.includes(IWC_CARTULARY_ID), false);
   assert.equal(serialized.includes(ownerUid), false);
-  await assert.rejects(() => new DeferredPublicAnchorAdapter().anchor(payload), (error) => error.code === 'anchoring_deferred');
+  const adapter = new OpenTimestampsPublicAnchorAdapter({
+    client: {
+      anchor: async ({ payloadDigest }) => ({
+        provider: 'opentimestamps',
+        network: 'bitcoin-mainnet',
+        protocol: 'opentimestamps-v1',
+        status: 'anchored',
+        payloadDigest,
+        proofBase64: Buffer.from('proof').toString('base64'),
+        proofSha256: 'sha256:placeholder',
+        blockHeight: 1,
+        confirmedAtIso: '2026-08-17T00:00:00.000Z',
+      }),
+    },
+  });
+  const anchored = await adapter.anchor({ payloadDigest: publicAnchorPayloadDigest(payload) });
+  assert.equal(anchored.status, 'anchored');
 });

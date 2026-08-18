@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   Package,
   Palette,
+  Plus,
   RefreshCw,
   Scale,
   Search,
@@ -59,7 +60,7 @@ const optionValues = (items: RegistryItemProjection[], field: 'assetType' | 'col
 const readInitialParameter = (name: string, fallback: string) =>
   new URLSearchParams(window.location.search).get(name) || fallback;
 
-export function RegistryItems({ registry }: { registry: RegistryDocument }) {
+export function RegistryItems({ registry, canCreateCartularies = false }: { registry: RegistryDocument; canCreateCartularies?: boolean }) {
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [loadState, setLoadState] = useState<CatalogLoadState>('loading');
   const [query, setQuery] = useState(() => readInitialParameter('q', ''));
@@ -147,9 +148,12 @@ export function RegistryItems({ registry }: { registry: RegistryDocument }) {
           <h1 id="registry-catalog-title">Les Cartulaires du Registre</h1>
           <p>Une vue transverse des dossiers autorisés, sans dupliquer leurs preuves, archives ou originaux.</p>
         </div>
-        <div className="registry-catalog__security">
-          <ShieldCheck aria-hidden="true" />
-          <span>Projection Registre uniquement</span>
+        <div className="registry-catalog__heading-actions">
+          {canCreateCartularies && <a href={`/registry/${encodeURIComponent(registry.id)}/new`}><Plus aria-hidden="true" /> Nouveau cartulaire</a>}
+          <div className="registry-catalog__security">
+            <ShieldCheck aria-hidden="true" />
+            <span>Projection Registre uniquement</span>
+          </div>
         </div>
       </header>
 
@@ -296,7 +300,7 @@ export function RegistryItems({ registry }: { registry: RegistryDocument }) {
                   >
                     <Scale aria-hidden="true" />{comparisonIds.includes(item.cartularyId) ? 'Sélectionné' : 'Ajouter à la comparaison'}
                   </button>
-                  <a href={buildCartularyHref(item.cartularyId, returnTo)}>
+                  <a href={buildCartularyHref(item.cartularyId, returnTo, item.assetType)}>
                     Ouvrir le Cartulaire <ExternalLink aria-hidden="true" />
                   </a>
                 </div>

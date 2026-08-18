@@ -37,7 +37,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'registry.read': 'Ouvrir le Registre',
   'access.read': 'Voir les accès partagés',
   'cartulary.read': 'Lire les Cartulaires autorisés',
-  'cartulary.edit': 'Modifier les Cartulaires autorisés',
+  'cartulary.edit': 'Créer et modifier les Cartulaires autorisés',
   'cartulary.export': 'Exporter ses Cartulaires',
   'integrity.batch': 'Créer un lot d’intégrité',
   'publication.manage': 'Gérer les publications',

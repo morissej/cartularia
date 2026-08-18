@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, FileText, Play } from 'lucide-react';
 import type { Asset } from '../types';
+import { horizontalNavigationDirection, targetConsumesHorizontalNavigation } from '../utils/horizontalNavigation.ts';
+import { PrivateMediaImage } from './PrivateMediaImage.tsx';
 
 interface MediaCarouselProps {
   assets: Asset[];
@@ -23,20 +25,37 @@ export function MediaCarousel({
     setCurrentIndex(0);
   }, [assets]);
 
+  const move = useCallback((direction: -1 | 1) => {
+    setCurrentIndex((previous) => (previous + direction + assets.length) % assets.length);
+  }, [assets.length]);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    const direction = horizontalNavigationDirection(event.key);
+    if (!direction || targetConsumesHorizontalNavigation(event.target) || assets.length < 2) return;
+    event.preventDefault();
+    move(direction);
+  };
+
   if (assets.length === 0) {
     return null;
   }
 
   const current = assets[currentIndex];
   const poster = current.posterUrl || current.thumbnailUrl || current.url;
-  const timestamp = current.metadataTimestamp || (current.capturedAt ? `${current.capturedAt}T12:00:00` : undefined);
-
-  const move = (direction: -1 | 1) => {
-    setCurrentIndex((previous) => (previous + direction + assets.length) % assets.length);
-  };
+  const timestamp = current.metadataTimestamp || current.capturedAt;
+  const timestampDate = timestamp ? new Date(timestamp) : null;
+  const formattedTimestamp = timestampDate && !Number.isNaN(timestampDate.getTime())
+    ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(timestampDate)
+    : null;
 
   return (
-    <section className={`media-carousel ${compact ? 'media-carousel--compact' : ''}`} aria-roledescription="carousel">
+    <section
+      className={`media-carousel ${compact ? 'media-carousel--compact' : ''}`}
+      aria-label={language === 'FR' ? 'Diaporama média' : 'Media slideshow'}
+      aria-roledescription="carousel"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       <div className="media-carousel__stage">
         <button
           type="button"
@@ -49,7 +68,7 @@ export function MediaCarousel({
           ) : current.type === 'video' ? (
             <video src={current.url} poster={current.posterUrl || current.thumbnailUrl} preload="metadata" muted aria-label={current.name} />
           ) : (
-            <img src={poster} alt={current.name} />
+            <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} eager />
           )}
           {current.type === 'video' && (
             <span className="media-carousel__play" aria-hidden="true">
@@ -89,7 +108,7 @@ export function MediaCarousel({
           </div>
           {timestamp && (
             <time className="media-carousel__timestamp" dateTime={timestamp}>
-              Horodaté le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp))}
+              {formattedTimestamp ? `Horodaté le ${formattedTimestamp}` : 'Horodatage à vérifier'}
             </time>
           )}
         </div>
@@ -117,7 +136,7 @@ export function MediaCarousel({
                   ? <FileText size={20} aria-hidden="true" />
                   : asset.type === 'video'
                     ? <video src={asset.url} poster={asset.posterUrl || asset.thumbnailUrl} preload="metadata" muted aria-hidden="true" />
-                    : <img src={thumbnail} alt="" />}
+                    : <PrivateMediaImage asset={asset} sourceOverride={thumbnail} alt="" />}
                 {asset.type === 'video' && <Play size={11} fill="currentColor" aria-hidden="true" />}
               </button>
             );

@@ -43,6 +43,12 @@ service cloud.firestore {
         && registryIsInScope(organizationId, registryId);
     }
 
+    function isLegalOwnerInScope(organizationId, registryId, permission) {
+      return hasPermission(organizationId, permission)
+        && 'legal_owner' in get(membershipPath(organizationId)).data.roles
+        && registryIsInScope(organizationId, registryId);
+    }
+
     function communityMembershipPath() {
       return /databases/$(database)/documents/communityMemberships/$(request.auth.uid);
     }
@@ -262,6 +268,142 @@ service cloud.firestore {
       allow list, delete: if false;
     }
 
+    // Demande de création bornée : le navigateur ne transmet que les identifiants
+    // de contexte. Le profil et les fichiers restent dans son brouillon privé ;
+    // une fonction Admin crée ensuite le Cartulaire et sa projection minimale.
+    match /cartularyCreateRequests/{requestDocumentId} {
+      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if accountIsActive(request.auth.uid)
+        && request.resource.data.keys().hasOnly([
+          'requestDocumentId', 'requestId', 'ownerUid', 'cartularyId',
+          'organizationId', 'registryId', 'publicCode', 'status',
+          'requestedAt', 'updatedAt'
+        ])
+        && request.resource.data.requestDocumentId == requestDocumentId
+        && request.resource.data.cartularyId == requestDocumentId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.requestId is string
+        && request.resource.data.requestId.matches('^create_[a-f0-9]{28}$')
+        && request.resource.data.organizationId is string
+        && request.resource.data.registryId is string
+        && request.resource.data.publicCode is string
+        && request.resource.data.publicCode.matches('^[A-Z0-9-]{6,32}$')
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/privateDrafts/$(request.auth.uid)/cartularies/$(requestDocumentId))
+        && get(/databases/$(database)/documents/privateDrafts/$(request.auth.uid)/cartularies/$(requestDocumentId)).data.status == 'active'
+        && get(/databases/$(database)/documents/privateDrafts/$(request.auth.uid)/cartularies/$(requestDocumentId)).data.ownerUid == request.auth.uid
+        && exists(/databases/$(database)/documents/registries/$(request.resource.data.registryId))
+        && get(/databases/$(database)/documents/registries/$(request.resource.data.registryId)).data.organizationId == request.resource.data.organizationId
+        && hasPermission(request.resource.data.organizationId, 'cartulary.edit')
+        && registryIsInScope(request.resource.data.organizationId, request.resource.data.registryId);
+      allow list, update, delete: if false;
+    }
+
+    // File d'horodatage authentifiée. Le navigateur peut uniquement déposer
+    // une empreinte et relire sa demande ; la Function seule crée le reçu.
+    match /timestampRequests/{requestDocumentId} {
+      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if accountIsActive(request.auth.uid)
+        && request.resource.data.keys().hasOnly([
+          'requestDocumentId', 'requestId', 'ownerUid', 'cartularyId',
+          'digest', 'status', 'requestedAt', 'updatedAt'
+        ])
+        && request.resource.data.requestDocumentId == requestDocumentId
+        && request.resource.data.requestId == requestDocumentId
+        && request.resource.data.requestId is string
+        && request.resource.data.requestId.matches('^timestamp_[a-f0-9]{32}$')
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.cartularyId is string
+        && request.resource.data.cartularyId.matches('^[A-Za-z0-9][A-Za-z0-9_-]{5,127}$')
+        && request.resource.data.digest is string
+        && request.resource.data.digest.matches('^sha256:[a-f0-9]{64}$')
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/cartularies/$(request.resource.data.cartularyId))
+        && get(/databases/$(database)/documents/cartularies/$(request.resource.data.cartularyId)).data.accountHolderId == request.auth.uid
+        && isLegalOwnerInScope(
+          get(/databases/$(database)/documents/cartularies/$(request.resource.data.cartularyId)).data.organizationId,
+          get(/databases/$(database)/documents/cartularies/$(request.resource.data.cartularyId)).data.registryId,
+          'integrity.batch'
+        );
+      allow list, update, delete: if false;
+    }
+
+    match /timestampReceipts/{receiptId} {
+      allow get: if accountIsActive(request.auth.uid)
+        && resource.data.ownerUid == request.auth.uid
+        && exists(/databases/$(database)/documents/cartularies/$(resource.data.cartularyId))
+        && get(/databases/$(database)/documents/cartularies/$(resource.data.cartularyId)).data.accountHolderId == request.auth.uid
+        && resource.data.organizationId == get(
+          /databases/$(database)/documents/cartularies/$(resource.data.cartularyId)
+        ).data.organizationId
+        && resource.data.registryId == get(
+          /databases/$(database)/documents/cartularies/$(resource.data.cartularyId)
+        ).data.registryId
+        && isLegalOwnerInScope(resource.data.organizationId, resource.data.registryId, 'integrity.batch');
+      allow list, create, update, delete: if false;
+    }
+
+    match /cartularyTransfers/{transferId} {
+      allow get, list: if signedIn() && request.auth.uid in resource.data.participantUids;
+      allow create, update, delete: if false;
+    }
+
+    match /cartularyTransferRequests/{requestDocumentId} {
+      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if accountIsActive(request.auth.uid)
+        && request.resource.data.keys().hasOnly([
+          'requestDocumentId', 'requestId', 'transferId', 'cartularyId',
+          'ownerUid', 'counterpartyUid', 'action', 'expectedRevision',
+          'decisionSource', 'expiresAtIso', 'status', 'requestedAt', 'updatedAt'
+        ])
+        && request.resource.data.requestDocumentId == requestDocumentId
+        && request.resource.data.requestId == requestDocumentId
+        && request.resource.data.requestId.matches('^transfer_request_[a-f0-9]{24}$')
+        && request.resource.data.transferId.matches('^transfer_[a-f0-9]{24}$')
+        && request.resource.data.cartularyId is string
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.action in ['propose', 'accept', 'reject']
+        && request.resource.data.expectedRevision is int
+        && request.resource.data.expectedRevision > 0
+        && request.resource.data.decisionSource == 'human_confirmed'
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/cartularies/$(request.resource.data.cartularyId))
+        && (
+          (
+            request.resource.data.action == 'propose'
+            && get(/databases/$(database)/documents/cartularies/$(request.resource.data.cartularyId)).data.accountHolderId == request.auth.uid
+            && request.resource.data.counterpartyUid is string
+            && request.resource.data.counterpartyUid != request.auth.uid
+            && request.resource.data.expiresAtIso is string
+          )
+          || (
+            request.resource.data.action in ['accept', 'reject']
+            && exists(/databases/$(database)/documents/cartularyTransfers/$(request.resource.data.transferId))
+            && get(/databases/$(database)/documents/cartularyTransfers/$(request.resource.data.transferId)).data.cartularyId == request.resource.data.cartularyId
+            && get(/databases/$(database)/documents/cartularyTransfers/$(request.resource.data.transferId)).data.buyerUid == request.auth.uid
+            && get(/databases/$(database)/documents/cartularyTransfers/$(request.resource.data.transferId)).data.status == 'proposed'
+          )
+        );
+      allow list, update, delete: if false;
+    }
+
+    match /transferPrivateArchives/{transferId} {
+      allow get: if signedIn() && resource.data.sellerUid == request.auth.uid;
+      allow list, create, update, delete: if false;
+
+      match /records/{recordId} {
+        allow get, list: if signedIn()
+          && get(/databases/$(database)/documents/transferPrivateArchives/$(transferId)).data.sellerUid == request.auth.uid;
+        allow create, update, delete: if false;
+      }
+    }
+
     match /publications/{publicCode} {
       allow get: if resource.data.status == 'published';
       allow list, create, update, delete: if false;
@@ -377,16 +519,27 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
 
       match /receipts/{receiptId} {
-        allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
-        allow list, create, update, delete: if false;
-      }
-
-      match /timestampReceipts/{receiptId} {
-        allow get: if signedIn()
+        allow get, list: if signedIn()
           && request.auth.uid in get(
             /databases/$(database)/documents/integrityBatches/$(batchId)
           ).data.readerUids;
-        allow list, create, update, delete: if false;
+        allow create, update, delete: if false;
+      }
+
+      match /timestampReceipts/{receiptId} {
+        allow get, list: if signedIn()
+          && request.auth.uid in get(
+            /databases/$(database)/documents/integrityBatches/$(batchId)
+          ).data.readerUids;
+        allow create, update, delete: if false;
+      }
+
+      match /publicAnchors/{providerId} {
+        allow get, list: if signedIn()
+          && request.auth.uid in get(
+            /databases/$(database)/documents/integrityBatches/$(batchId)
+          ).data.readerUids;
+        allow create, update, delete: if false;
       }
 
       match /{privateBatchDocument=**} {
@@ -395,7 +548,11 @@ service cloud.firestore {
     }
 
     match /integrityProjections/{cartularyId} {
-      allow read, write: if false;
+      allow get: if canReadCartulary(
+        get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.organizationId,
+        get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.registryId
+      );
+      allow list, create, update, delete: if false;
     }
 
     match /{document=**} {

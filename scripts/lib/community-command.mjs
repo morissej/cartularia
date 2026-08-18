@@ -51,6 +51,7 @@ const assertPatrimonialPublisher = (membership, rootData, actorId) => {
   const data = membership.exists ? membership.data() : null;
   if (
     !data ||
+    rootData.accountHolderId !== actorId ||
     membership.id !== actorId ||
     data.uid !== actorId ||
     data.status !== 'active' ||

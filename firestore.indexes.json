@@ -110,6 +110,22 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "cartularyTransfers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cartularyTransfers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "participantUids", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "cartularyId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

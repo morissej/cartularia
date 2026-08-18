@@ -54,15 +54,12 @@ service firebase.storage {
 
     match /private-drafts/{uid}/{cartularyId}/{binaryId}/{digest}/original {
       allow read: if ownsPrivateDraft(uid, cartularyId)
-        && firestore.exists(
-          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)/binaries/$(binaryId)
-        )
-        && firestore.get(
-          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)/binaries/$(binaryId)
-        ).data.deleted == false
-        && firestore.get(
-          /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)/binaries/$(binaryId)
-        ).data.sha256 == 'sha256:' + digest;
+        && resource != null
+        && resource.metadata.ownerUid == uid
+        && resource.metadata.cartularyId == cartularyId
+        && resource.metadata.binaryId == binaryId
+        && resource.metadata.sha256 == 'sha256:' + digest
+        && resource.metadata.kind in ['media', 'owner_document', 'condition_attachment'];
       allow create, update: if ownsPrivateDraft(uid, cartularyId)
         && request.resource.size <= 524288000
         && request.resource.metadata.ownerUid == uid
