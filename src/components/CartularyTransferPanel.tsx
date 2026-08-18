@@ -10,6 +10,12 @@ import {
   waitForTransferRequest,
 } from '../services/cartularyTransfer.ts';
 import { observeCartulariaSession } from '../services/foundations.ts';
+import {
+  isStepUpCancellation,
+  StepUpAuthenticationUnavailableError,
+  type StepUpPurpose,
+  useStepUpAuthentication,
+} from '../security/useStepUpAuthentication.tsx';
 
 const shortHash = (value?: string) => value?.startsWith('sha256:') ? `${value.slice(0, 19)}…${value.slice(-6)}` : value || '—';
 
@@ -30,6 +36,7 @@ export function CartularyTransferPanel({ cartularyId, language }: { cartularyId:
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { runWithStepUp, stepUpDialog } = useStepUpAuthentication(language);
 
   useEffect(() => observeCartulariaSession(setUser), []);
   useEffect(() => {
@@ -46,19 +53,23 @@ export function CartularyTransferPanel({ cartularyId, language }: { cartularyId:
   const isCurrentOwner = Boolean(user && state?.currentOwnerUid === user.uid);
   const isBuyer = Boolean(user && activeTransfer?.buyerUid === user.uid);
 
-  const run = async (action: () => Promise<string>, success: string) => {
+  const run = async (purpose: StepUpPurpose, action: () => Promise<string>, success: string) => {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const requestId = await action();
+      const requestId = await runWithStepUp(purpose, action, { required: true });
       setNotice(tx('Décision transmise au serveur…', 'Decision sent to the server…'));
       await waitForTransferRequest(requestId);
       setNotice(success);
       setConfirmed(false);
       setBuyerUid('');
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : tx('Cession impossible.', 'Transfer failed.'));
+      if (!isStepUpCancellation(nextError)) {
+        setError(nextError instanceof StepUpAuthenticationUnavailableError
+          ? tx('La session a expiré. Reconnectez-vous avant de continuer.', 'The session expired. Sign in again before continuing.')
+          : nextError instanceof Error ? nextError.message : tx('Cession impossible.', 'Transfer failed.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -66,6 +77,7 @@ export function CartularyTransferPanel({ cartularyId, language }: { cartularyId:
 
   return (
     <section className="cartulary-transfer" aria-labelledby="cartulary-transfer-title">
+      {stepUpDialog}
       <header><ArrowRightLeft aria-hidden="true" /><div><span>{tx('Autorité serveur', 'Server authority')}</span><h4 id="cartulary-transfer-title">{tx('Cession du Cartulaire', 'Cartulary transfer')}</h4></div>{state && <strong>{state.transferCount} {tx('cession(s) effective(s)', 'completed transfer(s)')}</strong>}</header>
 
       {!user && <p>{tx('Connectez-vous pour consulter ou décider une cession.', 'Sign in to review or decide a transfer.')}</p>}
@@ -77,6 +89,7 @@ export function CartularyTransferPanel({ cartularyId, language }: { cartularyId:
           <label>{tx('Identifiant du compte acquéreur', 'Buyer account ID')}<input value={buyerUid} onChange={(event) => setBuyerUid(event.target.value.trim())} placeholder="wave1-buyer" autoComplete="off" /></label>
           <label className="cartulary-transfer__confirmation"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>{tx('Je confirme humainement vouloir céder ce Cartulaire à ce compte.', 'I personally confirm that I want to transfer this Cartulary to this account.')}</span></label>
           <button type="button" className="button button--primary" disabled={busy || !confirmed || buyerUid.length < 6} onClick={() => void run(
+            'transfer_propose',
             () => proposeTransfer({ cartularyId, buyerUid, expectedRevision: state.revision }),
             tx('Proposition de cession enregistrée.', 'Transfer proposal recorded.'),
           )}>{busy ? tx('Traitement…', 'Processing…') : tx('Proposer la cession', 'Propose transfer')}</button>
@@ -87,7 +100,7 @@ export function CartularyTransferPanel({ cartularyId, language }: { cartularyId:
         <article className={`cartulary-transfer__status is-${activeTransfer.status}`}>
           <div><Clock3 aria-hidden="true" /><span><strong>{activeTransfer.status === 'accepted' ? tx('Acceptée — scellement en cours', 'Accepted — sealing in progress') : tx('Proposition en attente', 'Proposal pending')}</strong><small>{tx('Expire le', 'Expires')} {new Intl.DateTimeFormat(language === 'FR' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeTransfer.expiresAtIso))}</small></span></div>
           <dl><div><dt>{tx('Révision liée', 'Bound revision')}</dt><dd>R{activeTransfer.sourceRevision}</dd></div><div><dt>{tx('Tête proposée', 'Proposed head')}</dt><dd title={activeTransfer.proposalHead}>{shortHash(activeTransfer.proposalHead)}</dd></div><div><dt>{tx('Consentement cédant', 'Seller consent')}</dt><dd>{activeTransfer.sellerDecision.decisionSource === 'human_confirmed' ? tx('Confirmé', 'Confirmed') : tx('Absent', 'Missing')}</dd></div><div><dt>{tx('Consentement acquéreur', 'Buyer consent')}</dt><dd>{activeTransfer.buyerDecision.decisionSource === 'human_confirmed' ? tx('Confirmé', 'Confirmed') : tx('En attente', 'Pending')}</dd></div></dl>
-          {isBuyer && activeTransfer.status === 'proposed' && <div className="cartulary-transfer__action"><label className="cartulary-transfer__confirmation"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>{tx('J’ai contrôlé le Cartulaire et je confirme humainement accepter sa chaîne héritée.', 'I reviewed the Cartulary and personally accept its inherited chain.')}</span></label><div className="cartulary-transfer__buttons"><button type="button" className="button button--primary" disabled={busy || !confirmed} onClick={() => void run(() => acceptTransfer(activeTransfer), tx('Cession acceptée et changement de propriétaire traité.', 'Transfer accepted and ownership change processed.'))}><CheckCircle2 aria-hidden="true" />{tx('Accepter', 'Accept')}</button><button type="button" className="button button--quiet" disabled={busy} onClick={() => void run(() => rejectTransfer(activeTransfer), tx('Cession refusée.', 'Transfer rejected.'))}><XCircle aria-hidden="true" />{tx('Refuser', 'Reject')}</button></div></div>}
+          {isBuyer && activeTransfer.status === 'proposed' && <div className="cartulary-transfer__action"><label className="cartulary-transfer__confirmation"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>{tx('J’ai contrôlé le Cartulaire et je confirme humainement accepter sa chaîne héritée.', 'I reviewed the Cartulary and personally accept its inherited chain.')}</span></label><div className="cartulary-transfer__buttons"><button type="button" className="button button--primary" disabled={busy || !confirmed} onClick={() => void run('transfer_accept', () => acceptTransfer(activeTransfer), tx('Cession acceptée et changement de propriétaire traité.', 'Transfer accepted and ownership change processed.'))}><CheckCircle2 aria-hidden="true" />{tx('Accepter', 'Accept')}</button><button type="button" className="button button--quiet" disabled={busy} onClick={() => void run('transfer_reject', () => rejectTransfer(activeTransfer), tx('Cession refusée.', 'Transfer rejected.'))}><XCircle aria-hidden="true" />{tx('Refuser', 'Reject')}</button></div></div>}
         </article>
       )}
 

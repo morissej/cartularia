@@ -20,6 +20,11 @@ import {
 } from '../domain/integrityPresentation';
 import QRCode from 'qrcode';
 import { CartularyTransferPanel } from './CartularyTransferPanel';
+import {
+  isStepUpCancellation,
+  StepUpAuthenticationUnavailableError,
+  useStepUpAuthentication,
+} from '../security/useStepUpAuthentication';
 
 interface AuditPanelProps {
   journal: IntegrityJournal;
@@ -62,9 +67,11 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   const [isTimestamping, setIsTimestamping] = useState(false);
   const [timestampError, setTimestampError] = useState<string | null>(null);
   const [timestampNotice, setTimestampNotice] = useState<string | null>(null);
+  const [sensitiveActionError, setSensitiveActionError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [authorityLoadState, setAuthorityLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [authorityIntegrity, setAuthorityIntegrity] = useState<AuthoritativeCartularyIntegrity | null>(null);
+  const { runWithStepUp, stepUpDialog } = useStepUpAuthentication(language);
 
 
   // Onglet technique masqué par défaut (Règle 4)
@@ -160,16 +167,46 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   };
 
   const handleExport = async () => {
-    const bundle = await journal.exportPortableBundle(snapshot);
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `carnet-local-${bundle.cartularyId}-r${bundle.revision}.json`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
-    await refreshJournal();
-    onJournalUpdate();
+    setSensitiveActionError(null);
+    try {
+      await runWithStepUp('secret_export', async () => {
+        const bundle = await journal.exportPortableBundle(snapshot);
+        const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `carnet-local-${bundle.cartularyId}-r${bundle.revision}.json`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+        await refreshJournal();
+        onJournalUpdate();
+      }, { required: persistence.authenticated });
+    } catch (nextError) {
+      if (!isStepUpCancellation(nextError)) {
+        setSensitiveActionError(nextError instanceof StepUpAuthenticationUnavailableError
+          ? tx('La session a expiré. Reconnectez-vous avant de continuer.', 'The session expired. Sign in again before continuing.')
+          : nextError instanceof Error
+          ? nextError.message
+          : tx('Export impossible.', 'Export failed.'));
+      }
+    }
+  };
+
+  const handleDeleteAllData = async () => {
+    setIsDeleting(true);
+    setSensitiveActionError(null);
+    try {
+      await runWithStepUp('cloud_delete', onDeleteAllData, { required: persistence.authenticated });
+    } catch (nextError) {
+      if (!isStepUpCancellation(nextError)) {
+        setSensitiveActionError(nextError instanceof StepUpAuthenticationUnavailableError
+          ? tx('La session a expiré. Reconnectez-vous avant de continuer.', 'The session expired. Sign in again before continuing.')
+          : nextError instanceof Error
+          ? nextError.message
+          : tx('Suppression impossible.', 'Deletion failed.'));
+      }
+      setIsDeleting(false);
+    }
   };
 
   const latestExternalReceipt = [...receipts].reverse().find(isRfc3161Receipt);
@@ -207,6 +244,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
       backgroundColor: 'var(--sheet)',
       color: 'var(--ink)'
     }}>
+      {stepUpDialog}
       <section aria-labelledby="persistence-title" style={{ borderBottom: '1px solid var(--rule)', paddingBottom: 'var(--s4)' }}>
         <h4 id="persistence-title" style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 'var(--s3)' }}>
           {language === 'FR' ? 'Conservation des données' : 'Data preservation'}
@@ -269,14 +307,12 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
                   type="button"
                   className="button button--primary"
                   disabled={deleteConfirmation !== deleteKeyword || isDeleting}
-                  onClick={() => {
-                    setIsDeleting(true);
-                    void onDeleteAllData().catch(() => setIsDeleting(false));
-                  }}
+                  onClick={() => void handleDeleteAllData()}
                 >{isDeleting ? tx('Suppression…', 'Deleting…') : tx('Confirmer la suppression', 'Confirm deletion')}</button>
               </div>
             </div>
           )}
+          {sensitiveActionError && <p role="alert" style={{ margin: 0, color: 'var(--mark)' }}>{sensitiveActionError}</p>}
         </div>
       </section>
 

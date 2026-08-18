@@ -3,6 +3,7 @@ import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-ch
 import { connectAuthEmulator, getAuth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
+import { installSessionLock } from './security/sessionSecurity';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -30,6 +31,8 @@ export const appCheck = !usesFirebaseEmulators && appCheckSiteKey
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+if (!usesFirebaseEmulators) installSessionLock(auth);
 
 const emulatorState = globalThis as typeof globalThis & {
   __cartulariaFirebaseEmulatorsConnected?: boolean;
