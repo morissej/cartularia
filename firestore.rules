@@ -201,37 +201,61 @@ service cloud.firestore {
         }
 
         match /binaries/{binaryId} {
-          allow get, list: if accountIsActive(uid)
-            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active';
-          allow create, update: if accountIsActive(uid)
-            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active'
-            && request.resource.data.keys().hasOnly([
+          function clientBinaryKeys() {
+            return [
               'ownerUid', 'cartularyId', 'binaryId', 'deleted', 'revision', 'fileName',
               'mimeType', 'size', 'sha256', 'kind', 'storagePath', 'clientUpdatedAt',
               'uploadStatus', 'updatedAt'
-            ])
-            && request.resource.data.ownerUid == uid
-            && request.resource.data.cartularyId == cartularyId
-            && request.resource.data.binaryId == binaryId
-            && request.resource.data.revision is int
-            && request.resource.data.revision > 0
-            && request.resource.data.clientUpdatedAt is number
-            && request.resource.data.size is int
-            && request.resource.data.size >= 0
-            && request.resource.data.sha256.matches('^sha256:[a-f0-9]{64}$')
-            && request.resource.data.kind in ['media', 'owner_document', 'condition_attachment']
-            && (
-              (
-                request.resource.data.deleted == true
-                && request.resource.data.storagePath == null
-                && request.resource.data.uploadStatus == 'deleted'
-              )
-              || (
-                request.resource.data.deleted == false
-                && request.resource.data.storagePath is string
-                && request.resource.data.uploadStatus == 'ready'
-              )
-            );
+            ];
+          }
+
+          function verifiedBinaryKeys() {
+            return [
+              'verificationStatus', 'verificationVersion', 'verificationReason',
+              'verificationMessage', 'verificationStartedAt', 'detectedMimeType',
+              'detectedFormat', 'verifiedSize', 'imageWidth', 'imageHeight',
+              'capturedAtExtracted', 'capturedAtSource', 'derivativeStatus',
+              'presentationDerivative', 'metadataPolicy', 'malwareScanStatus',
+              'mediaDecodeStatus', 'publicationEligible', 'verifiedAt'
+            ];
+          }
+
+          function validClientBinary() {
+            return request.resource.data.ownerUid == uid
+              && request.resource.data.cartularyId == cartularyId
+              && request.resource.data.binaryId == binaryId
+              && request.resource.data.revision is int
+              && request.resource.data.revision > 0
+              && request.resource.data.clientUpdatedAt is number
+              && request.resource.data.size is int
+              && request.resource.data.size >= 0
+              && request.resource.data.sha256.matches('^sha256:[a-f0-9]{64}$')
+              && request.resource.data.kind in ['media', 'owner_document', 'condition_attachment']
+              && (
+                (
+                  request.resource.data.deleted == true
+                  && request.resource.data.storagePath == null
+                  && request.resource.data.uploadStatus == 'deleted'
+                )
+                || (
+                  request.resource.data.deleted == false
+                  && request.resource.data.storagePath is string
+                  && request.resource.data.uploadStatus in ['pending_upload', 'ready']
+                )
+              );
+          }
+
+          allow get, list: if accountIsActive(uid)
+            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active';
+          allow create: if accountIsActive(uid)
+            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active'
+            && request.resource.data.keys().hasOnly(clientBinaryKeys())
+            && validClientBinary();
+          allow update: if accountIsActive(uid)
+            && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active'
+            && request.resource.data.keys().hasOnly(clientBinaryKeys().concat(verifiedBinaryKeys()))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientBinaryKeys())
+            && validClientBinary();
           allow delete: if signedIn() && request.auth.uid == uid;
         }
       }

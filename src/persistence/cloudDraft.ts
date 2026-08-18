@@ -25,6 +25,8 @@ import {
   decideStateSync,
 } from './syncModel.ts';
 import type { CloudBinaryRecord, CloudStateRecord } from './syncModel.ts';
+import { validateFileForUpload } from '../security/fileValidation.ts';
+import { waitForPrivateUploadVerification } from '../services/privateUploadVerification.ts';
 
 const RETENTION_POLICY_VERSION = 'inactive-plus-2y-v1';
 const STATE_DOCUMENT_MAXIMUM_BYTES = 900_000;
@@ -145,7 +147,14 @@ const parseCloudBinary = (binaryId: string, data: Record<string, unknown>): Clou
   kind: data.kind === 'owner_document' || data.kind === 'condition_attachment' ? data.kind : 'media',
   storagePath: typeof data.storagePath === 'string' ? data.storagePath : null,
   clientUpdatedAt: typeof data.clientUpdatedAt === 'number' ? data.clientUpdatedAt : 0,
-  uploadStatus: data.deleted === true ? 'deleted' : 'ready',
+  uploadStatus: data.deleted === true
+    ? 'deleted'
+    : ['pending_upload', 'verifying', 'ready', 'failed'].includes(String(data.uploadStatus))
+      ? data.uploadStatus as CloudBinaryRecord['uploadStatus']
+      : 'ready',
+  verificationStatus: ['processing', 'accepted', 'rejected'].includes(String(data.verificationStatus))
+    ? data.verificationStatus as CloudBinaryRecord['verificationStatus']
+    : null,
 });
 
 const uploadPathFor = (uid: string, cartularyId: string, binary: LocalBinaryRecord) => (
@@ -288,17 +297,13 @@ const syncBinaryRecord = async (
   }
 
   const storagePath = local.deleted ? knownCloud?.storagePath ?? local.cloudStoragePath : uploadPathFor(uid, cartularyId, local);
+  let uploadInspection: Awaited<ReturnType<typeof validateFileForUpload>> | null = null;
   if (!local.deleted) {
     if (!local.blob) throw new Error(`Original local absent pour ${local.binaryId}.`);
-    await uploadBytes(ref(storage, storagePath!), local.blob, {
-      contentType: local.mimeType,
-      customMetadata: {
-        ownerUid: uid,
-        cartularyId,
-        binaryId: local.binaryId,
-        sha256: local.sha256,
-        kind: local.kind,
-      },
+    uploadInspection = await validateFileForUpload({
+      blob: local.blob,
+      fileName: local.fileName,
+      declaredMimeType: local.mimeType,
     });
   }
 
@@ -320,19 +325,38 @@ const syncBinaryRecord = async (
       kind: local.kind,
       storagePath: local.deleted ? null : storagePath!,
       clientUpdatedAt: local.updatedAt,
-      uploadStatus: local.deleted ? 'deleted' : 'ready',
+      uploadStatus: local.deleted
+        ? 'deleted'
+        : currentCloud?.storagePath === storagePath && currentCloud.uploadStatus === 'ready'
+          ? 'ready'
+          : 'pending_upload',
     };
     transaction.set(reference, {
       ownerUid: uid,
       cartularyId,
       ...cloud,
       updatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
     return { decision, cloud };
   });
 
   if (result.decision === 'push' && result.cloud) {
     if (local.deleted && storagePath) await deleteStorageObjectIfPresent(storagePath);
+    if (!local.deleted && result.cloud.uploadStatus === 'pending_upload') {
+      await uploadBytes(ref(storage, storagePath!), local.blob!, {
+        contentType: uploadInspection!.canonicalMimeType,
+        customMetadata: {
+          ownerUid: uid,
+          cartularyId,
+          binaryId: local.binaryId,
+          sha256: local.sha256,
+          kind: local.kind,
+          originalFileName: local.fileName,
+          inspectionRequested: 'true',
+        },
+      });
+      await waitForPrivateUploadVerification({ uid, cartularyId, binaryId: local.binaryId });
+    }
     await vault.markBinaryCloudSynced(local.binaryId, result.cloud.revision, result.cloud.storagePath);
   } else if (result.decision === 'noop' && result.cloud) {
     if (local.deleted && local.cloudStoragePath) await deleteStorageObjectIfPresent(local.cloudStoragePath);

@@ -282,6 +282,57 @@ test('un brouillon cloud privé est modifiable uniquement par son compte propri�
   }));
 });
 
+test('le client peut déclarer un fichier en attente sans pouvoir usurper la vérification serveur', async () => {
+  const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const root = doc(ownerFirestore, 'privateDrafts', ownerUid, 'cartularies', 'cart-a');
+  await assertSucceeds(setDoc(root, {
+    ownerUid,
+    cartularyId: 'cart-a',
+    status: 'active',
+    retentionPolicyVersion: 'inactive-plus-2y-v1',
+    updatedAt: serverTimestamp(),
+  }));
+  const binary = doc(root, 'binaries', 'binary-pending-a1');
+  const pendingManifest = {
+    ownerUid,
+    cartularyId: 'cart-a',
+    binaryId: 'binary-pending-a1',
+    deleted: false,
+    revision: 1,
+    fileName: 'preuve.jpg',
+    mimeType: 'image/jpeg',
+    size: 128,
+    sha256: `sha256:${'a'.repeat(64)}`,
+    kind: 'media',
+    storagePath: `private-drafts/${ownerUid}/cart-a/binary-pending-a1/${'a'.repeat(64)}/original`,
+    clientUpdatedAt: 100,
+    uploadStatus: 'pending_upload',
+    updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(setDoc(binary, pendingManifest));
+  await assertFails(setDoc(binary, {
+    ...pendingManifest,
+    uploadStatus: 'ready',
+    verificationStatus: 'accepted',
+    verificationVersion: 'client-forged',
+    publicationEligible: true,
+  }));
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), binary.path), {
+      verificationStatus: 'accepted',
+      verificationVersion: 'private-upload@1.0.0',
+      publicationEligible: true,
+    }, { merge: true });
+  });
+  await assertSucceeds(setDoc(binary, {
+    revision: 2,
+    clientUpdatedAt: 101,
+    uploadStatus: 'ready',
+    updatedAt: serverTimestamp(),
+  }, { merge: true }));
+  await assertFails(setDoc(binary, { publicationEligible: false }, { merge: true }));
+});
+
 test('un propriétaire éditeur peut demander une création seulement depuis son brouillon et son Registre', async () => {
   const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
   const outsiderFirestore = testEnvironment.authenticatedContext(outsiderUid).firestore();

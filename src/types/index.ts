@@ -86,7 +86,7 @@ export interface Asset {
   mimeType?: string;
   originalFileName?: string;
   metadataTimestamp?: string;
-  timestampSource?: 'file.lastModified' | 'catalogue';
+  timestampSource?: 'file.lastModified' | 'exif.DateTimeOriginal' | 'exif.CreateDate' | 'catalogue';
   binaryId?: string;
   localAvailability?: 'available' | 'missing';
   cloudStoragePath?: string;

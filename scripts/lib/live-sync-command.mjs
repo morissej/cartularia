@@ -2,6 +2,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { CANONICALIZATION_VERSION, sha256Digest } from './canonical-json.mjs';
 import { verifyAuditChain, ZERO_AUDIT_HASH } from './audit-verifier.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
+import { privateBinaryIsVerified } from './private-upload-command.mjs';
 
 const SYNC_RATE_LIMIT_PER_HOUR = 120;
 const ONE_HOUR_MS = 60 * 60 * 1_000;
@@ -123,11 +124,12 @@ const loadDraft = async (firestore, ownerUid, cartularyId) => {
 };
 
 const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organizationId }) => {
-  const storagePath = binary?.deleted === false && typeof binary.storagePath === 'string'
-    ? binary.storagePath
+  const trustedBinary = privateBinaryIsVerified(binary) ? binary : null;
+  const storagePath = trustedBinary && typeof trustedBinary.storagePath === 'string'
+    ? trustedBinary.storagePath
     : existing?.storagePath || null;
-  const sha256 = binary?.deleted === false && /^sha256:[a-f0-9]{64}$/.test(binary.sha256 || '')
-    ? binary.sha256
+  const sha256 = trustedBinary && /^sha256:[a-f0-9]{64}$/.test(trustedBinary.sha256 || '')
+    ? trustedBinary.sha256
     : existing?.sha256 || null;
   return {
     id: asset.id,
@@ -136,8 +138,8 @@ const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organiz
     mediaKind: ['image', 'video', 'audio', 'document'].includes(asset.type) ? asset.type : 'document',
     displayName: asText(asset.name, asset.id),
     originalFileName: typeof asset.originalFileName === 'string' ? asset.originalFileName : null,
-    mimeDeclared: binary?.mimeType || asset.mimeType || existing?.mimeDeclared || null,
-    sizeBytes: Number.isInteger(binary?.size) ? binary.size : existing?.sizeBytes || null,
+    mimeDeclared: trustedBinary?.mimeType || asset.mimeType || existing?.mimeDeclared || null,
+    sizeBytes: Number.isInteger(trustedBinary?.size) ? trustedBinary.size : existing?.sizeBytes || null,
     sha256,
     storagePath,
     binaryId: typeof asset.binaryId === 'string' ? asset.binaryId : existing?.binaryId || null,

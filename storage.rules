@@ -52,6 +52,24 @@ service firebase.storage {
         ).data.status == 'active';
     }
 
+    function validPrivateOriginalContent() {
+      return request.resource.contentType is string
+        && (
+          (
+            request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+            && request.resource.size <= 41943040
+          )
+          || (
+            request.resource.contentType in ['video/mp4', 'video/x-m4v', 'video/quicktime']
+            && request.resource.size <= 524288000
+          )
+          || (
+            request.resource.contentType == 'application/pdf'
+            && request.resource.size <= 52428800
+          )
+        );
+    }
+
     match /private-drafts/{uid}/{cartularyId}/{binaryId}/{digest}/original {
       allow read: if ownsPrivateDraft(uid, cartularyId)
         && resource != null
@@ -60,14 +78,28 @@ service firebase.storage {
         && resource.metadata.binaryId == binaryId
         && resource.metadata.sha256 == 'sha256:' + digest
         && resource.metadata.kind in ['media', 'owner_document', 'condition_attachment'];
-      allow create, update: if ownsPrivateDraft(uid, cartularyId)
-        && request.resource.size <= 524288000
+      allow create: if ownsPrivateDraft(uid, cartularyId)
+        && resource == null
+        && validPrivateOriginalContent()
         && request.resource.metadata.ownerUid == uid
         && request.resource.metadata.cartularyId == cartularyId
         && request.resource.metadata.binaryId == binaryId
         && request.resource.metadata.sha256 == 'sha256:' + digest
         && request.resource.metadata.kind in ['media', 'owner_document', 'condition_attachment'];
+      // Le chemin contient l'empreinte : un original accepté n'est jamais remplacé.
+      allow update: if false;
       allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /private-derivatives/{uid}/{cartularyId}/{binaryId}/{derivativeId} {
+      allow read: if ownsPrivateDraft(uid, cartularyId)
+        && resource != null
+        && resource.metadata.ownerUid == uid
+        && resource.metadata.cartularyId == cartularyId
+        && resource.metadata.binaryId == binaryId
+        && resource.metadata.derivativeId == derivativeId
+        && resource.metadata.metadataStripped == 'true';
+      allow write: if false;
     }
 
     // Seul l'objet dérivé physiquement copié dans l'espace public est lisible.

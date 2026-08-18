@@ -15,6 +15,7 @@ import {
 import type { OrganizationDocument, RegistryDocument } from '../../domain/foundations.ts';
 import { COLLECTION_ID_PATTERN } from '../../domain/collectionIdentifiers.ts';
 import { resumeOrCreateCartulary, type CartularyCreationResult } from '../../domain/cartularyCreation.ts';
+import { validateFileForUpload } from '../../security/fileValidation.ts';
 import {
   CartularyCreationFailedError,
   createWatchCartulary,
@@ -35,6 +36,7 @@ const progressLabel = (progress: CartularyCreationProgress | null) => {
   if (progress.phase === 'preparing') return 'Préparation du brouillon privé…';
   if (progress.phase === 'hashing') return `Calcul de l’empreinte · ${progress.fileName}`;
   if (progress.phase === 'uploading') return `Téléversement ${progress.completedFiles + 1}/${progress.totalFiles} · ${progress.fileName}`;
+  if (progress.phase === 'verifying') return `Vérification du fichier… · ${progress.fileName}`;
   if (progress.phase === 'finalizing') return 'Enregistrement des métadonnées privées…';
   return 'Création autoritaire et raccordement au Registre…';
 };
@@ -88,6 +90,33 @@ export function NewCartularyPage({ user, organization, registry }: {
 
   const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
   const numberOrNull = (value: string) => value.trim() ? Number(value) : null;
+
+  const selectCoverFile = async (file: File | null) => {
+    setError(null);
+    if (!file) return setCoverFile(null);
+    try {
+      await validateFileForUpload({ blob: file, fileName: file.name, declaredMimeType: file.type, expectedKind: 'image' });
+      setCoverFile(file);
+    } catch (caught) {
+      setCoverFile(null);
+      setError(caught instanceof Error ? caught.message : 'Photo de couverture refusée.');
+    }
+  };
+
+  const selectDossierFiles = async (selectedFiles: File[]) => {
+    setError(null);
+    try {
+      await Promise.all(selectedFiles.map((file) => validateFileForUpload({
+        blob: file,
+        fileName: file.name,
+        declaredMimeType: file.type,
+      })));
+      setFiles(selectedFiles);
+    } catch (caught) {
+      setFiles([]);
+      setError(caught instanceof Error ? caught.message : 'Un fichier du dossier a été refusé.');
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -184,13 +213,13 @@ export function NewCartularyPage({ user, organization, registry }: {
             <label className="registry-create-file">
               <ImagePlus aria-hidden="true" />
               <span><strong>Photo de couverture *</strong><small>JPG, PNG, HEIC ou WEBP</small></span>
-              <input name="coverFile" type="file" accept="image/*,.heic,.heif" required onChange={(event) => setCoverFile(event.target.files?.[0] || null)} />
+              <input name="coverFile" type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif" required onChange={(event) => void selectCoverFile(event.target.files?.[0] || null)} />
               {coverFile && <em>{coverFile.name} · {fileSize(coverFile.size)}</em>}
             </label>
             <label className="registry-create-file">
               <UploadCloud aria-hidden="true" />
               <span><strong>Photos, vidéos et documents</strong><small>Sélection multiple · originaux privés</small></span>
-              <input name="dossierFiles" type="file" multiple onChange={(event) => setFiles(Array.from(event.target.files || []))} />
+              <input name="dossierFiles" type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.mp4,.m4v,.mov,.pdf" multiple onChange={(event) => void selectDossierFiles(Array.from(event.target.files || []))} />
               {files.length > 0 && <em>{files.length} fichier{files.length > 1 ? 's' : ''} sélectionné{files.length > 1 ? 's' : ''}</em>}
             </label>
           </div>

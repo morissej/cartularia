@@ -2,6 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { importCartularyBundle } from './import-cartulary-command.mjs';
 import { projectRegistryItem } from './projection-command.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
+import { privateBinaryIsVerified } from './private-upload-command.mjs';
 
 const CREATE_RATE_LIMIT_PER_DAY = 12;
 const ONE_DAY_MS = 24 * 60 * 60 * 1_000;
@@ -344,10 +345,10 @@ const loadCreationDraft = async (firestore, requestData) => {
   const profile = parseStateValue(profileState, 'cartularia-creation-profile');
   const media = parseStateValue(mediaState, 'cartularia-media-assets-v3');
   const readyBinaries = new Map(binaries.docs
-    .filter((snapshot) => snapshot.data().deleted === false && snapshot.data().uploadStatus === 'ready')
+    .filter((snapshot) => privateBinaryIsVerified(snapshot.data()))
     .map((snapshot) => [snapshot.id, snapshot.data()]));
   if (!Array.isArray(media) || media.some((asset) => !readyBinaries.has(asset.binaryId))) {
-    throw new CreateCartularyCommandError('draft_not_ready', 'Tous les fichiers du brouillon doivent être téléversés avant la création.');
+    throw new CreateCartularyCommandError('draft_not_ready', 'Tous les fichiers du brouillon doivent être vérifiés avant la création.');
   }
   const mediaWithStoragePaths = media.map((asset) => {
     const binary = readyBinaries.get(asset.binaryId);

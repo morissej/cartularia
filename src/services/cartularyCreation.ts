@@ -19,6 +19,8 @@ import {
 } from '../domain/cartularyCreation.ts';
 import { db, storage } from '../firebase.ts';
 import { scopedStorageForCartulary } from '../persistence/localVault.ts';
+import { validateFileForUpload, type TrustedFileInspection } from '../security/fileValidation.ts';
+import { waitForPrivateUploadVerification } from './privateUploadVerification.ts';
 
 export interface CreateWatchCartularyInput {
   user: User;
@@ -31,7 +33,7 @@ export interface CreateWatchCartularyInput {
 }
 
 export interface CartularyCreationProgress {
-  phase: 'preparing' | 'hashing' | 'uploading' | 'finalizing' | 'processing';
+  phase: 'preparing' | 'hashing' | 'uploading' | 'verifying' | 'finalizing' | 'processing';
   fileName: string | null;
   completedFiles: number;
   totalFiles: number;
@@ -99,12 +101,6 @@ const sha256 = async (file: File): Promise<string> => {
   return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 };
 
-const mediaType = (file: File): CartularyCreationMediaAsset['type'] => {
-  if (file.type.startsWith('image/')) return 'image';
-  if (file.type.startsWith('video/')) return 'video';
-  return 'document';
-};
-
 const fileSizeLabel = (size: number) => size >= 1024 * 1024
   ? `${(size / (1024 * 1024)).toFixed(1)} Mo`
   : `${Math.ceil(size / 1024)} ko`;
@@ -118,6 +114,7 @@ const uploadFile = async ({
   uploadedBefore,
   totalBytes,
   progress,
+  inspection,
 }: {
   user: User;
   cartularyId: string;
@@ -127,17 +124,20 @@ const uploadFile = async ({
   uploadedBefore: number;
   totalBytes: number;
   progress: (uploadedBytes: number) => void;
+  inspection: TrustedFileInspection;
 }) => {
   const digestValue = digest.slice('sha256:'.length);
   const storagePath = `private-drafts/${user.uid}/${cartularyId}/${binaryId}/${digestValue}/original`;
   const task = uploadBytesResumable(ref(storage, storagePath), file, {
-    contentType: file.type || 'application/octet-stream',
+    contentType: inspection.canonicalMimeType,
     customMetadata: {
       ownerUid: user.uid,
       cartularyId,
       binaryId,
       sha256: digest,
       kind: 'media',
+      originalFileName: file.name,
+      inspectionRequested: 'true',
     },
   });
 
@@ -163,6 +163,15 @@ export const createWatchCartulary = async ({
   const publicCode = `${slugify(profile.brand).slice(0, 3).toUpperCase() || 'WCH'}-${randomToken(8).toUpperCase()}`;
   const requestId = `create_${randomToken(28)}`;
   const allFiles = uniqueFiles(coverFile, files);
+  const inspections = new Map<File, TrustedFileInspection>();
+  for (const file of allFiles) {
+    inspections.set(file, await validateFileForUpload({
+      blob: file,
+      fileName: file.name,
+      declaredMimeType: file.type,
+      expectedKind: file === coverFile ? 'image' : undefined,
+    }));
+  }
   const totalBytes = allFiles.reduce((sum, file) => sum + file.size, 0);
   let uploadedBytes = 0;
   let completedFiles = 0;
@@ -195,10 +204,29 @@ export const createWatchCartulary = async ({
     const digest = await sha256(file);
     const binaryId = `bin_${randomToken(28)}`;
     const assetId = `asset_${randomToken(28)}`;
-    const type = mediaType(file);
+    const inspection = inspections.get(file)!;
+    const type = inspection.kind;
     const uploadedBefore = uploadedBytes;
+    const storagePath = `private-drafts/${user.uid}/${cartularyId}/${binaryId}/${digest.slice('sha256:'.length)}/original`;
+    const binaryDocumentRef = doc(draftRef, 'binaries', binaryId);
+    await setDoc(binaryDocumentRef, {
+      ownerUid: user.uid,
+      cartularyId,
+      binaryId,
+      deleted: false,
+      revision: 1,
+      fileName: file.name,
+      mimeType: inspection.canonicalMimeType,
+      size: file.size,
+      sha256: digest,
+      kind: 'media',
+      storagePath,
+      clientUpdatedAt: Date.now(),
+      uploadStatus: 'pending_upload',
+      updatedAt: serverTimestamp(),
+    });
     emit('uploading', file.name);
-    const storagePath = await uploadFile({
+    await uploadFile({
       user,
       cartularyId,
       file,
@@ -206,40 +234,30 @@ export const createWatchCartulary = async ({
       digest,
       uploadedBefore,
       totalBytes,
+      inspection,
       progress: (nextUploadedBytes) => {
         uploadedBytes = nextUploadedBytes;
         emit('uploading', file.name);
       },
     });
     uploadedBytes = uploadedBefore + file.size;
-    completedFiles += 1;
-
-    await setDoc(doc(draftRef, 'binaries', binaryId), {
-      ownerUid: user.uid,
+    emit('verifying', file.name);
+    const verification = await waitForPrivateUploadVerification({
+      uid: user.uid,
       cartularyId,
       binaryId,
-      deleted: false,
-      revision: 1,
-      fileName: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      size: file.size,
-      sha256: digest,
-      kind: 'media',
-      storagePath,
-      clientUpdatedAt: Date.now(),
-      uploadStatus: 'ready',
-      updatedAt: serverTimestamp(),
     });
+    completedFiles += 1;
 
-    const capturedAt = Number.isFinite(file.lastModified) && file.lastModified > 0
+    const capturedAt = verification.capturedAt || (Number.isFinite(file.lastModified) && file.lastModified > 0
       ? new Date(file.lastModified).toISOString()
-      : new Date().toISOString();
+      : new Date().toISOString());
     mediaAssets.push({
       id: assetId,
       name: file.name,
       originalFileName: file.name,
       type,
-      mimeType: file.type || 'application/octet-stream',
+      mimeType: verification.detectedMimeType,
       url: '',
       hash: digest,
       status: 'Archived',
@@ -254,9 +272,9 @@ export const createWatchCartulary = async ({
       category: type === 'document' ? 'documentation' : 'ensemble',
       visibility: 'Secret',
       fileSize: fileSizeLabel(file.size),
-      derivativeStatus: 'not-required',
+      derivativeStatus: verification.derivativeStatus,
       capturedAt,
-      timestampSource: 'file.lastModified',
+      timestampSource: verification.timestampSource || 'file.lastModified',
     });
     emit('uploading', file.name);
   }

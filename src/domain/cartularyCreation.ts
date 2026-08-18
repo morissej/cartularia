@@ -40,9 +40,9 @@ export interface CartularyCreationMediaAsset {
   category: 'ensemble' | 'documentation';
   visibility: 'Secret';
   fileSize: string;
-  derivativeStatus: 'not-required';
+  derivativeStatus: 'not-required' | 'pending' | 'ready';
   capturedAt: string;
-  timestampSource: 'file.lastModified';
+  timestampSource: 'file.lastModified' | 'exif.DateTimeOriginal' | 'exif.CreateDate';
 }
 
 export interface CartularyCreationResult {

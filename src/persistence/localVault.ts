@@ -1,4 +1,5 @@
 import { ACTIVE_CARTULARY_ID, IWC_CARTULARY_ID } from '../domain/cartularyIds.ts';
+import { validateFileForUpload } from '../security/fileValidation.ts';
 
 const DATABASE_NAME = 'cartularia-local-vault-v2';
 const DATABASE_VERSION = 1;
@@ -432,6 +433,23 @@ export class CartulariaLocalVault {
       this.notifyUpdated();
       return record;
     });
+  }
+
+  public async putValidatedBinary(input: {
+    binaryId: string;
+    kind: LocalBinaryKind;
+    fileName: string;
+    mimeType: string;
+    sha256: string;
+    blob: Blob;
+  }): Promise<LocalBinaryRecord> {
+    const inspection = await validateFileForUpload({
+      blob: input.blob,
+      fileName: input.fileName,
+      declaredMimeType: input.mimeType,
+      allowedKinds: input.kind === 'media' ? undefined : ['image', 'document'],
+    });
+    return this.putBinary({ ...input, mimeType: inspection.canonicalMimeType });
   }
 
   public deleteBinary(binaryId: string): Promise<void> {

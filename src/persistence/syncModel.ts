@@ -19,7 +19,8 @@ export interface CloudBinaryRecord {
   kind: LocalBinaryRecord['kind'];
   storagePath: string | null;
   clientUpdatedAt: number;
-  uploadStatus: 'ready' | 'deleted';
+  uploadStatus: 'pending_upload' | 'verifying' | 'ready' | 'failed' | 'deleted';
+  verificationStatus?: 'processing' | 'accepted' | 'rejected' | null;
 }
 
 export type SyncDecision = 'push' | 'pull' | 'noop' | 'conflict';

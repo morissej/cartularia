@@ -854,6 +854,7 @@ function App() {
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
   const [undoNotice, setUndoNotice] = useState<UndoNotice | null>(null);
   const [deletionError, setDeletionError] = useState<string | null>(null);
+  const [fileImportError, setFileImportError] = useState<string | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
   const [editingBlock, setEditingBlock] = useState<PublishedBlockId | null>(null);
   const mediaState = useCartularyMediaState({ loadAssets: loadMediaAssets });
@@ -1765,7 +1766,7 @@ function App() {
           message: tx(`« ${asset.name} » a été supprimé du coffre média.`, `“${asset.name}” was deleted from the media vault.`),
           onUndo: async () => {
             if (binaryRecord?.blob) {
-              await cartulariaLocalVault?.putBinary({
+              await cartulariaLocalVault?.putValidatedBinary({
                 binaryId: binaryRecord.binaryId,
                 kind: binaryRecord.kind,
                 fileName: binaryRecord.fileName,
@@ -1804,10 +1805,13 @@ function App() {
       (value): value is File => value instanceof File && value.size > 0,
     );
     if (!note && files.length === 0) return;
-    const attachments = await Promise.all(files.map(async (file): Promise<ConditionAttachment> => {
+    setFileImportError(null);
+    let attachments: ConditionAttachment[];
+    try {
+      attachments = await Promise.all(files.map(async (file): Promise<ConditionAttachment> => {
       const binaryId = newId('condition-binary');
       const sha256 = await digestFile(file);
-      await cartulariaLocalVault?.putBinary({
+      await cartulariaLocalVault?.putValidatedBinary({
         binaryId,
         kind: 'condition_attachment',
         fileName: file.name,
@@ -1815,8 +1819,12 @@ function App() {
         sha256,
         blob: file,
       });
-      return { id: newId('attachment'), name: file.name, size: file.size, type: file.type, binaryId, sha256, url: URL.createObjectURL(file) };
-    }));
+        return { id: newId('attachment'), name: file.name, size: file.size, type: file.type, binaryId, sha256, url: URL.createObjectURL(file) };
+      }));
+    } catch (caught) {
+      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
+      return;
+    }
     const entry: ConditionEntry = {
       id: newId('condition'),
       date,
@@ -1836,41 +1844,49 @@ function App() {
     );
     if (files.length === 0) return;
 
-    const importedAssets: Asset[] = await Promise.all(files.map(async (file) => {
-      const type: Asset['type'] = file.type.startsWith('image/')
-        ? 'image'
-        : file.type.startsWith('video/') ? 'video' : 'document';
-      const hash = await digestFile(file);
-      const binaryId = newId('media-binary');
-      await cartulariaLocalVault?.putBinary({
-        binaryId,
-        kind: 'media',
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sha256: hash,
-        blob: file,
-      });
-      return {
-        id: newId('asset'),
-        name: file.name.replace(/\.[^/.]+$/, ''),
-        originalFileName: file.name,
-        url: URL.createObjectURL(file),
-        type,
-        ratio: type === 'video' ? '16:9' : '4:5',
-        hash,
-        status: 'Archived',
-        visibility: 'Secret',
-        tags: mediaUploadTags,
-        capturedAt: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
-        metadataTimestamp: new Date(file.lastModified || Date.now()).toISOString(),
-        timestampSource: 'file.lastModified',
-        fileSize: formatFileSize(file.size),
-        mimeType: file.type || 'application/octet-stream',
-        binaryId,
-        localAvailability: 'available',
-        derivativeStatus: type === 'video' ? 'pending' : 'not-required',
-      };
-    }));
+    setFileImportError(null);
+    let importedAssets: Asset[];
+    try {
+      importedAssets = await Promise.all(files.map(async (file) => {
+        const hash = await digestFile(file);
+        const binaryId = newId('media-binary');
+        const storedBinary = await cartulariaLocalVault?.putValidatedBinary({
+          binaryId,
+          kind: 'media',
+          fileName: file.name,
+          mimeType: file.type,
+          sha256: hash,
+          blob: file,
+        });
+        const canonicalMimeType = storedBinary?.mimeType || file.type;
+        const type: Asset['type'] = canonicalMimeType.startsWith('image/')
+          ? 'image'
+          : canonicalMimeType.startsWith('video/') ? 'video' : 'document';
+        return {
+          id: newId('asset'),
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          originalFileName: file.name,
+          url: URL.createObjectURL(file),
+          type,
+          ratio: type === 'video' ? '16:9' : '4:5',
+          hash,
+          status: 'Archived',
+          visibility: 'Secret',
+          tags: mediaUploadTags,
+          capturedAt: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
+          metadataTimestamp: new Date(file.lastModified || Date.now()).toISOString(),
+          timestampSource: 'file.lastModified',
+          fileSize: formatFileSize(file.size),
+          mimeType: canonicalMimeType,
+          binaryId,
+          localAvailability: 'available',
+          derivativeStatus: type === 'video' ? 'pending' : 'not-required',
+        };
+      }));
+    } catch (caught) {
+      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
+      return;
+    }
 
     mediaCommands.appendAssets(importedAssets);
     form.reset();
@@ -1963,7 +1979,7 @@ function App() {
           message: tx(`« ${target.fileName} » a été supprimé.`, `“${target.fileName}” was deleted.`),
           onUndo: async () => {
             if (binaryRecord?.blob) {
-              await cartulariaLocalVault?.putBinary({
+              await cartulariaLocalVault?.putValidatedBinary({
                 binaryId: binaryRecord.binaryId,
                 kind: binaryRecord.kind,
                 fileName: binaryRecord.fileName,
@@ -1991,10 +2007,13 @@ function App() {
       (value): value is File => value instanceof File && value.size > 0,
     );
     if (files.length === 0) return;
-    const addedDocuments = await Promise.all(files.map(async (file): Promise<OwnerDocument> => {
+    setFileImportError(null);
+    let addedDocuments: OwnerDocument[];
+    try {
+      addedDocuments = await Promise.all(files.map(async (file): Promise<OwnerDocument> => {
       const binaryId = newId('owner-binary');
       const sha256 = await digestFile(file);
-      await cartulariaLocalVault?.putBinary({
+      await cartulariaLocalVault?.putValidatedBinary({
         binaryId,
         kind: 'owner_document',
         fileName: file.name,
@@ -2002,7 +2021,7 @@ function App() {
         sha256,
         blob: file,
       });
-      return {
+        return {
         id: newId('owner-document'),
         category,
         fileName: file.name,
@@ -2011,8 +2030,12 @@ function App() {
         url: URL.createObjectURL(file),
         binaryId,
         sha256,
-      };
-    }));
+        };
+      }));
+    } catch (caught) {
+      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
+      return;
+    }
     setOwnerDocuments((current) => [...current, ...addedDocuments]);
     form.reset();
   };
@@ -2040,7 +2063,7 @@ function App() {
           id: newId('undo-condition'),
           message: tx(`« ${target.title} » et ses pièces jointes ont été supprimés.`, `“${target.title}” and its attachments were deleted.`),
           onUndo: async () => {
-            await Promise.all(binaryRecords.map((record) => record?.blob ? cartulariaLocalVault?.putBinary({
+            await Promise.all(binaryRecords.map((record) => record?.blob ? cartulariaLocalVault?.putValidatedBinary({
               binaryId: record.binaryId,
               kind: record.kind,
               fileName: record.fileName,
@@ -2762,7 +2785,7 @@ function App() {
                           {OWNER_DOCUMENT_CATEGORIES[ownerType].map((category) => <option key={category} value={category}>{ownerDocumentCategoryLabel(category)}</option>)}
                         </select>
                       </label>
-                      <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter un ou plusieurs documents', 'Add one or more documents')}</span><small>{tx('PDF, images ou autres formats', 'PDF, images or other formats')}</small><input {...aiFieldProps('cover.owner.documents[].file', 'new')} type="file" name="owner-documents" multiple /></label>
+                      <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter un ou plusieurs documents', 'Add one or more documents')}</span><small>{tx('PDF, JPG, PNG, WEBP ou HEIC', 'PDF, JPG, PNG, WEBP or HEIC')}</small><input {...aiFieldProps('cover.owner.documents[].file', 'new')} type="file" name="owner-documents" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple /></label>
                       <button type="submit" className="button button--primary">{tx('Ajouter les documents', 'Add documents')}</button>
                     </form>
                   </div>
@@ -2982,9 +3005,9 @@ function App() {
                     <span className="eyebrow">{tx('Nouvel actif', 'New asset')}</span>
                     <label className="file-drop file-drop--media">
                       <Upload size={18} />
-                      <span>{tx('Importer tous types de fichiers', 'Import any file type')}</span>
-                      <small>{tx('Images, vidéos, PDF, documents et archives', 'Images, videos, PDFs, documents and archives')}</small>
-                      <input {...aiFieldProps('media.assets[].file', 'new')} type="file" name="media-files" multiple />
+                      <span>{tx('Importer des fichiers vérifiables', 'Import verifiable files')}</span>
+                      <small>{tx('JPG, PNG, WEBP, HEIC, MP4, MOV et PDF', 'JPG, PNG, WEBP, HEIC, MP4, MOV and PDF')}</small>
+                      <input {...aiFieldProps('media.assets[].file', 'new')} type="file" name="media-files" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.mp4,.m4v,.mov,.pdf" multiple />
                     </label>
                     <fieldset>
                       <legend>{tx('Tags initiaux', 'Initial tags')}</legend>
@@ -3282,7 +3305,7 @@ function App() {
                         <label>Date<input {...aiFieldProps('condition.reports[].date', 'new')} type="date" name="date" defaultValue="2026-08-13" required /></label>
                         <label>{tx('Titre', 'Title')}<input {...aiFieldProps('condition.reports[].title', 'new')} type="text" name="title" placeholder={tx('Rapport, constat, note…', 'Report, observation, note…')} /></label>
                         <label>Note<textarea {...aiFieldProps('condition.reports[].note', 'new')} name="note" rows={7} placeholder={tx('Saisir un texte libre', 'Enter free text')} /></label>
-                        <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter des documents', 'Add documents')}</span><input {...aiFieldProps('condition.reports[].documents', 'new')} type="file" name="documents" multiple /></label>
+                        <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter des documents', 'Add documents')}</span><input {...aiFieldProps('condition.reports[].documents', 'new')} type="file" name="documents" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple /></label>
                         <button type="submit" className="button button--primary">{tx('Enregistrer', 'Save')}</button>
                       </form>
                     )}
@@ -3751,6 +3774,7 @@ function App() {
         onDismiss={async () => { await undoNotice.onExpire?.(); setUndoNotice(null); }}
       />}
       {deletionError && !pendingDeletion && <div className="deletion-error-toast no-print" role="alert">{deletionError}</div>}
+      {fileImportError && <div className="deletion-error-toast no-print" role="alert">{fileImportError}</div>}
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2/options';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import {
   markCartularySyncRequestFailed,
   processCartularySyncRequest,
@@ -19,12 +21,42 @@ import {
 import { runScheduledPublicAnchoring } from './lib/public-anchor-command.mjs';
 import { runExpiredTransferSweep } from './lib/transfer-command.mjs';
 import { markTransferRequestFailed, processTransferRequest } from './lib/transfer-request-command.mjs';
+import {
+  processPrivateDraftUpload,
+  processPrivateDraftUploadBacklog,
+} from './lib/private-upload-command.mjs';
 
 const REGION = 'us-central1';
 const app = getApps()[0] || initializeApp();
 const firestore = getFirestore(app);
+const storage = getStorage(app);
 
 setGlobalOptions({ region: REGION, maxInstances: 5 });
+
+export const verifyPrivateDraftUpload = onObjectFinalized({
+  region: REGION,
+  memory: '1GiB',
+  timeoutSeconds: 540,
+  maxInstances: 2,
+  retry: false,
+}, async (event) => {
+  const result = await processPrivateDraftUpload({ firestore, storage, object: event.data });
+  if (result.status === 'rejected') logger.warn('Original privé refusé après inspection.', result);
+  else if (result.status === 'accepted') logger.info('Original privé vérifié.', result);
+});
+
+export const verifyPrivateDraftBacklogDaily = onSchedule({
+  schedule: '5 4 * * *',
+  timeZone: 'Europe/Paris',
+  region: REGION,
+  memory: '1GiB',
+  timeoutSeconds: 540,
+  maxInstances: 1,
+  retryCount: 0,
+}, async () => {
+  const result = await processPrivateDraftUploadBacklog({ firestore, storage, limit: 10 });
+  logger.info('Validation progressive des originaux privés terminée.', result);
+});
 
 export const anchorIntegrityBatchesDaily = onSchedule({
   schedule: '20 3 * * *',

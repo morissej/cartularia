@@ -151,6 +151,60 @@ test('le propriétaire peut écrire et lire son original de brouillon privé', a
   await assertSucceeds(ownerStorage.ref(draftPath).getDownloadURL());
 });
 
+test('un nouvel original est immuable et les types actifs déguisés sont refusés', async () => {
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  const digest = 'c'.repeat(64);
+  const path = `private-drafts/owner-a/cart-a/immutable-binary/${digest}/original`;
+  const metadata = {
+    contentType: 'image/jpeg',
+    customMetadata: {
+      ownerUid: 'owner-a',
+      cartularyId: 'cart-a',
+      binaryId: 'immutable-binary',
+      sha256: `sha256:${digest}`,
+      kind: 'media',
+    },
+  };
+  await assertSucceeds(ownerStorage.ref(path).putString('premier original', 'raw', metadata));
+  await assertSucceeds(ownerStorage.ref(path).getDownloadURL());
+  await assertFails(ownerStorage.ref(path).putString('remplacement', 'raw', metadata));
+
+  const disguisedDigest = 'd'.repeat(64);
+  await assertFails(ownerStorage.ref(
+    `private-drafts/owner-a/cart-a/disguised-binary/${disguisedDigest}/original`,
+  ).putString('<script>alert(1)</script>', 'raw', {
+    contentType: 'text/html',
+    customMetadata: {
+      ownerUid: 'owner-a',
+      cartularyId: 'cart-a',
+      binaryId: 'disguised-binary',
+      sha256: `sha256:${disguisedDigest}`,
+      kind: 'media',
+    },
+  }));
+});
+
+test('un dérivé nettoyé est lisible par son seul propriétaire et jamais inscriptible par le client', async () => {
+  const derivativePath = 'private-derivatives/owner-a/cart-a/draft-binary-a1/presentation-v1';
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await context.storage(bucketUrl).ref(derivativePath).putString('dérivé privé', 'raw', {
+      contentType: 'image/webp',
+      customMetadata: {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        binaryId: 'draft-binary-a1',
+        derivativeId: 'presentation-v1',
+        metadataStripped: 'true',
+      },
+    });
+  });
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  const outsiderStorage = testEnvironment.authenticatedContext('owner-b').storage(bucketUrl);
+  await assertSucceeds(ownerStorage.ref(derivativePath).getDownloadURL());
+  await assertFails(outsiderStorage.ref(derivativePath).getDownloadURL());
+  await assertFails(ownerStorage.ref(derivativePath).putString('faux dérivé'));
+});
+
 test('un autre compte et un visiteur ne peuvent ni lire ni écrire le brouillon privé', async () => {
   const outsiderStorage = testEnvironment.authenticatedContext('owner-b').storage(bucketUrl);
   const anonymousStorage = testEnvironment.unauthenticatedContext().storage(bucketUrl);
