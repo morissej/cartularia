@@ -258,7 +258,7 @@ export function RegistryGallery({ registry, canReadCartularies }: {
                 {cover ? (
                   <button type="button" className="registry-gallery-card__visual" onClick={() => { setSelectedCartularyId(entry.item.cartularyId); setSlideIndex(0); }} aria-label={`Ouvrir le diaporama de ${entry.item.displayTitle}`}>
                     {cover.thumbnailUrl
-                      ? <img src={cover.thumbnailUrl} alt={`Vue principale — ${entry.item.displayTitle}`} loading="lazy" />
+                      ? <img src={cover.thumbnailUrl} alt={`Vue principale — ${entry.item.displayTitle}`} loading="lazy" decoding="async" />
                       : cover.source === 'error'
                         ? <span className="registry-gallery-card__pending"><ImageOff aria-hidden="true" /><span>Aperçu privé non accessible</span></span>
                       : <span className="registry-gallery-card__pending"><LoaderCircle className="registry-spinner" aria-hidden="true" /><span>Aperçu à charger</span></span>}
@@ -297,13 +297,13 @@ export function RegistryGallery({ registry, canReadCartularies }: {
             <div className="registry-lightbox__stage">
               {selectedSlides.length > 1 && <button type="button" className="registry-lightbox__arrow registry-lightbox__arrow--previous" onClick={() => moveSlide(-1)} aria-label="Photo précédente"><ChevronLeft aria-hidden="true" /></button>}
               <figure>{selectedSlide.url
-                ? <img src={selectedSlide.url} alt={`${selectedSlide.displayName} — ${selectedEntry.item.displayTitle}`} />
+                ? <img src={selectedSlide.url} alt={`${selectedSlide.displayName} — ${selectedEntry.item.displayTitle}`} decoding="async" />
                 : selectedSlide.source === 'error'
                   ? <span className="registry-lightbox__loading"><ImageOff aria-hidden="true" /><strong>Photo privée non accessible avec ce compte</strong></span>
                 : <span className="registry-lightbox__loading"><LoaderCircle className="registry-spinner" aria-hidden="true" /><strong>{loadingSlideId === selectedSlide.assetId ? 'Chargement de la photo…' : 'Photo à charger'}</strong></span>}<figcaption><strong>{selectedSlide.displayName}</strong><span>{labelFromIdentifier(selectedSlide.category)} · {formatDate(selectedSlide.capturedAt)}</span></figcaption></figure>
               {selectedSlides.length > 1 && <button type="button" className="registry-lightbox__arrow registry-lightbox__arrow--next" onClick={() => moveSlide(1)} aria-label="Photo suivante"><ChevronRight aria-hidden="true" /></button>}
             </div>
-            {selectedSlides.length > 1 && <div className="registry-lightbox__thumbnails" aria-label="Photos du diaporama">{selectedSlides.map((slide, index) => <button type="button" aria-current={index === slideIndex ? 'true' : undefined} onClick={() => setSlideIndex(index)} key={slide.assetId}>{slide.thumbnailUrl ? <img src={slide.thumbnailUrl} alt="" /> : <ImageOff aria-hidden="true" />}<span>{index + 1}</span></button>)}</div>}
+            {selectedSlides.length > 1 && <div className="registry-lightbox__thumbnails" aria-label="Photos du diaporama">{selectedSlides.map((slide, index) => <button type="button" aria-current={index === slideIndex ? 'true' : undefined} onClick={() => setSlideIndex(index)} key={slide.assetId}>{slide.thumbnailUrl ? <img src={slide.thumbnailUrl} alt="" loading="lazy" decoding="async" /> : <ImageOff aria-hidden="true" />}<span>{index + 1}</span></button>)}</div>}
             <footer><span><ShieldCheck aria-hidden="true" />Média lu depuis le Cartulaire</span><a href={buildCartularyHref(selectedEntry.item.cartularyId, window.location.pathname + window.location.search, selectedEntry.item.assetType)}>Ouvrir le Cartulaire <ExternalLink aria-hidden="true" /></a></footer>
           </div>
         </div>

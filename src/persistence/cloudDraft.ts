@@ -483,16 +483,31 @@ export const primePrivateDraftState = async ({
   uid,
   cartularyId,
   vault,
+  readTimeoutMs = 5_000,
 }: {
   uid: string;
   cartularyId: string;
   vault: CartulariaLocalVault;
+  readTimeoutMs?: number;
 }) => {
   const localStates = new Map((await vault.listStateRecords()).map((record) => [record.key, record]));
-  const cloudStates = await getDocs(collection(draftRef(uid, cartularyId), 'state'));
+  const cloudStates = await new Promise<Awaited<ReturnType<typeof getDocs>>>((resolve, reject) => {
+    let settled = false;
+    const finish = (operation: () => void) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      operation();
+    };
+    const timeout = globalThis.setTimeout(() => finish(() => reject(new Error('Lecture du brouillon cloud expirée.'))), readTimeoutMs);
+    void getDocs(collection(draftRef(uid, cartularyId), 'state')).then(
+      (snapshot) => finish(() => resolve(snapshot)),
+      (error) => finish(() => reject(error)),
+    );
+  });
   let pulled = 0;
   for (const snapshot of cloudStates.docs) {
-    const cloud = parseCloudState(snapshot.id, snapshot.data());
+    const cloud = parseCloudState(snapshot.id, snapshot.data() as Record<string, unknown>);
     const local = localStates.get(cloud.key);
     if (local?.dirty) continue;
     if (local && local.cloudRevision >= cloud.revision) continue;

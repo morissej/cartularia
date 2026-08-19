@@ -60,6 +60,18 @@ test('les valeurs localStorage migrées survivent à une perte du cache synchron
   assert.deepEqual(JSON.parse(restoredStorage.getItem('cartularia-owner-fields')), [{ id: 'owner-name', value: 'Durable' }]);
 });
 
+test('un coffre IndexedDB vide ne crée aucune valeur métier par défaut pendant la restauration', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const vault = new CartulariaLocalVault('cart-empty-bootstrap', backend, storage, () => 100);
+
+  await vault.restoreLocalStorage();
+
+  assert.equal(storage.getItem('cartularia-owner-fields'), null);
+  assert.equal(storage.getItem('cartularia-media-assets-v3'), null);
+  assert.deepEqual(await vault.listStateRecords(), []);
+});
+
 test('une suppression est persistée comme tombstone et ne ressuscite pas au rechargement', async () => {
   const backend = new MemoryVaultBackend();
   const storage = new MemoryStorage();

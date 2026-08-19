@@ -1,4 +1,5 @@
 import type { PublicBlockProjection } from '../domain/projections';
+import { PresentationImage } from './PresentationImage.tsx';
 
 interface ProjectedPublicBlockProps {
   block: PublicBlockProjection;
@@ -25,7 +26,7 @@ export const ProjectedPublicBlock = ({ block }: ProjectedPublicBlockProps) => {
     <section className="projected-public-block" data-public-block={block.blockId}>
       {heroAsset?.downloadUrl && (
         <figure className="projected-public-block__media">
-          <img src={heroAsset.downloadUrl} alt={heading} />
+          <PresentationImage src={heroAsset.downloadUrl} alt={heading} sizes="(max-width: 720px) 100vw, 50vw" loading="lazy" decoding="async" />
         </figure>
       )}
       <div className="projected-public-block__content">

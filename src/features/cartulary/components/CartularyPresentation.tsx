@@ -2,6 +2,7 @@ import { Lock, Pencil, Play, Plus, Trash2, Video } from 'lucide-react';
 import type { AIFieldId } from '../../../ai/fieldCatalog.ts';
 import { aiFieldProps } from '../../../ai/fieldCatalog.ts';
 import { PrivateMediaImage } from '../../../components/PrivateMediaImage.tsx';
+import { AutoResizeTextarea } from '../../../components/AutoResizeTextarea.tsx';
 import type { PublishedBlockId } from '../../../domain/publication.ts';
 import type { Asset, ComparableTransaction } from '../../../types/index.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
@@ -134,7 +135,7 @@ export function EditableParagraphs({
       title={!editing && onActivate ? (language === 'FR' ? 'Cliquer pour modifier' : 'Click to edit') : undefined}
     >
       {values.map((value, index) => editing ? (
-        <textarea key={index} {...(aiField ? aiFieldProps(aiField, index) : {})} value={value} rows={4} onChange={(event) => onChange(index, event.target.value)} aria-label={language === 'FR' ? `Modifier le paragraphe ${index + 1}` : `Edit paragraph ${index + 1}`} />
+        <AutoResizeTextarea key={index} {...(aiField ? aiFieldProps(aiField, index) : {})} value={value} rows={4} onChange={(event) => onChange(index, event.target.value)} aria-label={language === 'FR' ? `Modifier le paragraphe ${index + 1}` : `Edit paragraph ${index + 1}`} />
       ) : <p key={index} {...(aiField ? aiFieldProps(aiField, index) : {})}>{value}</p>)}
     </div>
   );
@@ -145,7 +146,7 @@ export function VideoPoster({ asset, onOpen }: { asset: Asset; onOpen: (asset: A
   return (
     <button type="button" className="video-poster" onClick={() => onOpen(asset)}>
       {hasPoster
-        ? <PrivateMediaImage asset={asset} alt="" />
+        ? <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 100vw, 1200px" />
         : <span className="video-poster__placeholder"><Video size={38} /><small>{asset.name}</small></span>}
       <span className="video-poster__play" aria-hidden="true"><Play size={24} fill="currentColor" /></span>
     </button>
@@ -192,7 +193,7 @@ export function ComparableTable({
             <span hidden {...aiFieldProps('value.comparables[].currency', comparable.id)}>{comparable.currency}</span>
             {editable && onUpdate ? <>
               <input data-column-label="Date" {...aiFieldProps('value.comparables[].date', comparable.id)} type="date" value={comparable.date} onChange={(event) => onUpdate(comparable.id, { date: event.target.value })} aria-label={isFrench ? `Date de ${comparable.description || 'ce comparable'}` : `Date of ${comparable.description || 'this comparable item'}`} />
-              <textarea data-column-label={isFrench ? 'Comparable' : 'Comparable item'} {...aiFieldProps('value.comparables[].description', comparable.id)} value={comparable.description} rows={2} onChange={(event) => onUpdate(comparable.id, { description: event.target.value })} aria-label={isFrench ? 'Description du comparable' : 'Comparable item description'} />
+              <AutoResizeTextarea data-column-label={isFrench ? 'Comparable' : 'Comparable item'} {...aiFieldProps('value.comparables[].description', comparable.id)} value={comparable.description} rows={2} onChange={(event) => onUpdate(comparable.id, { description: event.target.value })} aria-label={isFrench ? 'Description du comparable' : 'Comparable item description'} />
               <input data-column-label="Source" {...aiFieldProps('value.comparables[].source', comparable.id)} type="text" value={comparable.source} onChange={(event) => onUpdate(comparable.id, { source: event.target.value })} aria-label={isFrench ? 'Source du comparable' : 'Comparable item source'} />
               <select data-column-label={isFrench ? 'Canal' : 'Channel'} {...aiFieldProps('value.comparables[].channel', comparable.id)} value={comparable.saleChannel} onChange={(event) => onUpdate(comparable.id, { saleChannel: event.target.value as ComparableTransaction['saleChannel'] })} aria-label={isFrench ? 'Canal du comparable' : 'Comparable item channel'}>
                 <option value="Annonce">{isFrench ? 'Annonce' : 'Listing'}</option><option value="Enchère">{isFrench ? 'Enchère' : 'Auction'}</option><option value="Vente privée">{isFrench ? 'Vente privée' : 'Private sale'}</option><option value="Marchand">{isFrench ? 'Marchand' : 'Dealer'}</option>

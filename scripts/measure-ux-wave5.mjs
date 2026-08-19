@@ -1,10 +1,14 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 const root = resolve(import.meta.dirname, '..');
-const assetsDirectory = resolve(root, 'dist/assets');
-const indexHtml = await readFile(resolve(root, 'dist/index.html'), 'utf8');
+const requestedDirectory = process.argv[2] || process.env.PF6_DIST_DIR || 'dist';
+const distDirectory = isAbsolute(requestedDirectory)
+  ? requestedDirectory
+  : resolve(root, requestedDirectory);
+const assetsDirectory = resolve(distDirectory, 'assets');
+const indexHtml = await readFile(resolve(distDirectory, 'index.html'), 'utf8');
 const files = await readdir(assetsDirectory);
 const javascript = await Promise.all(files.filter((file) => file.endsWith('.js')).map(async (file) => {
   const path = resolve(assetsDirectory, file);
@@ -25,6 +29,7 @@ const baseline = { entry: 801326, app: 358349, registry: 142369 };
 const budgets = { entry: 250000, app: 320000, registry: 60000, largest: 500000 };
 const measured = {
   measuredAt: new Date().toISOString(),
+  distDirectory,
   chunks: javascript.length,
   entry,
   app,

@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 import { ArrowLeft, ArrowRight, FileText, Plus, Trash2, Video, X } from 'lucide-react';
 import { aiFieldProps } from '../../../ai/fieldCatalog.ts';
 import { PrivateMediaImage } from '../../../components/PrivateMediaImage.tsx';
+import { presentationDerivativeUrl } from '../../../media/presentationDerivatives.ts';
 import type { Asset, MediaTag, Valuation } from '../../../types/index.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
 import { formatDateTime } from '../../../utils/formatting.ts';
@@ -95,10 +96,10 @@ export function MediaViewerModal({
               {asset.mimeType === 'application/pdf' && <a href={asset.url} target="_blank" rel="noreferrer">{tx('Ouvrir le PDF', 'Open PDF')}</a>}
             </div>
           ) : asset.type === 'video' ? (
-            <video src={asset.url} poster={asset.posterUrl || asset.thumbnailUrl} controls preload="metadata">
+            <video src={asset.url} poster={presentationDerivativeUrl(asset.posterUrl || asset.thumbnailUrl, 768)} controls preload="metadata">
               {tx('Votre navigateur ne peut pas lire cette vidéo.', 'Your browser cannot play this video.')}
             </video>
-          ) : <PrivateMediaImage asset={asset} alt={asset.name} eager />}
+          ) : <PrivateMediaImage asset={asset} alt={asset.name} sizes="(max-width: 720px) 100vw, 70vw" eager />}
         </div>
         <div className="media-modal__caption">
           <div>

@@ -1,6 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Asset } from '../types';
 import { RotateCw, Play, Pause, ChevronLeft, ChevronRight } from 'lucide-react';
+import { alternatingFrameOrder, runBoundedPreloadQueue } from '../utils/boundedPreloadQueue.ts';
+
+const MAXIMUM_CONCURRENT_SPIN_PRELOADS = 2;
+
+const spinPresentationUrl = (source: string) => {
+  const path = source.split(/[?#]/, 1)[0];
+  if (!path.startsWith('/assets/IWC/') || !path.toLowerCase().endsWith('.jpg')) return source;
+  try {
+    const filename = decodeURIComponent(path.slice('/assets/IWC/'.length));
+    return `/assets/IWC/derivatives/${encodeURIComponent(filename.slice(0, -4))}.768.webp`;
+  } catch {
+    return source;
+  }
+};
+
+const preloadFrame = (url: string, signal?: AbortSignal): Promise<void> => new Promise((resolve) => {
+  if (signal?.aborted) {
+    resolve();
+    return;
+  }
+  const image = new Image();
+  const finish = () => {
+    image.onload = null;
+    image.onerror = null;
+    signal?.removeEventListener('abort', abort);
+    resolve();
+  };
+  const abort = () => {
+    image.src = '';
+    finish();
+  };
+  image.onload = finish;
+  image.onerror = finish;
+  signal?.addEventListener('abort', abort, { once: true });
+  image.src = url;
+});
 
 interface Spin360Props {
   images: Asset[];
@@ -34,41 +70,33 @@ export const Spin360: React.FC<Spin360Props> = ({
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // Algorithme de preloading progressif (Chapitre 12)
-  // Charge l'affiche (0) et les images adjacentes d'abord, puis le reste
+  // Charge l'affiche et les angles adjacents en priorité, avec une concurrence
+  // bornée pour préserver la bande passante du reste de la page.
   useEffect(() => {
-    if (images.length === 0) return;
-
-    const total = images.length;
-    const preloadOrder = [0]; // Commencer par l'image principale
-
-    // Ajouter les index alternés gauche/droite pour charger le pourtour en premier
-    for (let i = 1; i <= Math.floor(total / 2); i++) {
-      if (i < total) preloadOrder.push(i);
-      if (total - i > 0 && total - i !== i) preloadOrder.push(total - i);
+    setLoadedImages({});
+    if (images.length === 0) {
+      setIsPreloading(false);
+      return undefined;
     }
 
-    let loadedCount = 0;
-
-    preloadOrder.forEach((idx) => {
-      const img = new Image();
-      img.src = images[idx].url;
-      img.onload = () => {
-        setLoadedImages((prev) => {
-          const next = { ...prev, [idx]: true };
-          // Compter combien d'images sont chargées
-          loadedCount = Object.keys(next).length;
-          if (loadedCount >= total) {
-            setIsPreloading(false);
-          }
-          return next;
-        });
-      };
-      img.onerror = () => {
-        // En cas d'erreur de chargement, on considère comme chargé pour ne pas bloquer l'interface
-        setLoadedImages((prev) => ({ ...prev, [idx]: true }));
-      };
+    setIsPreloading(true);
+    const controller = new AbortController();
+    const preloadOrder = alternatingFrameOrder(images.length);
+    void runBoundedPreloadQueue({
+      items: preloadOrder,
+      concurrency: MAXIMUM_CONCURRENT_SPIN_PRELOADS,
+      signal: controller.signal,
+      load: (frameIndex, _queueIndex, signal) => preloadFrame(spinPresentationUrl(images[frameIndex].url), signal),
+      onSettled: (frameIndex) => {
+        setLoadedImages((previous) => previous[frameIndex]
+          ? previous
+          : { ...previous, [frameIndex]: true });
+      },
+    }).then(() => {
+      if (!controller.signal.aborted) setIsPreloading(false);
     });
+
+    return () => controller.abort();
   }, [images]);
 
   // Gestion de la lecture automatique (sauf si "mouvement réduit" activé)
@@ -202,7 +230,9 @@ export const Spin360: React.FC<Spin360Props> = ({
       >
         {/* Affiche de repli ou image actuelle */}
         <img
-          src={isPreloading && !loadedImages[currentIndex] ? posterImageUrl : images[currentIndex]?.url}
+          src={spinPresentationUrl(isPreloading && !loadedImages[currentIndex]
+            ? posterImageUrl
+            : images[currentIndex]?.url || posterImageUrl)}
           alt={language === 'FR' ? `Rendu 3D de la montre sous un angle de ${Math.round(currentIndex * (360 / images.length))}°` : `3D watch rendering at ${Math.round(currentIndex * (360 / images.length))}° angle`}
           draggable={false}
           style={{

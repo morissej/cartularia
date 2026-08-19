@@ -32,11 +32,11 @@ import type { Asset, ComparableTransaction, MediaTag, Valuation, VisibilityLevel
 import { BarreDossier } from './components/BarreDossier';
 import { BrandLogo } from './components/BrandLogo';
 import { MediaCarousel } from './components/MediaCarousel';
+import { AutoResizeTextarea } from './components/AutoResizeTextarea';
 import { computeHash, IntegrityJournal, isRfc3161Receipt } from './utils/integrityJournal';
 import { AI_SCHEMA_VERSION, aiFieldProps } from './ai/fieldCatalog';
 import { ProjectedPublicBlock } from './components/ProjectedPublicBlock';
 import { PrivateMediaImage } from './components/PrivateMediaImage';
-import { loadPublicProjection } from './services/projections';
 import type { LoadedPublicProjection } from './domain/projections';
 import {
   cartulariaLocalVault,
@@ -963,7 +963,7 @@ function App() {
   const [publicProjection, setPublicProjection] = useState<LoadedPublicProjection | null>(null);
   const [publicProjectionLoading, setPublicProjectionLoading] = useState(Boolean(isWatchWebsite && requestedPublicCode));
   const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
-  const persistence = useHybridPersistence(mockCartulary.id);
+  const persistence = useHybridPersistence(mockCartulary.id, !isIwcCartulary);
   const drawerRef = useRef<HTMLElement>(null);
   const publicationDialogRef = useRef<HTMLDivElement>(null);
   const deletionDialogRef = useRef<HTMLDivElement>(null);
@@ -1151,7 +1151,8 @@ function App() {
     let active = true;
     setPublicProjectionLoading(true);
     setPublicProjectionError(null);
-    loadPublicProjection(requestedPublicCode)
+    import('./services/projections.ts')
+      .then(({ loadPublicProjection }) => loadPublicProjection(requestedPublicCode))
       .then((projection) => {
         if (!active) return;
         setPublicProjection(projection);
@@ -1201,23 +1202,6 @@ function App() {
     }, 10_000);
     return () => window.clearTimeout(timeout);
   }, [undoNotice]);
-
-  useEffect(() => {
-    const resizeTextarea = (textarea: HTMLTextAreaElement) => {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${Math.max(44, textarea.scrollHeight)}px`;
-    };
-    const resizeAll = () => document.querySelectorAll('textarea').forEach((textarea) => resizeTextarea(textarea));
-    const frame = window.requestAnimationFrame(resizeAll);
-    const handleInput = (event: Event) => {
-      if (event.target instanceof HTMLTextAreaElement) resizeTextarea(event.target);
-    };
-    document.addEventListener('input', handleInput);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener('input', handleInput);
-    };
-  });
 
   useEffect(() => {
     if (!cartulariaLocalVault) return;
@@ -2200,7 +2184,7 @@ function App() {
             </div>
             <div className="cover-sheet__photo">
               {mainPhoto
-                ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} eager />
+                ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager />
                 : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
             </div>
           </section>
@@ -2291,7 +2275,7 @@ function App() {
       case 'media-hero':
         return (
           <section className="watch-website__hero">
-            {mainPhoto && <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} eager />}
+            {mainPhoto && <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" eager />}
             <div>
               <span className="eyebrow">{watch.reference.reference}</span>
               <h2>{watch.reference.brand}<br />{watch.reference.model}</h2>
@@ -2312,7 +2296,7 @@ function App() {
             {mainVideo ? (
               <a className="video-poster watch-website__media-link" href={mainVideo.url} target="_blank" rel="noreferrer">
                 {mainVideo.posterUrl || mainVideo.thumbnailUrl
-                  ? <PrivateMediaImage asset={mainVideo} alt={tx('La montre en mouvement', 'The watch in motion')} />
+                  ? <PrivateMediaImage asset={mainVideo} alt={tx('La montre en mouvement', 'The watch in motion')} sizes="(max-width: 720px) 100vw, 1200px" />
                   : <span className="video-poster__placeholder"><Video size={38} /><small>{mainVideo.name}</small></span>}
                 <span className="video-poster__play" aria-hidden="true"><Play size={24} fill="currentColor" /></span>
               </a>
@@ -2347,7 +2331,7 @@ function App() {
                       ? <FileText size={28} />
                       : asset.type === 'video'
                         ? <><Video size={28} /><small>VIDEO</small></>
-                        : <PrivateMediaImage asset={asset} alt="" />}
+                        : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" />}
                   </span>
                   <strong>{asset.name}</strong>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
@@ -2433,7 +2417,7 @@ function App() {
                     ? <FileText size={28} />
                     : asset.type === 'video'
                       ? <Video size={28} />
-                      : <PrivateMediaImage asset={asset} alt="" />}</span>
+                      : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" />}</span>
                   <strong>{asset.name}</strong><small>{asset.tags.includes('documentation') ? 'Documentation' : tx('Accessoires', 'Accessories')}</small>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
                 </a>
@@ -2727,7 +2711,7 @@ function App() {
                 aria-label={tx('Agrandir la photo principale', 'Enlarge main photo')}
               >
                 {mainPhoto
-                  ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} eager />
+                  ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager />
                   : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
               </button>
             </section>
@@ -2750,7 +2734,7 @@ function App() {
                     {ownerFields.map((field) => (
                       <div className="owner-field" key={field.id} data-ai-scope="cover.owner.customFields[]" data-ai-instance={field.id}>
                         <input {...aiFieldProps('cover.owner.customFields[].label', field.id)} type="text" value={field.label} onChange={(event) => updateOwnerField(field.id, { label: event.target.value })} aria-label={tx('Catégorie de donnée propriétaire', 'Owner data category')} />
-                        <textarea {...aiFieldProps('cover.owner.customFields[].value', field.id)} value={field.value} rows={field.id === 'owner-address' ? 3 : 2} onChange={(event) => updateOwnerField(field.id, { value: event.target.value })} aria-label={field.label || tx('Donnée propriétaire', 'Owner data')} placeholder={tx('À renseigner', 'To be completed')} />
+                        <AutoResizeTextarea {...aiFieldProps('cover.owner.customFields[].value', field.id)} value={field.value} rows={field.id === 'owner-address' ? 3 : 2} onChange={(event) => updateOwnerField(field.id, { value: event.target.value })} aria-label={field.label || tx('Donnée propriétaire', 'Owner data')} placeholder={tx('À renseigner', 'To be completed')} />
                         <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: ownerFields, setItems: setOwnerFields, id: field.id, targetLabel: field.label || tx('cette catégorie', 'this category') })} aria-label={tx(`Supprimer ${field.label || 'cette catégorie'}`, `Delete ${field.label || 'this category'}`)}><Trash2 size={15} /></button>
                       </div>
                     ))}
@@ -2822,7 +2806,7 @@ function App() {
                               <span aria-hidden="true">→</span>
                               <label>{tx('À (année)', 'To (year)')}<input {...aiFieldProps('cover.ownershipHistory[].toYear', entry.id)} type="number" min="1000" max="2200" step="1" value={entry.toYear} onChange={(event) => updateOwnershipHistory(entry.id, { toYear: event.target.value })} aria-invalid={yearsAreInvalid} placeholder="YYYY" /></label>
                             </div>
-                            <label className="ownership-period__description">{tx('Description', 'Description')}<textarea {...aiFieldProps('cover.ownershipHistory[].description', entry.id)} value={entry.description} rows={4} onChange={(event) => updateOwnershipHistory(entry.id, { description: event.target.value })} placeholder={tx('Propriétaire, contexte de détention, documents et éléments de provenance disponibles…', 'Owner, holding context, documents and available provenance evidence…')} /></label>
+                            <label className="ownership-period__description">{tx('Description', 'Description')}<AutoResizeTextarea {...aiFieldProps('cover.ownershipHistory[].description', entry.id)} value={entry.description} rows={4} onChange={(event) => updateOwnershipHistory(entry.id, { description: event.target.value })} placeholder={tx('Propriétaire, contexte de détention, documents et éléments de provenance disponibles…', 'Owner, holding context, documents and available provenance evidence…')} /></label>
                             {yearsAreInvalid && <p className="ownership-period__error" role="alert">{tx("L’année de fin doit être postérieure ou égale à l’année de début.", 'The end year must be greater than or equal to the start year.')}</p>}
                           </article>
                         );
@@ -2860,7 +2844,7 @@ function App() {
                           <div className="transmission-person__fields">
                             <label>{tx('Prénom', 'First name')}<input {...aiFieldProps('cover.transmission.recipients[].firstName', recipient.id)} type="text" value={recipient.firstName} onChange={(event) => updateTransmissionRecipient(recipient.id, { firstName: event.target.value })} placeholder={tx('Prénom', 'First name')} /></label>
                             <label>{tx('Nom', 'Last name')}<input {...aiFieldProps('cover.transmission.recipients[].lastName', recipient.id)} type="text" value={recipient.lastName} onChange={(event) => updateTransmissionRecipient(recipient.id, { lastName: event.target.value })} placeholder={tx('Nom', 'Last name')} /></label>
-                            <label className="transmission-person__address">{tx('Adresse', 'Address')}<textarea {...aiFieldProps('cover.transmission.recipients[].address', recipient.id)} value={recipient.address} rows={3} onChange={(event) => updateTransmissionRecipient(recipient.id, { address: event.target.value })} placeholder={tx('Adresse complète', 'Full address')} /></label>
+                            <label className="transmission-person__address">{tx('Adresse', 'Address')}<AutoResizeTextarea {...aiFieldProps('cover.transmission.recipients[].address', recipient.id)} value={recipient.address} rows={3} onChange={(event) => updateTransmissionRecipient(recipient.id, { address: event.target.value })} placeholder={tx('Adresse complète', 'Full address')} /></label>
                             <label>Email<input {...aiFieldProps('cover.transmission.recipients[].email', recipient.id)} type="email" value={recipient.email} onChange={(event) => updateTransmissionRecipient(recipient.id, { email: event.target.value })} placeholder={tx('nom@exemple.com', 'name@example.com')} /></label>
                             <label>{tx('Téléphone', 'Phone')}<input {...aiFieldProps('cover.transmission.recipients[].phone', recipient.id)} type="tel" value={recipient.phone} onChange={(event) => updateTransmissionRecipient(recipient.id, { phone: event.target.value })} placeholder="+33…" /></label>
                             <label>{tx('Part donnée', 'Share transferred')}<span className="percentage-input"><input {...aiFieldProps('cover.transmission.recipients[].percentage', recipient.id)} type="number" min="0" max="100" step="0.1" value={recipient.percentage} onChange={(event) => updateTransmissionRecipient(recipient.id, { percentage: event.target.value === '' ? '' : Math.min(100, Math.max(0, Number(event.target.value))) })} placeholder="0" /><span>%</span></span></label>
@@ -2895,8 +2879,8 @@ function App() {
                           </header>
                           <div className="storage-location__fields">
                             <label>{tx('Lieu de stockage', 'Storage location')}<input {...aiFieldProps('cover.storage.locations[].name', location.id)} type="text" value={location.name} onChange={(event) => updateStorageLocation(location.id, { name: event.target.value })} placeholder={tx('Coffre, cave, domicile…', 'Vault, cellar, home…')} /></label>
-                            <label>{tx('Ce qui est stocké', 'Stored contents')}<textarea {...aiFieldProps('cover.storage.locations[].contents', location.id)} value={location.contents} rows={3} onChange={(event) => updateStorageLocation(location.id, { contents: event.target.value })} placeholder={tx('Montre, boîte, papiers, accessoires…', 'Watch, box, papers, accessories…')} /></label>
-                            <label>{tx('Description et conditions', 'Description and conditions')}<textarea {...aiFieldProps('cover.storage.locations[].description', location.id)} value={location.description} rows={3} onChange={(event) => updateStorageLocation(location.id, { description: event.target.value })} placeholder={tx('Sécurité, accès, température, humidité ou autres précisions…', 'Security, access, temperature, humidity or other details…')} /></label>
+                            <label>{tx('Ce qui est stocké', 'Stored contents')}<AutoResizeTextarea {...aiFieldProps('cover.storage.locations[].contents', location.id)} value={location.contents} rows={3} onChange={(event) => updateStorageLocation(location.id, { contents: event.target.value })} placeholder={tx('Montre, boîte, papiers, accessoires…', 'Watch, box, papers, accessories…')} /></label>
+                            <label>{tx('Description et conditions', 'Description and conditions')}<AutoResizeTextarea {...aiFieldProps('cover.storage.locations[].description', location.id)} value={location.description} rows={3} onChange={(event) => updateStorageLocation(location.id, { description: event.target.value })} placeholder={tx('Sécurité, accès, température, humidité ou autres précisions…', 'Security, access, temperature, humidity or other details…')} /></label>
                           </div>
                         </article>
                       ))}
@@ -2921,7 +2905,7 @@ function App() {
               >
                 {mainPhoto ? (
                   <span className="watch-hero__image-visual">
-                    <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} eager />
+                    <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 38vw" eager />
                   </span>
                 ) : (
                   <span className="watch-hero__image-visual empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>
@@ -2934,7 +2918,7 @@ function App() {
                 <span className="eyebrow">{watch.reference.reference}</span>
                 <h1>{watch.reference.model}</h1>
                 {editingBlock === 'media-hero' ? (
-                  <textarea {...aiFieldProps('media.hero.summary')} className="editable-copy-single" value={editableCopy.heroSummary} rows={5} onChange={(event) => setEditableCopy((current) => ({ ...current, heroSummary: event.target.value }))} aria-label={tx('Modifier la présentation principale', 'Edit main presentation')} />
+                  <AutoResizeTextarea {...aiFieldProps('media.hero.summary')} className="editable-copy-single" value={editableCopy.heroSummary} rows={5} onChange={(event) => setEditableCopy((current) => ({ ...current, heroSummary: event.target.value }))} aria-label={tx('Modifier la présentation principale', 'Edit main presentation')} />
                 ) : <p {...aiFieldProps('media.hero.summary')} className="watch-hero__summary editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('media-hero')} tabIndex={audience === 'Secret' ? 0 : undefined} onKeyDown={(event) => { if (event.key === 'Enter' && audience === 'Secret') setEditingBlock('media-hero'); }} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
                 {audience === 'Secret' && <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance propriétaire', 'Ownership provenance')}</strong><p>{ownershipSummary}</p></aside>}
                 <dl className="hero-facts">
@@ -2959,7 +2943,7 @@ function App() {
               <SectionTitle eyebrow={tx('03 · Séquence 3D', '03 · 3D sequence')} title={tx('Revue à 360°', '360° review')} publish={publishProps('media-spin')} />
               {spinAssets.length > 0 ? (
                 <button type="button" className="spin-callout" onClick={() => setIsSpinOpen(true)}>
-                  <PrivateMediaImage asset={spinAssets[0]} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} />
+                  <PrivateMediaImage asset={spinAssets[0]} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} sizes="(max-width: 720px) 100vw, 1200px" />
                   <span className="spin-callout__icon"><RotateCw size={23} /></span>
                   <span><strong>{spinAssets.length} {tx('vues ordonnées', 'ordered views')}</strong></span>
                 </button>
@@ -2986,7 +2970,7 @@ function App() {
                           ) : asset.type === 'video' ? (
                             <><Video size={28} /><small>VIDEO</small></>
                           ) : (
-                            <PrivateMediaImage asset={asset} alt="" />
+                            <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" />
                           )}
                         </span>
                         <strong {...aiFieldProps('media.assets[].name', asset.id)}>{asset.name}</strong>
@@ -3051,7 +3035,7 @@ function App() {
                 </article>
                 <aside className="quote-card">
                 <span className="eyebrow">{tx('À savoir', 'Good to know')}</span>
-                {editingBlock === 'reference-history' ? <textarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className="editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('reference-history')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
+                {editingBlock === 'reference-history' ? <AutoResizeTextarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className="editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('reference-history')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
                 </aside>
               </div>
             </section>
@@ -3109,7 +3093,7 @@ function App() {
                       {isEditingChecks ? (
                         <>
                           <input {...aiFieldProps('reference.checks[].title', item.id)} value={item.title} onChange={(event) => updateCheck(item.id, { title: event.target.value })} aria-label={tx('Point de contrôle', 'Inspection point')} />
-                          <textarea {...aiFieldProps('reference.checks[].note', item.id)} value={item.note} onChange={(event) => updateCheck(item.id, { note: event.target.value })} aria-label={tx('Détail du contrôle', 'Inspection details')} rows={2} />
+                          <AutoResizeTextarea {...aiFieldProps('reference.checks[].note', item.id)} value={item.note} onChange={(event) => updateCheck(item.id, { note: event.target.value })} aria-label={tx('Détail du contrôle', 'Inspection details')} rows={2} />
                         </>
                       ) : (
                         <><h3>{item.title}</h3><p>{item.note}</p></>
@@ -3205,7 +3189,7 @@ function App() {
                         <select {...aiFieldProps('condition.documentation[].category', item.id)} value={item.category} disabled={audience !== 'Secret'} onChange={(event) => updateDocumentationItem(item.id, 'category', event.target.value as DocumentationCategory)} aria-label={tx('Catégorie documentaire', 'Document category')}>
                           {(['Facture', 'Garantie', 'Assurances', 'Boîte', 'Écrin', 'Manuel', 'Certificat', 'Accessoire', 'Autre'] as DocumentationCategory[]).map((category) => <option key={category} value={category}>{documentationCategoryLabel(category)}</option>)}
                         </select>
-                        <textarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} disabled={audience !== 'Secret'} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
+                        <AutoResizeTextarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} disabled={audience !== 'Secret'} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
                         <select {...aiFieldProps('condition.documentation[].state', item.id)} value={item.state} disabled={audience !== 'Secret'} onChange={(event) => updateDocumentationItem(item.id, 'state', event.target.value as DocumentationState)} aria-label={tx(`État ${item.category}`, `${item.category} condition`)}>
                           {(['Présent', 'Complet', 'Incomplet', 'Manquant', 'À vérifier'] as DocumentationState[]).map((state) => <option key={state} value={state}>{documentationStateLabel(state)}</option>)}
                         </select>
@@ -3230,7 +3214,7 @@ function App() {
                                 ? <FileText size={28} aria-hidden="true" />
                                 : asset.type === 'video'
                                   ? <Video size={28} aria-hidden="true" />
-                                : <PrivateMediaImage asset={asset} alt="" />}
+                                : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" />}
                               {asset.type === 'video' && <Play size={13} fill="currentColor" aria-hidden="true" />}
                             </span>
                             <strong>{asset.name}</strong>
@@ -3262,7 +3246,7 @@ function App() {
                             </div>
                           </header>
                           {editingBlock === 'condition-reference-report'
-                            ? <textarea {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="condition-entry__note-input" value={referenceConditionReport.note} rows={5} onChange={(event) => setConditionEntries((current) => current.map((entry) => entry.id === referenceConditionReport.id ? { ...entry, note: event.target.value } : entry))} aria-label={tx('Modifier le rapport de référence', 'Edit reference report')} />
+                            ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="condition-entry__note-input" value={referenceConditionReport.note} rows={5} onChange={(event) => setConditionEntries((current) => current.map((entry) => entry.id === referenceConditionReport.id ? { ...entry, note: event.target.value } : entry))} aria-label={tx('Modifier le rapport de référence', 'Edit reference report')} />
                             : referenceConditionReport.note && <p {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('condition-reference-report')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{referenceConditionReport.note}</p>}
                           {referenceConditionReport.attachments.length > 0 && (
                             <ul className="attachment-list">
@@ -3287,7 +3271,7 @@ function App() {
                               {audience === 'Secret' && <button type="button" className="icon-button no-print" onClick={() => deleteConditionEntry(entry.id)} aria-label={tx(`Supprimer ${entry.title}`, `Delete ${entry.title}`)}><Trash2 size={15} /></button>}
                             </header>
                             {editingBlock === 'condition-prior-reviews'
-                              ? <textarea {...aiFieldProps('condition.reports[].note', entry.id)} className="condition-entry__note-input" value={entry.note} rows={4} onChange={(event) => setConditionEntries((current) => current.map((item) => item.id === entry.id ? { ...item, note: event.target.value } : item))} aria-label={tx('Modifier la revue antérieure', 'Edit previous review')} />
+                              ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', entry.id)} className="condition-entry__note-input" value={entry.note} rows={4} onChange={(event) => setConditionEntries((current) => current.map((item) => item.id === entry.id ? { ...item, note: event.target.value } : item))} aria-label={tx('Modifier la revue antérieure', 'Edit previous review')} />
                               : entry.note && <p {...aiFieldProps('condition.reports[].note', entry.id)} className="editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('condition-prior-reviews')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{entry.note}</p>}
                             {entry.attachments.length > 0 && (
                               <ul className="attachment-list">
@@ -3304,7 +3288,7 @@ function App() {
                         <span className="eyebrow">{tx('Nouvelle entrée', 'New entry')}</span>
                         <label>Date<input {...aiFieldProps('condition.reports[].date', 'new')} type="date" name="date" defaultValue="2026-08-13" required /></label>
                         <label>{tx('Titre', 'Title')}<input {...aiFieldProps('condition.reports[].title', 'new')} type="text" name="title" placeholder={tx('Rapport, constat, note…', 'Report, observation, note…')} /></label>
-                        <label>Note<textarea {...aiFieldProps('condition.reports[].note', 'new')} name="note" rows={7} placeholder={tx('Saisir un texte libre', 'Enter free text')} /></label>
+                        <label>Note<AutoResizeTextarea {...aiFieldProps('condition.reports[].note', 'new')} name="note" rows={7} placeholder={tx('Saisir un texte libre', 'Enter free text')} /></label>
                         <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter des documents', 'Add documents')}</span><input {...aiFieldProps('condition.reports[].documents', 'new')} type="file" name="documents" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple /></label>
                         <button type="submit" className="button button--primary">{tx('Enregistrer', 'Save')}</button>
                       </form>
@@ -3372,7 +3356,7 @@ function App() {
                       <small>{tx('Valeur actuelle', 'Current value')} : {formatMoney(marketDepth.midValue, watch.currency)}</small>
                     </label>
                     <label className="retained-value-card__explanation">{tx('Explication de la valeur retenue', 'Retained value explanation')}
-                      <textarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder={tx('Expliquez le montant retenu, les ajustements et les réserves éventuelles.', 'Explain the retained amount, adjustments and any reservations.')} />
+                      <AutoResizeTextarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder={tx('Expliquez le montant retenu, les ajustements et les réserves éventuelles.', 'Explain the retained amount, adjustments and any reservations.')} />
                     </label>
                     <aside className="ownership-valuation-note" {...aiFieldProps('value.provenance.ownershipAssessment')}>
                       <strong>{tx('Critère de provenance', 'Provenance criterion')}</strong>
@@ -3403,7 +3387,7 @@ function App() {
                       <div {...aiFieldProps('value.comparables.analysis[]', entry.id)} role="row" key={entry.id} data-ai-scope="value.comparables.analysis[]" data-ai-instance={entry.id}>
                         <input {...aiFieldProps('value.comparables.analysis[].angle', entry.id)} type="text" value={entry.angle} onChange={(event) => updateComparableAnalysis(entry.id, { angle: event.target.value })} aria-label={tx('Angle d’analyse', 'Analysis angle')} />
                         <input {...aiFieldProps('value.comparables.analysis[].finding', entry.id)} type="text" value={entry.finding} onChange={(event) => updateComparableAnalysis(entry.id, { finding: event.target.value })} aria-label={tx('Constat d’analyse', 'Analysis finding')} />
-                        <textarea {...aiFieldProps('value.comparables.analysis[].reading', entry.id)} value={entry.reading} rows={2} onChange={(event) => updateComparableAnalysis(entry.id, { reading: event.target.value })} aria-label={tx('Lecture de l’analyse', 'Analysis interpretation')} />
+                        <AutoResizeTextarea {...aiFieldProps('value.comparables.analysis[].reading', entry.id)} value={entry.reading} rows={2} onChange={(event) => updateComparableAnalysis(entry.id, { reading: event.target.value })} aria-label={tx('Lecture de l’analyse', 'Analysis interpretation')} />
                         <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: comparableAnalysis, setItems: setComparableAnalysis, id: entry.id, targetLabel: entry.angle })} aria-label={tx(`Supprimer ${entry.angle}`, `Delete ${entry.angle}`)}><Trash2 size={15} /></button>
                       </div>
                     ))}

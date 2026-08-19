@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight, FileText, Play } from 'lucide-react';
 import type { Asset } from '../types';
 import { horizontalNavigationDirection, targetConsumesHorizontalNavigation } from '../utils/horizontalNavigation.ts';
 import { PrivateMediaImage } from './PrivateMediaImage.tsx';
+import { PresentationImage } from './PresentationImage.tsx';
+import { presentationDerivativeUrl } from '../media/presentationDerivatives.ts';
 
 interface MediaCarouselProps {
   assets: Asset[];
@@ -66,9 +68,9 @@ export function MediaCarousel({
           {current.type === 'document' ? (
             <span className="media-carousel__document"><FileText size={52} /><strong>{current.originalFileName || current.name}</strong><small>{current.mimeType || 'Document'}</small></span>
           ) : current.type === 'video' ? (
-            <video src={current.url} poster={current.posterUrl || current.thumbnailUrl} preload="metadata" muted aria-label={current.name} />
+            <video src={current.url} poster={presentationDerivativeUrl(current.posterUrl || current.thumbnailUrl, 768)} preload="metadata" muted aria-label={current.name} />
           ) : (
-            <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} eager />
+            <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} sizes="(max-width: 720px) 100vw, 900px" eager />
           )}
           {current.type === 'video' && (
             <span className="media-carousel__play" aria-hidden="true">
@@ -123,6 +125,7 @@ export function MediaCarousel({
         <div className="media-carousel__thumbs" aria-label={language === 'FR' ? 'Choisir un média' : 'Choose media'}>
           {assets.map((asset, index) => {
             const thumbnail = asset.posterUrl || asset.thumbnailUrl || asset.url;
+            const videoPoster = asset.posterUrl || asset.thumbnailUrl;
             return (
               <button
                 type="button"
@@ -135,8 +138,10 @@ export function MediaCarousel({
                 {asset.type === 'document'
                   ? <FileText size={20} aria-hidden="true" />
                   : asset.type === 'video'
-                    ? <video src={asset.url} poster={asset.posterUrl || asset.thumbnailUrl} preload="metadata" muted aria-hidden="true" />
-                    : <PrivateMediaImage asset={asset} sourceOverride={thumbnail} alt="" />}
+                    ? videoPoster
+                      ? <PresentationImage src={videoPoster} alt="" sizes="70px" loading="lazy" decoding="async" />
+                      : <span className="media-carousel__thumb-placeholder" aria-hidden="true" />
+                    : <PrivateMediaImage asset={asset} sourceOverride={thumbnail} alt="" sizes="70px" />}
                 {asset.type === 'video' && <Play size={11} fill="currentColor" aria-hidden="true" />}
               </button>
             );

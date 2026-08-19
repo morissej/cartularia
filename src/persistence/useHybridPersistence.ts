@@ -1,15 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
-import {
-  deletePrivateCloudDraft,
-  markUserActivity,
-  resolvePrivateDraftConflict,
-  synchronizePrivateDraft,
-  waitForAuthoritativeSyncCycle,
-  type CloudSyncReport,
-} from './cloudDraft';
+import type { CloudSyncReport } from './cloudDraft';
 import {
   cartulariaLocalVault,
   DEFAULT_LOCAL_CARTULARY_ID,
@@ -62,10 +53,13 @@ const emptyReport: {
 
 const messageFromError = (error: unknown) => error instanceof Error ? error.message : 'Erreur de persistance inconnue.';
 
-export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): HybridPersistenceState {
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+export function useHybridPersistence(
+  cartularyId = DEFAULT_LOCAL_CARTULARY_ID,
+  remoteSyncEnabled = true,
+): HybridPersistenceState {
+  const [user, setUser] = useState<User | null>(null);
   const [localStatus, setLocalStatus] = useState<LocalPersistenceStatus>('ready');
-  const [cloudStatus, setCloudStatus] = useState<CloudPersistenceStatus>(auth.currentUser ? 'syncing' : 'signed-out');
+  const [cloudStatus, setCloudStatus] = useState<CloudPersistenceStatus>('signed-out');
   const [report, setReport] = useState(emptyReport);
   const [error, setError] = useState<string | null>(null);
   const syncInFlight = useRef<Promise<void> | null>(null);
@@ -74,16 +68,40 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
   const retryAttempt = useRef(0);
   const rerunRequested = useRef(false);
 
-  useEffect(() => onAuthStateChanged(auth, (nextUser) => {
-    setUser(nextUser);
-    setCloudStatus(nextUser ? 'syncing' : 'signed-out');
-    if (!nextUser) setReport(emptyReport);
-  }), []);
+  useEffect(() => {
+    if (!remoteSyncEnabled) {
+      setUser(null);
+      setCloudStatus('signed-out');
+      setReport(emptyReport);
+      return undefined;
+    }
+    let active = true;
+    let unsubscribe: () => void = () => undefined;
+    void Promise.all([
+      import('firebase/auth'),
+      import('../firebase.ts'),
+    ]).then(([{ onAuthStateChanged }, { auth }]) => {
+      if (!active) return;
+      unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+        setUser(nextUser);
+        setCloudStatus(nextUser ? 'syncing' : 'signed-out');
+        if (!nextUser) setReport(emptyReport);
+      });
+    }).catch((authError: unknown) => {
+      if (!active) return;
+      setCloudStatus('error');
+      setError(messageFromError(authError));
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [remoteSyncEnabled]);
 
   const syncNow = useCallback(async () => {
     if (!cartulariaLocalVault) return;
     const vault = cartulariaLocalVault;
-    if (!user) {
+    if (!remoteSyncEnabled || !user) {
       await vault.flush();
       setLocalStatus('ready');
       setCloudStatus('signed-out');
@@ -102,6 +120,11 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
       setCloudStatus('syncing');
       setError(null);
       try {
+        const {
+          markUserActivity,
+          synchronizePrivateDraft,
+          waitForAuthoritativeSyncCycle,
+        } = await import('./cloudDraft.ts');
         await markUserActivity(user.uid).catch(() => undefined);
         const nextReport = await synchronizePrivateDraft({ uid: user.uid, cartularyId, vault });
         setReport({
@@ -153,7 +176,7 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
         }, AUTHORITATIVE_SYNC_FOLLOW_UP_DELAY_MS);
       }
     });
-  }, [cartularyId, user]);
+  }, [cartularyId, remoteSyncEnabled, user]);
 
   useEffect(() => {
     syncNowRef.current = syncNow;
@@ -197,7 +220,10 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
     if (!cartulariaLocalVault) return;
     setError(null);
     try {
-      if (user) await deletePrivateCloudDraft(user.uid, cartularyId);
+      if (remoteSyncEnabled && user) {
+        const { deletePrivateCloudDraft } = await import('./cloudDraft.ts');
+        await deletePrivateCloudDraft(user.uid, cartularyId);
+      }
       await cartulariaLocalVault.deleteAllLocalData();
       setLocalStatus('deleted');
       setCloudStatus(user ? 'remote-deleted' : 'signed-out');
@@ -205,7 +231,7 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
       setError(messageFromError(deleteError));
       throw deleteError;
     }
-  }, [cartularyId, user]);
+  }, [cartularyId, remoteSyncEnabled, user]);
 
   const resolveConflict = useCallback(async (
     conflict: CloudSyncReport['conflicts'][number],
@@ -215,6 +241,7 @@ export function useHybridPersistence(cartularyId = DEFAULT_LOCAL_CARTULARY_ID): 
     setCloudStatus('syncing');
     setError(null);
     try {
+      const { resolvePrivateDraftConflict } = await import('./cloudDraft.ts');
       const nextReport = await resolvePrivateDraftConflict({
         uid: user.uid,
         cartularyId,

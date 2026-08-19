@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ImgHTMLAttributes } from 'react';
 import type { Asset } from '../types';
-import { acquirePrivateMediaObjectUrl } from '../services/privateMedia.ts';
 import type { ObjectUrlLease } from '../utils/objectUrlLeaseCache.ts';
+import { presentationImageSetFor } from '../media/presentationDerivatives.ts';
 
 interface PrivateMediaImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   asset: Asset;
@@ -14,7 +14,18 @@ const usableSource = (value: string | undefined) => (
   value && !value.startsWith('data:image/gif;base64,R0lGODlhAQAB') ? value : undefined
 );
 
-export function PrivateMediaImage({ asset, eager = false, sourceOverride, loading, onError, ...imageProps }: PrivateMediaImageProps) {
+export function PrivateMediaImage({
+  asset,
+  eager = false,
+  sourceOverride,
+  loading,
+  onError,
+  sizes,
+  width,
+  height,
+  style,
+  ...imageProps
+}: PrivateMediaImageProps) {
   const directSource = useMemo(() => usableSource(
     sourceOverride || asset.posterUrl || asset.thumbnailUrl || (asset.type === 'image' ? asset.url : undefined),
   ), [asset.posterUrl, asset.thumbnailUrl, asset.type, asset.url, sourceOverride]);
@@ -48,7 +59,8 @@ export function PrivateMediaImage({ asset, eager = false, sourceOverride, loadin
     const resolve = () => {
       if (lease || loadingLease) return;
       loadingLease = true;
-      void acquirePrivateMediaObjectUrl(asset.binaryId!)
+      void import('../services/privateMedia.ts')
+        .then(({ acquirePrivateMediaObjectUrl }) => acquirePrivateMediaObjectUrl(asset.binaryId!))
         .then((acquiredLease) => {
           loadingLease = false;
           if (!active || !shouldRetain) {
@@ -79,12 +91,18 @@ export function PrivateMediaImage({ asset, eager = false, sourceOverride, loadin
     };
   }, [asset.binaryId, asset.type, eager, effectiveDirectSource]);
 
-  return (
+  const responsive = presentationImageSetFor(source);
+  const image = (
     <img
       {...imageProps}
       ref={imageRef}
       src={source}
+      sizes={sizes}
+      width={width ?? responsive?.width}
+      height={height ?? responsive?.height}
+      style={responsive ? { aspectRatio: responsive.aspectRatio, ...style } : style}
       loading={loading ?? (eager ? 'eager' : 'lazy')}
+      decoding="async"
       data-media-state={source ? 'ready' : 'loading'}
       onError={(event) => {
         onError?.(event);
@@ -92,4 +110,12 @@ export function PrivateMediaImage({ asset, eager = false, sourceOverride, loadin
       }}
     />
   );
+
+  return responsive ? (
+    <picture className="presentation-picture">
+      <source type="image/avif" srcSet={responsive.avifSrcSet} sizes={sizes} />
+      <source type="image/webp" srcSet={responsive.webpSrcSet} sizes={sizes} />
+      {image}
+    </picture>
+  ) : image;
 }

@@ -21,12 +21,26 @@ interface ReadableAssetDocument {
   };
 }
 
+const prototypePresentationUrl = (source: string, width: 480 | 1200) => {
+  const path = source.split(/[?#]/, 1)[0];
+  if (!path.startsWith('/assets/IWC/') || !path.toLowerCase().endsWith('.jpg')) return source;
+  try {
+    const filename = decodeURIComponent(path.slice('/assets/IWC/'.length));
+    const sourceWidth = new Set(['_DSC0980-3.jpg', '_DSC0981-3.jpg', '_DSC0985-3.jpg', '_DSC0994-3.jpg', '_DSC1009-3.jpg'])
+      .has(filename) ? 800 : 1200;
+    const targetWidth = Math.min(width, sourceWidth);
+    return `/assets/IWC/derivatives/${encodeURIComponent(filename.slice(0, -4))}.${targetWidth}.webp`;
+  } catch {
+    return source;
+  }
+};
+
 const prototypePreviewByAssetId = new Map(
   mockCartulary.assets
     .filter((asset) => asset.type === 'image')
     .map((asset) => [asset.id, {
-      url: asset.url,
-      thumbnailUrl: asset.thumbnailUrl || asset.url,
+      url: prototypePresentationUrl(asset.url, 1200),
+      thumbnailUrl: prototypePresentationUrl(asset.thumbnailUrl || asset.url, 480),
     }]),
 );
 

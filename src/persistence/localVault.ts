@@ -126,6 +126,7 @@ const openDatabase = (): Promise<IDBDatabase> => new Promise((resolve, reject) =
     reject(new Error('IndexedDB est indisponible dans ce navigateur.'));
     return;
   }
+  let settled = false;
   const request = globalThis.indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
   request.onupgradeneeded = () => {
     const database = request.result;
@@ -138,8 +139,24 @@ const openDatabase = (): Promise<IDBDatabase> => new Promise((resolve, reject) =
       binaries.createIndex('cartularyId', 'cartularyId', { unique: false });
     }
   };
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error('Ouverture IndexedDB impossible.'));
+  request.onsuccess = () => {
+    if (settled) {
+      request.result.close();
+      return;
+    }
+    settled = true;
+    resolve(request.result);
+  };
+  request.onerror = () => {
+    if (settled) return;
+    settled = true;
+    reject(request.error ?? new Error('Ouverture IndexedDB impossible.'));
+  };
+  request.onblocked = () => {
+    if (settled) return;
+    settled = true;
+    reject(new Error('Ouverture IndexedDB bloquée par une autre session.'));
+  };
 });
 
 export class IndexedDbVaultBackend implements VaultBackend {
@@ -627,8 +644,13 @@ export const cartulariaLocalVault = typeof window === 'undefined'
   ? null
   : new CartulariaLocalVault(DEFAULT_LOCAL_CARTULARY_ID, defaultBackend, cartulariaStorage!);
 
-export const restoreCartulariaLocalState = async () => {
-  if (!cartulariaLocalVault) return;
+export interface LocalStateRestoreResult {
+  status: 'restored' | 'skipped' | 'unavailable';
+  error?: unknown;
+}
+
+export const restoreCartulariaLocalState = async (): Promise<LocalStateRestoreResult> => {
+  if (!cartulariaLocalVault) return { status: 'skipped' };
   try {
     if (
       DEFAULT_LOCAL_CARTULARY_ID === IWC_CARTULARY_ID
@@ -642,8 +664,10 @@ export const restoreCartulariaLocalState = async () => {
       window.localStorage.setItem(CARTULARY_ID_MIGRATION_KEY, DEFAULT_LOCAL_CARTULARY_ID);
     }
     await cartulariaLocalVault.restoreLocalStorage();
+    return { status: 'restored' };
   } catch (error) {
     console.error('Restauration du coffre local impossible', error);
+    return { status: 'unavailable', error };
   }
 };
 
