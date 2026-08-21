@@ -194,7 +194,7 @@ export const Spin360: React.FC<Spin360Props> = ({
       ref={containerRef}
       onKeyDown={handleKeyDown}
       tabIndex={0} // Rendre focusable pour le clavier
-      aria-label={language === 'FR' ? "Visualiseur 3D de la montre" : "Watch 3D viewer"}
+      aria-label={language === 'FR' ? "Visualiseur 3D de l’objet" : "Object 3D viewer"}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -233,7 +233,7 @@ export const Spin360: React.FC<Spin360Props> = ({
           src={spinPresentationUrl(isPreloading && !loadedImages[currentIndex]
             ? posterImageUrl
             : images[currentIndex]?.url || posterImageUrl)}
-          alt={language === 'FR' ? `Rendu 3D de la montre sous un angle de ${Math.round(currentIndex * (360 / images.length))}°` : `3D watch rendering at ${Math.round(currentIndex * (360 / images.length))}° angle`}
+          alt={language === 'FR' ? `Rendu 3D de l’objet sous un angle de ${Math.round(currentIndex * (360 / images.length))}°` : `3D object rendering at ${Math.round(currentIndex * (360 / images.length))}° angle`}
           draggable={false}
           style={{
             width: '100%',

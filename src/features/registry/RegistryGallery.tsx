@@ -10,12 +10,12 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   X,
   ZoomIn,
 } from 'lucide-react';
 import type { RegistryGalleryEntry } from '../../domain/gallery.ts';
 import type { RegistryDocument } from '../../domain/foundations.ts';
+import { registryItemCollectionIds } from '../../domain/projections.ts';
 import {
   loadRegistryGallery,
   observeRegistryGallery,
@@ -30,6 +30,7 @@ import {
 } from './registryGallery.ts';
 import { ASSET_TYPE_LABELS, labelFromIdentifier } from './registryPresentation.ts';
 import { useDialogFocus } from '../../hooks/useDialogFocus.ts';
+import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
 
 type GalleryLoadState = 'loading' | 'ready' | 'error';
 
@@ -128,7 +129,7 @@ export function RegistryGallery({ registry, canReadCartularies }: {
     : [], [category, selectedEntry]);
   const selectedSlide = selectedSlides[slideIndex] || selectedSlides[0] || null;
   const assetTypes = useMemo(() => optionValues(entries, (entry) => [entry.item.assetType]), [entries]);
-  const collections = useMemo(() => optionValues(entries, (entry) => [entry.item.collectionId]), [entries]);
+  const collections = useMemo(() => optionValues(entries, (entry) => registryItemCollectionIds(entry.item)), [entries]);
   const makers = useMemo(() => optionValues(entries, (entry) => [entry.item.makerName]), [entries]);
   const categories = useMemo(() => optionValues(entries, (entry) => entry.slides.map((slide) => slide.category)), [entries]);
   const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', makerName !== 'all', category !== 'all']
@@ -215,9 +216,7 @@ export function RegistryGallery({ registry, canReadCartularies }: {
         <div>
           <p className="registry-kicker">Vue visuelle du Registre</p>
           <h1 id="registry-gallery-title">Galerie des Cartulaires</h1>
-          <p>Une image principale par Cartulaire. La visionneuse lit ensuite son diaporama autorisé, sans recopier les actifs média dans le Registre.</p>
         </div>
-        <div className="registry-gallery__security"><ShieldCheck aria-hidden="true" /><span>Références Cartulaire</span></div>
       </header>
 
       <div className="registry-gallery-toolbar">
@@ -232,14 +231,13 @@ export function RegistryGallery({ registry, canReadCartularies }: {
         </button>
       </div>
 
-      <div className="registry-gallery-filters" aria-label="Filtres de la Galerie">
-        <div className="registry-filter-title"><SlidersHorizontal aria-hidden="true" /><span>Personnaliser</span>{activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}</div>
+      <RegistryFilterPanel className="registry-gallery-filters" label="Filtres de la Galerie" activeFilterCount={activeFilterCount}>
         <label><span>Type d’actif</span><select value={assetType} onChange={(event) => setAssetType(event.target.value)}><option value="all">Tous les types</option>{assetTypes.map((value) => <option value={value} key={value}>{ASSET_TYPE_LABELS[value] || labelFromIdentifier(value)}</option>)}</select></label>
         <label><span>Collection</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}><option value="all">Toutes les collections</option>{collections.map((value) => <option value={value} key={value}>{labelFromIdentifier(value)}</option>)}</select></label>
         <label><span>Maison / marque</span><select value={makerName} onChange={(event) => setMakerName(event.target.value)}><option value="all">Toutes les maisons</option>{makers.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
         <label><span>Vue du diaporama</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Toutes les vues</option>{categories.map((value) => <option value={value} key={value}>{labelFromIdentifier(value)}</option>)}</select></label>
         {activeFilterCount > 0 && <button type="button" className="registry-filter-reset" onClick={resetFilters}>Effacer</button>}
-      </div>
+      </RegistryFilterPanel>
 
       <div className="registry-gallery-results" aria-live="polite"><strong>{filteredEntries.length}</strong><span> Cartulaire{filteredEntries.length > 1 ? 's' : ''} affiché{filteredEntries.length > 1 ? 's' : ''}</span></div>
 

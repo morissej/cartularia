@@ -19,6 +19,7 @@ const item = (overrides) => ({
   referenceCode: null,
   manufactureYear: null,
   lifecycleStatus: 'active',
+  patrimonialStatus: 'Patrimonial',
   possessionStatus: 'in_possession',
   completenessLevel: 'imported_unreviewed',
   primaryAssetId: null,
@@ -72,14 +73,27 @@ test('la recherche est multi-termes et insensible aux accents', () => {
   assert.deepEqual(result.map(({ cartularyId }) => cartularyId), ['watch-geneve']);
 });
 
-test('les facettes type, collection et statut se combinent', () => {
+test('les facettes type, collection et statut patrimonial se combinent', () => {
   const result = filterAndSortRegistryItems(fixtures, {
     ...DEFAULT_REGISTRY_CATALOG_FILTERS,
     assetType: 'car',
     collectionId: 'col_vehicles',
-    lifecycleStatus: 'review',
+    patrimonialStatus: 'Patrimonial',
   });
   assert.deepEqual(result.map(({ cartularyId }) => cartularyId), ['car-bentley-gt']);
+});
+
+test('une collection secondaire retrouve aussi le Cartulaire sans casser la collection principale', () => {
+  const multiCollectionItem = item({
+    cartularyId: 'watch-multi-collection',
+    collectionId: 'col_watches',
+    collectionIds: ['col_watches', 'col_travel'],
+  });
+  const result = filterAndSortRegistryItems([multiCollectionItem], {
+    ...DEFAULT_REGISTRY_CATALOG_FILTERS,
+    collectionId: 'col_travel',
+  });
+  assert.deepEqual(result.map(({ cartularyId }) => cartularyId), ['watch-multi-collection']);
 });
 
 test('les trois tris restent déterministes et ne modifient pas la source', () => {
@@ -111,18 +125,18 @@ test('le lien Cartulaire conserve le contexte et encode les paramètres', () => 
 test('le Cartulaire IWC du pilote ouvre l’interface complète existante', () => {
   const href = buildCartularyHref('cart_iwc_flieger_utc_2002', '/registry/reg_demo/gallery');
   const url = new URL(href, 'https://cartularia.test');
-  assert.equal(url.pathname, '/');
+  assert.equal(url.pathname, '/cartulary');
   assert.equal(url.searchParams.get('returnTo'), '/registry/reg_demo/gallery');
 });
 
 test('le Cartulaire Rolex ouvre la même interface complète que l’IWC', () => {
   const href = buildCartularyHref('cart_rolex_gmt_master_mark_i_long_e_1675_642cf3adba60', '/registry/reg_demo/items');
-  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/');
+  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/cartulary');
 });
 
 test('toute nouvelle montre est dirigée vers le Cartulaire complet', () => {
   const href = buildCartularyHref('cart_watch_future_0001', '/registry/reg_demo/items', 'watch');
-  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/');
+  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/cartulary');
 });
 
 test('le retour n’accepte qu’un chemin interne du Registre', () => {

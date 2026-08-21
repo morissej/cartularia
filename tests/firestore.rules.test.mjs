@@ -8,13 +8,16 @@ import {
 import {
   collection,
   collectionGroup,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 
 const projectId = 'cartularia-wave1-test';
@@ -25,6 +28,7 @@ const ownerUid = 'owner-a';
 const outsiderUid = 'owner-b';
 const payerUid = 'payer-a';
 const registryReaderUid = 'reader-a';
+const invitedUid = 'invited-a';
 const ownerOrganizationId = 'org-a';
 const outsiderOrganizationId = 'org-b';
 const ownerRegistryId = 'reg-a';
@@ -66,6 +70,7 @@ beforeEach(async () => {
       setDoc(doc(firestore, 'users', ownerUid), { uid: ownerUid, status: 'active' }),
       setDoc(doc(firestore, 'users', outsiderUid), { uid: outsiderUid, status: 'active' }),
       setDoc(doc(firestore, 'users', registryReaderUid), { uid: registryReaderUid, status: 'active' }),
+      setDoc(doc(firestore, 'users', invitedUid), { uid: invitedUid, status: 'active' }),
       setDoc(doc(firestore, 'organizations', ownerOrganizationId), {
         id: ownerOrganizationId,
         name: 'Organisation A',
@@ -104,6 +109,13 @@ beforeEach(async () => {
         doc(firestore, 'organizations', ownerOrganizationId, 'memberships', registryReaderUid),
         membership(registryReaderUid, ownerOrganizationId, ownerRegistryId, ['organization.read', 'registry.read'], ['manager']),
       ),
+      setDoc(doc(firestore, 'organizations', ownerOrganizationId, 'memberships', invitedUid), {
+        ...membership(invitedUid, ownerOrganizationId, ownerRegistryId, ['organization.read', 'registry.read', 'cartulary.read'], ['guest']),
+        invitationManaged: true,
+        invitationGrants: {
+          [ownerRegistryId]: { registry: false, collectionIds: [], cartularyIds: ['cart-a'] },
+        },
+      }),
       setDoc(doc(firestore, 'registries', ownerRegistryId), {
         id: ownerRegistryId,
         organizationId: ownerOrganizationId,
@@ -137,6 +149,18 @@ beforeEach(async () => {
         dueAt: '2026-09-01T00:00:00.000Z',
         reminderStatus: 'planned',
         visibility: 'secret',
+      }),
+      setDoc(doc(firestore, 'cartularies', 'cart-b'), {
+        organizationId: ownerOrganizationId,
+        registryId: ownerRegistryId,
+        accountHolderId: ownerUid,
+        defaultVisibility: 'secret',
+      }),
+      setDoc(doc(firestore, 'registries', ownerRegistryId, 'items', 'cart-a'), {
+        cartularyId: 'cart-a', registryId: ownerRegistryId, organizationId: ownerOrganizationId, collectionId: 'col-a',
+      }),
+      setDoc(doc(firestore, 'registries', ownerRegistryId, 'items', 'cart-b'), {
+        cartularyId: 'cart-b', registryId: ownerRegistryId, organizationId: ownerOrganizationId, collectionId: 'col-b',
       }),
       setDoc(doc(firestore, 'registries', ownerRegistryId, 'accesses', 'access-a'), {
         id: 'access-a',
@@ -193,6 +217,46 @@ test('les rappels restent lisibles seulement avec le droit de lecture du Cartula
   await assertFails(getDoc(doc(payerFirestore, ...reminderPath)));
 });
 
+test('un éditeur coordonne les tâches du Registre avec le Cartulaire, un lecteur ne peut pas les modifier', async () => {
+  const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const invitedFirestore = testEnvironment.authenticatedContext(invitedUid).firestore();
+  const reminderPath = ['cartularies', 'cart-a', 'reminders', 'todo-registry'];
+  await assertSucceeds(setDoc(doc(ownerFirestore, ...reminderPath), {
+    id: 'todo-registry',
+    cartularyId: 'cart-a',
+    organizationId: ownerOrganizationId,
+    title: 'Contrôler la police d’assurance',
+    dueAt: '2026-10-15',
+    category: 'insurance',
+    reminderStatus: 'planned',
+    visibility: 'secret',
+    source: 'registry',
+    createdBy: ownerUid,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(doc(ownerFirestore, ...reminderPath), {
+    reminderStatus: 'completed',
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(invitedFirestore, ...reminderPath), {
+    reminderStatus: 'dismissed',
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(deleteDoc(doc(invitedFirestore, ...reminderPath)));
+  await assertSucceeds(deleteDoc(doc(ownerFirestore, ...reminderPath)));
+});
+
+test("une invitation Cartulaire n’ouvre aucun autre objet du même Registre", async () => {
+  const firestore = testEnvironment.authenticatedContext(invitedUid).firestore();
+  await assertSucceeds(getDoc(doc(firestore, 'registries', ownerRegistryId)));
+  await assertSucceeds(getDoc(doc(firestore, 'registries', ownerRegistryId, 'items', 'cart-a')));
+  await assertSucceeds(getDoc(doc(firestore, 'cartularies', 'cart-a')));
+  await assertSucceeds(getDoc(doc(firestore, 'cartularies', 'cart-a', 'reminders', 'rem-a')));
+  await assertFails(getDoc(doc(firestore, 'registries', ownerRegistryId, 'items', 'cart-b')));
+  await assertFails(getDoc(doc(firestore, 'cartularies', 'cart-b')));
+});
+
 test('le Centre des accès exige la permission dédiée dans le Registre autorisé', async () => {
   const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
   const readerFirestore = testEnvironment.authenticatedContext(registryReaderUid).firestore();
@@ -202,7 +266,124 @@ test('le Centre des accès exige la permission dédiée dans le Registre autoris
   await assertSucceeds(getDocs(collection(ownerFirestore, 'registries', ownerRegistryId, 'accesses')));
   await assertFails(getDoc(doc(readerFirestore, ...accessPath)));
   await assertFails(getDoc(doc(outsiderFirestore, ...accessPath)));
-  await assertFails(setDoc(doc(ownerFirestore, ...accessPath), { sourceStatus: 'revoked' }, { merge: true }));
+  await assertFails(setDoc(doc(ownerFirestore, ...accessPath), {
+    sourceStatus: 'revoked',
+    revokedAt: '2026-08-19T10:00:00.000Z',
+    updatedAt: serverTimestamp(),
+  }, { merge: true }));
+  await assertFails(setDoc(doc(readerFirestore, ...accessPath), { sourceStatus: 'revoked' }, { merge: true }));
+});
+
+test('les collections sont gérées par un éditeur du Registre sans ouvrir les fondations', async () => {
+  const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const readerFirestore = testEnvironment.authenticatedContext(registryReaderUid).firestore();
+  const collectionPath = ['registries', ownerRegistryId, 'collections', 'col_art'];
+  await assertSucceeds(setDoc(doc(ownerFirestore, ...collectionPath), {
+    id: 'col_art',
+    organizationId: ownerOrganizationId,
+    registryId: ownerRegistryId,
+    name: 'Art',
+    description: '',
+    websiteTitle: 'Collection Art',
+    websiteSlug: 'art',
+    status: 'draft',
+    visibility: 'secret',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(getDoc(doc(readerFirestore, ...collectionPath)));
+  await assertFails(setDoc(doc(readerFirestore, ...collectionPath), { name: 'Altéré' }, { merge: true }));
+});
+
+test('un mini-site de Collection publie uniquement sa projection dédiée', async () => {
+  const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const outsiderFirestore = testEnvironment.authenticatedContext(outsiderUid).firestore();
+  const anonymousFirestore = testEnvironment.unauthenticatedContext().firestore();
+  const privateCollectionPath = ['registries', ownerRegistryId, 'collections', 'col-a'];
+  const publicationPath = ['collectionPublications', 'reg-a--col-a'];
+  const itemPath = [...publicationPath, 'items', 'cart-a'];
+
+  await assertFails(setDoc(doc(ownerFirestore, ...publicationPath), {
+    publicationId: 'reg-a--col-a',
+    organizationId: ownerOrganizationId,
+    registryId: ownerRegistryId,
+    collectionId: 'col-a',
+    websiteTitle: 'Collection A',
+    websiteSlug: 'collection-a',
+    description: 'Sélection publiée',
+    status: 'published',
+    itemCount: 1,
+    publishedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+
+  const publishBatch = writeBatch(ownerFirestore);
+  publishBatch.set(doc(ownerFirestore, ...privateCollectionPath), {
+    id: 'col-a',
+    organizationId: ownerOrganizationId,
+    registryId: ownerRegistryId,
+    name: 'Collection A',
+    description: 'Sélection publiée',
+    websiteTitle: 'Collection A',
+    websiteSlug: 'collection-a',
+    status: 'published',
+    visibility: 'public',
+    publicationConsent: true,
+    publishedCartularyIds: ['cart-a'],
+    publishedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  publishBatch.set(doc(ownerFirestore, ...publicationPath), {
+    publicationId: 'reg-a--col-a',
+    organizationId: ownerOrganizationId,
+    registryId: ownerRegistryId,
+    collectionId: 'col-a',
+    websiteTitle: 'Collection A',
+    websiteSlug: 'collection-a',
+    description: 'Sélection publiée',
+    status: 'published',
+    itemCount: 1,
+    publishedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  await assertSucceeds(publishBatch.commit());
+  await assertSucceeds(setDoc(doc(ownerFirestore, ...itemPath), {
+    cartularyId: 'cart-a',
+    collectionId: 'col-a',
+    assetType: 'watch',
+    displayTitle: 'Montre publiée',
+    makerName: 'Maison',
+    modelName: 'Modèle',
+    referenceCode: 'REF-1',
+    manufactureYear: 1969,
+    publicCode: 'PUB-1',
+  }));
+
+  await assertSucceeds(getDoc(doc(anonymousFirestore, ...publicationPath)));
+  await assertSucceeds(getDoc(doc(anonymousFirestore, ...itemPath)));
+  await assertSucceeds(getDocs(collection(anonymousFirestore, ...publicationPath, 'items')));
+  await assertFails(getDoc(doc(anonymousFirestore, 'registries', ownerRegistryId, 'items', 'cart-a')));
+  await assertFails(setDoc(doc(outsiderFirestore, ...publicationPath), { websiteTitle: 'Altéré' }, { merge: true }));
+  await assertFails(setDoc(doc(ownerFirestore, ...itemPath), { userAlias: 'Champ privé' }, { merge: true }));
+
+  const revokeBatch = writeBatch(ownerFirestore);
+  revokeBatch.set(doc(ownerFirestore, ...privateCollectionPath), {
+    status: 'draft',
+    visibility: 'secret',
+    publicationConsent: false,
+    publishedCartularyIds: [],
+    publishedAt: null,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+  revokeBatch.set(doc(ownerFirestore, ...publicationPath), {
+    status: 'revoked',
+    itemCount: 0,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+  await assertSucceeds(revokeBatch.commit());
+  await assertFails(getDoc(doc(anonymousFirestore, ...publicationPath)));
+  await assertFails(getDoc(doc(anonymousFirestore, ...itemPath)));
 });
 
 test('la liste des memberships reste bornée à l’organisation et au droit dédié', async () => {
@@ -248,7 +429,7 @@ test('un brouillon cloud privé est modifiable uniquement par son compte propri�
   const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
   const outsiderFirestore = testEnvironment.authenticatedContext(outsiderUid).firestore();
   const rootPath = ['privateDrafts', ownerUid, 'cartularies', 'cart-a'];
-  const statePath = [...rootPath, 'state', 'cartularia-owner-fields'];
+  const statePath = [...rootPath, 'state', 'cartularia-specification-groups'];
   await assertSucceeds(setDoc(doc(ownerFirestore, ...rootPath), {
     ownerUid,
     cartularyId: 'cart-a',
@@ -261,8 +442,8 @@ test('un brouillon cloud privé est modifiable uniquement par son compte propri�
   await assertSucceeds(setDoc(doc(ownerFirestore, ...statePath), {
     ownerUid,
     cartularyId: 'cart-a',
-    key: 'cartularia-owner-fields',
-    value: '[{"value":"secret"}]',
+    key: 'cartularia-specification-groups',
+    value: '[{"value":"référence"}]',
     deleted: false,
     revision: 1,
     clientUpdatedAt: 1,
@@ -273,11 +454,21 @@ test('un brouillon cloud privé est modifiable uniquement par son compte propri�
   await assertFails(setDoc(doc(outsiderFirestore, ...statePath), {
     ownerUid,
     cartularyId: 'cart-a',
-    key: 'cartularia-owner-fields',
+    key: 'cartularia-specification-groups',
     value: 'vol',
     deleted: false,
     revision: 2,
     clientUpdatedAt: 2,
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(ownerFirestore, ...rootPath, 'state', 'cartularia-owner-fields'), {
+    ownerUid,
+    cartularyId: 'cart-a',
+    key: 'cartularia-owner-fields',
+    value: '[{"value":"donnée personnelle"}]',
+    deleted: false,
+    revision: 1,
+    clientUpdatedAt: 1,
     updatedAt: serverTimestamp(),
   }));
 });

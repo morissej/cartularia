@@ -82,6 +82,8 @@ export interface MarketDepthState {
 
 export interface RetainedValuationState {
   amount: number;
+  saleCostAmount: number;
+  taxAmount: number;
   explanation: string;
 }
 

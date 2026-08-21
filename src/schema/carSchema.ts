@@ -12,7 +12,7 @@ import {
 } from './schemaTypes.ts';
 
 export const CAR_SCHEMA_ID = 'car';
-export const CAR_SCHEMA_VERSION = '1.1.0';
+export const CAR_SCHEMA_VERSION = '1.2.0';
 
 interface CarFieldDefinition {
   fieldId: string;
@@ -63,6 +63,21 @@ export const CAR_SCHEMA_FIELDS = [
     fieldId: 'cover.asset.type', sectionId: 'cover.asset', label: 'Type de bien', dataType: 'enum', required: true,
     visibility: 'public', registryFacet: true, allowedValues: ['Voiture'], sourcePriority: ['user', 'document'],
     aiWritable: false, instructions: 'La valeur doit rester Voiture pour le profil car.',
+  }),
+  carField({
+    fieldId: 'cover.privacy.userAlias', sectionId: 'cover.privacy_link', label: 'Nom utilisateur pseudonyme', dataType: 'text', required: true,
+    visibility: 'secret', sourcePriority: ['user'], aiWritable: false,
+    instructions: 'Recopier uniquement le pseudonyme du Coffre personnel, sans identité civile ni coordonnée.',
+  }),
+  carField({
+    fieldId: 'cover.privacy.objectCode', sectionId: 'cover.privacy_link', label: 'Code objet', dataType: 'text', required: true,
+    visibility: 'secret', sourcePriority: ['user'], aiWritable: false,
+    validation: '6 à 64 caractères parmi A-Z, 0-9, tiret et underscore.',
+  }),
+  carField({
+    fieldId: 'condition.storage.codeNames[]', sectionId: 'condition.storage', label: 'Nom de code de stockage', dataType: 'text',
+    cardinality: 'repeatable', visibility: 'secret', sourcePriority: ['user'], aiWritable: false,
+    instructions: 'Conserver uniquement le nom de code défini dans le Coffre personnel, jamais l’adresse ou les conditions d’accès.',
   }),
   carField({
     fieldId: 'cover.car.maker', sectionId: 'cover.car', label: 'Constructeur', dataType: 'text', required: true,

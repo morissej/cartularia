@@ -9,9 +9,7 @@ import {
   Layers3,
   LibraryBig,
   LoaderCircle,
-  LockKeyhole,
   RefreshCw,
-  ShieldCheck,
   Plus,
 } from 'lucide-react';
 import type {
@@ -21,11 +19,12 @@ import type {
 } from '../../domain/foundations.ts';
 import type { RegistryFollowUpItem } from '../../domain/followUp.ts';
 import type { RegistryItemProjection } from '../../domain/projections.ts';
-import { loadRegistryFollowUpsFromItems } from '../../services/followUp.ts';
+import { observeRegistryFollowUpsFromItems } from '../../services/followUp.ts';
 import { loadRegistryItems, observeRegistryItems } from '../../services/projections.ts';
 import { buildRegistryAggregates } from './registryAggregates.ts';
 import { ROLE_LABELS } from './registryAdministration.ts';
 import { buildRegistryFollowUpSummary } from './registryFollowUp.ts';
+import { RegistryTodoBoard } from './RegistryTodoBoard.tsx';
 import {
   assetTypeLabel,
   completenessLabel,
@@ -74,21 +73,12 @@ export function RegistryOverview({ registry, organization, membership }: {
     try {
       const nextItems = await loadRegistryItems(registry.id);
       setItems(nextItems);
-      if (canReadCartularies) {
-        try {
-          setFollowUps(await loadRegistryFollowUpsFromItems(nextItems));
-        } catch {
-          setFollowUps([]);
-        }
-      } else {
-        setFollowUps([]);
-      }
       setLoadState('ready');
     } catch {
       setItems([]);
       setLoadState('error');
     }
-  }, [canReadCartularies, registry.id]);
+  }, [registry.id]);
 
   useEffect(() => {
     let active = true;
@@ -96,17 +86,6 @@ export function RegistryOverview({ registry, organization, membership }: {
     const unsubscribe = observeRegistryItems(registry.id, (nextItems) => {
       if (!active) return;
       setItems(nextItems);
-      if (canReadCartularies) {
-        void loadRegistryFollowUpsFromItems(nextItems)
-          .then((nextFollowUps) => {
-            if (active) setFollowUps(nextFollowUps);
-          })
-          .catch(() => {
-            if (active) setFollowUps([]);
-          });
-      } else {
-        setFollowUps([]);
-      }
       setLoadState('ready');
     }, () => {
       if (!active) return;
@@ -118,11 +97,23 @@ export function RegistryOverview({ registry, organization, membership }: {
       active = false;
       unsubscribe();
     };
-  }, [canReadCartularies, registry.id]);
+  }, [registry.id]);
+
+  useEffect(() => {
+    if (!canReadCartularies) {
+      setFollowUps([]);
+      return () => undefined;
+    }
+    return observeRegistryFollowUpsFromItems(items, setFollowUps, () => setFollowUps([]));
+  }, [canReadCartularies, items]);
 
   const summary = useMemo(() => buildRegistryAggregates(items), [items]);
   const followUpSummary = useMemo(() => buildRegistryFollowUpSummary(followUps), [followUps]);
   const visibleTotal = loadState === 'ready' ? summary.total : registry.itemCount;
+  const actionableAttentionCount = summary.attention.suspended
+    + summary.attention.sensitivePossession
+    + followUpSummary.overdue
+    + followUpSummary.dueSoon;
 
   return (
     <>
@@ -134,10 +125,9 @@ export function RegistryOverview({ registry, organization, membership }: {
         </div>
         <div className="registry-dashboard-heading__actions">
           <span className={`registry-status registry-status--${registry.status}`}>
-            {registry.status === 'active' ? 'Actif' : 'Archivé'}
+            {registry.status === 'active' ? 'Registre actif' : 'Registre archivé'}
           </span>
           {canCreateCartularies && <a href={registrySectionHref(registry.id, 'new')}><Plus aria-hidden="true" /> Nouveau cartulaire</a>}
-          <a href={registrySectionHref(registry.id, 'items')}>Voir le catalogue <ArrowRight aria-hidden="true" /></a>
         </div>
       </section>
 
@@ -200,35 +190,36 @@ export function RegistryOverview({ registry, organization, membership }: {
           </section>
 
           <section className="registry-dashboard-panel">
-            <header><div><span className="registry-step">État</span><h2>Cycle de vie</h2></div><CircleCheck aria-hidden="true" /></header>
+            <header><div><span className="registry-step">Statut</span><h2>État des Cartulaires</h2></div><CircleCheck aria-hidden="true" /></header>
             <div className="registry-status-counts">
               {summary.byLifecycle.map((row) => <div key={row.key}><span>{lifecycleLabel(row.key)}</span><strong>{row.count}</strong></div>)}
             </div>
+            <p className="registry-dashboard-note">Position administrative : à vérifier, actif, suspendu, transféré ou archivé.</p>
           </section>
 
           <section className="registry-dashboard-panel">
-            <header><div><span className="registry-step">Paliers</span><h2>Complétude documentaire</h2></div><BookOpen aria-hidden="true" /></header>
+            <header><div><span className="registry-step">Documents</span><h2>Niveau documentaire</h2></div><BookOpen aria-hidden="true" /></header>
             <div className="registry-completeness-levels">
               {summary.byCompleteness.map((row) => (
                 <div key={row.key}><strong>{row.count}</strong><span>{completenessLabel(row.key)}</span></div>
               ))}
             </div>
-            <p className="registry-dashboard-note">La complétude est présentée par paliers explicites, sans score artificiel.</p>
+            <p className="registry-dashboard-note">Quantité et niveau de revue des informations et pièces réunies dans chaque Cartulaire.</p>
           </section>
 
           <section className="registry-dashboard-panel registry-dashboard-panel--attention">
-            <header><div><span className="registry-step">Vigilance</span><h2>Points d’attention</h2></div><AlertTriangle aria-hidden="true" /></header>
-            {summary.attention.total + followUpSummary.overdue + followUpSummary.dueSoon === 0 ? (
-              <div className="registry-attention-clear"><CircleCheck aria-hidden="true" /><span>Aucun point d’attention dérivé des projections.</span></div>
+            <header><div><span className="registry-step">Actions</span><h2>Alertes à traiter</h2></div><AlertTriangle aria-hidden="true" /></header>
+            {actionableAttentionCount === 0 ? (
+              <div className="registry-attention-clear"><CircleCheck aria-hidden="true" /><span>Aucune alerte opérationnelle en cours.</span></div>
             ) : (
               <div className="registry-attention-list">
-                {summary.attention.review > 0 && <div><span>Dossiers ou imports à revoir</span><strong>{summary.attention.review}</strong></div>}
                 {summary.attention.suspended > 0 && <div><span>Dossiers suspendus</span><strong>{summary.attention.suspended}</strong></div>}
                 {summary.attention.sensitivePossession > 0 && <div><span>Situation de possession sensible</span><strong>{summary.attention.sensitivePossession}</strong></div>}
                 {followUpSummary.overdue > 0 && <div><span>Échéances en retard</span><strong>{followUpSummary.overdue}</strong></div>}
                 {followUpSummary.dueSoon > 0 && <div><span>Échéances dans les 30 jours</span><strong>{followUpSummary.dueSoon}</strong></div>}
               </div>
             )}
+            <p className="registry-dashboard-note">Uniquement les situations qui demandent une action : suspension, perte, vol ou échéance.</p>
             <a href={registrySectionHref(registry.id, 'follow-up')}>Ouvrir le centre de suivi <ArrowRight aria-hidden="true" /></a>
           </section>
 
@@ -246,11 +237,14 @@ export function RegistryOverview({ registry, organization, membership }: {
         </div>
       )}
 
-      <section className="registry-dashboard-boundary">
-        <LockKeyhole aria-hidden="true" />
-        <div><h2>Frontière du tableau de bord</h2><p>Aucune valeur patrimoniale, preuve, archive ou donnée média n’est agrégée sans projection explicite du Cartulaire.</p></div>
-        <span><ShieldCheck aria-hidden="true" /> Secret par défaut</span>
-      </section>
+      {loadState === 'ready' && canReadCartularies && (
+        <RegistryTodoBoard
+          registryId={registry.id}
+          items={items}
+          todos={followUps}
+          canManage={canCreateCartularies}
+        />
+      )}
 
       <section className="registry-dashboard-account">
         <div><span>Contexte</span><strong>{organization.name}</strong></div>

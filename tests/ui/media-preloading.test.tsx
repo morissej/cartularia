@@ -111,7 +111,7 @@ describe('lecteur 360° PF1', () => {
 
     await waitFor(() => expect(started).toBe(6));
     expect(maximum).toBe(2);
-    expect(screen.getByLabelText('Visualiseur 3D de la montre')).toBeTruthy();
+    expect(screen.getByLabelText('Visualiseur 3D de l’objet')).toBeTruthy();
   });
 
   it('fait tourner le lecteur au clavier sans déclencher la lecture automatique', () => {
@@ -121,12 +121,12 @@ describe('lecteur 360° PF1', () => {
       language="FR"
     />);
 
-    const viewer = screen.getByLabelText('Visualiseur 3D de la montre');
-    expect(screen.getByAltText('Rendu 3D de la montre sous un angle de 0°')).toBeTruthy();
+    const viewer = screen.getByLabelText('Visualiseur 3D de l’objet');
+    expect(screen.getByAltText('Rendu 3D de l’objet sous un angle de 0°')).toBeTruthy();
     fireEvent.keyDown(viewer, { key: 'ArrowRight' });
-    expect(screen.getByAltText('Rendu 3D de la montre sous un angle de 60°')).toBeTruthy();
+    expect(screen.getByAltText('Rendu 3D de l’objet sous un angle de 60°')).toBeTruthy();
     fireEvent.keyDown(viewer, { key: 'ArrowLeft' });
-    expect(screen.getByAltText('Rendu 3D de la montre sous un angle de 0°')).toBeTruthy();
+    expect(screen.getByAltText('Rendu 3D de l’objet sous un angle de 0°')).toBeTruthy();
   });
 
   it('retire la rotation automatique lorsque le mouvement réduit est demandé', () => {

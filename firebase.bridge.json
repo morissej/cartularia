@@ -1,0 +1,11 @@
+{
+  "firestore": { "rules": "bridge-firestore.rules" },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 19399 },
+    "firestore": { "host": "127.0.0.1", "port": 8380, "websocketPort": 9398 },
+    "hub": { "host": "127.0.0.1", "port": 25402 },
+    "logging": { "host": "127.0.0.1", "port": 25502 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

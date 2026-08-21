@@ -1,4 +1,5 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
@@ -6,6 +7,7 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2/options';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
   markCartularySyncRequestFailed,
   processCartularySyncRequest,
@@ -25,13 +27,113 @@ import {
   processPrivateDraftUpload,
   processPrivateDraftUploadBacklog,
 } from './lib/private-upload-command.mjs';
+import {
+  acceptRegistryInvitation,
+  issueRegistryInvitation,
+  revokeRegistryInvitation,
+} from './lib/invitation-command.mjs';
+import { activateRegistryAccount as activateRegistryAccountCommand } from './lib/account-command.mjs';
 
 const REGION = 'us-central1';
 const app = getApps()[0] || initializeApp();
 const firestore = getFirestore(app);
 const storage = getStorage(app);
+const auth = getAuth(app);
 
 setGlobalOptions({ region: REGION, maxInstances: 5 });
+
+const invitationCallableOptions = {
+  region: REGION,
+  memory: '256MiB',
+  timeoutSeconds: 30,
+  maxInstances: 5,
+  enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
+};
+
+export const activateRegistryAccount = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  try {
+    const result = await activateRegistryAccountCommand({
+      firestore,
+      uid: request.auth.uid,
+      email: request.auth.token.email || '',
+      userName: request.data?.userName,
+    });
+    await auth.updateUser(request.auth.uid, { displayName: request.data?.userName?.trim().replace(/\s+/g, ' ').slice(0, 64) });
+    return result;
+  } catch (error) {
+    logger.warn("Échec d’activation d’un compte Registre.", { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
+
+const callableError = (error) => {
+  const supported = new Set([
+    'invalid_argument', 'unauthenticated', 'permission_denied', 'not_found',
+    'failed_precondition', 'deadline_exceeded', 'already_exists',
+  ]);
+  const code = supported.has(error?.code) ? error.code.replaceAll('_', '-') : 'internal';
+  return new HttpsError(code, code === 'internal' ? "L’opération d’invitation a échoué." : error.message);
+};
+
+export const createRegistryInvitation = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  try {
+    const result = await issueRegistryInvitation({
+      firestore,
+      auth,
+      actorUid: request.auth.uid,
+      registryId: request.data?.registryId,
+      recipientEmail: request.data?.recipientEmail,
+      scopeType: request.data?.scopeType,
+      scopeId: request.data?.scopeId,
+      displayTitle: request.data?.displayTitle,
+      expiresAt: request.data?.expiresAt,
+      continueUrl: request.data?.continueUrl,
+    });
+    return {
+      invitationId: result.invitationId,
+      expiresAt: result.expiresAt,
+      ...(process.env.FUNCTIONS_EMULATOR === 'true' ? { emulatorSignInLink: result.signInLink } : {}),
+    };
+  } catch (error) {
+    logger.warn("Échec d’émission d’une invitation.", { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
+
+export const acceptRegistryInvitationLink = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth?.token?.email || request.auth.token.email_verified !== true) {
+    throw new HttpsError('unauthenticated', 'Une adresse électronique vérifiée est requise.');
+  }
+  try {
+    return await acceptRegistryInvitation({
+      firestore,
+      actorUid: request.auth.uid,
+      actorEmail: request.auth.token.email,
+      invitationId: request.data?.invitationId,
+      token: request.data?.token,
+    });
+  } catch (error) {
+    logger.warn("Échec d’acceptation d’une invitation.", { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
+
+export const revokeRegistryInvitationLink = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  try {
+    return await revokeRegistryInvitation({
+      firestore,
+      actorUid: request.auth.uid,
+      registryId: request.data?.registryId,
+      invitationId: request.data?.invitationId,
+    });
+  } catch (error) {
+    logger.warn("Échec de révocation d’une invitation.", { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
 
 export const verifyPrivateDraftUpload = onObjectFinalized({
   region: REGION,

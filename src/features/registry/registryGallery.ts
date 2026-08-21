@@ -1,4 +1,5 @@
 import type { RegistryGalleryEntry, RegistryGallerySlide } from '../../domain/gallery.ts';
+import { registryItemCollectionIds } from '../../domain/projections.ts';
 
 export interface RegistryGalleryFilters {
   query: string;
@@ -36,7 +37,7 @@ export const filterRegistryGallery = (
   return entries.filter((entry) => {
     const { item } = entry;
     if (filters.assetType !== 'all' && item.assetType !== filters.assetType) return false;
-    if (filters.collectionId !== 'all' && item.collectionId !== filters.collectionId) return false;
+    if (filters.collectionId !== 'all' && !registryItemCollectionIds(item).includes(filters.collectionId)) return false;
     if (filters.makerName !== 'all' && item.makerName !== filters.makerName) return false;
     if (filters.category !== 'all' && gallerySlidesForCategory(entry, filters.category).length === 0) return false;
     const haystack = normalize([

@@ -16,7 +16,24 @@ import type {
   CommunityProfile,
   CommunityPublication,
   LoadedCommunityPost,
+  LoadedCommunityPublication,
 } from '../domain/community.ts';
+
+export const loadCommunityCatalog = async (): Promise<LoadedCommunityPublication[]> => {
+  const publicationSnapshots = await getDocs(query(
+    collection(db, 'communityPublications'),
+    where('status', '==', 'published'),
+    where('moderationStatus', '==', 'approved'),
+    orderBy('publishedAt', 'desc'),
+    limit(100),
+  ));
+  return Promise.all(publicationSnapshots.docs.map(async (publicationSnapshot) => ({
+    publication: publicationSnapshot.data() as CommunityPublication,
+    blocks: (await getDocs(collection(publicationSnapshot.ref, 'blocks'))).docs
+      .map((block) => block.data() as CommunityBlock)
+      .sort((left, right) => left.order - right.order),
+  })));
+};
 
 export const loadCommunityFeed = async (): Promise<LoadedCommunityPost[]> => {
   const publicationSnapshots = await getDocs(query(

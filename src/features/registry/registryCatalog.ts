@@ -1,4 +1,4 @@
-import type { RegistryItemProjection } from '../../domain/projections.ts';
+import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
 import { IWC_CARTULARY_ID, ROLEX_CARTULARY_ID } from '../../domain/cartularyIds.ts';
 
 export type RegistryCatalogSort = 'updated-desc' | 'title-asc' | 'year-desc';
@@ -7,7 +7,8 @@ export interface RegistryCatalogFilters {
   query: string;
   assetType: string;
   collectionId: string;
-  lifecycleStatus: string;
+  patrimonialStatus: string;
+  lifecycleStatus?: string;
   sort: RegistryCatalogSort;
 }
 
@@ -15,7 +16,7 @@ export const DEFAULT_REGISTRY_CATALOG_FILTERS: RegistryCatalogFilters = {
   query: '',
   assetType: 'all',
   collectionId: 'all',
-  lifecycleStatus: 'all',
+  patrimonialStatus: 'all',
   sort: 'updated-desc',
 };
 
@@ -37,17 +38,20 @@ export const filterAndSortRegistryItems = (
   const filtered = items.filter((item) => {
     if (item.projectionStatus !== 'active') return false;
     if (filters.assetType !== 'all' && item.assetType !== filters.assetType) return false;
-    if (filters.collectionId !== 'all' && item.collectionId !== filters.collectionId) return false;
-    if (filters.lifecycleStatus !== 'all' && item.lifecycleStatus !== filters.lifecycleStatus) return false;
+    if (filters.collectionId !== 'all' && !registryItemCollectionIds(item).includes(filters.collectionId)) return false;
+    if (filters.patrimonialStatus !== 'all' && item.patrimonialStatus !== filters.patrimonialStatus) return false;
+    if (filters.lifecycleStatus && filters.lifecycleStatus !== 'all' && item.lifecycleStatus !== filters.lifecycleStatus) return false;
 
     const haystack = normalize([
       item.displayTitle,
       item.makerName,
       item.modelName,
       item.referenceCode,
+      item.userAlias,
+      item.objectCode,
       item.manufactureYear,
       item.assetType,
-      item.collectionId,
+      ...registryItemCollectionIds(item),
     ].join(' '));
     return searchTokens.every((token) => haystack.includes(token));
   });
@@ -70,7 +74,7 @@ export const buildCartularyHref = (cartularyId: string, returnTo: string, assetT
   const usesFullCartulary = assetType === 'watch'
     || cartularyId === IWC_CARTULARY_ID
     || cartularyId === ROLEX_CARTULARY_ID;
-  return `${usesFullCartulary ? '/' : '/cartulary-view'}?${params.toString()}`;
+  return `${usesFullCartulary ? '/cartulary' : '/cartulary-view'}?${params.toString()}`;
 };
 
 export const isRegistryReturnPath = (value: string | null): value is string => Boolean(

@@ -34,71 +34,19 @@ export function PageIntroduction({ number, title }: { number: string; title: str
   return <header className="page-intro"><span className="page-intro__number">{number}</span><h1>{title}</h1></header>;
 }
 
-export function ContentMarker({
-  marker,
-  active,
-  label,
-  onToggle,
-  instance,
-  pendingValidation = false,
-  disabled = false,
-  language,
-}: {
-  marker: 'W' | 'R' | 'C';
-  active: boolean;
-  label: string;
-  onToggle: (label: string) => void;
-  instance: PublishedBlockId;
-  pendingValidation?: boolean;
-  disabled?: boolean;
-  language: InterfaceLanguage;
-}) {
-  const isFrench = language === 'FR';
-  const destination = marker === 'W' ? 'Watch website' : marker === 'R' ? 'rapport PDF' : 'Cercle';
-  const translatedDestination = marker === 'W' ? 'Watch website' : marker === 'R' ? 'PDF report' : 'Circle';
-  const markerClass = marker === 'W' ? 'website' : marker === 'R' ? 'report' : 'community';
-  const aiBinding = marker === 'W'
-    ? aiFieldProps('publishing.blocks.website', instance)
-    : marker === 'R'
-      ? aiFieldProps('publishing.blocks.report', instance)
-      : {};
-  return (
-    <button
-      type="button"
-      {...aiBinding}
-      className={`content-marker content-marker--${markerClass} no-print ${active ? 'is-active' : ''} ${pendingValidation ? 'is-pending-validation' : ''}`}
-      onClick={() => onToggle(label)}
-      disabled={disabled}
-      aria-pressed={active}
-      aria-label={pendingValidation
-        ? (isFrench ? `Valider la sélection historique de ${label} pour ${destination}` : `Validate the previous ${label} selection for ${translatedDestination}`)
-        : (isFrench
-          ? `${active ? 'Retirer' : 'Ajouter'} ${label} ${active ? 'du' : 'au'} ${destination}`
-          : `${active ? 'Remove' : 'Add'} ${label} ${active ? 'from' : 'to'} ${translatedDestination}`)}
-      title={disabled
-        ? (isFrench ? 'Sélection modifiable par le propriétaire' : 'Selection can only be changed by the owner')
-        : pendingValidation ? `${marker} · ${isFrench ? 'sélection à valider' : 'selection awaiting validation'}` : `${marker} · ${isFrench ? destination : translatedDestination}`}
-    ><span aria-hidden="true">{marker}</span></button>
-  );
-}
-
 export function BlockMarkers({ selection, label }: { selection: BlockMarkerState; label: string }) {
+  if (!selection.edit) return null;
   return (
     <div className="content-markers">
-      <ContentMarker marker="W" active={selection.website.active} pendingValidation={selection.website.pendingValidation} label={label} instance={selection.blockId} onToggle={selection.website.onToggle} disabled={selection.website.disabled} language={selection.language} />
-      <ContentMarker marker="R" active={selection.report.active} pendingValidation={selection.report.pendingValidation} label={label} instance={selection.blockId} onToggle={selection.report.onToggle} disabled={selection.report.disabled} language={selection.language} />
-      <ContentMarker marker="C" active={selection.community.active} pendingValidation={selection.community.pendingValidation} label={label} instance={selection.blockId} onToggle={selection.community.onToggle} disabled={selection.community.disabled} language={selection.language} />
-      {selection.edit && (
-        <button
-          type="button"
-          className={`content-marker content-marker--edit no-print ${selection.edit.active ? 'is-active' : ''}`}
-          onClick={selection.edit.onToggle}
-          disabled={selection.edit.disabled}
-          aria-pressed={selection.edit.active}
-          aria-label={`${selection.language === 'FR' ? (selection.edit.active ? 'Terminer la modification de' : 'Modifier') : (selection.edit.active ? 'Finish editing' : 'Edit')} ${label}`}
-          title={selection.language === 'FR' ? 'Modifier le texte' : 'Edit text'}
-        ><Pencil size={15} aria-hidden="true" /></button>
-      )}
+      <button
+        type="button"
+        className={`content-marker content-marker--edit no-print ${selection.edit.active ? 'is-active' : ''}`}
+        onClick={selection.edit.onToggle}
+        disabled={selection.edit.disabled}
+        aria-pressed={selection.edit.active}
+        aria-label={`${selection.language === 'FR' ? (selection.edit.active ? 'Terminer la modification de' : 'Modifier') : (selection.edit.active ? 'Finish editing' : 'Edit')} ${label}`}
+        title={selection.language === 'FR' ? 'Modifier le texte' : 'Edit text'}
+      ><Pencil size={15} aria-hidden="true" /></button>
     </div>
   );
 }

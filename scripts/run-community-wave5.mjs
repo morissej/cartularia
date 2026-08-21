@@ -51,7 +51,7 @@ const publication = await publishCommunityBlocks({
   blocks: [
     {
       id: 'community-iwc-cover',
-      title: 'Montre pilote',
+      title: 'Objet pilote',
       fields: {
         'cover.asset.type': 'Montre',
         'cover.watch.brand': 'IWC Schaffhausen',

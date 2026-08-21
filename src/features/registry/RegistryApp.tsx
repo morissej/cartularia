@@ -9,6 +9,7 @@ import {
   Fingerprint,
   Images,
   KeyRound,
+  Layers3,
   LibraryBig,
   LoaderCircle,
   LockKeyhole,
@@ -44,6 +45,7 @@ import './registry.css';
 
 const RegistryItems = lazy(() => import('./RegistryItems.tsx').then((module) => ({ default: module.RegistryItems })));
 const RegistryComparison = lazy(() => import('./RegistryComparison.tsx').then((module) => ({ default: module.RegistryComparison })));
+const RegistryCollections = lazy(() => import('./RegistryCollections.tsx').then((module) => ({ default: module.RegistryCollections })));
 const RegistryAdministration = lazy(() => import('./RegistryAdministration.tsx').then((module) => ({ default: module.RegistryAdministration })));
 const RegistryAccessCenter = lazy(() => import('./RegistryAccessCenter.tsx').then((module) => ({ default: module.RegistryAccessCenter })));
 const RegistryFollowUp = lazy(() => import('./RegistryFollowUp.tsx').then((module) => ({ default: module.RegistryFollowUp })));
@@ -58,6 +60,10 @@ interface RegistryChoice {
 }
 
 type NavigateRegistry = (href: string, options?: { replace?: boolean; focus?: boolean }) => void;
+
+const registryAccountLabel = (user: User) => user.displayName
+  || (user.email?.endsWith('@registry.cartularia.invalid') ? 'Compte Cartularia' : user.email)
+  || 'Compte Cartularia';
 
 const focusRegistryMainContent = () => {
   window.requestAnimationFrame(() => {
@@ -74,6 +80,7 @@ const SECTION_META: Array<{
 }> = [
   { section: 'overview', label: "Vue d'ensemble", icon: BookOpen },
   { section: 'items', label: 'Catalogue', icon: LibraryBig },
+  { section: 'collections', label: 'Collections', icon: Layers3 },
   { section: 'gallery', label: 'Galerie', icon: Images },
   { section: 'follow-up', label: 'Suivi', icon: Bell },
   { section: 'access', label: 'Accès', icon: KeyRound },
@@ -104,18 +111,18 @@ function RegistrySectionLoading() {
 }
 
 function RegistrySignIn() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!email.trim() || !password) return;
+    if (!identifier.trim() || !password) return;
     setSubmitting(true);
     setError(null);
     try {
-      await signInToCartularia(email.trim(), password);
+      await signInToCartularia(identifier.trim(), password);
     } catch {
       setError("Connexion impossible. Vérifiez vos identifiants et réessayez.");
     } finally {
@@ -126,9 +133,7 @@ function RegistrySignIn() {
   return (
     <main className="registry-auth-page">
       <section className="registry-auth-intro" aria-labelledby="registry-auth-title">
-        <a className="registry-auth-logo" href="/" aria-label="Retour à Cartularia">
-          <BrandLogo />
-        </a>
+        <div className="registry-auth-logo"><BrandLogo /></div>
         <p className="registry-kicker">Espace authentifié</p>
         <h1 id="registry-auth-title">Accéder à votre Registre</h1>
         <p>
@@ -144,16 +149,16 @@ function RegistrySignIn() {
         <div>
           <span className="registry-step">01</span>
           <h2>Connexion</h2>
-          <p>Utilisez le compte auquel vos Registres ont été attribués.</p>
+          <p>Utilisez votre nom utilisateur et le mot de passe propre au Registre.</p>
         </div>
         <form onSubmit={handleSubmit}>
-          <label htmlFor="registry-email">Adresse électronique</label>
+          <label htmlFor="registry-email">Nom utilisateur</label>
           <input
             id="registry-email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            type="text"
+            autoComplete="username"
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
             required
           />
           <label htmlFor="registry-password">Mot de passe</label>
@@ -166,10 +171,11 @@ function RegistrySignIn() {
             required
           />
           {error && <p className="registry-form-error" role="alert">{error}</p>}
-          <button type="submit" disabled={submitting || !email.trim() || !password}>
+          <button type="submit" disabled={submitting || !identifier.trim() || !password}>
             {submitting ? <LoaderCircle className="registry-spinner" aria-hidden="true" /> : <LogIn aria-hidden="true" />}
             {submitting ? 'Connexion…' : 'Ouvrir le Registre'}
           </button>
+          <a className="registry-auth-create-link" href="/account/create">Créer un compte Cartularia</a>
         </form>
       </section>
     </main>
@@ -188,7 +194,7 @@ function RegistryChooser({ choices, user, onRegistryClick }: {
   return (
     <div className="registry-app" onClick={onRegistryClick}>
       <header className="registry-topbar registry-topbar--chooser">
-        <a href="/" className="registry-brand" aria-label="Retour à Cartularia"><BrandLogo /></a>
+        <div className="registry-brand"><BrandLogo /></div>
         <button type="button" className="registry-signout" onClick={handleSignOut}>
           <LogOut aria-hidden="true" /> Déconnexion
         </button>
@@ -197,7 +203,7 @@ function RegistryChooser({ choices, user, onRegistryClick }: {
         <div className="registry-chooser__intro">
           <p className="registry-kicker">Registre</p>
           <h1>Choisir un contexte</h1>
-          <p>{user.displayName || user.email || 'Compte Cartularia'}, vos droits donnent accès aux Registres suivants.</p>
+          <p>{registryAccountLabel(user)}, vos droits donnent accès aux Registres suivants.</p>
         </div>
         <div className="registry-choice-grid">
           {choices.map(({ registry, organization, membership }) => (
@@ -230,7 +236,7 @@ function RegistryNoAccess({ user }: { user: User }) {
       <h1>Aucun contexte ne vous est attribué</h1>
       <p>Votre compte est authentifié, mais aucun membership actif ne lui donne actuellement accès à un Registre.</p>
       <div className="registry-state-actions">
-        <span>{user.email}</span>
+        <span>{registryAccountLabel(user)}</span>
         <button type="button" onClick={() => signOutOfCartularia()}>Changer de compte</button>
       </div>
     </main>
@@ -246,6 +252,11 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
   onRegistryClick: MouseEventHandler<HTMLElement>;
 }) {
   const { registry, organization } = choice;
+  const invitationGrant = choice.membership.invitationManaged
+    ? choice.membership.invitationGrants?.[registry.id]
+    : undefined;
+  const visibleSections = invitationGrant ? SECTION_META.filter((meta) => meta.section === 'items') : SECTION_META;
+  const effectiveSection = invitationGrant ? 'items' : section;
   const handleRegistryChange = (registryId: string) => {
     navigateRegistry(registryHref(registryId));
   };
@@ -254,7 +265,7 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
     <div className="registry-app" onClick={onRegistryClick}>
       <a className="registry-skip-link" href="#registry-main-content">Aller au contenu principal</a>
       <header className="registry-topbar">
-        <a href="/" className="registry-brand" aria-label="Retour à Cartularia"><BrandLogo /></a>
+        <div className="registry-brand"><BrandLogo /></div>
         <div className="registry-product-label">
           <span>Registre</span>
           <strong>{registry.name}</strong>
@@ -274,7 +285,7 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
           )}
           <div className="registry-user">
             <UserRound aria-hidden="true" />
-            <span><strong>{user.displayName || 'Compte Cartularia'}</strong><small>{user.email}</small></span>
+            <span><strong>{registryAccountLabel(user)}</strong><small>Compte authentifié</small></span>
           </div>
           <button type="button" className="registry-signout registry-signout--icon" onClick={() => signOutOfCartularia()} aria-label="Se déconnecter">
             <LogOut aria-hidden="true" />
@@ -289,10 +300,10 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
             <span><small>Administré dans</small><strong>{organization.name}</strong></span>
           </div>
           <nav aria-label="Navigation du Registre">
-            {SECTION_META.map((meta) => {
+            {visibleSections.map((meta) => {
               const target = meta.section;
               const Icon = meta.icon;
-              const current = section === target || (section === 'compare' && target === 'items');
+              const current = effectiveSection === target || (effectiveSection === 'compare' && target === 'items');
               return (
                 <a
                   href={registryHref(registry.id, target)}
@@ -314,47 +325,55 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
 
         <main className="registry-main" id="registry-main-content" tabIndex={-1}>
           <Suspense fallback={<RegistrySectionLoading />}>
-            {section === 'overview' && (
+            {effectiveSection === 'overview' && (
               <RegistryOverview registry={registry} organization={organization} membership={choice.membership} />
             )}
-            {section === 'items' && (
+            {effectiveSection === 'items' && (
               <RegistryItems
                 registry={registry}
                 canCreateCartularies={choice.membership.permissions.includes('cartulary.edit')}
+                invitationGrant={invitationGrant}
               />
             )}
-            {section === 'new' && choice.membership.permissions.includes('cartulary.edit') && (
+            {effectiveSection === 'collections' && (
+              <RegistryCollections
+                registry={registry}
+                canManage={choice.membership.permissions.includes('cartulary.edit')}
+              />
+            )}
+            {effectiveSection === 'new' && choice.membership.permissions.includes('cartulary.edit') && (
               <NewCartularyPage user={user} organization={organization} registry={registry} />
             )}
-            {section === 'new' && !choice.membership.permissions.includes('cartulary.edit') && (
+            {effectiveSection === 'new' && !choice.membership.permissions.includes('cartulary.edit') && (
               <section className="registry-create-denied"><LockKeyhole aria-hidden="true" /><h1>Création non autorisée</h1><p>Votre rôle permet de consulter ce Registre, mais pas d’y créer un Cartulaire.</p></section>
             )}
-            {section === 'gallery' && (
+            {effectiveSection === 'gallery' && (
               <RegistryGallery
                 registry={registry}
                 canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
               />
             )}
-            {section === 'compare' && <RegistryComparison registry={registry} />}
-            {section === 'follow-up' && (
+            {effectiveSection === 'compare' && <RegistryComparison registry={registry} />}
+            {effectiveSection === 'follow-up' && (
               <RegistryFollowUp
                 registry={registry}
                 canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
               />
             )}
-            {section === 'access' && (
+            {effectiveSection === 'access' && (
               <RegistryAccessCenter
                 registry={registry}
                 canReadAccesses={choice.membership.permissions.includes('access.read')}
+                canManageAccesses={choice.membership.permissions.includes('cartulary.edit')}
               />
             )}
-            {section === 'integrity' && (
+            {effectiveSection === 'integrity' && (
               <RegistryIntegrity
                 registry={registry}
                 canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
               />
             )}
-            {section === 'admin' && (
+            {effectiveSection === 'admin' && (
               <RegistryAdministration
                 registry={registry}
                 organization={organization}

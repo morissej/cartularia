@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   BlockMarkers,
-  ContentMarker,
   EditableParagraphs,
   type BlockMarkerState,
 } from '../../src/features/cartulary/components/CartularyPresentation.tsx';
@@ -18,31 +17,22 @@ const markerState = (overrides: Partial<BlockMarkerState> = {}): BlockMarkerStat
   ...overrides,
 });
 
-describe('marqueurs de publication W/R/C', () => {
-  it('transmet le libellé exact lors de l’activation', async () => {
-    const user = userEvent.setup();
-    const onToggle = vi.fn();
-    render(<ContentMarker marker="W" active={false} label="Accueil" onToggle={onToggle} instance="cover-watch" language="FR" />);
-
-    const button = screen.getByRole('button', { name: 'Ajouter Accueil au Watch website' });
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    await user.click(button);
-    expect(onToggle).toHaveBeenCalledWith('Accueil');
+describe('contrôles des blocs métier', () => {
+  it('ne rend plus aucun sélecteur de publication dans les blocs', () => {
+    render(<BlockMarkers selection={markerState()} label="Accueil" />);
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('préserve trois décisions indépendantes et le contrôle d’édition', async () => {
+  it('préserve seulement le contrôle d’édition local', async () => {
     const user = userEvent.setup();
     const selection = markerState({ edit: { active: false, onToggle: vi.fn() } });
     render(<BlockMarkers selection={selection} label="Origines" />);
 
-    await user.click(screen.getByRole('button', { name: 'Ajouter Origines au Watch website' }));
-    await user.click(screen.getByRole('button', { name: 'Ajouter Origines au rapport PDF' }));
-    await user.click(screen.getByRole('button', { name: 'Ajouter Origines au Cercle' }));
     await user.click(screen.getByRole('button', { name: 'Modifier Origines' }));
 
-    expect(selection.website.onToggle).toHaveBeenCalledOnce();
-    expect(selection.report.onToggle).toHaveBeenCalledOnce();
-    expect(selection.community.onToggle).toHaveBeenCalledOnce();
+    expect(selection.website.onToggle).not.toHaveBeenCalled();
+    expect(selection.report.onToggle).not.toHaveBeenCalled();
+    expect(selection.community.onToggle).not.toHaveBeenCalled();
     expect(selection.edit?.onToggle).toHaveBeenCalledOnce();
   });
 });

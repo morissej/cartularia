@@ -1,5 +1,7 @@
 export type TrustedFileKind = 'image' | 'video' | 'document';
-export type TrustedFileFormat = 'jpeg' | 'png' | 'webp' | 'heic' | 'mp4' | 'quicktime' | 'pdf';
+export type TrustedFileFormat =
+  | 'jpeg' | 'png' | 'webp' | 'heic' | 'mp4' | 'quicktime' | 'pdf'
+  | 'doc' | 'docx' | 'xls' | 'xlsx' | 'ppt' | 'pptx' | 'odt' | 'rtf' | 'markdown' | 'text' | 'csv';
 
 export interface TrustedFileInspection {
   kind: TrustedFileKind;
@@ -32,6 +34,17 @@ const policyByFormat: Record<TrustedFileFormat, Omit<TrustedFileInspection, 'ext
   mp4: { kind: 'video', format: 'mp4', canonicalMimeType: 'video/mp4', maximumBytes: 500 * MIB },
   quicktime: { kind: 'video', format: 'quicktime', canonicalMimeType: 'video/quicktime', maximumBytes: 500 * MIB },
   pdf: { kind: 'document', format: 'pdf', canonicalMimeType: 'application/pdf', maximumBytes: 50 * MIB },
+  doc: { kind: 'document', format: 'doc', canonicalMimeType: 'application/msword', maximumBytes: 50 * MIB },
+  docx: { kind: 'document', format: 'docx', canonicalMimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', maximumBytes: 50 * MIB },
+  xls: { kind: 'document', format: 'xls', canonicalMimeType: 'application/vnd.ms-excel', maximumBytes: 50 * MIB },
+  xlsx: { kind: 'document', format: 'xlsx', canonicalMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', maximumBytes: 50 * MIB },
+  ppt: { kind: 'document', format: 'ppt', canonicalMimeType: 'application/vnd.ms-powerpoint', maximumBytes: 50 * MIB },
+  pptx: { kind: 'document', format: 'pptx', canonicalMimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', maximumBytes: 50 * MIB },
+  odt: { kind: 'document', format: 'odt', canonicalMimeType: 'application/vnd.oasis.opendocument.text', maximumBytes: 50 * MIB },
+  rtf: { kind: 'document', format: 'rtf', canonicalMimeType: 'application/rtf', maximumBytes: 20 * MIB },
+  markdown: { kind: 'document', format: 'markdown', canonicalMimeType: 'text/markdown', maximumBytes: 10 * MIB },
+  text: { kind: 'document', format: 'text', canonicalMimeType: 'text/plain', maximumBytes: 10 * MIB },
+  csv: { kind: 'document', format: 'csv', canonicalMimeType: 'text/csv', maximumBytes: 20 * MIB },
 };
 
 const extensionsByFormat: Record<TrustedFileFormat, readonly string[]> = {
@@ -42,6 +55,8 @@ const extensionsByFormat: Record<TrustedFileFormat, readonly string[]> = {
   mp4: ['mp4', 'm4v'],
   quicktime: ['mov'],
   pdf: ['pdf'],
+  doc: ['doc'], docx: ['docx'], xls: ['xls'], xlsx: ['xlsx'], ppt: ['ppt'], pptx: ['pptx'],
+  odt: ['odt'], rtf: ['rtf'], markdown: ['md', 'markdown'], text: ['txt'], csv: ['csv'],
 };
 
 const mimeTypesByFormat: Record<TrustedFileFormat, readonly string[]> = {
@@ -52,9 +67,30 @@ const mimeTypesByFormat: Record<TrustedFileFormat, readonly string[]> = {
   mp4: ['video/mp4', 'video/x-m4v'],
   quicktime: ['video/quicktime'],
   pdf: ['application/pdf'],
+  doc: ['application/msword', 'application/octet-stream'],
+  docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/octet-stream'],
+  xls: ['application/vnd.ms-excel', 'application/octet-stream'],
+  xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/octet-stream'],
+  ppt: ['application/vnd.ms-powerpoint', 'application/octet-stream'],
+  pptx: ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip', 'application/octet-stream'],
+  odt: ['application/vnd.oasis.opendocument.text', 'application/zip', 'application/octet-stream'],
+  rtf: ['application/rtf', 'text/rtf', 'application/octet-stream'],
+  markdown: ['text/markdown', 'text/plain'],
+  text: ['text/plain'],
+  csv: ['text/csv', 'text/plain', 'application/vnd.ms-excel'],
 };
 
-const detectFormat = (bytes: Uint8Array): TrustedFileFormat | null => {
+const isUtf8Text = (bytes: Uint8Array) => {
+  if (bytes.includes(0)) return false;
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const detectFormat = (bytes: Uint8Array, extension: string): TrustedFileFormat | null => {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg';
   if (
     bytes.length >= 8
@@ -73,6 +109,18 @@ const detectFormat = (bytes: Uint8Array): TrustedFileFormat | null => {
     return 'mp4';
   }
   if (bytes.length >= 5 && textAt(bytes, 0, 5) === '%PDF-') return 'pdf';
+  if (bytes.length >= 8 && [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].every((byte, index) => bytes[index] === byte)) {
+    return (['doc', 'xls', 'ppt'] as TrustedFileFormat[]).includes(extension as TrustedFileFormat) ? extension as TrustedFileFormat : null;
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && [0x03, 0x05, 0x07].includes(bytes[2]) && [0x04, 0x06, 0x08].includes(bytes[3])) {
+    return (['docx', 'xlsx', 'pptx', 'odt'] as TrustedFileFormat[]).includes(extension as TrustedFileFormat) ? extension as TrustedFileFormat : null;
+  }
+  if (bytes.length >= 5 && textAt(bytes, 0, 5) === '{\\rtf') return 'rtf';
+  if (isUtf8Text(bytes)) {
+    if (extension === 'md' || extension === 'markdown') return 'markdown';
+    if (extension === 'txt') return 'text';
+    if (extension === 'csv') return 'csv';
+  }
   return null;
 };
 
@@ -95,16 +143,16 @@ export const validateFileForUpload = async ({
   allowedKinds?: readonly TrustedFileKind[];
 }): Promise<TrustedFileInspection> => {
   if (blob.size <= 0) throw new FileValidationError('empty_file', `${fileName || 'Le fichier'} est vide.`);
-  const bytes = new Uint8Array(await blob.slice(0, 32).arrayBuffer());
-  const format = detectFormat(bytes);
+  const extension = extensionOf(fileName);
+  const bytes = new Uint8Array(await blob.slice(0, 4096).arrayBuffer());
+  const format = detectFormat(bytes, extension);
   if (!format) {
     throw new FileValidationError(
       'unsupported_signature',
-      `${fileName} est refusé : signature inconnue. Formats acceptés : JPG, PNG, WEBP, HEIC, MP4, MOV et PDF.`,
+      `${fileName} est refusé : signature inconnue. Formats acceptés : images, vidéos, PDF, Word, OpenDocument, présentations, tableurs, Markdown et texte.`,
     );
   }
   const policy = policyByFormat[format];
-  const extension = extensionOf(fileName);
   if (!extensionsByFormat[format].includes(extension)) {
     throw new FileValidationError(
       'extension_mismatch',

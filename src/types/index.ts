@@ -91,6 +91,7 @@ export interface Asset {
   localAvailability?: 'available' | 'missing';
   cloudStoragePath?: string;
   derivativeStatus?: 'not-required' | 'pending' | 'ready' | 'failed';
+  sourceSection?: 'reference-report';
 }
 
 export interface SpinSet {

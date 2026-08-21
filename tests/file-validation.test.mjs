@@ -53,3 +53,10 @@ test('une vidéo reste refusée dans une rubrique documentaire', async () => {
     allowedKinds: ['image', 'document'],
   }), { code: 'unexpected_kind' });
 });
+
+test('les rapports Word Open XML et Markdown sont validés comme documents', async () => {
+  const docx = new Blob([Uint8Array.from([0x50, 0x4b, 0x03, 0x04]), 'conteneur-office'], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  const markdown = new Blob(['# Rapport\n\nContenu vérifié.'], { type: 'text/markdown' });
+  assert.equal((await validateFileForUpload({ blob: docx, fileName: 'rapport.docx', declaredMimeType: docx.type, expectedKind: 'document' })).format, 'docx');
+  assert.equal((await validateFileForUpload({ blob: markdown, fileName: 'rapport.md', declaredMimeType: markdown.type, expectedKind: 'document' })).format, 'markdown');
+});

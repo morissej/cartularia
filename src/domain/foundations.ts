@@ -66,6 +66,12 @@ export interface MembershipDocument {
   permissions: FoundationPermission[];
   createdAt: FirestoreTimestampValue;
   revokedAt: FirestoreTimestampValue | null;
+  invitationManaged?: boolean;
+  invitationGrants?: Record<string, {
+    registry: boolean;
+    collectionIds: string[];
+    cartularyIds: string[];
+  }>;
 }
 
 export interface RegistryDocument {

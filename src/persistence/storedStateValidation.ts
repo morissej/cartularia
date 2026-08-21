@@ -162,6 +162,7 @@ const normalizedMediaObject = identifiedObject({
   localAvailability: optionalString,
   cloudStoragePath: optionalString,
   derivativeStatus: optionalString,
+  sourceSection: optionalEnumValue(['reference-report']),
 });
 
 const mediaAsset: Normalizer = (value, fallback) => {
@@ -214,7 +215,7 @@ const comparable: Normalizer = (value, fallback) => {
 
 const normalizedPublicationDecision = identifiedObject({
   requestId: stringValue,
-  destination: enumValue(['website', 'report', 'community']),
+  destination: enumValue(['website', 'collection', 'report', 'community']),
   blockId: stringValue,
   blockLabel: stringValue,
   action: enumValue(['activate', 'validate', 'revoke']),
@@ -231,7 +232,7 @@ const publicationDecision: Normalizer = (value, fallback) => {
   const source = asRecord(value);
   if (
     !source
-    || !['website', 'report', 'community'].includes(String(source.destination))
+    || !['website', 'collection', 'report', 'community'].includes(String(source.destination))
     || !['activate', 'validate', 'revoke'].includes(String(source.action))
     || source.status !== 'confirmed'
     || source.decisionSource !== 'human_confirmed'
@@ -285,6 +286,11 @@ const KEY_NORMALIZERS: Record<string, Normalizer> = {
   'cartularia-ownership-history': recordArray,
   'cartularia-asset-kind': enumValue(['Montre', 'Voiture', 'Vin', 'Sculpture', 'Peinture', 'Photographie', 'Meuble', 'Autre art', 'Bien immobilier', 'Autre']),
   'cartularia-watch-status': enumValue(['Patrimonial', 'À vendre', 'Ouvert à proposition']),
+  'cartularia-collection-id': stringValue,
+  'cartularia-user-alias': stringValue,
+  'cartularia-object-code': stringValue,
+  'cartularia-storage-code-names': arrayValue(identifiedObject({ id: stringValue, correspondenceCode: stringValue, codeName: stringValue, note: stringValue })),
+  'cartularia-transmission-code-references': arrayValue(identifiedObject({ id: stringValue, correspondenceCode: stringValue, codeName: stringValue, note: stringValue })),
   'cartularia-transmission-recipients': arrayValue(identifiedObject({
     id: stringValue,
     firstName: stringValue,
@@ -320,7 +326,7 @@ const KEY_NORMALIZERS: Record<string, Normalizer> = {
   })),
   'cartularia-sensitivity-prices': nonNegativeNumberList,
   'cartularia-sensitivity-costs': nonNegativeNumberList,
-  'cartularia-retained-valuation': objectValue({ amount: nonNegativeNumber, explanation: stringValue }),
+  'cartularia-retained-valuation': objectValue({ amount: nonNegativeNumber, saleCostAmount: nonNegativeNumber, taxAmount: nonNegativeNumber, explanation: stringValue }),
   'cartularia-popularity-resources': arrayValue(identifiedObject({
     id: stringValue,
     name: stringValue,
@@ -330,6 +336,11 @@ const KEY_NORMALIZERS: Record<string, Normalizer> = {
   'cartularia-published-blocks': stringArray,
   'cartularia-report-blocks': stringArray,
   'cartularia-community-blocks': stringArray,
+  'cartularia-collection-blocks': stringArray,
+  'cartularia-publication-collection-ids': stringArray,
+  'cartularia-external-publication-enabled': booleanValue,
+  'cartularia-collection-publication-enabled': booleanValue,
+  'cartularia-community-publication-enabled': booleanValue,
   'cartularia-publication-decisions-v1': arrayValue(publicationDecision),
   'cartularia-publication-source-v1': objectValue({
     revision: nonNegativeNumber,
@@ -403,7 +414,12 @@ export const normalizeWatchCreationProfile = (value: unknown) => {
   if (!source) return null;
   const requiredStrings = ['collectionId', 'brand', 'model', 'reference', 'serialNumber', 'caliber', 'description', 'conditionSummary', 'purchaseDate', 'currency', 'seller', 'valuationDate', 'sourceLabel', 'assertedAt'];
   if (requiredStrings.some((field) => typeof source[field] !== 'string')) return null;
-  if (source.profileVersion !== '1.0.0' || source.assetType !== 'watch' || source.schemaId !== 'watch' || source.schemaVersion !== '1.5.0') return null;
+  if (
+    source.profileVersion !== '1.0.0'
+    || source.assetType !== 'watch'
+    || source.schemaId !== 'watch'
+    || !['1.5.0', '1.6.0'].includes(String(source.schemaVersion))
+  ) return null;
   return {
     ...source,
     manufactureYear: nullableFiniteNumber(source.manufactureYear, null),

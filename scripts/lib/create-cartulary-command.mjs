@@ -51,7 +51,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     profile?.profileVersion !== '1.0.0'
     || profile?.assetType !== 'watch'
     || profile?.schemaId !== 'watch'
-    || profile?.schemaVersion !== '1.5.0'
+    || profile?.schemaVersion !== '1.6.0'
   ) {
     throw new CreateCartularyCommandError('unsupported_profile', 'Le profil de création demandé n’est pas pris en charge.');
   }
@@ -98,8 +98,8 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     {
       id: 'identity.summary',
       schemaSectionId: 'cover.watch',
-      schemaVersion: 'watch@1.5.0',
-      title: 'Identité de la montre',
+      schemaVersion: 'watch@1.6.0',
+      title: "Identité de l’objet",
       visibility: 'secret',
       status: 'imported_unreviewed',
       fields: {
@@ -114,7 +114,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     {
       id: 'ownership.history',
       schemaSectionId: 'cover.ownership_history',
-      schemaVersion: 'watch@1.5.0',
+      schemaVersion: 'watch@1.6.0',
       title: "Historique de l'objet - Propriétaires précédents",
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -124,7 +124,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     {
       id: 'watch.reference',
       schemaSectionId: 'reference.specifications',
-      schemaVersion: 'watch@1.5.0',
+      schemaVersion: 'watch@1.6.0',
       title: 'Spécifications de référence',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -143,7 +143,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     {
       id: 'watch.instance.private',
       schemaSectionId: 'watch.instance.private',
-      schemaVersion: 'watch@1.5.0',
+      schemaVersion: 'watch@1.6.0',
       title: 'Identité confidentielle de l’exemplaire',
       visibility: 'secret',
       status: 'imported_unmapped',
@@ -156,8 +156,8 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     ...(description ? [{
       id: 'condition.description',
       schemaSectionId: 'condition.description',
-      schemaVersion: 'watch@1.5.0',
-      title: 'Description de la montre',
+      schemaVersion: 'watch@1.6.0',
+      title: "Description de l’objet",
       visibility: 'secret',
       status: 'imported_unreviewed',
       fields: { 'condition.description.paragraphs[]': [value(description)] },
@@ -166,7 +166,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     ...(conditionSummary ? [{
       id: 'condition.summary',
       schemaSectionId: 'condition.summary',
-      schemaVersion: 'watch@1.5.0',
+      schemaVersion: 'watch@1.6.0',
       title: 'État déclaré',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -180,7 +180,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     ...(purchaseDate || purchasePrice ? [{
       id: 'value.purchase',
       schemaSectionId: 'value.cost_basis',
-      schemaVersion: 'watch@1.5.0',
+      schemaVersion: 'watch@1.6.0',
       title: 'Acquisition',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -194,7 +194,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     ...(valuationMid ? [{
       id: 'value.market-depth',
       schemaSectionId: 'value.market_depth',
-      schemaVersion: 'watch@1.5.0',
+      schemaVersion: 'watch@1.6.0',
       title: 'Fourchette de marché déclarée',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -208,7 +208,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     }, {
       id: 'value.retained',
       schemaSectionId: 'value.retained_value',
-      schemaVersion: 'watch@1.5.0',
+      schemaVersion: 'watch@1.6.0',
       title: 'Valeur de travail',
       visibility: 'secret',
       status: 'imported_unreviewed',
@@ -228,7 +228,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
       collectionId,
       assetType: 'watch',
       schemaId: 'watch',
-      schemaVersion: '1.5.0',
+      schemaVersion: '1.6.0',
       publicCode: requestData.publicCode,
       displayTitle: `${brand} ${model}`.trim(),
       makerName: brand,
@@ -236,9 +236,19 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
       referenceCode: reference,
       manufactureYear,
       accountHolderId: requestData.ownerUid,
+      userAlias: null,
+      objectCode: requestData.publicCode,
+      storageCodeNames: [],
       legalOwnerRelationId: 'owner_relation_current',
       lifecycleStatus: 'review',
+      patrimonialStatus: 'Patrimonial',
       possessionStatus: 'in_possession',
+      purchasePrice,
+      costBasis: purchasePrice,
+      grossValuation: valuationMid,
+      netValuation: valuationMid,
+      netAfterTaxValuation: valuationMid,
+      valuationCurrency: currency,
       defaultVisibility: 'secret',
       publicationStatus: 'none',
       primaryAssetId,

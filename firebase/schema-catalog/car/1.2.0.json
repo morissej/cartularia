@@ -1,0 +1,1163 @@
+{
+  "schemaId": "car",
+  "assetType": "car",
+  "version": "1.2.0",
+  "status": "baseline",
+  "defaultVisibility": "secret",
+  "fieldCount": 49,
+  "sections": [
+    "condition.current",
+    "condition.storage",
+    "cover.asset",
+    "cover.car",
+    "cover.ownership_history",
+    "cover.privacy_link",
+    "history.incidents",
+    "history.service",
+    "identity.private",
+    "media.library",
+    "publishing.selection",
+    "technical.chassis",
+    "technical.powertrain",
+    "usage.current",
+    "value.market",
+    "value.provenance",
+    "value.retained"
+  ],
+  "fields": [
+    {
+      "fieldId": "cover.asset.type",
+      "sectionId": "cover.asset",
+      "label": "Type de bien",
+      "purpose": "Documenter type de bien pour le véhicule.",
+      "instructions": "La valeur doit rester Voiture pour le profil car.",
+      "dataType": "enum",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "user",
+        "document"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": true,
+      "allowedValues": [
+        "Voiture"
+      ]
+    },
+    {
+      "fieldId": "cover.privacy.userAlias",
+      "sectionId": "cover.privacy_link",
+      "label": "Nom utilisateur pseudonyme",
+      "purpose": "Documenter nom utilisateur pseudonyme pour le véhicule.",
+      "instructions": "Recopier uniquement le pseudonyme du Coffre personnel, sans identité civile ni coordonnée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.privacy.objectCode",
+      "sectionId": "cover.privacy_link",
+      "label": "Code objet",
+      "purpose": "Documenter code objet pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "6 à 64 caractères parmi A-Z, 0-9, tiret et underscore.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.storage.codeNames[]",
+      "sectionId": "condition.storage",
+      "label": "Nom de code de stockage",
+      "purpose": "Documenter nom de code de stockage pour le véhicule.",
+      "instructions": "Conserver uniquement le nom de code défini dans le Coffre personnel, jamais l’adresse ou les conditions d’accès.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.car.maker",
+      "sectionId": "cover.car",
+      "label": "Constructeur",
+      "purpose": "Documenter constructeur pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": true,
+      "examples": [
+        "Constructeur Démonstration"
+      ]
+    },
+    {
+      "fieldId": "cover.car.model",
+      "sectionId": "cover.car",
+      "label": "Modèle",
+      "purpose": "Documenter modèle pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": true
+    },
+    {
+      "fieldId": "cover.car.version",
+      "sectionId": "cover.car",
+      "label": "Version",
+      "purpose": "Documenter version pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": true
+    },
+    {
+      "fieldId": "cover.car.year",
+      "sectionId": "cover.car",
+      "label": "Année modèle",
+      "purpose": "Documenter année modèle pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Entier compris entre 1886 et l’année courante plus un.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": true
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].fromYear",
+      "sectionId": "cover.ownership_history",
+      "label": "Année de début de propriété",
+      "purpose": "Documenter année de début de propriété pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Année sur quatre chiffres, antérieure ou égale à l’année de fin lorsqu’elle est connue.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].toYear",
+      "sectionId": "cover.ownership_history",
+      "label": "Année de fin de propriété",
+      "purpose": "Documenter année de fin de propriété pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Année sur quatre chiffres, postérieure ou égale à l’année de début lorsqu’elle est connue.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].description",
+      "sectionId": "cover.ownership_history",
+      "label": "Description de la période de propriété",
+      "purpose": "Documenter description de la période de propriété pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Description factuelle rattachée à la bonne période et sans donnée personnelle inutile.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory[].firstOwner",
+      "sectionId": "cover.ownership_history",
+      "label": "Premier propriétaire",
+      "purpose": "Documenter premier propriétaire pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "boolean",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Au plus une période marquée Premier propriétaire dans le Cartulaire.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "cover.ownershipHistory.summary",
+      "sectionId": "cover.ownership_history",
+      "label": "Synthèse de l’historique des propriétaires",
+      "purpose": "Documenter synthèse de l’historique des propriétaires pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Synthèse reproductible à partir des périodes de propriété.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "cover.ownershipHistory[].fromYear",
+        "cover.ownershipHistory[].toYear",
+        "cover.ownershipHistory[].description",
+        "cover.ownershipHistory[].firstOwner"
+      ]
+    },
+    {
+      "fieldId": "identity.car.vin",
+      "sectionId": "identity.private",
+      "label": "VIN",
+      "purpose": "Documenter vin pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "17 caractères pour un VIN moderne ; conserver toute exception historique sans normalisation destructive.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "identity.car.registration",
+      "sectionId": "identity.private",
+      "label": "Immatriculation",
+      "purpose": "Documenter immatriculation pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "technical.engine.architecture",
+      "sectionId": "technical.powertrain",
+      "label": "Architecture moteur",
+      "purpose": "Documenter architecture moteur pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "6 cylindres en ligne"
+      ]
+    },
+    {
+      "fieldId": "technical.engine.displacementCc",
+      "sectionId": "technical.powertrain",
+      "label": "Cylindrée",
+      "purpose": "Documenter cylindrée pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Nombre positif exprimé en cm3.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "technical.engine.fuelType",
+      "sectionId": "technical.powertrain",
+      "label": "Énergie",
+      "purpose": "Documenter énergie pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "enum",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Essence",
+        "Diesel",
+        "Hybride",
+        "Électrique",
+        "Autre"
+      ]
+    },
+    {
+      "fieldId": "technical.engine.powerKw",
+      "sectionId": "technical.powertrain",
+      "label": "Puissance kW",
+      "purpose": "Documenter puissance kw pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Puissance homologuée positive en kW.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "technical.engine.powerHp",
+      "sectionId": "technical.powertrain",
+      "label": "Puissance ch",
+      "purpose": "Documenter puissance ch pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Puissance positive ; préciser la convention de cheval utilisée dans la provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "technical.transmission.gearbox",
+      "sectionId": "technical.powertrain",
+      "label": "Boîte de vitesses",
+      "purpose": "Documenter boîte de vitesses pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "technical.transmission.drivetrain",
+      "sectionId": "technical.powertrain",
+      "label": "Transmission",
+      "purpose": "Documenter transmission pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "enum",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Traction",
+        "Propulsion",
+        "Intégrale",
+        "Autre"
+      ]
+    },
+    {
+      "fieldId": "technical.chassis.code",
+      "sectionId": "technical.chassis",
+      "label": "Code châssis",
+      "purpose": "Documenter code châssis pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "technical.chassis.bodyStyle",
+      "sectionId": "technical.chassis",
+      "label": "Carrosserie",
+      "purpose": "Documenter carrosserie pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "public",
+      "publishableTo": [
+        "registry",
+        "community",
+        "public"
+      ],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "examples": [
+        "Coupé"
+      ]
+    },
+    {
+      "fieldId": "usage.mileage.valueKm",
+      "sectionId": "usage.current",
+      "label": "Kilométrage",
+      "purpose": "Documenter kilométrage pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Entier positif en kilomètres, rattaché à une date et une source.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "usage.mileage.observedAt",
+      "sectionId": "usage.current",
+      "label": "Date du kilométrage",
+      "purpose": "Documenter date du kilométrage pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "date",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "usage.roadworthiness.status",
+      "sectionId": "usage.current",
+      "label": "Contrôle technique",
+      "purpose": "Documenter contrôle technique pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "enum",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Valide",
+        "À renouveler",
+        "Non applicable",
+        "Inconnu"
+      ]
+    },
+    {
+      "fieldId": "usage.roadworthiness.expiresAt",
+      "sectionId": "usage.current",
+      "label": "Échéance du contrôle technique",
+      "purpose": "Documenter échéance du contrôle technique pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "date",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.body.summary",
+      "sectionId": "condition.current",
+      "label": "État de la carrosserie",
+      "purpose": "Documenter état de la carrosserie pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.interior.summary",
+      "sectionId": "condition.current",
+      "label": "État de l’habitacle",
+      "purpose": "Documenter état de l’habitacle pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.mechanical.summary",
+      "sectionId": "condition.current",
+      "label": "État mécanique",
+      "purpose": "Documenter état mécanique pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.tires.summary",
+      "sectionId": "condition.current",
+      "label": "État des pneus",
+      "purpose": "Documenter état des pneus pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.corrosion.summary",
+      "sectionId": "condition.current",
+      "label": "Corrosion",
+      "purpose": "Documenter corrosion pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "condition.overall.conclusion",
+      "sectionId": "condition.current",
+      "label": "Conclusion d’état",
+      "purpose": "Documenter conclusion d’état pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "community",
+      "publishableTo": [
+        "community"
+      ],
+      "sourcePriority": [
+        "expert",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "history.service[].date",
+      "sectionId": "history.service",
+      "label": "Date d’entretien",
+      "purpose": "Documenter date d’entretien pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "date",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "history.service[].mileageKm",
+      "sectionId": "history.service",
+      "label": "Kilométrage à l’entretien",
+      "purpose": "Documenter kilométrage à l’entretien pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "number",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "history.service[].kind",
+      "sectionId": "history.service",
+      "label": "Type d’entretien",
+      "purpose": "Documenter type d’entretien pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "history.service[].description",
+      "sectionId": "history.service",
+      "label": "Description d’entretien",
+      "purpose": "Documenter description d’entretien pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "history.incidents[].summary",
+      "sectionId": "history.incidents",
+      "label": "Sinistre ou incident",
+      "purpose": "Documenter sinistre ou incident pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.assets[].file",
+      "sectionId": "media.library",
+      "label": "Actif média",
+      "purpose": "Documenter actif média pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "file",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.assets[].name",
+      "sectionId": "media.library",
+      "label": "Nom de l’actif",
+      "purpose": "Documenter nom de l’actif pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "text",
+      "cardinality": "repeatable",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "file_metadata",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "media.assets[].tags",
+      "sectionId": "media.library",
+      "label": "Catégories média",
+      "purpose": "Documenter catégories média pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "media_tags",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "document",
+        "manufacturer",
+        "expert",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false,
+      "allowedValues": [
+        "Extérieur",
+        "Intérieur",
+        "Dessous",
+        "Moteur",
+        "Vidéo",
+        "Documents",
+        "Autre"
+      ]
+    },
+    {
+      "fieldId": "media.assets[].hash",
+      "sectionId": "media.library",
+      "label": "Empreinte du média",
+      "purpose": "Documenter empreinte du média pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.market.analysisDate",
+      "sectionId": "value.market",
+      "label": "Date d’analyse",
+      "purpose": "Documenter date d’analyse pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "date",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "market",
+        "document",
+        "user"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.retained.amount",
+      "sectionId": "value.retained",
+      "label": "Valeur retenue",
+      "purpose": "Documenter valeur retenue pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "money",
+      "cardinality": "single",
+      "required": true,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "market"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.retained.explanation",
+      "sectionId": "value.retained",
+      "label": "Explication de la valeur retenue",
+      "purpose": "Documenter explication de la valeur retenue pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "long_text",
+      "cardinality": "single",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user",
+        "market",
+        "expert"
+      ],
+      "aiWritable": true,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "value.provenance.ownershipAssessment",
+      "sectionId": "value.provenance",
+      "label": "Appréciation de la provenance propriétaire",
+      "purpose": "Documenter appréciation de la provenance propriétaire pour le véhicule.",
+      "instructions": "Renseigner uniquement une valeur confirmée par une source ou une observation identifiée.",
+      "dataType": "computed",
+      "cardinality": "computed",
+      "required": true,
+      "validation": "Appréciation reproductible à partir de l’historique des propriétaires ; aucun ajustement monétaire automatique.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "calculation"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": false,
+      "registryFacet": false,
+      "dependencies": [
+        "cover.ownershipHistory.summary",
+        "cover.ownershipHistory[].firstOwner"
+      ]
+    },
+    {
+      "fieldId": "publishing.blocks.website",
+      "sectionId": "publishing.selection",
+      "label": "Sélection site public",
+      "purpose": "Documenter sélection site public pour le véhicule.",
+      "instructions": "Décision exclusivement humaine ; l’IA ne peut jamais activer W.",
+      "dataType": "boolean",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    },
+    {
+      "fieldId": "publishing.blocks.report",
+      "sectionId": "publishing.selection",
+      "label": "Sélection rapport",
+      "purpose": "Documenter sélection rapport pour le véhicule.",
+      "instructions": "Décision exclusivement humaine ; l’IA ne peut jamais activer R.",
+      "dataType": "boolean",
+      "cardinality": "repeatable",
+      "required": false,
+      "validation": "Valeur cohérente avec le véhicule et sa provenance.",
+      "defaultVisibility": "secret",
+      "publishableTo": [],
+      "sourcePriority": [
+        "user"
+      ],
+      "aiWritable": false,
+      "humanReviewRequired": true,
+      "registryFacet": false
+    }
+  ]
+}

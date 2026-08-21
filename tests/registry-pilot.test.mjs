@@ -70,8 +70,8 @@ test('l’autorisation finale exige toutes les décisions confirmées', () => {
   assert.deepEqual(readiness.productionBlockers, []);
 });
 
-test('les neuf routes du Registre sont stables et les identifiants restent opaques', () => {
-  assert.deepEqual(REGISTRY_SECTIONS, ['overview', 'items', 'new', 'gallery', 'compare', 'follow-up', 'access', 'integrity', 'admin']);
+test('les dix routes du Registre sont stables et les identifiants restent opaques', () => {
+  assert.deepEqual(REGISTRY_SECTIONS, ['overview', 'items', 'collections', 'new', 'gallery', 'compare', 'follow-up', 'access', 'integrity', 'admin']);
   assert.deepEqual(parseRegistryRoute('/registry/reg%2Fprive/compare'), {
     registryId: 'reg/prive',
     section: 'compare',

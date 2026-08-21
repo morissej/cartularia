@@ -151,6 +151,22 @@ test('le propriétaire peut écrire et lire son original de brouillon privé', a
   await assertSucceeds(ownerStorage.ref(draftPath).getDownloadURL());
 });
 
+test('les documents personnels sont refusés dans le Storage du Registre', async () => {
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  const digest = 'f'.repeat(64);
+  const path = `private-drafts/owner-a/cart-a/owner-document-a1/${digest}/original`;
+  await assertFails(ownerStorage.ref(path).putString('document personnel', 'raw', {
+    contentType: 'application/pdf',
+    customMetadata: {
+      ownerUid: 'owner-a',
+      cartularyId: 'cart-a',
+      binaryId: 'owner-document-a1',
+      sha256: `sha256:${digest}`,
+      kind: 'owner_document',
+    },
+  }));
+});
+
 test('un nouvel original est immuable et les types actifs déguisés sont refusés', async () => {
   const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
   const digest = 'c'.repeat(64);

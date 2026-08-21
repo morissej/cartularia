@@ -4,7 +4,7 @@ export interface WatchCartularyCreationProfile {
   profileVersion: typeof CARTULARY_CREATION_PROFILE_VERSION;
   assetType: 'watch';
   schemaId: 'watch';
-  schemaVersion: '1.5.0';
+  schemaVersion: '1.5.0' | '1.6.0';
   collectionId: string;
   brand: string;
   model: string;

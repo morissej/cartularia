@@ -92,7 +92,7 @@ const defaultDependencies: PrivateBootstrapDependencies = {
 export const requiresPrivateCartularyHydration = (
   location: Pick<Location, 'pathname' | 'search'>,
 ) => (
-  location.pathname.replace(/\/$/, '') === ''
+  location.pathname.replace(/\/$/, '') === '/cartulary'
   && new URLSearchParams(location.search).get('data-deleted') !== '1'
 );
 

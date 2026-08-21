@@ -23,7 +23,7 @@ const seed = async () => {
     profileVersion: '1.0.0',
     assetType: 'watch',
     schemaId: 'watch',
-    schemaVersion: '1.5.0',
+    schemaVersion: '1.6.0',
     collectionId: 'col_pilots',
     brand: 'Rolex',
     model: 'GMT-Master Mark I Long E',
@@ -81,8 +81,8 @@ const seed = async () => {
       scopes: { registryIds: ['reg_collection_privee'] },
       permissions: ['registry.read', 'cartulary.read', 'cartulary.edit', 'publication.manage'],
     }),
-    firestore.doc('schemaCatalog/watch/versions/1.5.0').set({
-      schemaId: 'watch', assetType: 'watch', version: '1.5.0', status: 'active',
+    firestore.doc('schemaCatalog/watch/versions/1.6.0').set({
+      schemaId: 'watch', assetType: 'watch', version: '1.6.0', status: 'active',
     }),
     firestore.doc(draftPath).set({ ownerUid, cartularyId, status: 'active' }),
     firestore.doc(`${draftPath}/state/cartularia-creation-profile`).set({
@@ -156,7 +156,10 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
   assert.equal(assetAfterCreate.data().binaryId, 'bin_rolex_cover_0000000001');
   assert.match(assetAfterCreate.data().storagePath, /^private-drafts\/wave1-owner\//);
   assert.equal('serialNumber' in projectionAfterCreate.data(), false);
-  assert.equal('purchasePrice' in projectionAfterCreate.data(), false);
+  assert.equal(projectionAfterCreate.data().purchasePrice, 21_900);
+  assert.equal(projectionAfterCreate.data().userAlias, null);
+  assert.equal(projectionAfterCreate.data().objectCode, 'ROL-TEST01');
+  assert.equal('storageCodeNames' in projectionAfterCreate.data(), false);
   assert.equal(requestAfterCreate.data().status, 'processed');
   assert.equal(syncRequest.data().status, 'pending');
 

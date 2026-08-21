@@ -9,7 +9,7 @@ export const GenericCartularyPage = () => {
   const parameters = new URLSearchParams(window.location.search);
   const cartularyId = parameters.get('cartularyId');
   const returnToParameter = parameters.get('returnTo');
-  const returnTo = isRegistryReturnPath(returnToParameter) ? returnToParameter : null;
+  const returnTo = isRegistryReturnPath(returnToParameter) ? returnToParameter : '/registry';
   const [snapshot, setSnapshot] = useState<PrivateCartularySnapshot | null>(null);
   const [schema, setSchema] = useState<VerticalSchema | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'denied'>('loading');

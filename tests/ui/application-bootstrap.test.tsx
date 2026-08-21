@@ -25,7 +25,7 @@ describe('barrière d’hydratation PF3', () => {
     const bootstrap = deferred<PrivateBootstrapOutcome>();
     render(
       <ApplicationBootstrap
-        location={{ pathname: '/', search: '' }}
+        location={{ pathname: '/cartulary', search: '' }}
         bootstrap={() => bootstrap.promise}
         PageComponent={ReadyPage}
       />,
@@ -56,7 +56,7 @@ describe('barrière d’hydratation PF3', () => {
     const bootstrap = vi.fn(async (): Promise<PrivateBootstrapOutcome> => ({ status: 'ready', reason: 'local_ready' }));
     render(
       <ApplicationBootstrap
-        location={{ pathname: '/', search: '?data-deleted=1' }}
+        location={{ pathname: '/cartulary', search: '?data-deleted=1' }}
         bootstrap={bootstrap}
         PageComponent={ReadyPage}
       />,
@@ -69,7 +69,7 @@ describe('barrière d’hydratation PF3', () => {
   it('ouvre l’application avec un avertissement non bloquant en mode dégradé', async () => {
     render(
       <ApplicationBootstrap
-        location={{ pathname: '/', search: '' }}
+        location={{ pathname: '/cartulary', search: '' }}
         bootstrap={async () => ({
           status: 'degraded',
           reason: 'cloud_unavailable',
@@ -84,10 +84,11 @@ describe('barrière d’hydratation PF3', () => {
     expect(screen.getByText('La copie privée cloud est indisponible.')).toBeTruthy();
   });
 
-  it('identifie uniquement la racine privée comme route à hydrater', () => {
-    expect(requiresPrivateCartularyHydration({ pathname: '/', search: '' })).toBe(true);
-    expect(requiresPrivateCartularyHydration({ pathname: '/', search: '?cartularyId=cart_rolex_demo' })).toBe(true);
-    expect(requiresPrivateCartularyHydration({ pathname: '/', search: '?data-deleted=1' })).toBe(false);
+  it('identifie uniquement la route privée du Cartulaire comme route à hydrater', () => {
+    expect(requiresPrivateCartularyHydration({ pathname: '/', search: '' })).toBe(false);
+    expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '' })).toBe(true);
+    expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '?cartularyId=cart_rolex_demo' })).toBe(true);
+    expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '?data-deleted=1' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/watch-website', search: '' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/cartulary-view', search: '' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/community', search: '' })).toBe(false);

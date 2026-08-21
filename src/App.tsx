@@ -4,21 +4,19 @@ import {
   ArrowLeft,
   ArrowRight,
   Calculator,
+  Download,
   ExternalLink,
   FileText,
   Globe2,
-  Eye,
   Lock,
   Paperclip,
   Pencil,
   Play,
   Plus,
-  Printer,
   RotateCw,
   ShieldCheck,
   Trash2,
   Upload,
-  Users,
   Video,
   X,
 } from 'lucide-react';
@@ -28,12 +26,15 @@ import {
   isIwcCartulary,
   isRolexCartulary,
 } from './data/activeCartulary';
-import type { Asset, ComparableTransaction, MediaTag, Valuation, VisibilityLevel } from './types';
+import { ACTIVE_CARTULARY_ID } from './domain/cartularyIds';
+import type { Asset, ComparableTransaction, MediaTag, Valuation } from './types';
 import { BarreDossier } from './components/BarreDossier';
+import { CartularyTodoBoard } from './components/CartularyTodoBoard';
 import { BrandLogo } from './components/BrandLogo';
 import { MediaCarousel } from './components/MediaCarousel';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
 import { computeHash, IntegrityJournal, isRfc3161Receipt } from './utils/integrityJournal';
+import { downloadTextPdf } from './utils/pdfExport';
 import { AI_SCHEMA_VERSION, aiFieldProps } from './ai/fieldCatalog';
 import { ProjectedPublicBlock } from './components/ProjectedPublicBlock';
 import { PrivateMediaImage } from './components/PrivateMediaImage';
@@ -45,6 +46,7 @@ import {
   persistCartulariaJson,
 } from './persistence/localVault';
 import { readValidatedStoredJson } from './persistence/storedStateValidation';
+import { validateFileForUpload } from './security/fileValidation';
 import {
   CLOUD_PULL_APPLIED_EVENT,
   useHybridPersistence,
@@ -52,6 +54,7 @@ import {
 } from './persistence/useHybridPersistence';
 import {
   PUBLISHED_BLOCK_IDS,
+  PUBLICATION_BLOCK_CATALOG,
   applyPublicationDecision,
   destinationLabel,
   destinationMarker,
@@ -60,7 +63,6 @@ import {
   getPublicationPolicy,
   isSelectionValidated,
   publicationActionFor,
-  validatedBlockIds,
   type PublicationAction,
   type PublicationDecision,
   type PublicationDestination,
@@ -69,11 +71,9 @@ import {
   type PublishedBlockId,
 } from './domain/publication';
 import {
-  AUDIENCE_STORAGE_KEY,
   INTERFACE_LANGUAGE_STORAGE_KEY,
   adjacentCartularyPage,
   cartularyPageFromHash,
-  normalizeAudience,
   normalizeInterfaceLanguage,
   type CartularyPage,
   type InterfaceLanguage,
@@ -112,6 +112,7 @@ import {
   CoverPage,
   MediaPage,
   ReferencePage,
+  PublicationPage,
   ValuePage,
 } from './features/cartulary/pages/CartularyPages';
 import { useCartularyMediaState } from './features/cartulary/state/useCartularyMediaState';
@@ -119,6 +120,11 @@ import { useCartularyConditionState } from './features/cartulary/state/useCartul
 import { useCartularyOwnerState } from './features/cartulary/state/useCartularyOwnerState';
 import { useCartularyValuationState } from './features/cartulary/state/useCartularyValuationState';
 import { useCartularyPublicationState } from './features/cartulary/state/useCartularyPublicationState';
+import { useCartularyFollowUp } from './features/cartulary/state/useCartularyFollowUp';
+import {
+  CARTULARY_PRESENTATION_CONTRACT_VERSION,
+  cartularyPageDefinitions,
+} from './features/cartulary/presentation/cartularyPresentationContract';
 import type {
   AssetKind,
   ComparableAnalysisEntry,
@@ -129,16 +135,19 @@ import type {
   DocumentationState,
   IdentificationCheck,
   MarketDepthState,
-  OwnerDocument,
-  OwnerField,
-  OwnerType,
   PublicationSourceBinding,
   PurchaseExpense,
-  StorageLocation,
-  TransmissionRecipient,
   WatchPatrimonialStatus,
 } from './features/cartulary/state/cartularyStateTypes';
 import { isRegistryReturnPath } from './features/registry/registryCatalog';
+import { parseRegistryRoute } from './features/registry/registryRouting';
+import type { RegistryCollectionDocument } from './domain/collections';
+import { loadCartularyCollectionContext, saveRegistryCollection } from './services/collections';
+import {
+  normalizeStorageCodeReferences,
+  normalizeTransmissionCodeReferences,
+} from './domain/personalDataBoundary';
+import { observeCodeBridgeOptions, type CodeBridgeSelectorOption } from './personalVault/codeBridgeRepository';
 import {
   normalizeOwnershipHistory,
   ownershipHistorySummary,
@@ -386,44 +395,7 @@ const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isIwcCartulary ? [
   { id: 'doc-expertise', category: 'Certificat', description: 'Certificat, expertise ou rapport de contrôle à documenter.', state: 'À vérifier' },
 ];
 
-const DEFAULT_OWNER_FIELDS: OwnerField[] = [
-  { id: 'owner-last-name', label: 'Nom', value: '' },
-  { id: 'owner-first-name', label: 'Prénom', value: '' },
-  { id: 'owner-address', label: 'Adresse', value: '' },
-  { id: 'owner-email', label: 'Email', value: '' },
-  { id: 'owner-phone', label: 'Téléphone', value: '' },
-];
-
-const OWNER_DOCUMENT_CATEGORIES: Record<OwnerType, string[]> = {
-  'Personne physique': [
-    'Carte nationale d’identité',
-    'Passeport',
-    'Permis de conduire',
-    'Titre de séjour',
-    'Justificatif de domicile',
-    'Acte de naissance',
-    'Justificatif d’identifiant fiscal',
-    'Autre document d’identification',
-  ],
-  Entreprise: [
-    'Extrait Kbis / registre du commerce',
-    'Statuts à jour',
-    'Certificat d’immatriculation / d’incorporation',
-    'Avis de situation SIRENE',
-    'Attestation de TVA / identifiant fiscal',
-    'Registre des bénéficiaires effectifs',
-    'Pouvoir du représentant légal',
-    'Pièce d’identité du représentant légal',
-    'Justificatif du siège social',
-    'Autre document d’identification de l’entreprise',
-  ],
-};
-
-const DEFAULT_STORAGE_DESCRIPTION = isIwcCartulary
-  ? `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}. Accès contrôlé et conditions de conservation à documenter.`
-  : 'Emplacement, sécurité et conditions de conservation à renseigner par le propriétaire.';
-
-const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de la montre, de la complétude de son dossier et du canal de cession.';
+const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de l’objet, de la complétude de son dossier et du canal de cession.';
 
 const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isIwcCartulary ? [
   { id: 'pop-iwc-forum', name: 'IWC Collectors Forum', type: 'Forum officiel', url: 'https://forum.iwc.com/' },
@@ -463,7 +435,7 @@ const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
       ['case', 'Boîtier', mockCartulary.watchInstance.reference.material],
       ['bracelet', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
       ['year', 'Année de fabrication', activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : isIwcCartulary ? '2002' : 'À documenter'],
-      ['condition', 'État', 'Voir 03 · État de la montre'],
+      ['condition', 'État', 'Voir 03 · L’objet'],
       ['delivered', 'Contenu livré', isRolexCartulary ? 'Montre et bracelet Jubilee · accessoires à documenter' : isIwcCartulary ? 'Montre, boîte, écrin, facture et carte de garantie' : 'Montre et accessoires à inventorier'],
       ['gender', 'Sexe', 'Montre homme / Unisexe'],
       ['location', 'Emplacement', 'Accès restreint'],
@@ -572,7 +544,7 @@ const DEFAULT_EDITABLE_COPY: EditableCopyData = isIwcCartulary ? {
     `Calibre indiqué : ${creationCaliber}. Numéro de série : ${mockCartulary.watchInstance.serialNumber || 'à documenter'}. Configuration et accessoires à inventorier.`,
   ],
   conditionSummary: [
-    activeCreationProfile?.conditionSummary || 'L’état de la montre est à documenter par une revue visuelle et, si nécessaire, un contrôle technique.',
+    activeCreationProfile?.conditionSummary || 'L’état de l’objet est à documenter par une revue visuelle et, si nécessaire, un contrôle technique.',
     'Points ouverts : identité de l’exemplaire, configuration, état du boîtier et du bracelet, mouvement, fonctionnement et étanchéité.',
   ],
   conditionFacts: {
@@ -629,21 +601,6 @@ const loadMarketDepth = (): MarketDepthState => ({
   ...readStored<Partial<MarketDepthState>>('cartularia-market-depth', {}),
 });
 
-const loadStorageLocations = (): StorageLocation[] => {
-  const stored = readStored<StorageLocation[] | null>('cartularia-storage-locations', null);
-  if (stored) return stored;
-
-  const legacyDescription = readStored('cartularia-storage-description', DEFAULT_STORAGE_DESCRIPTION);
-  return [{
-    id: 'storage-main',
-    name: isIwcCartulary
-      ? `${mockCartulary.location.storageType} — ${mockCartulary.location.city}, ${mockCartulary.location.country}`
-      : 'Emplacement privé à documenter',
-    contents: 'Montre',
-    description: legacyDescription,
-  }];
-};
-
 const loadConditionEntries = (): ConditionEntry[] => readStored(
   'cartularia-condition-entries',
   DEFAULT_CONDITION_ENTRIES,
@@ -688,12 +645,18 @@ const loadCommunityBlocks = (): PublishedBlockId[] => {
     PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)))];
 };
 
+const loadCollectionBlocks = (): PublishedBlockId[] => {
+  const stored = readStored<string[]>('cartularia-collection-blocks', []);
+  return [...new Set(stored.filter((blockId): blockId is PublishedBlockId =>
+    PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)))];
+};
+
 const loadPublicationDecisions = (): PublicationDecision[] => {
   const stored = readStored<PublicationDecision[]>('cartularia-publication-decisions-v1', []);
   return stored.filter((decision) => (
     decision
     && typeof decision.requestId === 'string'
-    && ['website', 'report', 'community'].includes(decision.destination)
+    && ['website', 'collection', 'report', 'community'].includes(decision.destination)
     && PUBLISHED_BLOCK_IDS.includes(decision.blockId)
     && ['activate', 'validate', 'revoke'].includes(decision.action)
     && decision.status === 'confirmed'
@@ -759,14 +722,6 @@ const loadEditableCopy = (): EditableCopyData => {
   };
 };
 
-const loadOwnerDocuments = (): OwnerDocument[] => readStored<OwnerDocument[]>(
-  'cartularia-owner-documents',
-  [],
-).map((document) => ({
-  ...document,
-  url: document.url?.startsWith('blob:') ? undefined : document.url,
-}));
-
 const LEGACY_TAGS: Record<string, MediaTag> = {
   '1-main-photo': 'main-photo',
   '2-main-video': 'main-video',
@@ -830,8 +785,12 @@ function App() {
   const routeParameters = new URLSearchParams(window.location.search);
   const hasPublicCodeParameter = routeParameters.has('publicCode');
   const requestedRegistryReturn = routeParameters.get('returnTo');
-  const registryReturnHref = isRegistryReturnPath(requestedRegistryReturn) ? requestedRegistryReturn : null;
+  const registryReturnHref = isRegistryReturnPath(requestedRegistryReturn) ? requestedRegistryReturn : '/registry';
+  const requestedRegistryId = parseRegistryRoute(registryReturnHref).registryId;
   const requestedPublicCode = publicCodeFromUrl();
+  const localPublicationPreviewAllowed = isWatchWebsite
+    && routeParameters.get('preview') === 'local'
+    && requestedPublicCode === mockCartulary.publicCode;
   const invalidPublicCode = hasPublicCodeParameter && !requestedPublicCode;
   useEffect(() => {
     if (!isWatchWebsite) {
@@ -842,9 +801,8 @@ function App() {
   const [language, setLanguage] = useState<InterfaceLanguage>(() => normalizeInterfaceLanguage(
     readStored<unknown>(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR'),
   ));
-  const [audience, setAudience] = useState<VisibilityLevel>(() => normalizeAudience(
-    readStored<unknown>(AUDIENCE_STORAGE_KEY, 'Secret'),
-  ));
+  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language });
+  const canEdit = true;
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
   const [eventTrigger, setEventTrigger] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -872,27 +830,64 @@ function App() {
   const setConditionEntries = conditionCommands.replaceEntries;
   const setDocumentationItems = conditionCommands.replaceDocumentation;
   const ownerState = useCartularyOwnerState({
-    loadFields: () => readStored('cartularia-owner-fields', DEFAULT_OWNER_FIELDS),
-    loadType: () => readStored<OwnerType>('cartularia-owner-type', 'Personne physique'),
-    loadDocuments: loadOwnerDocuments,
     loadHistory: () => normalizeOwnershipHistory(readStored<unknown>('cartularia-ownership-history', [])),
     loadAssetKind: () => readStored<AssetKind>('cartularia-asset-kind', 'Montre'),
     loadWatchStatus: () => readStored<WatchPatrimonialStatus>('cartularia-watch-status', 'Patrimonial'),
-    loadRecipients: () => readStored<TransmissionRecipient[]>('cartularia-transmission-recipients', []),
-    loadLocations: loadStorageLocations,
+    loadCollectionId: () => readStored<string>('cartularia-collection-id', activeCreationProfile?.collectionId || 'col_pilots'),
+    loadUserAlias: () => readStored<string>('cartularia-user-alias', ''),
+    loadObjectCode: () => readStored<string>('cartularia-object-code', mockCartulary.publicCode),
+    loadStorageCodes: () => normalizeStorageCodeReferences(readStored<unknown>('cartularia-storage-code-names', [])),
+    loadTransmissionCodes: () => normalizeTransmissionCodeReferences(readStored<unknown>('cartularia-transmission-code-references', [])),
   });
   const {
-    ownerFields, ownerType, ownerDocuments, ownershipHistory, assetKind, watchStatus,
-    transmissionRecipients, storageLocations, reloadOwnerState, commands: ownerCommands,
+    ownershipHistory, assetKind, watchStatus, collectionId, userAlias, objectCode, storageCodes, transmissionCodes,
+    reloadOwnerState, commands: ownerCommands,
   } = ownerState;
-  const setOwnerFields = ownerCommands.replaceFields;
-  const setOwnerType = ownerCommands.setOwnerType;
-  const setOwnerDocuments = ownerCommands.replaceDocuments;
   const setOwnershipHistory = ownerCommands.replaceHistory;
   const setAssetKind = ownerCommands.setAssetKind;
   const setWatchStatus = ownerCommands.setWatchStatus;
-  const setTransmissionRecipients = ownerCommands.replaceRecipients;
-  const setStorageLocations = ownerCommands.replaceLocations;
+  const setCollectionId = ownerCommands.setCollectionId;
+  const setStorageCodes = ownerCommands.replaceStorageCodes;
+  const setTransmissionCodes = ownerCommands.replaceTransmissionCodes;
+  const [storageLocationOptions, setStorageLocationOptions] = useState<CodeBridgeSelectorOption[]>([]);
+  const [transmissionPersonOptions, setTransmissionPersonOptions] = useState<CodeBridgeSelectorOption[]>([]);
+  useEffect(() => observeCodeBridgeOptions('locations', setStorageLocationOptions, () => setStorageLocationOptions([])), []);
+  useEffect(() => observeCodeBridgeOptions('people', setTransmissionPersonOptions, () => setTransmissionPersonOptions([])), []);
+  const [availableCollections, setAvailableCollections] = useState<RegistryCollectionDocument[]>([]);
+  const [collectionContext, setCollectionContext] = useState<{ registryId: string; organizationId: string } | null>(null);
+  const [isCreatingPublicationCollection, setIsCreatingPublicationCollection] = useState(false);
+  const [newPublicationCollectionName, setNewPublicationCollectionName] = useState('');
+  const [publicationCollectionError, setPublicationCollectionError] = useState<string | null>(null);
+  const [reportExportMessage, setReportExportMessage] = useState<string | null>(null);
+  const [publicationUrlCopied, setPublicationUrlCopied] = useState(false);
+  const [collectionUrlCopied, setCollectionUrlCopied] = useState(false);
+  const [communityUrlCopied, setCommunityUrlCopied] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void loadCartularyCollectionContext(mockCartulary.id, requestedRegistryId)
+      .then((context) => {
+        if (!active) return;
+        if (!context) {
+          setPublicationCollectionError(language === 'FR'
+            ? 'Impossible d’identifier le Registre de ce Cartulaire.'
+            : 'Unable to identify this Cartulary Registry.');
+          return;
+        }
+        setAvailableCollections(context.collections);
+        setCollectionContext({ registryId: context.registryId, organizationId: context.organizationId });
+        setPublicationCollectionError(null);
+        const selectedCollection = context.collections.find((entry) => entry.id === collectionId)
+          ?? context.collections.find((entry) => entry.id.replace(/^col_/, '') === collectionId.replace(/^col_/, ''))
+          ?? context.collections.find((entry) => entry.id === context.collectionId);
+        if (selectedCollection && selectedCollection.id !== collectionId) setCollectionId(selectedCollection.id);
+      })
+      .catch(() => {
+        if (active) setPublicationCollectionError(language === 'FR'
+          ? 'Collections indisponibles. Vérifiez votre connexion au Registre.'
+          : 'Collections unavailable. Check your Registry connection.');
+      });
+    return () => { active = false; };
+  }, [collectionId, language, requestedRegistryId, setCollectionId]);
   const valuationState = useCartularyValuationState({
     loadMarketHistory: () => readStored('cartularia-market-history', mockCartulary.watchInstance.valuations),
     loadMarketDepth,
@@ -902,6 +897,8 @@ function App() {
     loadSensitivityCosts: () => readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
     loadRetainedValuation: () => readStored('cartularia-retained-valuation', {
       amount: mockCartulary.marketSnapshot.midValue,
+      saleCostAmount: Math.round(mockCartulary.marketSnapshot.midValue * 0.1),
+      taxAmount: 0,
       explanation: DEFAULT_RETAINED_VALUE_EXPLANATION,
     }),
     loadPurchase: () => readStored('cartularia-purchase', {
@@ -937,16 +934,27 @@ function App() {
     loadWebsiteBlocks: loadPublishedBlocks,
     loadReportBlocks,
     loadCommunityBlocks,
+    loadCollectionBlocks,
+    loadCollectionIds: () => readStored<string[]>('cartularia-publication-collection-ids', [collectionId]),
+    loadExternalEnabled: () => readStored<boolean>('cartularia-external-publication-enabled', false),
+    loadCollectionEnabled: () => readStored<boolean>('cartularia-collection-publication-enabled', false),
+    loadCommunityEnabled: () => readStored<boolean>('cartularia-community-publication-enabled', false),
     loadDecisions: loadPublicationDecisions,
     loadSourceBinding: loadPublicationSourceBinding,
   });
   const {
-    publishedBlocks, reportBlocks, communityBlocks, publicationDecisions,
+    publishedBlocks, reportBlocks, communityBlocks, collectionBlocks, publicationCollectionIds,
+    externalPublicationEnabled, collectionPublicationEnabled, communityPublicationEnabled, publicationDecisions,
     publicationSourceBinding, reloadPublicationState, commands: publicationCommands,
   } = publicationState;
   const setPublishedBlocks = publicationCommands.replaceWebsiteBlocks;
   const setReportBlocks = publicationCommands.replaceReportBlocks;
   const setCommunityBlocks = publicationCommands.replaceCommunityBlocks;
+  const setCollectionBlocks = publicationCommands.replaceCollectionBlocks;
+  const setPublicationCollectionIds = publicationCommands.replaceCollectionIds;
+  const setExternalPublicationEnabled = publicationCommands.setExternalEnabled;
+  const setCollectionPublicationEnabled = publicationCommands.setCollectionEnabled;
+  const setCommunityPublicationEnabled = publicationCommands.setCommunityEnabled;
   const setPublicationDecisions = publicationCommands.replaceDecisions;
   const setPublicationSourceBinding = publicationCommands.setSourceBinding;
   const [publicationIntent, setPublicationIntent] = useState<PublicationIntent | null>(null);
@@ -961,7 +969,9 @@ function App() {
   const [editableCopy, setEditableCopy] = useState<EditableCopyData>(loadEditableCopy);
   const [cloudRefreshVersion, setCloudRefreshVersion] = useState(0);
   const [publicProjection, setPublicProjection] = useState<LoadedPublicProjection | null>(null);
-  const [publicProjectionLoading, setPublicProjectionLoading] = useState(Boolean(isWatchWebsite && requestedPublicCode));
+  const [publicProjectionLoading, setPublicProjectionLoading] = useState(Boolean(
+    isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed,
+  ));
   const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
   const persistence = useHybridPersistence(mockCartulary.id, !isIwcCartulary);
   const drawerRef = useRef<HTMLElement>(null);
@@ -991,7 +1001,6 @@ function App() {
       if (!detail || detail.cartularyId !== mockCartulary.id) return;
       const keys = new Set(detail.stateKeys);
       if (keys.has(INTERFACE_LANGUAGE_STORAGE_KEY)) setLanguage(normalizeInterfaceLanguage(readStored(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR')));
-      if (keys.has(AUDIENCE_STORAGE_KEY)) setAudience(normalizeAudience(readStored(AUDIENCE_STORAGE_KEY, 'Secret')));
       reloadMediaState(keys);
       reloadConditionState(keys);
       reloadOwnerState(keys);
@@ -1011,12 +1020,9 @@ function App() {
     identity: {
       assetKind,
       watchStatus,
-      ownerType,
-      ownerFields,
-      ownerDocuments: ownerDocuments.map(({ id, category, fileName, size, type, binaryId, sha256 }) => ({ id, category, fileName, size, type, binaryId: binaryId ?? null, sha256: sha256 ?? null })),
+      privacyLink: { userAlias, objectCode },
       ownershipHistory,
-      transmissionRecipients,
-      storageLocations,
+      storageCodes,
     },
     media: mediaAssets.map((asset) => ({
       id: asset.id,
@@ -1060,12 +1066,10 @@ function App() {
   }), [
     assetKind,
     watchStatus,
-    ownerType,
-    ownerFields,
-    ownerDocuments,
+    userAlias,
+    objectCode,
     ownershipHistory,
-    transmissionRecipients,
-    storageLocations,
+    storageCodes,
     mediaAssets,
     specificationGroups,
     identificationChecks,
@@ -1121,7 +1125,6 @@ function App() {
   }, [publicationSourceSnapshot, setPublicationSourceBinding]);
 
   useEffect(() => {
-    if (window.location.pathname.replace(/\/$/, '') === '/watch-website') return;
     const handleHash = () => {
       const page = pageFromHash();
       if (window.location.hash !== `#${page}`) window.history.replaceState(null, '', `#${page}`);
@@ -1138,16 +1141,14 @@ function App() {
   }, [language]);
 
   useEffect(() => {
-    persistJson(AUDIENCE_STORAGE_KEY, audience);
-    if (audience !== 'Secret') {
-      setEditingBlock(null);
-      setIsEditingChecks(false);
-      setIsMarketHistoryEditorOpen(false);
+    if (!isWatchWebsite || !requestedPublicCode || localPublicationPreviewAllowed) {
+      if (localPublicationPreviewAllowed) {
+        setPublicProjection(null);
+        setPublicProjectionError(null);
+        setPublicProjectionLoading(false);
+      }
+      return;
     }
-  }, [audience]);
-
-  useEffect(() => {
-    if (!isWatchWebsite || !requestedPublicCode) return;
     let active = true;
     setPublicProjectionLoading(true);
     setPublicProjectionError(null);
@@ -1169,7 +1170,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [isWatchWebsite, requestedPublicCode]);
+  }, [isWatchWebsite, localPublicationPreviewAllowed, requestedPublicCode]);
 
   useEffect(() => () => {
     publicProjection?.blocks.forEach((block) => block.assets.forEach((asset) => {
@@ -1181,15 +1182,15 @@ function App() {
     journal
       .logEvent(
         'ACCESS_CARTULARY',
-        audience === 'Secret' ? 'Propriétaire' : `Visiteur_${audience}`,
-        `Consultation du Cartulaire avec le filtre d'audience: ${audience}`,
+        'Propriétaire',
+        'Consultation du Cartulaire propriétaire',
         {
-          requestId: `${LOCAL_ACCESS_REQUEST_ID}-${audience}`,
+          requestId: `${LOCAL_ACCESS_REQUEST_ID}-owner`,
           resource: { type: 'cartulary_access', id: mockCartulary.id },
         },
       )
       .then(() => setEventTrigger((previous) => previous + 1));
-  }, [audience]);
+  }, []);
 
   useEffect(() => {
     if (!undoNotice) return;
@@ -1234,11 +1235,6 @@ function App() {
       };
     })).then((hydrated) => active && setMediaAssets(hydrated));
 
-    void Promise.all(ownerDocuments.map(async (document) => {
-      if (!document.binaryId || document.url) return document;
-      return { ...document, url: (await hydrateBinary(document.binaryId))?.url };
-    })).then((hydrated) => active && setOwnerDocuments(hydrated));
-
     void Promise.all(conditionEntries.map(async (entry) => ({
       ...entry,
       attachments: await Promise.all(entry.attachments.map(async (attachment) => (
@@ -1282,13 +1278,7 @@ function App() {
   }, [integritySnapshot]);
 
   const watch = mockCartulary.watchInstance;
-  const isVisible = (required: VisibilityLevel) => {
-    if (audience === 'Secret') return true;
-    if (audience === 'Communauté') return required !== 'Secret';
-    return required === 'Tous';
-  };
-
-  const visibleAssets = mediaAssets.filter((asset) => isVisible(asset.visibility));
+  const visibleAssets = mediaAssets;
   const localWebsiteAssets = mediaAssets.filter((asset) => asset.visibility === 'Tous');
   const renderedAssets = isWatchWebsite && !requestedPublicCode ? localWebsiteAssets : visibleAssets;
   const mainPhoto = renderedAssets.find((asset) => asset.tags.includes('main-photo'));
@@ -1296,6 +1286,7 @@ function App() {
   const spinAssets = renderedAssets.filter((asset) => asset.tags.includes('spin-3d') && asset.type === 'image');
   const presentationAssets = renderedAssets.filter((asset) => asset.tags.includes('slideshow'));
   const documentationAssets = renderedAssets.filter((asset) => asset.tags.includes('documentation') || asset.tags.includes('accessories'));
+  const referenceReportAssets = renderedAssets.filter((asset) => asset.sourceSection === 'reference-report');
   const selectedAssetPosition = selectedAsset
     ? renderedAssets.findIndex((asset) => asset.id === selectedAsset.id)
     : -1;
@@ -1333,7 +1324,9 @@ function App() {
     destination,
   });
   const selectedBlocksFor = (destination: PublicationDestination) => (
-    destination === 'website' ? publishedBlocks : destination === 'report' ? reportBlocks : communityBlocks
+    destination === 'website' ? publishedBlocks
+      : destination === 'collection' ? collectionBlocks
+        : destination === 'report' ? reportBlocks : communityBlocks
   );
   const selectionIsValidated = (destination: PublicationDestination, blockId: PublishedBlockId) => isSelectionValidated({
     selected: selectedBlocksFor(destination).includes(blockId),
@@ -1343,40 +1336,48 @@ function App() {
     sourceDigest: effectivePublicationSourceDigest,
     sourceRevision: effectivePublicationSourceRevision,
   });
-  const approvedWebsiteBlocks = validatedBlockIds(
-    publishedBlocks,
-    'website',
-    publicationDecisions,
-    effectivePublicationSourceDigest,
-    effectivePublicationSourceRevision,
-  );
-  const approvedReportBlocks = validatedBlockIds(
-    reportBlocks,
-    'report',
-    publicationDecisions,
-    effectivePublicationSourceDigest,
-    effectivePublicationSourceRevision,
-  );
-  const approvedCommunityBlocks = validatedBlockIds(
-    communityBlocks,
-    'community',
-    publicationDecisions,
-    effectivePublicationSourceDigest,
-    effectivePublicationSourceRevision,
-  );
+  const approvedWebsiteBlocks = externalPublicationEnabled ? publishedBlocks : [];
+  const approvedReportBlocks = reportBlocks;
   const requestedPublishedBlocks = publishedBlocksFromUrl();
   const firestorePublishedBlocks = publicProjection?.blocks
     .map((block) => block.blockId)
     .filter((blockId): blockId is PublishedBlockId => PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)) ?? [];
   const watchWebsiteBlocks = isWatchWebsite
     ? (requestedPublicCode
-        ? firestorePublishedBlocks
+        ? localPublicationPreviewAllowed
+          ? requestedPublishedBlocks ?? approvedWebsiteBlocks
+          : firestorePublishedBlocks
         : requestedPublishedBlocks
           ? filterRequestedWebsiteBlocks(requestedPublishedBlocks, approvedWebsiteBlocks)
           : approvedWebsiteBlocks)
     : approvedWebsiteBlocks;
-  const watchWebsiteUrl = `${window.location.origin}/watch-website?blocks=${approvedWebsiteBlocks.join(',')}`;
   const publicShareUrl = `${window.location.origin}/watch-website?publicCode=${encodeURIComponent(mockCartulary.publicCode)}`;
+  const localPublicationPreviewParameters = new URLSearchParams({
+    publicCode: mockCartulary.publicCode,
+    preview: 'local',
+    cartularyId: mockCartulary.id,
+    blocks: approvedWebsiteBlocks.join(','),
+  });
+  const localPublicationPreviewUrl = `${window.location.origin}/watch-website?${localPublicationPreviewParameters.toString()}`;
+  const collectionWebsiteParameters = new URLSearchParams({
+    registryId: collectionContext?.registryId || requestedRegistryId || '',
+    collectionIds: publicationCollectionIds.join(','),
+    preview: 'local',
+    cartularyId: mockCartulary.id,
+    cartularyUrl: localPublicationPreviewUrl,
+  });
+  const localCollectionWebsiteUrl = `${window.location.origin}/collection-website?${collectionWebsiteParameters.toString()}`;
+  const communityWebsiteParameters = new URLSearchParams({
+    preview: 'local',
+    cartularyId: mockCartulary.id,
+    displayTitle: `${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`,
+    makerName: specificationValue('Marque', watch.reference.brand),
+    modelName: specificationValue('Modèle', watch.reference.model),
+    assetType: activeCreationProfile?.assetType || 'watch',
+    blocks: (communityPublicationEnabled ? communityBlocks : []).join(','),
+    cartularyUrl: localPublicationPreviewUrl,
+  });
+  const localCommunityWebsiteUrl = `${window.location.origin}/community?${communityWebsiteParameters.toString()}`;
   const orderedReportBlocks = PUBLISHED_BLOCK_IDS.filter((blockId) => approvedReportBlocks.includes(blockId));
   const reportProofState = journal.getProofState();
   const reportTimestampReceipt = [...journal.getReceipts()].reverse().find(isRfc3161Receipt);
@@ -1393,7 +1394,7 @@ function App() {
     blockId: PublishedBlockId,
     blockLabel: string,
   ) => {
-    if (audience !== 'Secret') return;
+    if (!canEdit) return;
     publicationDialogOpenedAtRef.current = performance.now();
     const selected = selectedBlocksFor(destination).includes(blockId);
     const validated = selectionIsValidated(destination, blockId);
@@ -1456,7 +1457,7 @@ function App() {
         decidedAt: new Date().toISOString(),
         sourceRevision: effectivePublicationSourceRevision,
         sourceDigest: currentDigest,
-        policyVersion: 'publication-policy-v1',
+        policyVersion: 'publication-policy-v2',
         prerequisites: currentEligibility.prerequisites,
       };
       const marker = destinationMarker(decision.destination);
@@ -1475,6 +1476,8 @@ function App() {
         : [...current, decision]);
       if (decision.destination === 'website') {
         setPublishedBlocks((current) => applyPublicationDecision(current, decision));
+      } else if (decision.destination === 'collection') {
+        setCollectionBlocks((current) => applyPublicationDecision(current, decision));
       } else if (decision.destination === 'report') {
         setReportBlocks((current) => applyPublicationDecision(current, decision));
       } else {
@@ -1497,25 +1500,25 @@ function App() {
       active: publishedBlocks.includes(blockId),
       pendingValidation: publishedBlocks.includes(blockId) && !selectionIsValidated('website', blockId),
       onToggle: (label) => requestPublicationChange('website', blockId, label),
-      disabled: audience !== 'Secret',
+      disabled: !canEdit,
     },
     report: {
       active: reportBlocks.includes(blockId),
       pendingValidation: reportBlocks.includes(blockId) && !selectionIsValidated('report', blockId),
       onToggle: (label) => requestPublicationChange('report', blockId, label),
-      disabled: audience !== 'Secret',
+      disabled: !canEdit,
     },
     community: {
       active: communityBlocks.includes(blockId),
       pendingValidation: communityBlocks.includes(blockId) && !selectionIsValidated('community', blockId),
       onToggle: (label) => requestPublicationChange('community', blockId, label),
-      disabled: audience !== 'Secret',
+      disabled: !canEdit,
     },
     ...(editable ? {
       edit: {
         active: editingBlock === blockId,
         onToggle: () => setEditingBlock((current) => current === blockId ? null : blockId),
-        disabled: audience !== 'Secret',
+        disabled: !canEdit,
       },
     } : {}),
   });
@@ -1526,6 +1529,8 @@ function App() {
     () => purchase.purchasePrice + purchaseExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
     [purchase.purchasePrice, purchaseExpenses],
   );
+  const retainedNetValuation = Math.max(0, retainedValuation.amount - retainedValuation.saleCostAmount);
+  const retainedNetAfterTaxValuation = Math.max(0, retainedNetValuation - retainedValuation.taxAmount);
   const listingComparables = comparables.filter((comparable) => comparable.sourceType === 'Annonce');
   const transactionComparables = comparables.filter((comparable) => comparable.sourceType === 'Transaction');
 
@@ -1560,6 +1565,108 @@ function App() {
   };
 
   const tx = (french: string, english: string) => language === 'FR' ? french : english;
+  const togglePublicationCollection = (targetCollectionId: string) => {
+    setPublicationCollectionIds((current) => current.includes(targetCollectionId)
+      ? current.filter((id) => id !== targetCollectionId)
+      : [...current, targetCollectionId]);
+  };
+  const createPublicationCollection = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = newPublicationCollectionName.trim();
+    if (!name || !collectionContext) return;
+    setPublicationCollectionError(null);
+    try {
+      const createdId = await saveRegistryCollection({
+        organizationId: collectionContext.organizationId,
+        registryId: collectionContext.registryId,
+        input: {
+          name,
+          description: '',
+          websiteTitle: name,
+          websiteSlug: name,
+          status: 'draft',
+          visibility: 'secret',
+          publicationConsent: false,
+          publishedCartularyIds: [],
+        },
+      });
+      const context = await loadCartularyCollectionContext(mockCartulary.id, requestedRegistryId);
+      if (context) setAvailableCollections(context.collections);
+      setPublicationCollectionIds((current) => current.includes(createdId) ? current : [...current, createdId]);
+      setNewPublicationCollectionName('');
+      setIsCreatingPublicationCollection(false);
+    } catch {
+      setPublicationCollectionError(tx('Création impossible. Vérifiez vos droits sur le Registre.', 'Creation failed. Check your Registry permissions.'));
+    }
+  };
+  const copyShareUrl = async (url: string, setCopied: (copied: boolean) => void) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_800);
+    } catch {
+      setCopied(false);
+    }
+  };
+  const replacePublicationBlocks = (
+    destination: PublicationDestination,
+    update: (current: PublishedBlockId[]) => PublishedBlockId[],
+  ) => {
+    if (destination === 'website') setPublishedBlocks(update);
+    else if (destination === 'collection') setCollectionBlocks(update);
+    else if (destination === 'report') setReportBlocks(update);
+    else setCommunityBlocks(update);
+  };
+  const togglePublicationBlock = (destination: PublicationDestination, blockId: PublishedBlockId) => {
+    if (!canEdit) return;
+    replacePublicationBlocks(destination, (current) => current.includes(blockId)
+      ? current.filter((id) => id !== blockId)
+      : [...current, blockId]);
+  };
+  const renderPublicationBlockSelector = (
+    destination: PublicationDestination,
+    selected: readonly PublishedBlockId[],
+  ) => (
+    <div className="publication-block-selector">
+      <div className="publication-block-selector__toolbar">
+        <span>{tx(`${selected.length} contenu${selected.length > 1 ? 's' : ''} sélectionné${selected.length > 1 ? 's' : ''}`, `${selected.length} selected item${selected.length === 1 ? '' : 's'}`)}</span>
+        <button
+          type="button"
+          className="button button--quiet"
+          onClick={() => replacePublicationBlocks(destination, () => selected.length === PUBLISHED_BLOCK_IDS.length ? [] : [...PUBLISHED_BLOCK_IDS])}
+          disabled={!canEdit}
+        >{selected.length === PUBLISHED_BLOCK_IDS.length ? tx('Tout décocher', 'Clear all') : tx('Tout sélectionner', 'Select all')}</button>
+      </div>
+      {(['00', '01', '02', '03', '04'] as const).map((pageNumber) => {
+        const definitions = PUBLICATION_BLOCK_CATALOG.filter((definition) => definition.pageNumber === pageNumber);
+        return (
+          <details key={pageNumber} open={pageNumber === '00'}>
+            <summary><span>{pageNumber}</span><strong>{definitions[0]?.pageLabel}</strong><small>{definitions.filter((definition) => selected.includes(definition.id)).length}/{definitions.length}</small></summary>
+            <div>
+              {definitions.map((definition) => {
+                const isSelected = selected.includes(definition.id);
+                const aiBinding = destination === 'website'
+                  ? aiFieldProps('publishing.blocks.website', definition.id)
+                  : destination === 'report' ? aiFieldProps('publishing.blocks.report', definition.id) : {};
+                return (
+                  <label key={definition.id} className={isSelected ? 'is-selected' : undefined}>
+                    <input
+                      {...aiBinding}
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => togglePublicationBlock(destination, definition.id)}
+                      disabled={!canEdit}
+                    />
+                    <span>{definition.title}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
   const ownershipSummary = ownershipHistorySummary(ownershipHistory, language);
   const ownershipAssessment = ownershipValuationAssessment(ownershipHistory, language);
   const interfaceLocale = language === 'FR' ? 'fr-FR' : 'en-GB';
@@ -1572,16 +1679,6 @@ function App() {
     documentation: 'Documentation',
     other: 'Other',
   } satisfies Record<MediaTag, string>)[tag.id];
-  const ownerDocumentCategoryLabel = (category: string) => language === 'FR' ? category : ({
-    'Carte nationale d’identité': 'National identity card', Passeport: 'Passport', 'Permis de conduire': 'Driving licence', 'Titre de séjour': 'Residence permit',
-    'Justificatif de domicile': 'Proof of address', 'Acte de naissance': 'Birth certificate', 'Justificatif d’identifiant fiscal': 'Proof of tax identifier',
-    'Autre document d’identification': 'Other identification document', 'Extrait Kbis / registre du commerce': 'Company register extract',
-    'Statuts à jour': 'Current articles of association', 'Certificat d’immatriculation / d’incorporation': 'Registration / incorporation certificate',
-    'Avis de situation SIRENE': 'SIRENE status notice', 'Attestation de TVA / identifiant fiscal': 'VAT / tax identifier certificate',
-    'Registre des bénéficiaires effectifs': 'Beneficial ownership register', 'Pouvoir du représentant légal': 'Legal representative authorization',
-    'Pièce d’identité du représentant légal': 'Legal representative identity document', 'Justificatif du siège social': 'Registered office proof',
-    'Autre document d’identification de l’entreprise': 'Other company identification document',
-  } satisfies Record<string, string>)[category] ?? category;
   const documentationCategoryLabel = (category: DocumentationCategory) => language === 'FR' ? category : ({
     Facture: 'Invoice', Garantie: 'Warranty', Assurances: 'Insurance', Boîte: 'Box', Écrin: 'Presentation case', Manuel: 'Manual', Certificat: 'Certificate', Accessoire: 'Accessory', Autre: 'Other',
   } satisfies Record<DocumentationCategory, string>)[category];
@@ -1671,45 +1768,75 @@ function App() {
     });
   };
 
-  const pages = [
-    { id: 'cover' as const, number: '00', label: language === 'FR' ? 'Accueil' : 'Home' },
-    { id: 'media' as const, number: '01', label: language === 'FR' ? 'Médias' : 'Media' },
-    { id: 'reference' as const, number: '02', label: language === 'FR' ? 'La référence' : 'Reference' },
-    { id: 'condition' as const, number: '03', label: language === 'FR' ? 'État de la montre' : 'Watch condition' },
-    { id: 'value' as const, number: '04', label: language === 'FR' ? 'Valorisation' : 'Valuation' },
-  ];
-
-  const audienceOptions: Array<{ value: VisibilityLevel; label: string; help: string }> = language === 'FR'
-    ? [
-        { value: 'Secret', label: 'Secret', help: 'Vue propriétaire complète et modifiable' },
-        { value: 'Communauté', label: 'Communauté', help: 'Données accessibles au Cercle' },
-        { value: 'Tous', label: 'Tous', help: 'Données accessibles publiquement' },
-      ]
-    : [
-        { value: 'Secret', label: 'Secret', help: 'Complete editable owner view' },
-        { value: 'Communauté', label: 'Community', help: 'Data visible to Circle members' },
-        { value: 'Tous', label: 'Everyone', help: 'Publicly visible data' },
-      ];
+  const pages = cartularyPageDefinitions(language);
+  const publicationPageNumberByBlock = useMemo(() => new Map(
+    PUBLICATION_BLOCK_CATALOG.map((definition) => [definition.id, definition.pageNumber]),
+  ), []);
+  const reportPagesWithBlocks = useMemo(() => pages
+    .filter((page) => page.id !== 'publication')
+    .map((page) => ({
+      ...page,
+      blockIds: orderedReportBlocks.filter((blockId) => publicationPageNumberByBlock.get(blockId) === page.number),
+    }))
+    .filter((page) => page.blockIds.length > 0), [orderedReportBlocks, pages, publicationPageNumberByBlock]);
 
   const navigateTo = (page: CartularyPage) => {
     if (activePage === page) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    setActivePage(page);
     window.location.hash = page;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleReportPrint = () => {
-    // The print call stays first and synchronous so the browser keeps the
-    // original user gesture. Without an R selection, print the current page.
-    window.print();
+    if (orderedReportBlocks.length === 0) {
+      setReportExportMessage(tx(
+        'Sélectionnez au moins une boîte du rapport avant de l’imprimer ou de l’enregistrer en PDF.',
+        'Select at least one report block before printing or saving it as a PDF.',
+      ));
+      return;
+    }
 
-    const scope = orderedReportBlocks.length > 0
-      ? `rapport personnalisé · ${orderedReportBlocks.length} blocs`
-      : `page actuelle · ${activePage}`;
+    try {
+      const report = document.querySelector('.report-print-view');
+      const reportLines = report
+        ? [...report.querySelectorAll('h1, h2, h3, p, dt, dd, li, th, td')]
+          .map((element) => element.textContent?.replace(/\s+/g, ' ').trim() || '')
+          .filter(Boolean)
+        : [];
+      const selectedBlockLines = orderedReportBlocks.map((blockId) => {
+        const definition = PUBLICATION_BLOCK_CATALOG.find((entry) => entry.id === blockId);
+        return definition ? `${definition.pageNumber} · ${definition.pageLabel} — ${definition.title}` : blockId;
+      });
+      const date = new Date().toISOString().slice(0, 10);
+      downloadTextPdf(`cartularia-${mockCartulary.publicCode}-${date}.pdf`, [
+        `RAPPORT CARTULARIA · ${mockCartulary.publicCode}`,
+        `${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`,
+        `${tx('Référence', 'Reference')} · ${specificationValue('Numéro de référence', watch.reference.reference)}`,
+        `${tx('Date du rapport', 'Report date')} · ${date}`,
+        '',
+        tx('CONTENUS SÉLECTIONNÉS', 'SELECTED CONTENT'),
+        ...selectedBlockLines,
+        '',
+        ...reportLines,
+      ]);
+      setReportExportMessage(tx(
+        'La boîte de dialogue d’impression s’est ouverte. Choisissez « Enregistrer au format PDF » pour enregistrer le rapport complet avec mise en page et photos.',
+        'The print dialog has opened. Choose "Save as PDF" to save the full report with layout and photos.',
+      ));
+    } catch {
+      setReportExportMessage(tx(
+        'Le rapport PDF n’a pas pu être généré. Réessayez après avoir rechargé la page.',
+        'The PDF report could not be generated. Reload the page and try again.',
+      ));
+      return;
+    }
+
+    const scope = `rapport personnalisé · ${orderedReportBlocks.length} blocs`;
     void journal
-      .logEvent('EXPORT_PDF', 'Propriétaire', `Impression ${scope}`)
+      .logEvent('EXPORT_PDF', 'Propriétaire', `Téléchargement ${scope}`)
       .then(() => setEventTrigger((previous) => previous + 1))
       .catch((error: unknown) => console.error("Échec de la journalisation de l'impression", error));
   };
@@ -1725,7 +1852,7 @@ function App() {
   };
 
   const toggleMediaTag = (assetId: string, tag: MediaTag) => {
-    if (audience !== 'Secret') return;
+    if (!canEdit) return;
     mediaCommands.toggleAssetTag(assetId, tag);
   };
 
@@ -1877,16 +2004,68 @@ function App() {
     setMediaUploadTags([]);
   };
 
+  const addReferenceReports = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const files = new FormData(form).getAll('reference-report-files').filter(
+      (value): value is File => value instanceof File && value.size > 0,
+    );
+    if (files.length === 0) return;
+    setFileImportError(null);
+    try {
+      const reports = await Promise.all(files.map(async (file): Promise<Asset> => {
+        const inspection = await validateFileForUpload({
+          blob: file,
+          fileName: file.name,
+          declaredMimeType: file.type,
+          expectedKind: 'document',
+        });
+        const hash = await digestFile(file);
+        const binaryId = newId('reference-report-binary');
+        await cartulariaLocalVault?.putValidatedBinary({
+          binaryId,
+          kind: 'media',
+          fileName: file.name,
+          mimeType: inspection.canonicalMimeType,
+          sha256: hash,
+          blob: file,
+        });
+        return {
+          id: newId('reference-report'),
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          originalFileName: file.name,
+          url: URL.createObjectURL(file),
+          type: 'document',
+          ratio: '4:5',
+          hash,
+          status: 'Archived',
+          visibility: 'Secret',
+          tags: ['documentation'],
+          category: 'documentation',
+          capturedAt: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
+          metadataTimestamp: new Date(file.lastModified || Date.now()).toISOString(),
+          timestampSource: 'file.lastModified',
+          fileSize: formatFileSize(file.size),
+          mimeType: inspection.canonicalMimeType,
+          binaryId,
+          localAvailability: 'available',
+          derivativeStatus: 'not-required',
+          sourceSection: 'reference-report',
+        };
+      }));
+      mediaCommands.appendAssets(reports);
+      form.reset();
+    } catch (caught) {
+      setFileImportError(caught instanceof Error ? caught.message : tx('Rapport refusé.', 'Report rejected.'));
+    }
+  };
+
   const updateDocumentationItem = <K extends keyof DocumentationItem>(
     id: string,
     key: K,
     value: DocumentationItem[K],
   ) => {
     conditionCommands.updateDocumentation(id, key, value);
-  };
-
-  const updateOwnerField = (id: string, patch: Partial<OwnerField>) => {
-    ownerCommands.updateField(id, patch);
   };
 
   const updateOwnershipHistory = (id: string, patch: Partial<OwnershipHistoryEntry>) => {
@@ -1910,118 +2089,12 @@ function App() {
     }]);
   };
 
-  const updateTransmissionRecipient = (id: string, patch: Partial<TransmissionRecipient>) => {
-    ownerCommands.updateRecipient(id, patch);
+  const addStorageCode = () => {
+    setStorageCodes((current) => [...current, { id: newId('storage-code'), correspondenceCode: '', codeName: '', note: '' }]);
   };
 
-  const addTransmissionRecipient = () => {
-    setTransmissionRecipients((current) => [...current, {
-      id: newId('transmission-recipient'),
-      firstName: '',
-      lastName: '',
-      address: '',
-      email: '',
-      phone: '',
-      percentage: '',
-    }]);
-  };
-
-  const updateStorageLocation = (id: string, patch: Partial<StorageLocation>) => {
-    ownerCommands.updateLocation(id, patch);
-  };
-
-  const addStorageLocation = () => {
-    setStorageLocations((current) => [...current, {
-      id: newId('storage-location'),
-      name: '',
-      contents: '',
-      description: '',
-    }]);
-  };
-
-  const updateOwnerDocument = (id: string, patch: Partial<OwnerDocument>) => {
-    ownerCommands.updateDocument(id, patch);
-  };
-
-  const deleteOwnerDocument = (id: string) => {
-    const target = ownerDocuments.find((document) => document.id === id);
-    const index = ownerDocuments.findIndex((document) => document.id === id);
-    if (!target || index < 0) return;
-    requestDeletion({
-      title: tx('Supprimer ce document confidentiel ?', 'Delete this confidential document?'),
-      description: tx(
-        'Le document sera retiré du coffre propriétaire et marqué comme supprimé pour la prochaine synchronisation.',
-        'The document will be removed from the owner vault and marked as deleted for the next sync.',
-      ),
-      targetLabel: target.fileName,
-      onConfirm: async () => {
-        const binaryRecord = target.binaryId ? await cartulariaLocalVault?.getBinary(target.binaryId) : null;
-        if (target.binaryId) await cartulariaLocalVault?.deleteBinary(target.binaryId);
-        setOwnerDocuments((current) => removeItemById(current, id)?.remaining ?? current);
-        return {
-          id: newId('undo-owner-document'),
-          message: tx(`« ${target.fileName} » a été supprimé.`, `“${target.fileName}” was deleted.`),
-          onUndo: async () => {
-            if (binaryRecord?.blob) {
-              await cartulariaLocalVault?.putValidatedBinary({
-                binaryId: binaryRecord.binaryId,
-                kind: binaryRecord.kind,
-                fileName: binaryRecord.fileName,
-                mimeType: binaryRecord.mimeType,
-                sha256: binaryRecord.sha256,
-                blob: binaryRecord.blob,
-              });
-            }
-            setOwnerDocuments((current) => restoreItemAtIndex(current, target, index));
-          },
-          onExpire: () => {
-            if (target.url?.startsWith('blob:')) URL.revokeObjectURL(target.url);
-          },
-        };
-      },
-    });
-  };
-
-  const addOwnerDocuments = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const category = String(formData.get('owner-document-category') || '').trim() || 'Document d’identité';
-    const files = formData.getAll('owner-documents').filter(
-      (value): value is File => value instanceof File && value.size > 0,
-    );
-    if (files.length === 0) return;
-    setFileImportError(null);
-    let addedDocuments: OwnerDocument[];
-    try {
-      addedDocuments = await Promise.all(files.map(async (file): Promise<OwnerDocument> => {
-      const binaryId = newId('owner-binary');
-      const sha256 = await digestFile(file);
-      await cartulariaLocalVault?.putValidatedBinary({
-        binaryId,
-        kind: 'owner_document',
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sha256,
-        blob: file,
-      });
-        return {
-        id: newId('owner-document'),
-        category,
-        fileName: file.name,
-        size: file.size,
-        type: file.type || 'application/octet-stream',
-        url: URL.createObjectURL(file),
-        binaryId,
-        sha256,
-        };
-      }));
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
-      return;
-    }
-    setOwnerDocuments((current) => [...current, ...addedDocuments]);
-    form.reset();
+  const addTransmissionCode = () => {
+    setTransmissionCodes((current) => [...current, { id: newId('transmission-code'), correspondenceCode: '', codeName: '', note: '' }]);
   };
 
   const deleteConditionEntry = (id: string) => {
@@ -2192,18 +2265,29 @@ function App() {
       case 'cover-owner':
         return (
           <section>
-            <SectionTitle eyebrow={tx('Dossier privé', 'Private record')} title={tx('Propriétaire de la montre', 'Watch owner')} />
+            <SectionTitle eyebrow={tx('Propriétaire', 'Owner')} title={tx('Propriétaire actuel', 'Current owner')} />
             <article className="owner-card owner-card--published">
-              <div className="owner-type-badge">{ownerType}</div>
-              <dl className="owner-fields owner-fields--published">
-                {ownerFields.map((field) => <div key={field.id}><dt>{field.label}</dt><dd>{field.value || tx('Non renseigné', 'Not provided')}</dd></div>)}
-              </dl>
-              {ownerDocuments.length > 0 && (
-                <div className="owner-documents owner-documents--published">
-                  <h3>{tx('Documents associés', 'Associated documents')}</h3>
-                  {ownerDocuments.map((document) => <div key={document.id}><FileText size={16} /><span>{ownerDocumentCategoryLabel(document.category)}</span><strong>{document.fileName}</strong></div>)}
+              <p><strong>{tx('Pseudonyme / Code', 'Alias / Code')} :</strong> {userAlias || tx('Non renseigné', 'Not provided')}</p>
+              <p><strong>{tx('Statut de détention', 'Holding status')} :</strong> {watchStatusLabel(watchStatus)}</p>
+            </article>
+          </section>
+        );
+      case 'cover-transmission':
+        return (
+          <section>
+            <SectionTitle eyebrow={tx('Transmission', 'Transmission')} title={tx('Règles et contacts de transmission', 'Transmission rules & contacts')} />
+            <article className="transmission-card transmission-card--published">
+              {transmissionCodes.length > 0 ? (
+                <div className="storage-published-grid">
+                  {transmissionCodes.map((person, index) => (
+                    <article key={person.id}>
+                      <span className="eyebrow">{tx('Contact', 'Contact')} {String(index + 1).padStart(2, '0')}</span>
+                      <h3>{person.codeName || person.correspondenceCode || tx('Contact confidentiel', 'Confidential contact')}</h3>
+                      {person.note && <p>{person.note}</p>}
+                    </article>
+                  ))}
                 </div>
-              )}
+              ) : <p className="storage-empty">{tx('Aucun contact de transmission renseigné.', 'No transmission contact entered.')}</p>}
             </article>
           </section>
         );
@@ -2226,49 +2310,16 @@ function App() {
             </article>
           </section>
         );
-      case 'cover-transmission':
-        return (
-          <section>
-            <SectionTitle eyebrow={tx('Projet patrimonial', 'Estate planning')} title={tx('Transmission', 'Transfer')} />
-            <article className="transmission-card transmission-card--published">
-              {transmissionRecipients.length > 0 ? (
-                <div className="transmission-published-grid">
-                  {transmissionRecipients.map((recipient, index) => (
-                    <article key={recipient.id}>
-                      <span className="eyebrow">{tx('Personne', 'Person')} {String(index + 1).padStart(2, '0')}</span>
-                      <h3>{[recipient.firstName, recipient.lastName].filter(Boolean).join(' ') || tx('Identité non renseignée', 'Identity not provided')}</h3>
-                      <dl>
-                        <div><dt>{tx('Adresse', 'Address')}</dt><dd>{recipient.address || tx('Non renseignée', 'Not provided')}</dd></div>
-                        <div><dt>Email</dt><dd>{recipient.email || tx('Non renseigné', 'Not provided')}</dd></div>
-                        <div><dt>{tx('Téléphone', 'Phone')}</dt><dd>{recipient.phone || tx('Non renseigné', 'Not provided')}</dd></div>
-                        <div><dt>{tx('Part donnée', 'Share transferred')}</dt><dd>{recipient.percentage === '' ? tx('Non renseignée', 'Not provided') : `${recipient.percentage} %`}</dd></div>
-                      </dl>
-                    </article>
-                  ))}
-                </div>
-              ) : <p className="transmission-empty">{tx('Aucune personne renseignée pour la transmission.', 'No person entered for the transfer.')}</p>}
-            </article>
-          </section>
-        );
       case 'cover-storage':
         return (
           <section>
             <SectionTitle eyebrow={tx('Conservation', 'Safekeeping')} title={tx('Stockage', 'Storage')} />
             <article className="storage-card storage-card--published">
-              {storageLocations.length > 0 ? (
+              {storageCodes.length > 0 ? (
                 <div className="storage-published-grid">
-                  {storageLocations.map((location, index) => (
-                    <article key={location.id}>
-                      <span className="eyebrow">{tx('Lieu', 'Location')} {String(index + 1).padStart(2, '0')}</span>
-                      <h3>{location.name || tx('Lieu non renseigné', 'Location not provided')}</h3>
-                      <dl>
-                        <div><dt>{tx('Contenu stocké', 'Stored contents')}</dt><dd>{location.contents || tx('Non renseigné', 'Not provided')}</dd></div>
-                        <div><dt>Description</dt><dd>{location.description || tx('Aucune précision', 'No details')}</dd></div>
-                      </dl>
-                    </article>
-                  ))}
+                  {storageCodes.map((location, index) => <article key={location.id}><span className="eyebrow">{tx('Code', 'Code')} {String(index + 1).padStart(2, '0')}</span><h3>{location.codeName}</h3></article>)}
                 </div>
-              ) : <p className="storage-empty">{tx('Aucun lieu de stockage renseigné.', 'No storage location provided.')}</p>}
+              ) : <p className="storage-empty">{tx('Aucun nom de code de stockage renseigné.', 'No storage code name entered.')}</p>}
             </article>
           </section>
         );
@@ -2292,14 +2343,16 @@ function App() {
       case 'media-motion':
         return (
           <section>
-            <SectionTitle eyebrow={tx('Vidéo principale', 'Main video')} title={tx('La montre en mouvement', 'The watch in motion')} />
+            <SectionTitle eyebrow={tx('Vidéo principale', 'Main video')} title={tx("L’objet en mouvement", 'The object in motion')} />
             {mainVideo ? (
-              <a className="video-poster watch-website__media-link" href={mainVideo.url} target="_blank" rel="noreferrer">
+              <div className="video-poster watch-website__media-link">
                 {mainVideo.posterUrl || mainVideo.thumbnailUrl
-                  ? <PrivateMediaImage asset={mainVideo} alt={tx('La montre en mouvement', 'The watch in motion')} sizes="(max-width: 720px) 100vw, 1200px" />
-                  : <span className="video-poster__placeholder"><Video size={38} /><small>{mainVideo.name}</small></span>}
+                  ? <PrivateMediaImage asset={mainVideo} alt={tx("L’objet en mouvement", 'The object in motion')} sizes="(max-width: 720px) 100vw, 1200px" eager />
+                  : (mainPhoto
+                    ? <PrivateMediaImage asset={mainPhoto} alt={tx("L’objet en mouvement", 'The object in motion')} sizes="(max-width: 720px) 100vw, 1200px" eager />
+                    : <span className="video-poster__placeholder"><Video size={38} /><small>{mainVideo.name}</small></span>)}
                 <span className="video-poster__play" aria-hidden="true"><Play size={24} fill="currentColor" /></span>
-              </a>
+              </div>
             ) : <p className="watch-website__empty">{tx('Vidéo non disponible.', 'Video unavailable.')}</p>}
           </section>
         );
@@ -2316,7 +2369,19 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Présentation', 'Presentation')} title={tx('Diaporama', 'Slideshow')} />
-            <MediaCarousel assets={presentationAssets} language={language} onOpen={(asset) => window.open(asset.url, '_blank', 'noopener,noreferrer')} />
+            <div className="report-slideshow-gallery">
+              <div className="report-slideshow-gallery__grid">
+                {presentationAssets.map((asset) => (
+                  <div className="report-slideshow-gallery__item" key={asset.id}>
+                    <PrivateMediaImage asset={asset} alt={asset.name} sizes="(max-width: 720px) 100vw, 450px" eager />
+                    <span className="report-slideshow-gallery__label">{asset.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="media-carousel-wrapper">
+              <MediaCarousel assets={presentationAssets} language={language} onOpen={(asset) => window.open(asset.url, '_blank', 'noopener,noreferrer')} />
+            </div>
           </section>
         );
       case 'media-library':
@@ -2387,7 +2452,7 @@ function App() {
       case 'condition-description':
         return (
           <section>
-            <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx('Description de la montre', 'Watch description')} />
+            <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx("Description de l’objet", 'Object description')} />
             <article className="watch-description-card">
               {editableCopy.watchDescription.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
             </article>
@@ -2505,7 +2570,7 @@ function App() {
     }
   };
 
-  if (isWatchWebsite && requestedPublicCode && (publicProjectionLoading || !publicProjection)) {
+  if (isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed && (publicProjectionLoading || !publicProjection)) {
     return (
       <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
         <header className="watch-website__masthead">
@@ -2541,21 +2606,70 @@ function App() {
 
   if (isWatchWebsite) {
     const orderedBlocks = PUBLISHED_BLOCK_IDS.filter((blockId) => watchWebsiteBlocks.includes(blockId));
+    const publicationPageNumberByBlock = new Map(
+      PUBLICATION_BLOCK_CATALOG.map((definition) => [definition.id, definition.pageNumber]),
+    );
+    const publishedWebsitePages = pages
+      .filter((page) => page.id !== 'publication')
+      .map((page) => ({
+        ...page,
+        blockIds: orderedBlocks.filter((blockId) => publicationPageNumberByBlock.get(blockId) === page.number),
+      }))
+      .filter((page) => page.blockIds.length > 0);
+    const activeWebsitePage = publishedWebsitePages.find((page) => page.id === activePage)
+      ?? publishedWebsitePages[0];
+    const activeWebsitePageIndex = activeWebsitePage
+      ? publishedWebsitePages.findIndex((page) => page.id === activeWebsitePage.id)
+      : -1;
+    const previousWebsitePage = activeWebsitePageIndex > 0
+      ? publishedWebsitePages[activeWebsitePageIndex - 1]
+      : null;
+    const nextWebsitePage = activeWebsitePageIndex >= 0
+      ? publishedWebsitePages[activeWebsitePageIndex + 1] ?? null
+      : null;
     const websiteCode = publicProjection?.publication.publicCode ?? mockCartulary.publicCode;
     const websiteBrand = publicProjection?.publication.makerName ?? watch.reference.brand;
     const websiteModel = publicProjection?.publication.modelName ?? watch.reference.model;
     return (
-      <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
+      <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION} data-cartulary-presentation-version={CARTULARY_PRESENTATION_CONTRACT_VERSION}>
+        <a className="skip-link" href="#published-cartulary-content">{tx('Aller au contenu', 'Skip to content')}</a>
         <header className="watch-website__masthead">
           <div className="container">
             <BrandLogo className="watch-website__wordmark" />
-            <div><span className="eyebrow">{publicProjection ? tx('Watch website publié', 'Published Watch website') : tx('Aperçu local Watch website', 'Local Watch website preview')} · {websiteCode}</span><strong>{websiteBrand} · {websiteModel}</strong></div>
+            <div><span className="eyebrow">{publicProjection ? tx('Mini-site publié', 'Published mini-site') : tx('Aperçu local du mini-site', 'Local mini-site preview')} · {websiteCode}</span><strong>{websiteBrand} · {websiteModel}</strong></div>
           </div>
         </header>
-        <main className="container watch-website__main">
-          {orderedBlocks.length > 0
-            ? orderedBlocks.map((blockId) => <div className="watch-website__block" id={blockId} key={blockId}>{renderWatchWebsiteBlock(blockId)}</div>)
-            : <div className="watch-website__empty-state"><Globe2 size={26} /><h1>{tx('Aucun contenu validé', 'No validated content')}</h1><p>{publicProjection ? tx('Cette publication ne contient actuellement aucun bloc.', 'This publication currently contains no blocks.') : tx('Validez au moins une sélection W depuis le Cartulaire pour composer cet aperçu local.', 'Validate at least one W selection from the Cartulary to compose this local preview.')}</p></div>}
+        {publishedWebsitePages.length > 0 && (
+          <nav className="page-tabs watch-website__tabs" aria-label={tx('Pages de la publication', 'Publication pages')}>
+            <div className="container page-tabs__inner">
+              {publishedWebsitePages.map((page) => (
+                <button
+                  type="button"
+                  key={page.id}
+                  className={activeWebsitePage?.id === page.id ? 'is-active' : ''}
+                  onClick={() => navigateTo(page.id)}
+                  aria-current={activeWebsitePage?.id === page.id ? 'page' : undefined}
+                >
+                  <span>{page.number}</span>
+                  {page.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+        )}
+        <main id="published-cartulary-content" className="container watch-website__main" tabIndex={-1}>
+          {activeWebsitePage
+            ? <>
+                <PageIntroduction number={activeWebsitePage.number} title={activeWebsitePage.label} />
+                {activeWebsitePage.blockIds.map((blockId) => <div className="watch-website__block" id={blockId} key={blockId}>{renderWatchWebsiteBlock(blockId)}</div>)}
+                <nav className="page-turner watch-website__page-turner" aria-label={tx('Navigation entre les pages publiées', 'Published page navigation')}>
+                  {previousWebsitePage
+                    ? <button type="button" onClick={() => navigateTo(previousWebsitePage.id)}><ArrowLeft size={16} /> {tx('Page précédente', 'Previous page')}</button>
+                    : <span />}
+                  {nextWebsitePage && <button type="button" onClick={() => navigateTo(nextWebsitePage.id)}>{tx('Page suivante', 'Next page')} <ArrowRight size={16} /></button>}
+                </nav>
+              </>
+            : <div className="watch-website__empty-state"><Globe2 size={26} /><h1>{tx('Aucun contenu validé', 'No validated content')}</h1><p>{publicProjection ? tx('Cette publication ne contient actuellement aucun bloc.', 'This publication currently contains no blocks.') : tx('Validez au moins un contenu depuis la page Publication du Cartulaire.', 'Validate at least one item from the Cartulary Publication page.')}</p></div>}
         </main>
         <footer className="watch-website__footer"><div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>{tx('Dossier numérique indépendant', 'Independent digital record')}</span></span><span>{websiteCode} · {publicProjection?.seal?.supportCode ?? 'projection'}</span></div></footer>
       </div>
@@ -2563,7 +2677,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell" data-ai-schema-version={AI_SCHEMA_VERSION}>
+    <div className="app-shell" data-ai-schema-version={AI_SCHEMA_VERSION} data-cartulary-presentation-version={CARTULARY_PRESENTATION_CONTRACT_VERSION}>
       <a className="skip-link" href="#cartulary-content">{language === 'FR' ? 'Aller au contenu' : 'Skip to content'}</a>
       <BarreDossier
         publicCode={mockCartulary.publicCode}
@@ -2571,14 +2685,13 @@ function App() {
         model={watch.reference.model}
         language={language}
         setLanguage={setLanguage}
+        followUp={followUp}
       />
 
-      {registryReturnHref && (
-        <a className="cartulary-registry-return no-print" href={registryReturnHref}>
-          <ArrowLeft size={14} aria-hidden="true" />
-          {language === 'FR' ? 'Retour au Registre' : 'Back to Registry'}
-        </a>
-      )}
+      <a className="cartulary-registry-return no-print" href={registryReturnHref}>
+        <ArrowLeft size={14} aria-hidden="true" />
+        {language === 'FR' ? 'Retour au Registre' : 'Back to Registry'}
+      </a>
 
       <nav className="page-tabs no-print" aria-label={language === 'FR' ? 'Pages du Cartulaire' : 'Cartulary pages'}>
         <div className="container page-tabs__inner">
@@ -2594,51 +2707,6 @@ function App() {
               {page.label}
             </button>
           ))}
-          <a
-            className="page-tabs__website"
-            href={watchWebsiteUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={language === 'FR' ? `Ouvrir l’aperçu Watch website avec ${approvedWebsiteBlocks.length} bloc${approvedWebsiteBlocks.length > 1 ? 's' : ''} validé${approvedWebsiteBlocks.length > 1 ? 's' : ''}` : `Open the Watch website preview with ${approvedWebsiteBlocks.length} validated block${approvedWebsiteBlocks.length === 1 ? '' : 's'}`}
-            title={publishedBlocks.length > approvedWebsiteBlocks.length
-              ? tx(`${publishedBlocks.length - approvedWebsiteBlocks.length} sélection(s) W attendent une validation`, `${publishedBlocks.length - approvedWebsiteBlocks.length} W selection(s) await validation`)
-              : tx('Aperçu local ; la publication autoritaire utilise un code public', 'Local preview; the authoritative publication uses a public code')}
-          >
-            <Globe2 size={14} />
-            {tx('Aperçu W', 'W preview')}
-            <span>{approvedWebsiteBlocks.length}</span>
-          </a>
-          <a
-            className="page-tabs__community"
-            href="/community"
-            target="_blank"
-            rel="noreferrer"
-            aria-label={language === 'FR'
-              ? `Ouvrir le Cercle avec ${approvedCommunityBlocks.length} sélection${approvedCommunityBlocks.length > 1 ? 's' : ''} C validée${approvedCommunityBlocks.length > 1 ? 's' : ''}`
-              : `Open the Circle with ${approvedCommunityBlocks.length} validated C selection${approvedCommunityBlocks.length === 1 ? '' : 's'}`}
-            title={language === 'FR'
-              ? 'Les sélections C locales ne sont pas envoyées au Cercle sans acte serveur distinct'
-              : 'Local C selections are not sent to the Circle without a separate server-side act'}
-          >
-            <Users size={14} />
-            {language === 'FR' ? 'Cercle' : 'Circle'}
-            <span>{approvedCommunityBlocks.length}</span>
-          </a>
-          <button
-            type="button"
-            className="page-tabs__report"
-            onClick={handleReportPrint}
-            aria-label={orderedReportBlocks.length > 0
-              ? tx(`Imprimer le rapport PDF (${orderedReportBlocks.length} blocs sélectionnés)`, `Print the PDF report (${orderedReportBlocks.length} selected blocks)`)
-              : tx('Imprimer la page actuelle', 'Print the current page')}
-            title={orderedReportBlocks.length > 0
-              ? tx('Imprimer le rapport ou l’enregistrer au format PDF', 'Print the report or save it as a PDF')
-              : tx('Imprimer la page actuelle ; sélectionnez des blocs R pour composer un rapport personnalisé', 'Print the current page; select R blocks to compose a custom report')}
-          >
-            <Printer size={14} />
-            {language === 'FR' ? 'Rapport PDF' : 'PDF report'}
-            <span>{orderedReportBlocks.length}</span>
-          </button>
           <button type="button" className="page-tabs__audit" onClick={() => setIsDrawerOpen(true)}>
             <ShieldCheck size={14} />
             {language === 'FR' ? 'Preuves' : 'Proofs'}
@@ -2646,59 +2714,40 @@ function App() {
         </div>
       </nav>
 
-      <section className="audience-toolbar no-print" aria-label={language === 'FR' ? 'Filtre de visibilité' : 'Visibility filter'}>
-        <div className="container audience-toolbar__inner">
-          <div className="audience-toolbar__summary" aria-live="polite">
-            <Eye size={15} aria-hidden="true" />
-            <span>{language === 'FR' ? 'Mode de consultation' : 'Viewing mode'}</span>
-            <strong>{audienceOptions.find((option) => option.value === audience)?.label}</strong>
-            <small>{language === 'FR' ? 'Ce filtre ne publie rien.' : 'This filter does not publish anything.'}</small>
-          </div>
-          <div className="audience-toolbar__options" role="group" aria-label={language === 'FR' ? 'Choisir les données visibles' : 'Choose visible data'}>
-            {audienceOptions.map((option) => (
-              <button
-                type="button"
-                key={option.value}
-                className={audience === option.value ? 'is-active' : ''}
-                onClick={() => setAudience(option.value)}
-                aria-pressed={audience === option.value}
-                title={option.help}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <main id="cartulary-content" className="container cartulary-main" tabIndex={-1}>
         <CoverPage active={activePage === 'cover'}>
             <section className="cover-sheet publishable-block">
-              <BlockMarkers selection={publishProps('cover-watch', true)} label={tx('Accueil de la montre', 'Watch cover')} />
+              <BlockMarkers selection={publishProps('cover-watch', true)} label={tx("Accueil de l’objet", 'Object cover')} />
               <div className="cover-sheet__identity">
                 <span className="eyebrow">Cartulaire · {mockCartulary.publicCode}</span>
                 {editingBlock === 'cover-watch' ? (
                   <><h1 className="sr-only">{specificationValue('Marque', watch.reference.brand)} {specificationValue('Modèle', watch.reference.model)}</h1><div className="cover-sheet__identity-editor">
                     <label>{tx('Marque', 'Brand')}<input {...aiFieldProps('cover.watch.brand')} type="text" value={specificationValue('Marque', watch.reference.brand)} onChange={(event) => updateSpecificationValue('Marque', event.target.value)} /></label>
-                    <label>{tx('Nom de la montre', 'Watch name')}<input {...aiFieldProps('cover.watch.model')} type="text" value={specificationValue('Modèle', watch.reference.model)} onChange={(event) => updateSpecificationValue('Modèle', event.target.value)} /></label>
+                    <label>{tx("Nom de l’objet", 'Object name')}<input {...aiFieldProps('cover.watch.model')} type="text" value={specificationValue('Modèle', watch.reference.model)} onChange={(event) => updateSpecificationValue('Modèle', event.target.value)} /></label>
                   </div></>
                 ) : (
-                  <h1 className="cover-sheet__editable-heading"><button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('cover-watch')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>
+                  <h1 className="cover-sheet__editable-heading"><button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => canEdit && setEditingBlock('cover-watch')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>
                       <span>{specificationValue('Marque', watch.reference.brand)}</span>
                       <strong>{specificationValue('Modèle', watch.reference.model)}</strong>
                     </button></h1>
                 )}
                 <div className="cover-sheet__identity-meta">
                   <label className="asset-kind-control">{tx('Type de bien', 'Asset type')}
-                    <select {...aiFieldProps('cover.asset.type')} value={assetKind} onChange={(event) => setAssetKind(event.target.value as AssetKind)} disabled={audience !== 'Secret'}>
+                    <select {...aiFieldProps('cover.asset.type')} value={assetKind} onChange={(event) => setAssetKind(event.target.value as AssetKind)} disabled={!canEdit}>
                       {ASSET_KINDS.map((kind) => <option key={kind} value={kind}>{assetKindLabel(kind)}</option>)}
                     </select>
                   </label>
                   <label className="watch-status-control">{tx('Statut', 'Status')}
-                    <select {...aiFieldProps('cover.watch.status')} value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchPatrimonialStatus)} disabled={audience !== 'Secret'}>
+                    <select {...aiFieldProps('cover.watch.status')} value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchPatrimonialStatus)} disabled={!canEdit}>
                       <option value="Patrimonial">{tx('Patrimonial', 'Collection asset')}</option>
                       <option value="À vendre">{tx('À vendre', 'For sale')}</option>
                       <option value="Ouvert à proposition">{tx('Ouvert à proposition', 'Open to offers')}</option>
+                    </select>
+                  </label>
+                  <label className="asset-kind-control">{tx('Collection', 'Collection')}
+                    <select value={collectionId} onChange={(event) => setCollectionId(event.target.value)} disabled={!canEdit}>
+                      {availableCollections.length === 0 && <option value={collectionId}>{collectionId.replace(/^col_/, '').replace(/[_-]+/g, ' ')}</option>}
+                      {availableCollections.map((collection) => <option value={collection.id} key={collection.id}>{collection.name}</option>)}
                     </select>
                   </label>
                   <small {...aiFieldProps('cover.watch.reference')}>{specificationValue('Numéro de référence', watch.reference.reference)}</small>
@@ -2716,182 +2765,11 @@ function App() {
               </button>
             </section>
 
-            {isVisible('Secret') ? (
-              <>
-              <section>
-                <SectionTitle eyebrow={tx('Dossier privé', 'Private record')} title={tx('Propriétaire de la montre', 'Watch owner')} publish={publishProps('cover-owner')} />
-                <article className="owner-card">
-                  <div className="owner-type-selector">
-                    <label>{tx('Type de propriétaire', 'Owner type')}
-                      <select {...aiFieldProps('cover.owner.type')} value={ownerType} onChange={(event) => setOwnerType(event.target.value as OwnerType)}>
-                        <option value="Personne physique">{tx('Personne physique', 'Individual')}</option>
-                        <option value="Entreprise">{tx('Entreprise', 'Company')}</option>
-                      </select>
-                    </label>
-                    <p>{tx('Les catégories d’identification ci-dessous restent entièrement personnalisables.', 'The identification categories below remain fully customizable.')}</p>
-                  </div>
-                  <div className="owner-fields">
-                    {ownerFields.map((field) => (
-                      <div className="owner-field" key={field.id} data-ai-scope="cover.owner.customFields[]" data-ai-instance={field.id}>
-                        <input {...aiFieldProps('cover.owner.customFields[].label', field.id)} type="text" value={field.label} onChange={(event) => updateOwnerField(field.id, { label: event.target.value })} aria-label={tx('Catégorie de donnée propriétaire', 'Owner data category')} />
-                        <AutoResizeTextarea {...aiFieldProps('cover.owner.customFields[].value', field.id)} value={field.value} rows={field.id === 'owner-address' ? 3 : 2} onChange={(event) => updateOwnerField(field.id, { value: event.target.value })} aria-label={field.label || tx('Donnée propriétaire', 'Owner data')} placeholder={tx('À renseigner', 'To be completed')} />
-                        <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: ownerFields, setItems: setOwnerFields, id: field.id, targetLabel: field.label || tx('cette catégorie', 'this category') })} aria-label={tx(`Supprimer ${field.label || 'cette catégorie'}`, `Delete ${field.label || 'this category'}`)}><Trash2 size={15} /></button>
-                      </div>
-                    ))}
-                  </div>
-                  <button type="button" className="button button--quiet no-print" onClick={() => setOwnerFields((current) => [...current, { id: newId('owner-field'), label: tx('Nouvelle catégorie', 'New category'), value: '' }])}><Plus size={14} /> {tx('Ajouter une catégorie', 'Add category')}</button>
+            <CartularyTodoBoard followUp={followUp} language={language} />
 
-                  <div className="owner-documents">
-                    <div className="owner-documents__heading"><div><span className="eyebrow">{tx('Pièces confidentielles', 'Confidential files')}</span><h3>{tx('Documents du propriétaire', 'Owner documents')}</h3></div><span>{ownerDocuments.length} {language === 'FR' ? `fichier${ownerDocuments.length > 1 ? 's' : ''}` : `file${ownerDocuments.length === 1 ? '' : 's'}`}</span></div>
-                    {ownerDocuments.length > 0 ? (
-                      <div className="owner-document-list">
-                        {ownerDocuments.map((document) => (
-                          <div className="owner-document" key={document.id} data-ai-scope="cover.owner.documents[]" data-ai-instance={document.id}>
-                            <FileText size={20} aria-hidden="true" />
-                            <input {...aiFieldProps('cover.owner.documents[].category', document.id)} type="text" value={document.category} onChange={(event) => updateOwnerDocument(document.id, { category: event.target.value })} aria-label={tx('Catégorie du document', 'Document category')} />
-                            <div><input {...aiFieldProps('cover.owner.documents[].fileName', document.id)} type="text" value={document.fileName} onChange={(event) => updateOwnerDocument(document.id, { fileName: event.target.value })} aria-label={tx('Nom du fichier', 'File name')} /><small>{formatFileSize(document.size)} · {document.type || tx('fichier', 'file')}</small></div>
-                            {document.url && <a className="icon-button no-print" href={document.url} download={document.fileName} aria-label={tx(`Télécharger ${document.fileName}`, `Download ${document.fileName}`)}><ExternalLink size={15} /></a>}
-                            <button type="button" className="icon-button no-print" onClick={() => deleteOwnerDocument(document.id)} aria-label={tx(`Supprimer ${document.fileName}`, `Delete ${document.fileName}`)}><Trash2 size={15} /></button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : <p className="owner-documents__empty">{tx('Aucun document d’identification ajouté.', 'No identification document added.')}</p>}
+            <span hidden {...aiFieldProps('cover.privacy.userAlias')}>{userAlias}</span>
+            <span hidden {...aiFieldProps('cover.privacy.objectCode')}>{objectCode}</span>
 
-                    <form className="owner-document-upload no-print" onSubmit={addOwnerDocuments}>
-                      <label>{tx('Catégorie', 'Category')}
-                        <select
-                          key={ownerType}
-                          {...aiFieldProps('cover.owner.documents[].category', 'new')}
-                          name="owner-document-category"
-                          defaultValue={OWNER_DOCUMENT_CATEGORIES[ownerType][0]}
-                          aria-label={tx(`Catégorie de document pour ${ownerType.toLowerCase()}`, 'Owner document category')}
-                        >
-                          {OWNER_DOCUMENT_CATEGORIES[ownerType].map((category) => <option key={category} value={category}>{ownerDocumentCategoryLabel(category)}</option>)}
-                        </select>
-                      </label>
-                      <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter un ou plusieurs documents', 'Add one or more documents')}</span><small>{tx('PDF, JPG, PNG, WEBP ou HEIC', 'PDF, JPG, PNG, WEBP or HEIC')}</small><input {...aiFieldProps('cover.owner.documents[].file', 'new')} type="file" name="owner-documents" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple /></label>
-                      <button type="submit" className="button button--primary">{tx('Ajouter les documents', 'Add documents')}</button>
-                    </form>
-                  </div>
-                </article>
-              </section>
-
-              <section>
-                <SectionTitle eyebrow={tx('Provenance privée', 'Private provenance')} title={tx("Historique de l'objet - Propriétaires précédents", 'Object history - Previous owners')} publish={publishProps('cover-ownership-history')} />
-                <article className="ownership-history-card">
-                  <header className="ownership-history-card__heading">
-                    <div>
-                      <span className="eyebrow">{tx('Chaîne de propriété', 'Ownership chain')}</span>
-                      <p>{tx("Documentez chaque période connue. Cette rubrique reste déclarative et distincte du journal serveur de cession ; elle n’en remplace jamais les événements vérifiés. L’identification du premier propriétaire alimente les résumés et l’appréciation de la valeur.", 'Document each known period. This section remains declared provenance and is separate from the server transfer journal; it never replaces verified transfer events. Identifying the first owner feeds summaries and the valuation assessment.')}</p>
-                    </div>
-                    <span>{ownershipHistory.length} {language === 'FR' ? `période${ownershipHistory.length > 1 ? 's' : ''}` : `period${ownershipHistory.length === 1 ? '' : 's'}`}</span>
-                  </header>
-
-                  {ownershipHistory.length > 0 ? (
-                    <div className="ownership-history-list">
-                      {ownershipHistory.map((entry, index) => {
-                        const yearsAreInvalid = Boolean(entry.fromYear && entry.toYear && Number(entry.fromYear) > Number(entry.toYear));
-                        return (
-                          <article className="ownership-period" key={entry.id} data-ai-scope="cover.ownershipHistory[]" data-ai-instance={entry.id}>
-                            <header>
-                              <span className="eyebrow">{tx('Période', 'Period')} {String(index + 1).padStart(2, '0')}</span>
-                              <label className="ownership-first-owner-selector">
-                                <input {...aiFieldProps('cover.ownershipHistory[].firstOwner', entry.id)} type="checkbox" checked={entry.firstOwner} onChange={(event) => selectFirstOwner(entry.id, event.target.checked)} />
-                                <span>{tx('Premier propriétaire', 'First owner')}</span>
-                              </label>
-                              <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: ownershipHistory, setItems: setOwnershipHistory, id: entry.id, targetLabel: tx(`la période ${entry.fromYear || '—'} à ${entry.toYear || '—'}`, `period ${entry.fromYear || '—'} to ${entry.toYear || '—'}`) })} aria-label={tx('Supprimer cette période de propriété', 'Delete this ownership period')}><Trash2 size={15} /></button>
-                            </header>
-                            <div className="ownership-period__years">
-                              <label>{tx('De (année)', 'From (year)')}<input {...aiFieldProps('cover.ownershipHistory[].fromYear', entry.id)} type="number" min="1000" max="2200" step="1" value={entry.fromYear} onChange={(event) => updateOwnershipHistory(entry.id, { fromYear: event.target.value })} aria-invalid={yearsAreInvalid} placeholder="YYYY" /></label>
-                              <span aria-hidden="true">→</span>
-                              <label>{tx('À (année)', 'To (year)')}<input {...aiFieldProps('cover.ownershipHistory[].toYear', entry.id)} type="number" min="1000" max="2200" step="1" value={entry.toYear} onChange={(event) => updateOwnershipHistory(entry.id, { toYear: event.target.value })} aria-invalid={yearsAreInvalid} placeholder="YYYY" /></label>
-                            </div>
-                            <label className="ownership-period__description">{tx('Description', 'Description')}<AutoResizeTextarea {...aiFieldProps('cover.ownershipHistory[].description', entry.id)} value={entry.description} rows={4} onChange={(event) => updateOwnershipHistory(entry.id, { description: event.target.value })} placeholder={tx('Propriétaire, contexte de détention, documents et éléments de provenance disponibles…', 'Owner, holding context, documents and available provenance evidence…')} /></label>
-                            {yearsAreInvalid && <p className="ownership-period__error" role="alert">{tx("L’année de fin doit être postérieure ou égale à l’année de début.", 'The end year must be greater than or equal to the start year.')}</p>}
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : <p className="ownership-history-empty">{tx("Aucun propriétaire précédent renseigné. La provenance antérieure sera signalée comme non documentée dans les résumés et l’évaluation.", 'No previous owner entered. Earlier provenance will be flagged as undocumented in summaries and valuation.')}</p>}
-
-                  <button type="button" className="button button--quiet no-print" onClick={addOwnershipHistory}><Plus size={14} /> {tx('Ajouter une période', 'Add period')}</button>
-                  <div className="ownership-history-summary" {...aiFieldProps('cover.ownershipHistory.summary')}>
-                    <strong>{tx('Synthèse de provenance', 'Provenance summary')}</strong>
-                    <p>{ownershipSummary}</p>
-                  </div>
-                </article>
-              </section>
-
-              <section>
-                <SectionTitle eyebrow={tx('Projet patrimonial', 'Estate planning')} title={tx('Transmission', 'Transfer')} publish={publishProps('cover-transmission')} />
-                <article className="transmission-card">
-                  <header className="transmission-card__heading">
-                    <div>
-                      <span className="eyebrow">{tx('Personnes désignées', 'Designated people')}</span>
-                      <p>{tx('Renseignez les personnes auxquelles vous souhaitez transmettre tout ou partie du bien.', 'Enter the people to whom you intend to transfer all or part of the asset.')}</p>
-                    </div>
-                    <span>{transmissionRecipients.length} {language === 'FR' ? `personne${transmissionRecipients.length > 1 ? 's' : ''}` : `person${transmissionRecipients.length === 1 ? '' : 's'}`}</span>
-                  </header>
-
-                  {transmissionRecipients.length > 0 ? (
-                    <div className="transmission-list">
-                      {transmissionRecipients.map((recipient, index) => (
-                        <article className="transmission-person" key={recipient.id} data-ai-scope="cover.transmission.recipients[]" data-ai-instance={recipient.id}>
-                          <header>
-                            <span className="eyebrow">{tx('Personne', 'Person')} {String(index + 1).padStart(2, '0')}</span>
-                            <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: transmissionRecipients, setItems: setTransmissionRecipients, id: recipient.id, targetLabel: recipient.firstName || recipient.lastName || tx(`la personne ${index + 1}`, `person ${index + 1}`) })} aria-label={tx(`Supprimer ${recipient.firstName || recipient.lastName || `la personne ${index + 1}`}`, `Delete ${recipient.firstName || recipient.lastName || `person ${index + 1}`}`)}><Trash2 size={15} /></button>
-                          </header>
-                          <div className="transmission-person__fields">
-                            <label>{tx('Prénom', 'First name')}<input {...aiFieldProps('cover.transmission.recipients[].firstName', recipient.id)} type="text" value={recipient.firstName} onChange={(event) => updateTransmissionRecipient(recipient.id, { firstName: event.target.value })} placeholder={tx('Prénom', 'First name')} /></label>
-                            <label>{tx('Nom', 'Last name')}<input {...aiFieldProps('cover.transmission.recipients[].lastName', recipient.id)} type="text" value={recipient.lastName} onChange={(event) => updateTransmissionRecipient(recipient.id, { lastName: event.target.value })} placeholder={tx('Nom', 'Last name')} /></label>
-                            <label className="transmission-person__address">{tx('Adresse', 'Address')}<AutoResizeTextarea {...aiFieldProps('cover.transmission.recipients[].address', recipient.id)} value={recipient.address} rows={3} onChange={(event) => updateTransmissionRecipient(recipient.id, { address: event.target.value })} placeholder={tx('Adresse complète', 'Full address')} /></label>
-                            <label>Email<input {...aiFieldProps('cover.transmission.recipients[].email', recipient.id)} type="email" value={recipient.email} onChange={(event) => updateTransmissionRecipient(recipient.id, { email: event.target.value })} placeholder={tx('nom@exemple.com', 'name@example.com')} /></label>
-                            <label>{tx('Téléphone', 'Phone')}<input {...aiFieldProps('cover.transmission.recipients[].phone', recipient.id)} type="tel" value={recipient.phone} onChange={(event) => updateTransmissionRecipient(recipient.id, { phone: event.target.value })} placeholder="+33…" /></label>
-                            <label>{tx('Part donnée', 'Share transferred')}<span className="percentage-input"><input {...aiFieldProps('cover.transmission.recipients[].percentage', recipient.id)} type="number" min="0" max="100" step="0.1" value={recipient.percentage} onChange={(event) => updateTransmissionRecipient(recipient.id, { percentage: event.target.value === '' ? '' : Math.min(100, Math.max(0, Number(event.target.value))) })} placeholder="0" /><span>%</span></span></label>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : <p className="transmission-empty">{tx('Aucune personne renseignée. Ajoutez une personne pour préparer votre projet de transmission.', 'No person entered. Add someone to prepare your transfer plan.')}</p>}
-
-                  <button type="button" className="button button--quiet no-print" onClick={addTransmissionRecipient}><Plus size={14} /> {tx('Ajouter une personne', 'Add person')}</button>
-                </article>
-              </section>
-
-              <section>
-                <SectionTitle eyebrow={tx('Conservation', 'Safekeeping')} title={tx('Stockage', 'Storage')} publish={publishProps('cover-storage')} />
-                <article className="storage-card">
-                  <header className="storage-card__heading">
-                    <div>
-                      <span className="eyebrow">{tx('Lieux et contenus', 'Locations and contents')}</span>
-                      <p>{tx('Chaque emplacement distingue le lieu, ce qui y est conservé et les conditions de stockage.', 'Each location identifies the place, its stored contents and storage conditions.')}</p>
-                    </div>
-                    <span>{storageLocations.length} {language === 'FR' ? `lieu${storageLocations.length > 1 ? 'x' : ''}` : `location${storageLocations.length === 1 ? '' : 's'}`}</span>
-                  </header>
-
-                  {storageLocations.length > 0 ? (
-                    <div className="storage-list">
-                      {storageLocations.map((location, index) => (
-                        <article className="storage-location" key={location.id} data-ai-scope="cover.storage.locations[]" data-ai-instance={location.id}>
-                          <header>
-                            <span className="eyebrow">{tx('Lieu', 'Location')} {String(index + 1).padStart(2, '0')}</span>
-                            <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: storageLocations, setItems: setStorageLocations, id: location.id, targetLabel: location.name || tx(`le lieu ${index + 1}`, `location ${index + 1}`) })} aria-label={tx(`Supprimer ${location.name || `le lieu ${index + 1}`}`, `Delete ${location.name || `location ${index + 1}`}`)}><Trash2 size={15} /></button>
-                          </header>
-                          <div className="storage-location__fields">
-                            <label>{tx('Lieu de stockage', 'Storage location')}<input {...aiFieldProps('cover.storage.locations[].name', location.id)} type="text" value={location.name} onChange={(event) => updateStorageLocation(location.id, { name: event.target.value })} placeholder={tx('Coffre, cave, domicile…', 'Vault, cellar, home…')} /></label>
-                            <label>{tx('Ce qui est stocké', 'Stored contents')}<AutoResizeTextarea {...aiFieldProps('cover.storage.locations[].contents', location.id)} value={location.contents} rows={3} onChange={(event) => updateStorageLocation(location.id, { contents: event.target.value })} placeholder={tx('Montre, boîte, papiers, accessoires…', 'Watch, box, papers, accessories…')} /></label>
-                            <label>{tx('Description et conditions', 'Description and conditions')}<AutoResizeTextarea {...aiFieldProps('cover.storage.locations[].description', location.id)} value={location.description} rows={3} onChange={(event) => updateStorageLocation(location.id, { description: event.target.value })} placeholder={tx('Sécurité, accès, température, humidité ou autres précisions…', 'Security, access, temperature, humidity or other details…')} /></label>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : <p className="storage-empty">{tx('Aucun lieu renseigné. Ajoutez un lieu pour décrire où chaque élément est conservé.', 'No location entered. Add a location to describe where each item is kept.')}</p>}
-
-                  <button type="button" className="button button--quiet no-print" onClick={addStorageLocation}><Plus size={14} /> {tx('Ajouter un lieu de stockage', 'Add storage location')}</button>
-                </article>
-              </section>
-              </>
-            ) : <AccessRestricted title={tx('Informations du propriétaire', 'Owner information')} language={language} />}
         </CoverPage>
 
         <MediaPage active={activePage === 'media'}>
@@ -2919,19 +2797,19 @@ function App() {
                 <h1>{watch.reference.model}</h1>
                 {editingBlock === 'media-hero' ? (
                   <AutoResizeTextarea {...aiFieldProps('media.hero.summary')} className="editable-copy-single" value={editableCopy.heroSummary} rows={5} onChange={(event) => setEditableCopy((current) => ({ ...current, heroSummary: event.target.value }))} aria-label={tx('Modifier la présentation principale', 'Edit main presentation')} />
-                ) : <p {...aiFieldProps('media.hero.summary')} className="watch-hero__summary editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('media-hero')} tabIndex={audience === 'Secret' ? 0 : undefined} onKeyDown={(event) => { if (event.key === 'Enter' && audience === 'Secret') setEditingBlock('media-hero'); }} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
-                {audience === 'Secret' && <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance propriétaire', 'Ownership provenance')}</strong><p>{ownershipSummary}</p></aside>}
+                ) : <p {...aiFieldProps('media.hero.summary')} className="watch-hero__summary editable-click-target" onClick={() => canEdit && setEditingBlock('media-hero')} tabIndex={canEdit ? 0 : undefined} onKeyDown={(event) => { if (event.key === 'Enter' && canEdit) setEditingBlock('media-hero'); }} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
+                {canEdit && <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance propriétaire', 'Ownership provenance')}</strong><p>{ownershipSummary}</p></aside>}
                 <dl className="hero-facts">
                   <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
                   <div><dt>{tx('Dernier contrôle', 'Last inspection')}</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
-                  <div><dt>{tx('Valeur retenue', 'Retained value')}</dt><dd>{isVisible('Secret') ? formatMoney(retainedValuation.amount, watch.currency) : tx('ACCÈS RESTREINT', 'RESTRICTED ACCESS')}</dd></div>
+                  <div><dt>{tx('Valeur retenue', 'Retained value')}</dt><dd>{canEdit ? formatMoney(retainedValuation.amount, watch.currency) : tx('ACCÈS RESTREINT', 'RESTRICTED ACCESS')}</dd></div>
                   <div><dt>{tx('Dossier', 'Record')}</dt><dd>{mockCartulary.publicCode}</dd></div>
                 </dl>
               </div>
             </section>
 
             <section className="media-wide-section">
-              <SectionTitle eyebrow={tx('02 · Vidéo principale', '02 · Main video')} title={tx('La montre en mouvement', 'The watch in motion')} publish={publishProps('media-motion')} />
+              <SectionTitle eyebrow={tx('02 · Vidéo principale', '02 · Main video')} title={tx("L’objet en mouvement", 'The object in motion')} publish={publishProps('media-motion')} />
               {mainVideo ? (
                 <VideoPoster asset={mainVideo} onOpen={setSelectedAsset} />
               ) : (
@@ -2957,7 +2835,7 @@ function App() {
               <MediaCarousel assets={presentationAssets} language={language} onOpen={setSelectedAsset} />
             </section>
 
-            {audience === 'Secret' && (
+            {canEdit && (
               <section>
                 <SectionTitle eyebrow={tx('Gestion des actifs', 'Asset management')} title={tx('Bibliothèque média', 'Media library')} publish={publishProps('media-library')} />
                 <div className="media-library-layout">
@@ -3031,11 +2909,11 @@ function App() {
                   : isIwcCartulary
                     ? 'Une montre de pilote pensée pour voyager'
                     : `Histoire de la référence ${creationReference}`}</h2>
-                <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={() => audience === 'Secret' && setEditingBlock('reference-history')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
+                <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={() => canEdit && setEditingBlock('reference-history')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
                 </article>
                 <aside className="quote-card">
                 <span className="eyebrow">{tx('À savoir', 'Good to know')}</span>
-                {editingBlock === 'reference-history' ? <AutoResizeTextarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className="editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('reference-history')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
+                {editingBlock === 'reference-history' ? <AutoResizeTextarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className="editable-click-target" onClick={() => canEdit && setEditingBlock('reference-history')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
                 </aside>
               </div>
             </section>
@@ -3049,7 +2927,7 @@ function App() {
                     <dl>
                       {group.items.map((item) => (
                         <div className="specification-row" key={item.id} data-ai-scope="reference.specifications[]" data-ai-instance={item.id}>
-                          {audience === 'Secret' ? (
+                          {canEdit ? (
                             <>
                               <dt><input {...aiFieldProps('reference.specifications[].label', item.id)} type="text" value={item.label} onChange={(event) => updateSpecification(group.id, item.id, { label: event.target.value })} aria-label={tx(`Modifier le nom de ${item.label}`, `Edit the name of ${item.label}`)} /></dt>
                               <dd><input {...aiFieldProps('reference.specifications[].value', item.id)} type="text" value={item.value} onChange={(event) => updateSpecification(group.id, item.id, { value: event.target.value })} aria-label={tx(`Modifier ${item.label}`, `Edit ${item.label}`)} /></dd>
@@ -3059,7 +2937,7 @@ function App() {
                         </div>
                       ))}
                     </dl>
-                    {audience === 'Secret' && <button type="button" className="specification-add button button--quiet no-print" onClick={() => addSpecification(group.id)}><Plus size={14} /> {tx('Ajouter une donnée', 'Add data')}</button>}
+                    {canEdit && <button type="button" className="specification-add button button--quiet no-print" onClick={() => addSpecification(group.id)}><Plus size={14} /> {tx('Ajouter une donnée', 'Add data')}</button>}
                   </section>
                 ))}
               </div>
@@ -3070,7 +2948,7 @@ function App() {
                 <SectionTitle eyebrow={tx('Identification', 'Identification')} title={tx('Points à contrôler', 'Inspection points')} />
                 <div className="section-heading-actions">
                   <BlockMarkers selection={publishProps('reference-checks')} label={tx('Points à contrôler', 'Inspection points')} />
-                  {audience === 'Secret' && (
+                  {canEdit && (
                     <button type="button" className={`content-marker content-marker--edit no-print ${isEditingChecks ? 'is-active' : ''}`} onClick={() => setIsEditingChecks((value) => !value)} aria-pressed={isEditingChecks} aria-label={isEditingChecks ? tx('Terminer la modification de la liste', 'Finish editing the list') : tx('Modifier la liste', 'Edit the list')} title={tx('Modifier la liste', 'Edit the list')}><Pencil size={15} /></button>
                   )}
                 </div>
@@ -3084,7 +2962,7 @@ function App() {
                         {...aiFieldProps('reference.checks[].checked', item.id)}
                         type="checkbox"
                         checked={item.checked}
-                        disabled={audience !== 'Secret'}
+                        disabled={!canEdit}
                         onChange={(event) => updateCheck(item.id, { checked: event.target.checked })}
                       />
                       <span aria-hidden="true">✓</span>
@@ -3110,10 +2988,10 @@ function App() {
                   </article>
                 ))}
               </div>
-              {audience === 'Secret' && (
+              {canEdit && (
                 <button type="button" className="button button--quiet no-print" onClick={addCheck}><Plus size={14} /> {tx('Ajouter un point', 'Add point')}</button>
               )}
-              <p className="method-note">{tx('Le Sceau public identifie une projection W émise par le serveur. La chaîne serveur se vérifie dans « Preuves ». Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert.', 'The public Seal identifies a server-issued W projection. The server chain is checked under “Proofs”. Neither indicator replaces a physical examination or an expert opinion.')}</p>
+              <p className="method-note">{tx('Le Sceau public identifie une publication émise par le serveur. La chaîne serveur se vérifie dans « Preuves ». Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert.', 'The public Seal identifies a server-issued publication. The server chain is checked under “Proofs”. Neither indicator replaces a physical examination or an expert opinion.')}</p>
             </section>
 
             <section>
@@ -3124,12 +3002,12 @@ function App() {
                   const hasValidUrl = /^https?:\/\//i.test(resource.url);
                   return (
                     <div key={resource.id} data-ai-scope="reference.popularity[]" data-ai-instance={resource.id}>
-                      {audience === 'Secret' ? (
+                      {canEdit ? (
                         <input {...aiFieldProps('reference.popularity[].name', resource.id)} type="text" value={resource.name} onChange={(event) => updatePopularityResource(resource.id, 'name', event.target.value)} aria-label={tx('Nom du site ou forum', 'Website or forum name')} />
                       ) : (
                         <strong>{resource.name}</strong>
                       )}
-                      {audience === 'Secret' ? (
+                      {canEdit ? (
                         <select {...aiFieldProps('reference.popularity[].type', resource.id)} value={resource.type} onChange={(event) => updatePopularityResource(resource.id, 'type', event.target.value as PopularityResourceType)} aria-label={`Type ${resource.name}`}>
                           {(['Forum officiel', 'Discussion dédiée', 'Communauté', 'Base de données', 'Revue'] as PopularityResourceType[]).map((type) => <option key={type} value={type}>{popularityTypeLabel(type)}</option>)}
                         </select>
@@ -3137,33 +3015,135 @@ function App() {
                         <span>{popularityTypeLabel(resource.type)}</span>
                       )}
                       <div className="popularity-url-cell">
-                        {audience === 'Secret' ? (
+                        {canEdit ? (
                           <input {...aiFieldProps('reference.popularity[].url', resource.id)} type="url" value={resource.url} onChange={(event) => updatePopularityResource(resource.id, 'url', event.target.value)} aria-label={`URL ${resource.name}`} placeholder="https://" />
                         ) : (
                           <span>{resource.url}</span>
                         )}
                         {hasValidUrl && <a href={resource.url} target="_blank" rel="noreferrer" aria-label={tx(`Ouvrir ${resource.name}`, `Open ${resource.name}`)}><ExternalLink size={15} /></a>}
                       </div>
-                      {audience === 'Secret' && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: popularityResources, setItems: setPopularityResources, id: resource.id, targetLabel: resource.name })} aria-label={tx(`Supprimer ${resource.name}`, `Delete ${resource.name}`)}><Trash2 size={15} /></button>}
+                      {canEdit && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: popularityResources, setItems: setPopularityResources, id: resource.id, targetLabel: resource.name })} aria-label={tx(`Supprimer ${resource.name}`, `Delete ${resource.name}`)}><Trash2 size={15} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {audience === 'Secret' && (
+              {canEdit && (
                 <button type="button" className="button button--quiet no-print" onClick={() => setPopularityResources((current) => [...current, { id: newId('popularity'), name: '', type: 'Communauté', url: '' }])}><Plus size={14} /> {tx('Ajouter un site ou forum', 'Add a website or forum')}</button>
               )}
+            </section>
+
+            <section>
+              <SectionTitle eyebrow={tx('Documentation externe', 'External documentation')} title={tx('Rapports sur la référence', 'Reference reports')} />
+              <article className="reference-report-card">
+                {canEdit && (
+                  <form className="reference-report-upload no-print" onSubmit={addReferenceReports}>
+                    <label className="file-drop">
+                      <Upload size={18} />
+                      <span>{tx('Charger des rapports', 'Upload reports')}</span>
+                      <input type="file" name="reference-report-files" accept=".pdf,.doc,.docx,.odt,.rtf,.md,.markdown,.txt,.xls,.xlsx,.csv,.ppt,.pptx" multiple />
+                    </label>
+                    <button type="submit" className="button button--primary">{tx('Ajouter les fichiers', 'Add files')}</button>
+                  </form>
+                )}
+                {referenceReportAssets.length > 0 ? (
+                  <div className="reference-report-list">
+                    {referenceReportAssets.map((asset) => (
+                      <article key={asset.id}>
+                        <button type="button" className="reference-report-list__open" onClick={() => setSelectedAsset(asset)}>
+                          <FileText size={22} aria-hidden="true" />
+                          <span><strong>{asset.originalFileName || asset.name}</strong><small>{asset.mimeType} · {asset.fileSize}</small></span>
+                        </button>
+                        {canEdit && <button type="button" className="icon-button no-print" onClick={() => deleteMediaAsset(asset.id)} aria-label={tx(`Supprimer ${asset.name}`, `Delete ${asset.name}`)}><Trash2 size={15} /></button>}
+                      </article>
+                    ))}
+                  </div>
+                ) : <p className="storage-empty">{tx('Aucun rapport chargé.', 'No report uploaded.')}</p>}
+              </article>
             </section>
         </ReferencePage>
 
         <ConditionPage active={activePage === 'condition'}>
-            <PageIntroduction number="03" title={tx('État de la montre', 'Watch condition')} />
+            <PageIntroduction number="03" title={tx("L’objet", 'The object')} />
 
-            {isVisible('Communauté') ? (
+            {canEdit && (
               <>
                 <section>
-                  <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx('Description de la montre', 'Watch description')} publish={publishProps('condition-description', true)} />
+                  <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history')} />
+                  <article className="ownership-history-card">
+                    <header className="ownership-history-card__heading">
+                      <div>
+                        <span className="eyebrow">{tx('Propriétaires précédents', 'Previous owners')}</span>
+                        <p>{tx("Documentez chaque période connue. Cette rubrique reste déclarative et distincte du journal serveur de cession. Évitez d’y inscrire les coordonnées personnelles détaillées : elles relèvent du Coffre personnel.", 'Document each known period. This declared history remains separate from the server transfer journal. Do not enter detailed personal contact information here; it belongs in the Personal Vault.')}</p>
+                      </div>
+                      <span>{ownershipHistory.length} {language === 'FR' ? `période${ownershipHistory.length > 1 ? 's' : ''}` : `period${ownershipHistory.length === 1 ? '' : 's'}`}</span>
+                    </header>
+                    {ownershipHistory.length > 0 ? (
+                      <div className="ownership-history-list">
+                        {ownershipHistory.map((entry, index) => {
+                          const yearsAreInvalid = Boolean(entry.fromYear && entry.toYear && Number(entry.fromYear) > Number(entry.toYear));
+                          return (
+                            <article className="ownership-period" key={entry.id} data-ai-scope="cover.ownershipHistory[]" data-ai-instance={entry.id}>
+                              <header>
+                                <span className="eyebrow">{tx('Période', 'Period')} {String(index + 1).padStart(2, '0')}</span>
+                                <label className="ownership-first-owner-selector"><input {...aiFieldProps('cover.ownershipHistory[].firstOwner', entry.id)} type="checkbox" checked={entry.firstOwner} onChange={(event) => selectFirstOwner(entry.id, event.target.checked)} /><span>{tx('Premier propriétaire', 'First owner')}</span></label>
+                                <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: ownershipHistory, setItems: setOwnershipHistory, id: entry.id, targetLabel: tx(`la période ${entry.fromYear || '—'} à ${entry.toYear || '—'}`, `period ${entry.fromYear || '—'} to ${entry.toYear || '—'}`) })} aria-label={tx('Supprimer cette période de propriété', 'Delete this ownership period')}><Trash2 size={15} /></button>
+                              </header>
+                              <div className="ownership-period__years">
+                                <label>{tx('De (année)', 'From (year)')}<input {...aiFieldProps('cover.ownershipHistory[].fromYear', entry.id)} type="number" min="1000" max="2200" step="1" value={entry.fromYear} onChange={(event) => updateOwnershipHistory(entry.id, { fromYear: event.target.value })} aria-invalid={yearsAreInvalid} placeholder="YYYY" /></label>
+                                <span aria-hidden="true">→</span>
+                                <label>{tx('À (année)', 'To (year)')}<input {...aiFieldProps('cover.ownershipHistory[].toYear', entry.id)} type="number" min="1000" max="2200" step="1" value={entry.toYear} onChange={(event) => updateOwnershipHistory(entry.id, { toYear: event.target.value })} aria-invalid={yearsAreInvalid} placeholder="YYYY" /></label>
+                              </div>
+                              <label className="ownership-period__description">{tx('Description de provenance', 'Provenance description')}<AutoResizeTextarea {...aiFieldProps('cover.ownershipHistory[].description', entry.id)} value={entry.description} rows={4} onChange={(event) => updateOwnershipHistory(entry.id, { description: event.target.value })} placeholder={tx('Contexte de détention, documents et éléments de provenance disponibles…', 'Holding context, documents and available provenance evidence…')} /></label>
+                              {yearsAreInvalid && <p className="ownership-period__error" role="alert">{tx("L’année de fin doit être postérieure ou égale à l’année de début.", 'The end year must be greater than or equal to the start year.')}</p>}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : <p className="ownership-history-empty">{tx("Aucun propriétaire précédent renseigné.", 'No previous owner entered.')}</p>}
+                    <button type="button" className="button button--quiet no-print" onClick={addOwnershipHistory}><Plus size={14} /> {tx('Ajouter une période', 'Add period')}</button>
+                    <div className="ownership-history-summary" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Synthèse de provenance', 'Provenance summary')}</strong><p>{ownershipSummary}</p></div>
+                  </article>
+                </section>
+
+                <section>
+                  <SectionTitle eyebrow={tx('Conservation pseudonymisée', 'Pseudonymous safekeeping')} title={tx('Stockage', 'Storage')} publish={publishProps('cover-storage')} />
+                  <article className="storage-card storage-code-card">
+                    <header className="storage-card__heading">
+                      <div><span className="eyebrow">{tx('Lieux du Coffre personnel', 'Personal Vault locations')}</span></div>
+                      <span>{storageCodes.length} {language === 'FR' ? `lieu${storageCodes.length > 1 ? 'x' : ''}` : `location${storageCodes.length === 1 ? '' : 's'}`}</span>
+                    </header>
+                    {storageCodes.length > 0 ? <div className="storage-code-list">{storageCodes.map((storageCode, index) => (
+                      <div key={storageCode.id}>
+                        <span>{String(index + 1).padStart(2, '0')}</span>
+                        <select
+                          {...aiFieldProps('condition.storage.codeNames[]', storageCode.id)}
+                          value={storageCode.correspondenceCode || (storageCode.codeName ? `legacy:${storageCode.id}` : '')}
+                          onChange={(event) => {
+                            const option = storageLocationOptions.find((entry) => entry.code === event.target.value);
+                            ownerCommands.updateStorageCode(storageCode.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
+                          }}
+                          aria-label={tx(`Lieu de stockage ${index + 1}`, `Storage location ${index + 1}`)}
+                        >
+                          <option value="">{tx('Choisir un lieu', 'Select a location')}</option>
+                          {!storageCode.correspondenceCode && storageCode.codeName && <option value={`legacy:${storageCode.id}`}>{storageCode.codeName}</option>}
+                          {storageLocationOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel}</option>)}
+                        </select>
+                        <AutoResizeTextarea value={storageCode.note} rows={2} onChange={(event) => ownerCommands.updateStorageCode(storageCode.id, { note: event.target.value.slice(0, 500) })} placeholder={tx('Note sur l’emplacement (facultatif)', 'Location note (optional)')} aria-label={tx(`Note sur le lieu ${index + 1}`, `Location ${index + 1} note`)} />
+                        <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: storageCodes, setItems: setStorageCodes, id: storageCode.id, targetLabel: storageCode.codeName || tx(`le lieu ${index + 1}`, `location ${index + 1}`) })} aria-label={tx('Supprimer ce lieu', 'Delete this location')}><Trash2 size={15} /></button>
+                      </div>
+                    ))}</div> : <p className="storage-empty">{tx('Aucun lieu sélectionné.', 'No location selected.')}</p>}
+                    <button type="button" className="button button--quiet no-print" onClick={addStorageCode}><Plus size={14} /> {tx('Ajouter un lieu', 'Add a location')}</button>
+                  </article>
+                </section>
+              </>
+            )}
+
+            {canEdit ? (
+              <>
+                <section>
+                  <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx("Description de l’objet", 'Object description')} publish={publishProps('condition-description', true)} />
                   <article className="watch-description-card">
-                    <EditableParagraphs aiField="condition.description.paragraphs[]" values={editableCopy.watchDescription} editing={editingBlock === 'condition-description'} onActivate={() => audience === 'Secret' && setEditingBlock('condition-description')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, watchDescription: current.watchDescription.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
+                    <EditableParagraphs aiField="condition.description.paragraphs[]" values={editableCopy.watchDescription} editing={editingBlock === 'condition-description'} onActivate={() => canEdit && setEditingBlock('condition-description')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, watchDescription: current.watchDescription.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
                     <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance prise en compte', 'Provenance considered')}</strong><p>{ownershipSummary}</p></aside>
                   </article>
                 </section>
@@ -3171,11 +3151,11 @@ function App() {
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx('État actuel', 'Current condition')} publish={publishProps('condition-summary', true)} />
                   <article className="current-condition-summary">
-                    <EditableParagraphs aiField="condition.summary.paragraphs[]" values={editableCopy.conditionSummary} editing={editingBlock === 'condition-summary'} onActivate={() => audience === 'Secret' && setEditingBlock('condition-summary')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, conditionSummary: current.conditionSummary.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
+                    <EditableParagraphs aiField="condition.summary.paragraphs[]" values={editableCopy.conditionSummary} editing={editingBlock === 'condition-summary'} onActivate={() => canEdit && setEditingBlock('condition-summary')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, conditionSummary: current.conditionSummary.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
                     <dl>
-                      <div><dt>{tx('Dernier état', 'Latest condition')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.lastCondition')} value={editableCopy.conditionFacts.lastCondition} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, lastCondition: event.target.value } }))} aria-label={tx('Dernier état', 'Latest condition')} /> : <button {...aiFieldProps('condition.summary.lastCondition')} type="button" className="editable-fact" onClick={() => audience === 'Secret' && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.lastCondition}</button>}</dd></div>
-                      <div><dt>Conclusion</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.conclusion')} value={editableCopy.conditionFacts.conclusion} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, conclusion: event.target.value } }))} aria-label="Conclusion" /> : <button {...aiFieldProps('condition.summary.conclusion')} type="button" className="editable-fact" onClick={() => audience === 'Secret' && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.conclusion}</button>}</dd></div>
-                      <div><dt>{tx('Point ouvert', 'Open point')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.openPoint')} value={editableCopy.conditionFacts.openPoint} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, openPoint: event.target.value } }))} aria-label={tx('Point ouvert', 'Open point')} /> : <button {...aiFieldProps('condition.summary.openPoint')} type="button" className="editable-fact" onClick={() => audience === 'Secret' && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.openPoint}</button>}</dd></div>
+                      <div><dt>{tx('Dernier état', 'Latest condition')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.lastCondition')} value={editableCopy.conditionFacts.lastCondition} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, lastCondition: event.target.value } }))} aria-label={tx('Dernier état', 'Latest condition')} /> : <button {...aiFieldProps('condition.summary.lastCondition')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.lastCondition}</button>}</dd></div>
+                      <div><dt>Conclusion</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.conclusion')} value={editableCopy.conditionFacts.conclusion} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, conclusion: event.target.value } }))} aria-label="Conclusion" /> : <button {...aiFieldProps('condition.summary.conclusion')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.conclusion}</button>}</dd></div>
+                      <div><dt>{tx('Point ouvert', 'Open point')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.openPoint')} value={editableCopy.conditionFacts.openPoint} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, openPoint: event.target.value } }))} aria-label={tx('Point ouvert', 'Open point')} /> : <button {...aiFieldProps('condition.summary.openPoint')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.openPoint}</button>}</dd></div>
                     </dl>
                   </article>
                 </section>
@@ -3186,18 +3166,18 @@ function App() {
                     <div className="documentation-register__head"><span>{tx('Catégorie', 'Category')}</span><span>Description</span><span>{tx('État', 'Condition')}</span><span /></div>
                     {documentationItems.map((item) => (
                       <div key={item.id} data-ai-scope="condition.documentation[]" data-ai-instance={item.id}>
-                        <select {...aiFieldProps('condition.documentation[].category', item.id)} value={item.category} disabled={audience !== 'Secret'} onChange={(event) => updateDocumentationItem(item.id, 'category', event.target.value as DocumentationCategory)} aria-label={tx('Catégorie documentaire', 'Document category')}>
+                        <select {...aiFieldProps('condition.documentation[].category', item.id)} value={item.category} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'category', event.target.value as DocumentationCategory)} aria-label={tx('Catégorie documentaire', 'Document category')}>
                           {(['Facture', 'Garantie', 'Assurances', 'Boîte', 'Écrin', 'Manuel', 'Certificat', 'Accessoire', 'Autre'] as DocumentationCategory[]).map((category) => <option key={category} value={category}>{documentationCategoryLabel(category)}</option>)}
                         </select>
-                        <AutoResizeTextarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} disabled={audience !== 'Secret'} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
-                        <select {...aiFieldProps('condition.documentation[].state', item.id)} value={item.state} disabled={audience !== 'Secret'} onChange={(event) => updateDocumentationItem(item.id, 'state', event.target.value as DocumentationState)} aria-label={tx(`État ${item.category}`, `${item.category} condition`)}>
+                        <AutoResizeTextarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
+                        <select {...aiFieldProps('condition.documentation[].state', item.id)} value={item.state} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'state', event.target.value as DocumentationState)} aria-label={tx(`État ${item.category}`, `${item.category} condition`)}>
                           {(['Présent', 'Complet', 'Incomplet', 'Manquant', 'À vérifier'] as DocumentationState[]).map((state) => <option key={state} value={state}>{documentationStateLabel(state)}</option>)}
                         </select>
-                        {audience === 'Secret' && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: documentationItems, setItems: setDocumentationItems, id: item.id, targetLabel: item.category })} aria-label={tx(`Supprimer ${item.category}`, `Delete ${item.category}`)}><Trash2 size={15} /></button>}
+                        {canEdit && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: documentationItems, setItems: setDocumentationItems, id: item.id, targetLabel: item.category })} aria-label={tx(`Supprimer ${item.category}`, `Delete ${item.category}`)}><Trash2 size={15} /></button>}
                       </div>
                     ))}
                   </div>
-                  {audience === 'Secret' && (
+                  {canEdit && (
                     <button type="button" className="button button--quiet no-print" onClick={() => setDocumentationItems((current) => [...current, { id: newId('documentation'), category: 'Autre', description: '', state: 'À vérifier' }])}><Plus size={14} /> {tx('Ajouter un élément', 'Add item')}</button>
                   )}
                   <div className="documentation-media">
@@ -3230,7 +3210,7 @@ function App() {
                 </section>
 
                 <section>
-                  <SectionTitle eyebrow={tx('Rapports et notes', 'Reports and notes')} title={tx("Rapport sur l'état de la montre", 'Watch condition report')} />
+                  <SectionTitle eyebrow={tx('Rapports et notes', 'Reports and notes')} title={tx("Rapport sur l’état de l’objet", 'Object condition report')} />
                   <div className="condition-layout">
                     <div className="condition-entry-list">
                       {referenceConditionReport && (
@@ -3242,12 +3222,12 @@ function App() {
                               : <h3 {...aiFieldProps('condition.reports[].title', referenceConditionReport.id)}>{referenceConditionReport.title}</h3>}
                             <div className="condition-entry__actions">
                               <BlockMarkers selection={publishProps('condition-reference-report', true)} label={tx('Rapport d’état de référence', 'Reference condition report')} />
-                              {audience === 'Secret' && <button type="button" className="icon-button no-print" onClick={() => deleteConditionEntry(referenceConditionReport.id)} aria-label={tx(`Supprimer ${referenceConditionReport.title}`, `Delete ${referenceConditionReport.title}`)}><Trash2 size={15} /></button>}
+                              {canEdit && <button type="button" className="icon-button no-print" onClick={() => deleteConditionEntry(referenceConditionReport.id)} aria-label={tx(`Supprimer ${referenceConditionReport.title}`, `Delete ${referenceConditionReport.title}`)}><Trash2 size={15} /></button>}
                             </div>
                           </header>
                           {editingBlock === 'condition-reference-report'
                             ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="condition-entry__note-input" value={referenceConditionReport.note} rows={5} onChange={(event) => setConditionEntries((current) => current.map((entry) => entry.id === referenceConditionReport.id ? { ...entry, note: event.target.value } : entry))} aria-label={tx('Modifier le rapport de référence', 'Edit reference report')} />
-                            : referenceConditionReport.note && <p {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('condition-reference-report')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{referenceConditionReport.note}</p>}
+                            : referenceConditionReport.note && <p {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="editable-click-target" onClick={() => canEdit && setEditingBlock('condition-reference-report')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{referenceConditionReport.note}</p>}
                           {referenceConditionReport.attachments.length > 0 && (
                             <ul className="attachment-list">
                               {referenceConditionReport.attachments.map((attachment, index) => <li key={`${referenceConditionReport.id}-${attachment.name}-${index}`}><Paperclip size={13} />{attachment.url ? <a href={attachment.url} download={attachment.name}>{attachment.name}</a> : <span>{attachment.name}</span>}{attachment.size && <small>{Math.ceil(attachment.size / 1024)} ko</small>}</li>)}
@@ -3268,11 +3248,11 @@ function App() {
                               {editingBlock === 'condition-prior-reviews'
                                 ? <input {...aiFieldProps('condition.reports[].title', entry.id)} className="condition-entry__title-input" value={entry.title} onChange={(event) => setConditionEntries((current) => current.map((item) => item.id === entry.id ? { ...item, title: event.target.value } : item))} aria-label={tx('Modifier le titre de la revue', 'Edit review title')} />
                                 : <h3 {...aiFieldProps('condition.reports[].title', entry.id)}>{entry.title === 'Revues antérieures' ? tx(`Revue du ${formatDate(entry.date)}`, `Review dated ${formatDate(entry.date)}`) : entry.title}</h3>}
-                              {audience === 'Secret' && <button type="button" className="icon-button no-print" onClick={() => deleteConditionEntry(entry.id)} aria-label={tx(`Supprimer ${entry.title}`, `Delete ${entry.title}`)}><Trash2 size={15} /></button>}
+                              {canEdit && <button type="button" className="icon-button no-print" onClick={() => deleteConditionEntry(entry.id)} aria-label={tx(`Supprimer ${entry.title}`, `Delete ${entry.title}`)}><Trash2 size={15} /></button>}
                             </header>
                             {editingBlock === 'condition-prior-reviews'
                               ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', entry.id)} className="condition-entry__note-input" value={entry.note} rows={4} onChange={(event) => setConditionEntries((current) => current.map((item) => item.id === entry.id ? { ...item, note: event.target.value } : item))} aria-label={tx('Modifier la revue antérieure', 'Edit previous review')} />
-                              : entry.note && <p {...aiFieldProps('condition.reports[].note', entry.id)} className="editable-click-target" onClick={() => audience === 'Secret' && setEditingBlock('condition-prior-reviews')} title={audience === 'Secret' ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{entry.note}</p>}
+                              : entry.note && <p {...aiFieldProps('condition.reports[].note', entry.id)} className="editable-click-target" onClick={() => canEdit && setEditingBlock('condition-prior-reviews')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{entry.note}</p>}
                             {entry.attachments.length > 0 && (
                               <ul className="attachment-list">
                                 {entry.attachments.map((attachment, index) => <li key={`${entry.id}-${attachment.name}-${index}`}><Paperclip size={13} />{attachment.url ? <a href={attachment.url} download={attachment.name}>{attachment.name}</a> : <span>{attachment.name}</span>}{attachment.size && <small>{Math.ceil(attachment.size / 1024)} ko</small>}</li>)}
@@ -3283,7 +3263,7 @@ function App() {
                       </div>
                     </div>
 
-                    {audience === 'Secret' && (
+                    {canEdit && (
                       <form className="condition-form no-print" onSubmit={addConditionEntry}>
                         <span className="eyebrow">{tx('Nouvelle entrée', 'New entry')}</span>
                         <label>Date<input {...aiFieldProps('condition.reports[].date', 'new')} type="date" name="date" defaultValue="2026-08-13" required /></label>
@@ -3297,14 +3277,46 @@ function App() {
                 </section>
               </>
             ) : (
-              <AccessRestricted title={tx('Rapports et notes de la montre', 'Watch reports and notes')} language={language} />
+              <AccessRestricted title={tx("Rapports et notes de l’objet", 'Object reports and notes')} language={language} />
+            )}
+
+            {canEdit && (
+              <section>
+                <SectionTitle eyebrow={tx('Correspondance pseudonymisée', 'Pseudonymous correspondence')} title={tx('Transmission', 'Transmission')} publish={publishProps('cover-transmission')} />
+                <article className="storage-card storage-code-card">
+                  <header className="storage-card__heading">
+                    <div><span className="eyebrow">{tx('Personnes du Coffre personnel', 'Personal Vault people')}</span></div>
+                    <span>{transmissionCodes.length} {language === 'FR' ? `personne${transmissionCodes.length > 1 ? 's' : ''}` : `person${transmissionCodes.length === 1 ? '' : 's'}`}</span>
+                  </header>
+                  {transmissionCodes.length > 0 ? <div className="storage-code-list">{transmissionCodes.map((reference, index) => (
+                    <div key={reference.id}>
+                      <span>{String(index + 1).padStart(2, '0')}</span>
+                      <select
+                        value={reference.correspondenceCode || (reference.codeName ? `legacy:${reference.id}` : '')}
+                        onChange={(event) => {
+                          const option = transmissionPersonOptions.find((entry) => entry.code === event.target.value);
+                          ownerCommands.updateTransmissionCode(reference.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
+                        }}
+                        aria-label={tx(`Personne chargée de la transmission ${index + 1}`, `Transmission person ${index + 1}`)}
+                      >
+                        <option value="">{tx('Choisir une personne', 'Select a person')}</option>
+                        {!reference.correspondenceCode && reference.codeName && <option value={`legacy:${reference.id}`}>{reference.codeName}</option>}
+                        {transmissionPersonOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel}</option>)}
+                      </select>
+                      <AutoResizeTextarea value={reference.note} rows={2} onChange={(event) => ownerCommands.updateTransmissionCode(reference.id, { note: event.target.value.slice(0, 500) })} placeholder={tx('Note de transmission (facultatif)', 'Transmission note (optional)')} aria-label={tx(`Note de transmission ${index + 1}`, `Transmission note ${index + 1}`)} />
+                      <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: transmissionCodes, setItems: setTransmissionCodes, id: reference.id, targetLabel: reference.codeName || tx(`la personne ${index + 1}`, `person ${index + 1}`) })} aria-label={tx('Supprimer cette personne', 'Delete this person')}><Trash2 size={15} /></button>
+                    </div>
+                  ))}</div> : <p className="storage-empty">{tx('Aucune personne sélectionnée.', 'No person selected.')}</p>}
+                  <button type="button" className="button button--quiet no-print" onClick={addTransmissionCode}><Plus size={14} /> {tx('Ajouter une personne', 'Add a person')}</button>
+                </article>
+              </section>
             )}
         </ConditionPage>
 
         <ValuePage active={activePage === 'value'}>
             <PageIntroduction number="04" title={tx('Valorisation', 'Valuation')} />
 
-            {isVisible('Secret') ? (
+            {canEdit ? (
               <section>
                 <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} publish={publishProps('value-market')} />
                 <div className="market-grid">
@@ -3345,16 +3357,21 @@ function App() {
                   <article className="retained-value-card">
                     <div className="retained-value-card__intro">
                       <span className="eyebrow">{tx('Décision du propriétaire', 'Owner decision')}</span>
-                      <h3>{tx('Valeur retenue', 'Retained value')}</h3>
-                      <p>{tx('Le montant est initialisé avec la valeur actuelle, puis peut être ajusté manuellement sans modifier les données de marché.', 'The amount starts with the current value and can then be adjusted manually without changing market data.')}</p>
+                      <h3>{tx('Niveaux de valorisation', 'Valuation levels')}</h3>
                     </div>
-                    <label className="retained-value-card__amount">{tx('Montant retenu', 'Retained amount')}
+                    <label className="retained-value-card__amount">{tx('Valorisation brute', 'Gross valuation')}
                       <span>
                         <input {...aiFieldProps('value.retained.amount')} type="number" min="0" step="100" value={retainedValuation.amount} onChange={(event) => setRetainedValuation((current) => ({ ...current, amount: Math.max(0, Number(event.target.value)) }))} />
                         <strong>{watch.currency || 'EUR'}</strong>
                       </span>
                       <small>{tx('Valeur actuelle', 'Current value')} : {formatMoney(marketDepth.midValue, watch.currency)}</small>
                     </label>
+                    <div className="retained-value-card__levels">
+                      <label>{tx('Frais de vente estimés', 'Estimated selling costs')}<span><input type="number" min="0" step="100" value={retainedValuation.saleCostAmount} onChange={(event) => setRetainedValuation((current) => ({ ...current, saleCostAmount: Math.max(0, Number(event.target.value)) }))} /><strong>{watch.currency || 'EUR'}</strong></span></label>
+                      <div><span>{tx('Valorisation nette après frais de vente', 'Net valuation after selling costs')}</span><strong>{formatMoney(retainedNetValuation, watch.currency)}</strong></div>
+                      <label>{tx('Impôts estimés', 'Estimated taxes')}<span><input type="number" min="0" step="100" value={retainedValuation.taxAmount} onChange={(event) => setRetainedValuation((current) => ({ ...current, taxAmount: Math.max(0, Number(event.target.value)) }))} /><strong>{watch.currency || 'EUR'}</strong></span></label>
+                      <div><span>{tx('Valorisation nette après impôts', 'Net valuation after taxes')}</span><strong>{formatMoney(retainedNetAfterTaxValuation, watch.currency)}</strong></div>
+                    </div>
                     <label className="retained-value-card__explanation">{tx('Explication de la valeur retenue', 'Retained value explanation')}
                       <AutoResizeTextarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder={tx('Expliquez le montant retenu, les ajustements et les réserves éventuelles.', 'Explain the retained amount, adjustments and any reservations.')} />
                     </label>
@@ -3369,7 +3386,7 @@ function App() {
               <AccessRestricted title={tx('Analyse de marché', 'Market analysis')} language={language} />
             )}
 
-            {isVisible('Secret') && (
+            {canEdit && (
               <section>
                 <SectionTitle eyebrow={tx('Analyse de marché', 'Market analysis')} title={tx('Comparables', 'Comparable items')} />
                 <div className="comparable-groups">
@@ -3398,7 +3415,7 @@ function App() {
               </section>
             )}
 
-            {isVisible('Secret') && (
+            {canEdit && (
               <section>
                 <SectionTitle eyebrow={tx('Acquisition', 'Acquisition')} title={tx('Prix de revient', 'Cost basis')} publish={publishProps('value-cost-basis')} />
                 <div className="cost-basis-card">
@@ -3434,7 +3451,7 @@ function App() {
               </section>
             )}
 
-            {isVisible('Secret') && (
+            {canEdit && (
               <section>
                 <SectionTitle eyebrow={tx('Performance de détention', 'Holding performance')} title={tx('Plus-value, moins-value et TRI', 'Capital gain, loss and IRR')} publish={publishProps('value-performance')} />
                 <div className="performance-card">
@@ -3462,7 +3479,7 @@ function App() {
               </section>
             )}
 
-            {isVisible('Secret') && (
+            {canEdit && (
               <section>
                 <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} publish={publishProps('value-sensitivity')} />
                 <div {...aiFieldProps('value.computed.sensitivity')} className="sensitivity-stack">
@@ -3504,6 +3521,94 @@ function App() {
               </section>
             )}
         </ValuePage>
+
+        <PublicationPage active={activePage === 'publication'}>
+          <PageIntroduction number="05" title={tx('Publication', 'Publication')} />
+          <div className="publication-center">
+            <article className="publication-scope publication-scope--cartulary">
+              <header>
+                <div><span className="eyebrow">01</span><h2>{tx('Publiez un mini -site de votre Cartulaire', 'Publish a mini-site for your Cartulary')}</h2></div>
+                <label className="publication-toggle"><input type="checkbox" checked={externalPublicationEnabled} onChange={(event) => setExternalPublicationEnabled(event.target.checked)} disabled={!canEdit} /><span>{externalPublicationEnabled ? tx('Publication active', 'Publication active') : tx("Publication du mini-site de l'objet", 'Publish the object mini-site')}</span></label>
+              </header>
+              {externalPublicationEnabled && (
+                <div className="publication-url-panel">
+                  <label><span>{tx('Adresse dédiée (aperçu local)', 'Dedicated address (local preview)')}</span><input value={localPublicationPreviewUrl} readOnly /></label>
+                  <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localPublicationPreviewUrl, setPublicationUrlCopied)}>{publicationUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
+                  <a className="button button--primary" href={localPublicationPreviewUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder', 'Open')}</a>
+                </div>
+              )}
+              {renderPublicationBlockSelector('website', publishedBlocks)}
+            </article>
+
+            <article className="publication-scope publication-scope--collection">
+              <header>
+                <div><span className="eyebrow">02</span><h2>{tx('Publiez votre objet dans une Collection', 'Publish your object in a Collection')}</h2></div>
+                <label className="publication-toggle"><input type="checkbox" checked={collectionPublicationEnabled} onChange={(event) => setCollectionPublicationEnabled(event.target.checked)} disabled={!canEdit} /><span>{collectionPublicationEnabled ? tx('Validation générale active', 'General validation active') : tx('Valider au niveau Collection', 'Validate at Collection level')}</span></label>
+              </header>
+              <div className="publication-collection-picker">
+                <details>
+                  <summary>
+                    <span>{tx('Collections associées', 'Associated collections')}</span>
+                    <strong>{publicationCollectionIds.length > 0
+                      ? tx(`${publicationCollectionIds.length} collection${publicationCollectionIds.length > 1 ? 's' : ''} sélectionnée${publicationCollectionIds.length > 1 ? 's' : ''}`, `${publicationCollectionIds.length} collection${publicationCollectionIds.length > 1 ? 's' : ''} selected`)
+                      : tx('Choisir une ou plusieurs collections', 'Choose one or more collections')}</strong>
+                  </summary>
+                  <fieldset disabled={!canEdit}>
+                    <legend className="sr-only">{tx('Associer le Cartulaire à plusieurs collections', 'Associate the Cartulary with multiple collections')}</legend>
+                    {availableCollections.map((entry) => (
+                      <label key={entry.id} className={publicationCollectionIds.includes(entry.id) ? 'is-selected' : undefined}>
+                        <input type="checkbox" checked={publicationCollectionIds.includes(entry.id)} onChange={() => togglePublicationCollection(entry.id)} />
+                        <span><strong>{entry.name}</strong><small>{entry.status === 'published' ? tx('Publiée', 'Published') : entry.status === 'archived' ? tx('Archivée', 'Archived') : tx('Brouillon', 'Draft')}</small></span>
+                      </label>
+                    ))}
+                    {availableCollections.length === 0 && <p>{tx('Aucune collection disponible dans ce Registre.', 'No collection is available in this Registry.')}</p>}
+                  </fieldset>
+                </details>
+                <button type="button" className="button button--quiet" onClick={() => setIsCreatingPublicationCollection((current) => !current)} disabled={!canEdit}><Plus size={15} />{tx('Créer une collection', 'Create a collection')}</button>
+              </div>
+              {isCreatingPublicationCollection && (
+                <form className="publication-collection-create" onSubmit={(event) => void createPublicationCollection(event)}>
+                  <label><span>{tx('Nom de la collection', 'Collection name')}</span><input value={newPublicationCollectionName} onChange={(event) => setNewPublicationCollectionName(event.target.value)} autoFocus required /></label>
+                  <button type="submit" className="button button--primary" disabled={!newPublicationCollectionName.trim() || !collectionContext}>{tx('Créer et ajouter', 'Create and add')}</button>
+                </form>
+              )}
+              {publicationCollectionError && <p className="publication-inline-error" role="alert">{publicationCollectionError}</p>}
+              {collectionPublicationEnabled && publicationCollectionIds.length > 0 && collectionContext && (
+                <div className="publication-url-panel">
+                  <label><span>{tx('Mini-site des Collections sélectionnées', 'Selected Collections mini-site')}</span><input value={localCollectionWebsiteUrl} readOnly /></label>
+                  <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localCollectionWebsiteUrl, setCollectionUrlCopied)}>{collectionUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
+                  <a className="button button--primary" href={localCollectionWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder au mini-site', 'Open mini-site')}</a>
+                </div>
+              )}
+              {collectionPublicationEnabled && publicationCollectionIds.length === 0 && <p className="publication-report-message" role="status">{tx('Sélectionnez au moins une Collection pour ouvrir son mini-site.', 'Select at least one Collection to open its mini-site.')}</p>}
+              {renderPublicationBlockSelector('collection', collectionBlocks)}
+            </article>
+
+            <article className="publication-scope publication-scope--community">
+              <header>
+                <div><span className="eyebrow">03</span><h2>{tx('Publiez votre objet dans Le Cercle', 'Publish your object in The Circle')}</h2></div>
+                <label className="publication-toggle"><input type="checkbox" checked={communityPublicationEnabled} onChange={(event) => setCommunityPublicationEnabled(event.target.checked)} disabled={!canEdit} /><span>{communityPublicationEnabled ? tx('Validation générale active', 'General validation active') : tx('Valider la publication dans Le Cercle', 'Validate publication in The Circle')}</span></label>
+              </header>
+              {communityPublicationEnabled && (
+                <div className="publication-url-panel">
+                  <label><span>{tx('Adresse du site Le Cercle', 'The Circle website address')}</span><input value={localCommunityWebsiteUrl} readOnly /></label>
+                  <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localCommunityWebsiteUrl, setCommunityUrlCopied)}>{communityUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
+                  <a className="button button--primary" href={localCommunityWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder au Cercle', 'Open The Circle')}</a>
+                </div>
+              )}
+              {renderPublicationBlockSelector('community', communityBlocks)}
+            </article>
+
+            <article className="publication-scope publication-scope--report">
+              <header>
+                <div><span className="eyebrow">04</span><h2>{tx('Rapport PDF', 'PDF report')}</h2></div>
+                <button type="button" className="button button--primary" onClick={handleReportPrint}><Download size={15} />{tx('Télécharger le rapport PDF', 'Download PDF report')}</button>
+              </header>
+              {reportExportMessage && <p className="publication-report-message" role="status">{reportExportMessage}</p>}
+              {renderPublicationBlockSelector('report', reportBlocks)}
+            </article>
+          </div>
+        </PublicationPage>
 
         <nav className="page-turner no-print" aria-label={language === 'FR' ? 'Navigation entre les pages' : 'Page navigation'}>
           {adjacentCartularyPage(activePage, 'previous') ? (
@@ -3558,9 +3663,21 @@ function App() {
             </dl>
             <p>{tx('Cette trace locale détecte une altération de l’export et, lorsqu’un jeton est présent, date son empreinte. L’autorité partagée demeure la chaîne serveur ; aucune de ces preuves ne certifie l’authenticité de l’objet, la vérité des informations ou la propriété juridique.', 'This local trace detects changes to the export and, when a token is present, dates its digest. The shared authority remains the server chain; neither proof certifies object authenticity, factual truth or legal ownership.')}</p>
           </section>
-          <main>
-            {orderedReportBlocks.map((blockId) => (
-              <div className="report-print-view__block" key={blockId}>{renderWatchWebsiteBlock(blockId)}</div>
+          <main className="report-print-view__main">
+            {reportPagesWithBlocks.map((reportPage) => (
+              <section className="report-print-view__page-section" key={reportPage.id}>
+                <header className="report-print-view__page-header">
+                  <span className="report-print-view__page-number">{reportPage.number}</span>
+                  <h2>{reportPage.label}</h2>
+                </header>
+                <div className="report-print-view__page-content">
+                  {reportPage.blockIds.map((blockId) => (
+                    <div className="report-print-view__block" id={`report-${blockId}`} key={blockId}>
+                      {renderWatchWebsiteBlock(blockId)}
+                    </div>
+                  ))}
+                </div>
+              </section>
             ))}
           </main>
           <footer><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>{tx('Rapport généré depuis le Cartulaire', 'Report generated from the Cartulary')}</span></span><span>{mockCartulary.publicCode}</span></footer>
@@ -3631,7 +3748,7 @@ function App() {
               <div className="publication-dialog__summary">
                 <span className={`publication-destination publication-destination--${publicationIntent.destination}`}>{destinationMarker(publicationIntent.destination)}</span>
                 <div>
-                  <span className="eyebrow">{language === 'FR' ? destinationLabel(publicationIntent.destination) : publicationIntent.destination === 'website' ? 'Watch website' : publicationIntent.destination === 'report' ? 'R report' : 'Circle'}</span>
+                  <span className="eyebrow">{language === 'FR' ? destinationLabel(publicationIntent.destination) : publicationIntent.destination === 'website' ? 'External publication' : publicationIntent.destination === 'collection' ? 'Collection' : publicationIntent.destination === 'report' ? 'PDF report' : 'Circle'}</span>
                   <h3>{publicationIntent.blockLabel}</h3>
                   <code>{publicationIntent.blockId}</code>
                 </div>
@@ -3639,10 +3756,12 @@ function App() {
 
               <p id="publication-dialog-description" className="publication-dialog__explanation">
                 {publicationIntent.destination === 'website'
-                  ? tx('Cette décision autorise le bloc dans l’aperçu W local. La publication publique réelle reste une commande serveur distincte, liée à la révision, limitée à quatre blocs et contrôlée par liste blanche.', 'This decision authorizes the block in the local W preview. Actual public publication remains a separate server command, tied to the revision, limited to four blocks and controlled by an allowlist.')
+                  ? tx('Cette décision autorise le contenu dans la publication extérieure. La publication publique réelle reste un acte serveur distinct, lié à la révision et contrôlé par liste blanche.', 'This decision authorizes the content in the external publication. Actual public publication remains a separate server act, tied to the revision and controlled by an allowlist.')
+                  : publicationIntent.destination === 'collection'
+                    ? tx('Cette décision autorise le contenu dans les Collections sélectionnées. La projection du Registre reste filtrée côté serveur.', 'This decision authorizes the content in the selected Collections. The Registry projection remains server-filtered.')
                   : publicationIntent.destination === 'report'
-                    ? tx('Cette décision autorise le bloc dans le prochain rapport R imprimé. Le rapport reste une projection privée du propriétaire.', 'This decision authorizes the block in the next printed R report. The report remains a private owner projection.')
-                    : tx('Cette décision prépare le bloc pour une projection Cercle. Aucun contenu n’est envoyé à la communauté tant que la commande serveur C n’est pas reliée.', 'This decision prepares the block for a Circle projection. No content is sent to the community until the C server command is connected.')}
+                    ? tx('Cette décision autorise le contenu dans le prochain rapport PDF. Le rapport reste une projection privée du propriétaire.', 'This decision authorizes the content in the next PDF report. The report remains a private owner projection.')
+                    : tx('Cette décision prépare le contenu pour Le Cercle. Aucun contenu n’est envoyé tant que la commande serveur correspondante n’est pas reliée.', 'This decision prepares the content for the Circle. No content is sent until the corresponding server command is connected.')}
               </p>
 
               {publicationIntent.action !== 'revoke' && (
@@ -3665,9 +3784,11 @@ function App() {
               <div className={`publication-dialog__policy ${publicationIntent.policy.allowed ? 'is-valid' : 'is-blocking'}`} role={publicationIntent.policy.allowed ? undefined : 'alert'}>
                 <strong>{publicationIntent.policy.allowed ? tx('Politique de destination conforme', 'Destination policy satisfied') : tx('Destination interdite pour ce bloc', 'Destination forbidden for this block')}</strong>
                 <p>{language === 'FR' ? publicationIntent.policy.reason : publicationIntent.destination === 'report'
-                  ? 'The R report remains a private owner projection.'
+                  ? 'The PDF report remains a private owner projection.'
                   : publicationIntent.destination === 'website'
-                    ? (publicationIntent.policy.allowed ? 'Block allowed by the W allowlist; content remains server-controlled.' : 'This block is excluded from the public W allowlist.')
+                    ? (publicationIntent.policy.allowed ? 'Content allowed by the publication allowlist; it remains server-controlled.' : 'This content is excluded from external publication.')
+                    : publicationIntent.destination === 'collection'
+                      ? (publicationIntent.policy.allowed ? 'Content allowed for Collection publication.' : 'This content remains private.')
                     : (publicationIntent.policy.allowed ? 'Block allowed for a server-filtered Circle projection.' : 'This block contains private data incompatible with a Circle projection.')}</p>
               </div>
 
@@ -3731,7 +3852,7 @@ function App() {
         asset={selectedAsset}
         assetCount={renderedAssets.length}
         position={selectedAssetPosition}
-        audience={audience}
+        audience="Secret"
         language={language}
         mediaTags={MEDIA_TAGS.map((tag) => ({ id: tag.id, label: mediaTagLabel(tag) }))}
         dialogRef={mediaDialogRef}

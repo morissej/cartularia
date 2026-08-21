@@ -64,7 +64,7 @@ export const buildIwcImportBundle = (): CartularyImportBundle => ({
       id: 'identity.summary',
       schemaSectionId: 'cover.watch',
       schemaVersion: 'watch@1.3.0',
-      title: 'Identité de la montre',
+      title: "Identité de l’objet",
       visibility: 'secret',
       status: 'imported_unreviewed',
       fields: {

@@ -22,10 +22,7 @@ export const PUBLIC_BLOCK_ALLOWLIST = Object.freeze([
 
 export const REPORT_BLOCK_ALLOWLIST = Object.freeze([
   ...PUBLIC_BLOCK_ALLOWLIST,
-  'cover-owner',
   'cover-ownership-history',
-  'cover-transmission',
-  'cover-storage',
   'condition-documentation',
   'value-market',
   'value-comparables-listings',
@@ -307,6 +304,9 @@ export const projectRegistryItem = async ({
       organizationId: rootData.organizationId,
       registryId: rootData.registryId,
       collectionId: rootData.collectionId,
+      collectionIds: Array.isArray(rootData.collectionIds) && rootData.collectionIds.length > 0
+        ? [...new Set([...rootData.collectionIds, rootData.collectionId].filter(Boolean))]
+        : [rootData.collectionId].filter(Boolean),
       assetType: rootData.assetType,
       displayTitle: rootData.displayTitle,
       makerName: rootData.makerName,
@@ -314,7 +314,16 @@ export const projectRegistryItem = async ({
       referenceCode: rootData.referenceCode,
       manufactureYear: rootData.manufactureYear,
       lifecycleStatus: rootData.lifecycleStatus,
+      patrimonialStatus: rootData.patrimonialStatus || null,
+      userAlias: rootData.userAlias || null,
+      objectCode: rootData.objectCode || rootData.publicCode || null,
       possessionStatus: rootData.possessionStatus,
+      purchasePrice: rootData.purchasePrice || null,
+      costBasis: rootData.costBasis || null,
+      grossValuation: rootData.grossValuation || null,
+      netValuation: rootData.netValuation || null,
+      netAfterTaxValuation: rootData.netAfterTaxValuation || null,
+      valuationCurrency: rootData.valuationCurrency || rootData.currency || null,
       completenessLevel: rootData.completenessLevel,
       primaryAssetId: rootData.primaryAssetId,
       sourceRevision: rootData.revision,

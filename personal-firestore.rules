@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function ownsVault(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validEncryptedAccount(uid) {
+      return request.resource.data.keys().hasOnly([
+          'schemaVersion', 'ownerUid', 'accountId', 'version', 'algorithm',
+          'keyDerivation', 'iterations', 'salt', 'iv', 'ciphertext', 'updatedAt'
+        ])
+        && request.resource.data.schemaVersion == 'encrypted-personal-account@2.0.0'
+        && request.resource.data.ownerUid == uid
+        && request.resource.data.accountId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.version == 2
+        && request.resource.data.algorithm == 'AES-GCM'
+        && request.resource.data.keyDerivation == 'PBKDF2-SHA-256'
+        && request.resource.data.iterations >= 600000
+        && request.resource.data.salt is string
+        && request.resource.data.salt.size() <= 64
+        && request.resource.data.iv is string
+        && request.resource.data.iv.size() <= 64
+        && request.resource.data.ciphertext is string
+        && request.resource.data.ciphertext.size() <= 900000;
+    }
+
+    match /vaultUsers/{uid} {
+      allow read, write: if false;
+
+      match /vault/{vaultId} {
+        allow get: if vaultId == 'profile' && ownsVault(uid);
+        allow list: if false;
+        allow create, update: if vaultId == 'profile' && ownsVault(uid) && validEncryptedAccount(uid);
+        allow delete: if vaultId == 'profile' && ownsVault(uid) && resource.data.ownerUid == uid;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -15,18 +15,29 @@ const exportedSchema = JSON.parse(
 const legacySchema = JSON.parse(
   readFileSync(new URL('../firebase/schema-catalog/car/1.0.0.json', import.meta.url), 'utf8'),
 );
+const ownershipSchema = JSON.parse(
+  readFileSync(new URL('../firebase/schema-catalog/car/1.1.0.json', import.meta.url), 'utf8'),
+);
 
-test('car@1.1.0 ajoute le contrat générique de propriété à la verticale pilote', () => {
-  assert.equal(CAR_SCHEMA_VERSION, '1.1.0');
+test('car@1.2.0 ajoute la frontière pseudonyme à la verticale pilote', () => {
+  assert.equal(CAR_SCHEMA_VERSION, '1.2.0');
   assert.equal(CAR_SCHEMA_FIELDS.length, CAR_SCHEMA.fieldCount);
   assert.equal(new Set(CAR_SCHEMA_FIELDS.map((field) => field.fieldId)).size, CAR_SCHEMA_FIELDS.length);
   assert.equal(CAR_SCHEMA.assetType, 'car');
   assert.ok(CAR_SCHEMA.sections.includes('technical.powertrain'));
   assert.ok(CAR_SCHEMA.sections.includes('history.service'));
   assert.ok(CAR_SCHEMA.sections.includes('cover.ownership_history'));
+  assert.ok(CAR_SCHEMA.sections.includes('cover.privacy_link'));
+  assert.ok(CAR_SCHEMA.sections.includes('condition.storage'));
   for (const fieldId of Object.values(OWNERSHIP_HISTORY_FIELD_IDS)) {
     assert.ok(CAR_SCHEMA_FIELDS.some((field) => field.fieldId === fieldId));
   }
+});
+
+test('car@1.1.0 reste immuable avec le contrat générique de propriété', () => {
+  assert.equal(ownershipSchema.version, '1.1.0');
+  assert.ok(ownershipSchema.sections.includes('cover.ownership_history'));
+  assert.ok(!ownershipSchema.sections.includes('cover.privacy_link'));
 });
 
 test('car@1.0.0 reste un artefact historique de 40 champs', () => {

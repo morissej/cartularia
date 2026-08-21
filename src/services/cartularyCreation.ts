@@ -21,6 +21,7 @@ import { db, storage } from '../firebase.ts';
 import { scopedStorageForCartulary } from '../persistence/localVault.ts';
 import { validateFileForUpload, type TrustedFileInspection } from '../security/fileValidation.ts';
 import { waitForPrivateUploadVerification } from './privateUploadVerification.ts';
+import { generateCorrespondenceCode } from '../domain/correspondenceCodes.ts';
 
 export interface CreateWatchCartularyInput {
   user: User;
@@ -158,9 +159,9 @@ export const createWatchCartulary = async ({
   files,
   onProgress,
 }: CreateWatchCartularyInput): Promise<CartularyCreationResult> => {
-  const cartularySlug = slugify([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'montre';
+  const cartularySlug = slugify([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'objet';
   const cartularyId = `cart_${cartularySlug}_${randomToken()}`;
-  const publicCode = `${slugify(profile.brand).slice(0, 3).toUpperCase() || 'WCH'}-${randomToken(8).toUpperCase()}`;
+  const publicCode = generateCorrespondenceCode('object', profile.brand || 'WCH');
   const requestId = `create_${randomToken(28)}`;
   const allFiles = uniqueFiles(coverFile, files);
   const inspections = new Map<File, TrustedFileInspection>();
@@ -285,7 +286,7 @@ export const createWatchCartulary = async ({
     profileVersion: CARTULARY_CREATION_PROFILE_VERSION,
     assetType: 'watch',
     schemaId: 'watch',
-    schemaVersion: '1.5.0',
+    schemaVersion: '1.6.0',
     ...profile,
     assertedAt: new Date().toISOString(),
   };

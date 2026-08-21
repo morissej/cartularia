@@ -4,6 +4,7 @@ import {
   ArrowRightLeft,
   Blocks,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   ExternalLink,
   FileClock,
@@ -156,11 +157,12 @@ export function RegistryIntegrity({ registry, canReadCartularies }: {
       {loadState === 'ready' && entries.length > 0 && (
         <div className="registry-integrity-list">
           {entries.map((entry) => (
-            <article className={`registry-integrity-card${entry.verification.valid ? ' is-valid' : ' is-invalid'}`} key={entry.item.cartularyId}>
-              <header>
+            <details className={`registry-integrity-card${entry.verification.valid ? ' is-valid' : ' is-invalid'}`} key={entry.item.cartularyId}>
+              <summary>
                 <div className="registry-integrity-card__identity"><Fingerprint aria-hidden="true" /><div><span>{entry.item.makerName}</span><h2>{entry.item.displayTitle}</h2><p>{entry.item.referenceCode || entry.item.modelName}{entry.ownershipTransferCount > 0 ? ` · ${entry.ownershipTransferCount} changement${entry.ownershipTransferCount > 1 ? 's' : ''} de propriétaire vérifié${entry.ownershipTransferCount > 1 ? 's' : ''}` : ''}</p></div></div>
                 <div className="registry-integrity-card__status">{entry.verification.valid ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}<span><strong>{entry.verification.valid ? 'Chaîne serveur vérifiée' : 'Rupture de la chaîne serveur'}</strong><small>{entry.verification.valid ? 'Empreintes, ordre et tête cohérents' : `${entry.verification.errors.length} anomalie(s) détectée(s)`}</small></span></div>
-              </header>
+                <ChevronDown className="registry-integrity-card__chevron" aria-hidden="true" />
+              </summary>
 
               <dl className="registry-integrity-card__facts">
                 <div><dt>Révision scellée</dt><dd>R{entry.sourceRevision}</dd></div>
@@ -184,7 +186,7 @@ export function RegistryIntegrity({ registry, canReadCartularies }: {
               </section>
 
               <footer><span><ShieldCheck aria-hidden="true" />Source : chaîne serveur autoritaire du Cartulaire</span><a href={buildCartularyHref(entry.item.cartularyId, window.location.pathname, entry.item.assetType)}>Ouvrir le Cartulaire <ExternalLink aria-hidden="true" /></a></footer>
-            </article>
+            </details>
           ))}
         </div>
       )}

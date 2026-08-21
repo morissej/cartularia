@@ -114,6 +114,24 @@ test('les données financières non finies reviennent à des valeurs sûres', ()
   assert.equal(normalized.value.midValue, 20);
 });
 
+test('une ancienne valorisation reçoit les nouveaux niveaux nets sans perdre son montant brut', () => {
+  const normalized = normalizeCartularyStoredValue('cartularia-retained-valuation', {
+    amount: 20_000,
+    explanation: 'Historique',
+  }, {
+    amount: 0,
+    saleCostAmount: 2_000,
+    taxAmount: 500,
+    explanation: '',
+  });
+  assert.deepEqual(normalized.value, {
+    amount: 20_000,
+    saleCostAmount: 2_000,
+    taxAmount: 500,
+    explanation: 'Historique',
+  });
+});
+
 test('un ancien état partiel ne remplace pas les défauts absents par des zéros', () => {
   const normalized = normalizeCartularyStoredValue('cartularia-market-depth', {
     activeListings: 12,

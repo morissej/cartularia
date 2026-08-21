@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
   Ban,
@@ -10,14 +10,16 @@ import {
   Link2,
   LoaderCircle,
   Mail,
+  Plus,
   RefreshCw,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
 } from 'lucide-react';
 import type { RegistryAccessKind, RegistryAccessProjection } from '../../domain/access.ts';
 import type { RegistryDocument } from '../../domain/foundations.ts';
-import { loadRegistryAccesses } from '../../services/access.ts';
+import { createRegistryAccess, loadRegistryAccesses, revokeRegistryAccess } from '../../services/access.ts';
+import type { RegistryItemProjection } from '../../domain/projections.ts';
+import { loadRegistryItems } from '../../services/projections.ts';
 import {
   accessDate,
   buildRegistryAccessSummary,
@@ -28,6 +30,7 @@ import {
   type RegistryAccessStatus,
 } from './registryAccess.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
+import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
 
 type AccessLoadState = 'loading' | 'ready' | 'error';
 
@@ -76,12 +79,22 @@ const formatConsultation = (access: RegistryAccessProjection) => {
   }).format(date)}`;
 };
 
-export function RegistryAccessCenter({ registry, canReadAccesses }: {
+export function RegistryAccessCenter({ registry, canReadAccesses, canManageAccesses = false }: {
   registry: RegistryDocument;
   canReadAccesses: boolean;
+  canManageAccesses?: boolean;
 }) {
   const [accesses, setAccesses] = useState<RegistryAccessProjection[]>([]);
   const [loadState, setLoadState] = useState<AccessLoadState>('loading');
+  const [registryItems, setRegistryItems] = useState<RegistryItemProjection[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [recipient, setRecipient] = useState('');
+  const [scopeType, setScopeType] = useState<'registry' | 'collection' | 'cartulary'>('cartulary');
+  const [scopeId, setScopeId] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [creationNotice, setCreationNotice] = useState('');
+  const [emulatorInvitationLink, setEmulatorInvitationLink] = useState('');
   const [query, setQuery] = useState(() => readInitialParameter('q', ''));
   const [status, setStatus] = useState<'all' | RegistryAccessStatus>(() => {
     const candidate = readInitialParameter('status', 'all');
@@ -104,7 +117,9 @@ export function RegistryAccessCenter({ registry, canReadAccesses }: {
     }
     setLoadState('loading');
     try {
-      setAccesses(await loadRegistryAccesses(registry.id));
+      const [loadedAccesses, loadedItems] = await Promise.all([loadRegistryAccesses(registry.id), loadRegistryItems(registry.id)]);
+      setAccesses(loadedAccesses);
+      setRegistryItems(loadedItems.filter((item) => item.projectionStatus === 'active'));
       setLoadState('ready');
     } catch {
       setAccesses([]);
@@ -142,6 +157,53 @@ export function RegistryAccessCenter({ registry, canReadAccesses }: {
   const activeFilterCount = [query.trim(), status !== 'all', accessKind !== 'all', consultation !== 'all']
     .filter(Boolean).length;
   const returnTo = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
+  const collections = useMemo(() => [...new Set(registryItems.map((item) => item.collectionId))].sort(), [registryItems]);
+  const scopeOptions = useMemo(() => scopeType === 'registry'
+    ? [{ id: registry.id, label: registry.name }]
+    : scopeType === 'collection'
+      ? collections.map((id) => ({ id, label: id.replace(/^col_/, '').replace(/[_-]+/g, ' ') }))
+      : registryItems.map((item) => ({ id: item.cartularyId, label: item.displayTitle })), [collections, registry.id, registry.name, registryItems, scopeType]);
+
+  useEffect(() => {
+    if (!scopeOptions.some((option) => option.id === scopeId)) setScopeId(scopeOptions[0]?.id || '');
+  }, [scopeId, scopeOptions]);
+
+  const submitAccess = async (event: FormEvent) => {
+    event.preventDefault();
+    const target = scopeOptions.find((option) => option.id === scopeId);
+    if (!recipient.trim() || !target) return;
+    setCreating(true);
+    setCreationNotice('');
+    setEmulatorInvitationLink('');
+    try {
+      const result = await createRegistryAccess({
+        registryId: registry.id,
+        organizationId: registry.organizationId,
+        input: {
+          recipientLabel: recipient.trim(),
+          recipientKind: 'person',
+          accessKind: 'invitation',
+          scopeType,
+          scopeId,
+          displayTitle: target.label,
+          cartularyId: scopeType === 'cartulary' ? scopeId : null,
+          collectionId: scopeType === 'collection' ? scopeId : null,
+          expiresAt: expiresAt ? `${expiresAt}T23:59:59.000Z` : null,
+          permissions: ['read'],
+        },
+      });
+      setRecipient('');
+      setExpiresAt('');
+      setShowCreate(false);
+      setCreationNotice("Invitation émise. Le lien personnel de connexion a été placé dans la file d’envoi et expirera automatiquement.");
+      setEmulatorInvitationLink(result.emulatorSignInLink || '');
+      await reload();
+    } catch {
+      setCreationNotice("L’invitation n’a pas pu être émise. Vérifiez le destinataire, la portée et la date d’expiration.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const resetFilters = () => {
     setQuery('');
@@ -170,8 +232,21 @@ export function RegistryAccessCenter({ registry, canReadAccesses }: {
           <h1 id="registry-access-title">Invitations et consultations</h1>
           <p>Le pilotage des accès partagés, sans recopier les contenus, preuves, archives ou médias des Cartulaires.</p>
         </div>
-        <div className="registry-access__security"><ShieldCheck aria-hidden="true" /><span>Métadonnées minimales</span></div>
+        {canManageAccesses && <button type="button" className="registry-access__create" onClick={() => setShowCreate((current) => !current)}><Plus aria-hidden="true" />Nouvelle invitation</button>}
       </header>
+
+      {showCreate && (
+        <form className="registry-access-create" onSubmit={submitAccess}>
+          <p className="registry-access-create__guidance"><strong>Aucun mot de passe à communiquer.</strong> Le destinataire reçoit un lien personnel de connexion sans mot de passe. Le lien expire et ne peut activer que la portée indiquée.</p>
+          <label>Adresse du destinataire<input type="email" value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="nom@exemple.com" required /></label>
+          <label>Portée<select value={scopeType} onChange={(event) => setScopeType(event.target.value as typeof scopeType)}><option value="cartulary">Un Cartulaire</option><option value="collection">Une Collection</option><option value="registry">Tout le Registre</option></select></label>
+          <label>Élément<select value={scopeId} onChange={(event) => setScopeId(event.target.value)} required>{scopeOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select></label>
+          <label>Expiration<input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></label>
+          <button type="submit" disabled={creating || !recipient.trim() || !scopeId}>{creating ? 'Émission…' : "Envoyer l’invitation"}</button>
+        </form>
+      )}
+      {creationNotice && <p className="registry-access-creation-notice" role="status">{creationNotice}</p>}
+      {emulatorInvitationLink && <p className="registry-access-creation-notice" role="status"><a href={emulatorInvitationLink}>Ouvrir le lien dans l’émulateur local</a></p>}
 
       <div className="registry-access-facts" aria-label="Synthèse des accès">
         <button type="button" className={status === 'active' ? 'is-active' : undefined} onClick={() => setStatus('active')}><KeyRound aria-hidden="true" /><span>Actifs</span><strong>{summary.active}</strong></button>
@@ -192,13 +267,12 @@ export function RegistryAccessCenter({ registry, canReadAccesses }: {
         </button>
       </div>
 
-      <div className="registry-access-filters" aria-label="Filtres du centre des accès">
-        <div className="registry-filter-title"><SlidersHorizontal aria-hidden="true" /><span>Filtrer</span>{activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}</div>
+      <RegistryFilterPanel className="registry-access-filters" label="Filtres des accès" activeFilterCount={activeFilterCount}>
         <label><span>Statut</span><select value={status} onChange={(event) => setStatus(event.target.value as 'all' | RegistryAccessStatus)}><option value="all">Tous les statuts</option>{Object.entries(STATUS_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
         <label><span>Nature</span><select value={accessKind} onChange={(event) => setAccessKind(event.target.value as 'all' | RegistryAccessKind)}><option value="all">Toutes les natures</option>{Object.entries(KIND_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
         <label><span>Consultation</span><select value={consultation} onChange={(event) => setConsultation(event.target.value as RegistryAccessConsultationFilter)}><option value="all">Toutes</option><option value="consulted">Déjà consulté</option><option value="never">Jamais consulté</option></select></label>
         {activeFilterCount > 0 && <button type="button" className="registry-filter-reset" onClick={resetFilters}>Effacer</button>}
-      </div>
+      </RegistryFilterPanel>
 
       <div className="registry-access-results">
         <p aria-live="polite"><strong>{filteredAccesses.length}</strong> accès{filteredAccesses.length !== summary.total && <span> sur {summary.total}</span>}</p>
@@ -217,17 +291,17 @@ export function RegistryAccessCenter({ registry, canReadAccesses }: {
             return (
               <article className={`registry-access-item registry-access-item--${effectiveStatus}`} key={access.id}>
                 <div className="registry-access-item__kind"><AccessKindIcon kind={access.accessKind} /><span>{KIND_LABELS[access.accessKind]}</span><small className={`is-${effectiveStatus}`}>{STATUS_LABELS[effectiveStatus]}</small></div>
-                <div className="registry-access-item__body"><h2>{access.displayTitle}</h2><p>{maskRecipientReference(access.recipientLabel)}</p><small>Révision source {access.sourceRevision}</small></div>
+                <div className="registry-access-item__body"><h2>{access.displayTitle}</h2><p>{maskRecipientReference(access.recipientLabel)}</p><small>{access.scopeType === 'registry' ? 'Registre' : access.scopeType === 'collection' ? 'Collection' : 'Cartulaire'} · Révision {access.sourceRevision}</small></div>
                 <div className="registry-access-item__expiry"><Clock3 aria-hidden="true" /><span>{effectiveStatus === 'revoked' ? 'Accès révoqué' : 'Échéance'}</span><time dateTime={expiresAt?.toISOString()}>{effectiveStatus === 'revoked' ? formatDate(access.revokedAt) : formatDate(access.expiresAt)}</time></div>
                 <div className="registry-access-item__consultation"><Eye aria-hidden="true" /><strong>{Math.max(0, access.consultationCount || 0)}</strong><span>consultation{access.consultationCount > 1 ? 's' : ''}</span><small>{formatConsultation(access)}</small></div>
-                <a href={buildCartularyHref(access.cartularyId, returnTo)}>Gérer dans le Cartulaire <ExternalLink aria-hidden="true" /><ChevronRight aria-hidden="true" /></a>
+                {access.cartularyId ? <a href={buildCartularyHref(access.cartularyId, returnTo)}>Gérer dans le Cartulaire <ExternalLink aria-hidden="true" /><ChevronRight aria-hidden="true" /></a> : <span className="registry-access-item__scope">{access.scopeType === 'collection' ? 'Accès Collection' : 'Accès Registre'}</span>}
+                {effectiveStatus !== 'revoked' && <button type="button" className="registry-access-item__revoke" onClick={() => void revokeRegistryAccess(registry.id, access.id).then(reload)}><Ban aria-hidden="true" />Révoquer</button>}
               </article>
             );
           })}
         </div>
       )}
 
-      <aside className="registry-access-boundary"><ShieldCheck aria-hidden="true" /><div><h2>Le Cartulaire reste l’autorité</h2><p>Le Registre affiche uniquement le pilotage minimal. La portée du contenu, l’autorisation effective et la révocation sont décidées et auditées dans le Cartulaire source.</p></div><span>Aucun actif média repris</span></aside>
     </section>
   );
 }

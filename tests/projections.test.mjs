@@ -90,7 +90,7 @@ const importIwc = () => importCartularyBundle({
 const safePublicBlocks = () => [
   {
     id: 'cover-watch',
-    title: 'Identité de la montre',
+    title: "Identité de l’objet",
     payload: {
       eyebrow: 'IWC Schaffhausen',
       heading: 'Flieger UTC',
@@ -272,6 +272,19 @@ test('owner, transmission, stockage et champ Secret sont refusés avant toute é
       ],
       actorId: IWC_IMPORT_ACTOR_ID,
       requestId: 'wave3-approve-owner-forbidden-v1',
+      expectedRevision: 1,
+    }),
+    (error) => error.code === 'block_not_allowlisted',
+  );
+  await assert.rejects(
+    () => recordProjectionApproval({
+      firestore: adminFirestore,
+      cartularyId: IWC_CARTULARY_ID,
+      approvalId: 'approval-report-owner-forbidden-v1',
+      audience: 'report',
+      blocks: [{ id: 'cover-owner', title: 'Propriétaire', payload: { heading: 'Identité' } }],
+      actorId: IWC_IMPORT_ACTOR_ID,
+      requestId: 'wave3-approve-report-owner-forbidden-v1',
       expectedRevision: 1,
     }),
     (error) => error.code === 'block_not_allowlisted',

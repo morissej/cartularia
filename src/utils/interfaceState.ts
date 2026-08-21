@@ -1,18 +1,11 @@
-import type { VisibilityLevel } from '../types';
-
-export const CARTULARY_PAGE_IDS = ['cover', 'media', 'reference', 'condition', 'value'] as const;
+export const CARTULARY_PAGE_IDS = ['cover', 'media', 'reference', 'condition', 'value', 'publication'] as const;
 export type CartularyPage = (typeof CARTULARY_PAGE_IDS)[number];
 export type InterfaceLanguage = 'FR' | 'EN';
-export type ApplicationRoute = 'cartulary' | 'watch-website' | 'cartulary-view' | 'community' | 'registry' | 'not-found';
+export type ApplicationRoute = 'home' | 'account-create' | 'account-sign-in' | 'cartulary' | 'watch-website' | 'collection-website' | 'cartulary-view' | 'community' | 'registry' | 'invitation' | 'not-found';
 
 export const INTERFACE_LANGUAGE_STORAGE_KEY = 'cartularia-interface-language';
-export const AUDIENCE_STORAGE_KEY = 'cartularia-audience';
 
 export const normalizeInterfaceLanguage = (value: unknown): InterfaceLanguage => value === 'EN' ? 'EN' : 'FR';
-
-export const normalizeAudience = (value: unknown): VisibilityLevel => (
-  value === 'Communauté' || value === 'Tous' ? value : 'Secret'
-);
 
 export const cartularyPageFromHash = (hash: string): CartularyPage => {
   const candidate = hash.replace(/^#/, '');
@@ -29,10 +22,15 @@ export const adjacentCartularyPage = (
 
 export const applicationRouteFromPathname = (pathname: string): ApplicationRoute => {
   const normalized = pathname === '/' ? '' : pathname.replace(/\/$/, '');
-  if (normalized === '') return 'cartulary';
+  if (normalized === '') return 'home';
+  if (normalized === '/account/create') return 'account-create';
+  if (normalized === '/account/sign-in') return 'account-sign-in';
+  if (normalized === '/cartulary') return 'cartulary';
   if (normalized === '/watch-website') return 'watch-website';
+  if (normalized === '/collection-website') return 'collection-website';
   if (normalized === '/cartulary-view') return 'cartulary-view';
   if (normalized === '/community') return 'community';
   if (normalized === '/registry' || normalized.startsWith('/registry/')) return 'registry';
+  if (normalized === '/invitation/accept') return 'invitation';
   return 'not-found';
 };

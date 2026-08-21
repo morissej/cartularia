@@ -31,7 +31,7 @@ const decision = (overrides = {}) => ({
   decidedAt: '2026-08-16T10:00:00.000Z',
   sourceRevision: 4,
   sourceDigest: `sha256:${'a'.repeat(64)}`,
-  policyVersion: 'publication-policy-v1',
+  policyVersion: 'publication-policy-v2',
   prerequisites: [
     { id: 'brand', label: 'Marque', satisfied: true, detail: 'IWC' },
     { id: 'model', label: 'Modèle', satisfied: true, detail: 'Flieger UTC' },
@@ -50,11 +50,12 @@ test('les prérequis exigent marque, modèle et photo principale durable', () =>
   assert.deepEqual(missing.missing, ['brand', 'model', 'main-photo']);
 });
 
-test('la visibilité de la photo est contrôlée selon W, C et R', () => {
+test('la visibilité de la photo est contrôlée selon chaque destination', () => {
   const secretPhoto = { ...publicPhoto, visibility: 'Secret' };
   assert.equal(evaluatePublicationEligibility({ brand: 'IWC', model: 'UTC', mainPhoto: secretPhoto, destination: 'website' }).isEligible, false);
   assert.equal(evaluatePublicationEligibility({ brand: 'IWC', model: 'UTC', mainPhoto: secretPhoto, destination: 'community' }).isEligible, false);
   assert.equal(evaluatePublicationEligibility({ brand: 'IWC', model: 'UTC', mainPhoto: secretPhoto, destination: 'report' }).isEligible, true);
+  assert.equal(evaluatePublicationEligibility({ brand: 'IWC', model: 'UTC', mainPhoto: secretPhoto, destination: 'collection' }).isEligible, false);
 });
 
 test('la liste blanche W du client reste identique à la commande serveur', () => {
@@ -62,10 +63,13 @@ test('la liste blanche W du client reste identique à la commande serveur', () =
   assert.equal(getPublicationPolicy('website', 'cover-owner').allowed, false);
   assert.equal(getPublicationPolicy('website', 'cover-ownership-history').allowed, false);
   assert.equal(getPublicationPolicy('website', 'value-market').allowed, false);
-  assert.equal(getPublicationPolicy('report', 'cover-owner').allowed, true);
+  assert.equal(getPublicationPolicy('report', 'cover-owner').allowed, false);
   assert.equal(getPublicationPolicy('report', 'cover-ownership-history').allowed, true);
+  assert.equal(getPublicationPolicy('report', 'cover-storage').allowed, false);
   assert.equal(getPublicationPolicy('community', 'cover-owner').allowed, false);
   assert.equal(getPublicationPolicy('community', 'cover-ownership-history').allowed, false);
+  assert.equal(getPublicationPolicy('collection', 'media-hero').allowed, true);
+  assert.equal(getPublicationPolicy('collection', 'cover-storage').allowed, false);
 });
 
 test('une sélection historique sans décision humaine reste en attente de validation', () => {

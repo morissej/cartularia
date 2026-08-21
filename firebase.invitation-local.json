@@ -1,0 +1,29 @@
+{
+  "functions": {
+    "source": ".",
+    "codebase": "cartularia-sync",
+    "runtime": "nodejs22",
+    "ignore": [
+      ".git",
+      ".firebase",
+      ".env",
+      ".env.*",
+      "node_modules",
+      "dist",
+      "public",
+      "src",
+      "tests",
+      "docs",
+      "firebase",
+      "config",
+      "*.log"
+    ]
+  },
+  "emulators": {
+    "functions": { "host": "127.0.0.1", "port": 5001 },
+    "hub": { "host": "127.0.0.1", "port": 24400 },
+    "logging": { "host": "127.0.0.1", "port": 24500 },
+    "ui": { "enabled": false },
+    "singleProjectMode": false
+  }
+}

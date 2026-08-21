@@ -1,9 +1,12 @@
 import {
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
   type User,
 } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
 import {
   collection,
   collectionGroup,
@@ -14,7 +17,8 @@ import {
   query,
   where,
 } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { auth, db, functions } from '../firebase';
+import { normalizeUserAlias } from '../domain/personalDataBoundary';
 import type {
   AccountOrganizationContext,
   MembershipDocument,
@@ -34,8 +38,30 @@ const loadRegistry = async (registryId: string): Promise<RegistryDocument | null
   return snapshot.exists() ? (snapshot.data() as RegistryDocument) : null;
 };
 
-export const signInToCartularia = async (email: string, password: string): Promise<User> => {
-  const credential = await signInWithEmailAndPassword(auth, email, password);
+const sha256Hex = async (value: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
+export const registryAuthenticationEmail = async (identifier: string) => {
+  const normalized = normalizeUserAlias(identifier);
+  if (normalized.includes('@')) return normalized.toLocaleLowerCase('en-US');
+  return `${await sha256Hex(`registry-alias\u0000${normalized.toLocaleLowerCase('fr')}`)}@registry.cartularia.invalid`;
+};
+
+export const signInToCartularia = async (identifier: string, password: string): Promise<User> => {
+  const credential = await signInWithEmailAndPassword(auth, await registryAuthenticationEmail(identifier), password);
+  return credential.user;
+};
+
+export const createCartulariaAccount = async (userName: string, password: string): Promise<User> => {
+  const normalized = normalizeUserAlias(userName);
+  if (normalized.length < 3) throw new Error('invalid_user_name');
+  if (password.length < 12) throw new Error('weak_password');
+  const credential = await createUserWithEmailAndPassword(auth, await registryAuthenticationEmail(normalized), password);
+  await updateProfile(credential.user, { displayName: normalized });
+  const activate = httpsCallable<{ userName: string }, { registryId: string }>(functions, 'activateRegistryAccount');
+  await activate({ userName: normalized });
   return credential.user;
 };
 

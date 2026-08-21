@@ -27,6 +27,7 @@ import {
 import type { CloudBinaryRecord, CloudStateRecord } from './syncModel.ts';
 import { validateFileForUpload } from '../security/fileValidation.ts';
 import { waitForPrivateUploadVerification } from '../services/privateUploadVerification.ts';
+import { isRegistrySafeBinaryKind, isRegistrySafeStateKey } from '../domain/personalDataBoundary.ts';
 
 const RETENTION_POLICY_VERSION = 'inactive-plus-2y-v1';
 const STATE_DOCUMENT_MAXIMUM_BYTES = 900_000;
@@ -402,14 +403,20 @@ export const synchronizePrivateDraft = async ({
     updatedAt: serverTimestamp(),
   }, { merge: true });
 
-  const [localStates, localBinaries, cloudStatesSnapshot, cloudBinariesSnapshot] = await Promise.all([
+  const [allLocalStates, allLocalBinaries, cloudStatesSnapshot, cloudBinariesSnapshot] = await Promise.all([
     vault.listStateRecords(),
     vault.listBinaryRecords(),
     getDocs(collection(root, 'state')),
     getDocs(collection(root, 'binaries')),
   ]);
-  const cloudStates = new Map(cloudStatesSnapshot.docs.map((snapshot) => [snapshot.id, parseCloudState(snapshot.id, snapshot.data())]));
-  const cloudBinaries = new Map(cloudBinariesSnapshot.docs.map((snapshot) => [snapshot.id, parseCloudBinary(snapshot.id, snapshot.data())]));
+  const localStates = allLocalStates.filter((record) => isRegistrySafeStateKey(record.key));
+  const localBinaries = allLocalBinaries.filter((record) => isRegistrySafeBinaryKind(record.kind));
+  const cloudStates = new Map(cloudStatesSnapshot.docs
+    .filter((snapshot) => isRegistrySafeStateKey(snapshot.id))
+    .map((snapshot) => [snapshot.id, parseCloudState(snapshot.id, snapshot.data())]));
+  const cloudBinaries = new Map(cloudBinariesSnapshot.docs
+    .map((snapshot) => [snapshot.id, parseCloudBinary(snapshot.id, snapshot.data())] as const)
+    .filter(([, record]) => isRegistrySafeBinaryKind(record.kind)));
   const conflicts: SyncConflict[] = [];
   const pulledStateKeys: string[] = [];
   const pulledBinaryIds: string[] = [];
@@ -490,7 +497,9 @@ export const primePrivateDraftState = async ({
   vault: CartulariaLocalVault;
   readTimeoutMs?: number;
 }) => {
-  const localStates = new Map((await vault.listStateRecords()).map((record) => [record.key, record]));
+  const localStates = new Map((await vault.listStateRecords())
+    .filter((record) => isRegistrySafeStateKey(record.key))
+    .map((record) => [record.key, record]));
   const cloudStates = await new Promise<Awaited<ReturnType<typeof getDocs>>>((resolve, reject) => {
     let settled = false;
     const finish = (operation: () => void) => {
@@ -507,6 +516,7 @@ export const primePrivateDraftState = async ({
   });
   let pulled = 0;
   for (const snapshot of cloudStates.docs) {
+    if (!isRegistrySafeStateKey(snapshot.id)) continue;
     const cloud = parseCloudState(snapshot.id, snapshot.data() as Record<string, unknown>);
     const local = localStates.get(cloud.key);
     if (local?.dirty) continue;
@@ -538,6 +548,7 @@ export const resolvePrivateDraftConflict = async ({
   strategy: 'keep-local' | 'take-cloud';
 }) => {
   if (conflict.kind === 'state') {
+    if (!isRegistrySafeStateKey(conflict.id)) throw new Error('Cette donnée personnelle relève du Coffre personnel.');
     const snapshot = await getDoc(stateRef(uid, cartularyId, conflict.id));
     if (!snapshot.exists()) throw new Error(`Version cloud absente pour ${conflict.id}.`);
     const cloud = parseCloudState(conflict.id, snapshot.data());
@@ -547,6 +558,7 @@ export const resolvePrivateDraftConflict = async ({
     const snapshot = await getDoc(binaryRef(uid, cartularyId, conflict.id));
     if (!snapshot.exists()) throw new Error(`Original cloud absent pour ${conflict.id}.`);
     const cloud = parseCloudBinary(conflict.id, snapshot.data());
+    if (!isRegistrySafeBinaryKind(cloud.kind)) throw new Error('Ce document personnel relève du Coffre personnel.');
     if (strategy === 'keep-local') {
       await vault.prepareBinaryConflictResolution(conflict.id, cloud.revision);
     } else if (cloud.deleted || !cloud.storagePath) {

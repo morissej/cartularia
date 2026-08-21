@@ -205,11 +205,6 @@ export function RegistryAdministration({
         </section>
       </div>
 
-      <aside className="registry-administration-boundary">
-        <ShieldCheck aria-hidden="true" />
-        <div><h2>Administration sans superutilisateur silencieux</h2><p>Cette page expose uniquement les métadonnées organisationnelles autorisées. Elle ne lit aucun contenu, média, preuve, archive, valeur ou identité privée des Cartulaires.</p></div>
-        <span>Lecture seule</span>
-      </aside>
     </section>
   );
 }

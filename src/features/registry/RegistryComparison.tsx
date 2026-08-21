@@ -9,7 +9,6 @@ import {
   Plus,
   RefreshCw,
   Scale,
-  ShieldCheck,
   Watch,
   X,
 } from 'lucide-react';
@@ -126,7 +125,6 @@ export function RegistryComparison({ registry }: { registry: RegistryDocument })
           <h1 id="registry-comparison-title">Comparer les Cartulaires</h1>
           <p>Deux à quatre dossiers rapprochés sur leur noyau commun autorisé, sans ouvrir ni recopier leur contenu patrimonial.</p>
         </div>
-        <div className="registry-comparison__security"><ShieldCheck aria-hidden="true" /><span>Liste blanche projetée</span></div>
       </header>
 
       <div className="registry-comparison-toolbar">
@@ -171,7 +169,6 @@ export function RegistryComparison({ registry }: { registry: RegistryDocument })
         </div>
       )}
 
-      <aside className="registry-comparison-boundary"><ShieldCheck aria-hidden="true" /><div><h2>Comparer n’accorde aucun droit supplémentaire</h2><p>La matrice réutilise uniquement les champs déjà visibles dans le catalogue du Registre. Pour les valeurs, preuves, médias, documents et détails, chaque Cartulaire applique séparément ses propres autorisations.</p></div><span>2 à 4 projections</span></aside>
     </section>
   );
 }

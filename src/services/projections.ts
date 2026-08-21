@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { getBlob, ref } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import type {
@@ -13,6 +13,25 @@ import type {
 export const loadRegistryItems = async (registryId: string): Promise<RegistryItemProjection[]> => {
   const snapshot = await getDocs(query(collection(db, 'registries', registryId, 'items'), orderBy('updatedAt', 'desc')));
   return snapshot.docs.map((item) => item.data() as RegistryItemProjection);
+};
+
+export const loadScopedRegistryItems = async (
+  registryId: string,
+  grant?: { registry: boolean; collectionIds: string[]; cartularyIds: string[] },
+): Promise<RegistryItemProjection[]> => {
+  if (!grant || grant.registry) return loadRegistryItems(registryId);
+  const [cartularies, collections] = await Promise.all([
+    Promise.all(grant.cartularyIds.map((cartularyId) => getDoc(doc(db, 'registries', registryId, 'items', cartularyId)))),
+    Promise.all(grant.collectionIds.flatMap((collectionId) => [
+      getDocs(query(collection(db, 'registries', registryId, 'items'), where('collectionId', '==', collectionId))),
+      getDocs(query(collection(db, 'registries', registryId, 'items'), where('collectionIds', 'array-contains', collectionId))),
+    ])),
+  ]);
+  const items = [
+    ...cartularies.flatMap((snapshot) => snapshot.exists() ? [snapshot.data() as RegistryItemProjection] : []),
+    ...collections.flatMap((snapshot) => snapshot.docs.map((item) => item.data() as RegistryItemProjection)),
+  ];
+  return [...new Map(items.map((item) => [item.cartularyId, item])).values()];
 };
 
 export const observeRegistryItems = (

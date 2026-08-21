@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import {
   ArrowLeft,
@@ -10,10 +10,10 @@ import {
   Plus,
   ShieldCheck,
   UploadCloud,
-  Watch,
+  Package,
 } from 'lucide-react';
 import type { OrganizationDocument, RegistryDocument } from '../../domain/foundations.ts';
-import { COLLECTION_ID_PATTERN } from '../../domain/collectionIdentifiers.ts';
+import type { RegistryCollectionDocument } from '../../domain/collections.ts';
 import { resumeOrCreateCartulary, type CartularyCreationResult } from '../../domain/cartularyCreation.ts';
 import { validateFileForUpload } from '../../security/fileValidation.ts';
 import {
@@ -24,6 +24,7 @@ import {
 } from '../../services/cartularyCreation.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
 import { registryHref } from './registryRouting.ts';
+import { loadRegistryCollections } from '../../services/collections.ts';
 
 const fileSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} o`;
@@ -53,6 +54,7 @@ export function NewCartularyPage({ user, organization, registry }: {
   const [error, setError] = useState<string | null>(null);
   const [createdCartularyId, setCreatedCartularyId] = useState<string | null>(null);
   const [pendingCreation, setPendingCreation] = useState<CartularyCreationResult | null>(null);
+  const [collections, setCollections] = useState<RegistryCollectionDocument[]>([]);
   const [form, setForm] = useState({
     brand: '',
     model: '',
@@ -73,6 +75,15 @@ export function NewCartularyPage({ user, organization, registry }: {
     valuationHigh: '',
     sourceLabel: 'Dossier transmis par le propriétaire',
   });
+  useEffect(() => {
+    let active = true;
+    void loadRegistryCollections(registry.id).then((items) => {
+      if (!active) return;
+      setCollections(items.filter((item) => item.status !== 'archived'));
+      if (items.length > 0) setForm((current) => ({ ...current, collectionId: items.some((item) => item.id === current.collectionId) ? current.collectionId : items[0].id }));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [registry.id]);
   const allFileCount = useMemo(() => {
     const identities = new Set([coverFile, ...files].filter(Boolean).map((file) => `${file!.name}\u0000${file!.size}\u0000${file!.lastModified}`));
     return identities.size;
@@ -185,7 +196,7 @@ export function NewCartularyPage({ user, organization, registry }: {
         <div>
           <a className="registry-create__back" href={registryHref(registry.id, 'items')}><ArrowLeft aria-hidden="true" /> Catalogue</a>
           <p className="registry-kicker">Nouveau cartulaire</p>
-          <h1 id="registry-create-title">Ajouter une montre</h1>
+          <h1 id="registry-create-title">Ajouter un objet</h1>
           <p>Créez un dossier privé distinct. Les informations et fichiers sont secrets par défaut et devront être revus après import.</p>
         </div>
         <div className="registry-create__privacy"><ShieldCheck aria-hidden="true" /><span>Secret par défaut</span></div>
@@ -193,7 +204,7 @@ export function NewCartularyPage({ user, organization, registry }: {
 
       <form className="registry-create-form" onSubmit={handleSubmit}>
         <section className="registry-create-card">
-          <header><span>01</span><div><h2>Identifier la montre</h2><p>Ces trois informations permettent de distinguer le nouveau Cartulaire.</p></div><Watch aria-hidden="true" /></header>
+          <header><span>01</span><div><h2>Identifier l’objet</h2><p>Ces trois informations permettent de distinguer le nouveau Cartulaire.</p></div><Package aria-hidden="true" /></header>
           <div className="registry-create-grid registry-create-grid--three">
             <label><span>Marque *</span><input name="brand" value={form.brand} onChange={(event) => update('brand', event.target.value)} required /></label>
             <label><span>Modèle *</span><input name="model" value={form.model} onChange={(event) => update('model', event.target.value)} required /></label>
@@ -201,7 +212,7 @@ export function NewCartularyPage({ user, organization, registry }: {
             <label><span>Année</span><input name="manufactureYear" type="number" min="1500" max="2200" value={form.manufactureYear} onChange={(event) => update('manufactureYear', event.target.value)} /></label>
             <label><span>Numéro de série</span><input name="serialNumber" value={form.serialNumber} onChange={(event) => update('serialNumber', event.target.value)} /></label>
             <label><span>Calibre</span><input name="caliber" value={form.caliber} onChange={(event) => update('caliber', event.target.value)} /></label>
-            <label><span>Collection</span><input name="collectionId" value={form.collectionId} onChange={(event) => update('collectionId', event.target.value)} required pattern={COLLECTION_ID_PATTERN} /></label>
+            <label><span>Collection</span><select name="collectionId" value={form.collectionId} onChange={(event) => update('collectionId', event.target.value)} required><option value={form.collectionId}>{collections.find((item) => item.id === form.collectionId)?.name || form.collectionId.replace(/^col_/, '').replace(/[_-]+/g, ' ')}</option>{collections.filter((item) => item.id !== form.collectionId).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
           </div>
           <label className="registry-create-wide"><span>Description</span><textarea name="description" rows={4} value={form.description} onChange={(event) => update('description', event.target.value)} /></label>
           <label className="registry-create-wide"><span>État déclaré</span><textarea name="conditionSummary" rows={3} value={form.conditionSummary} onChange={(event) => update('conditionSummary', event.target.value)} /></label>

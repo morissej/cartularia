@@ -6,6 +6,14 @@ import { privateBinaryIsVerified } from './private-upload-command.mjs';
 
 const SYNC_RATE_LIMIT_PER_HOUR = 120;
 const ONE_HOUR_MS = 60 * 60 * 1_000;
+const REGISTRY_FORBIDDEN_STATE_KEYS = new Set([
+  'cartularia-owner-fields',
+  'cartularia-owner-type',
+  'cartularia-owner-documents',
+  'cartularia-transmission-recipients',
+  'cartularia-storage-locations',
+  'cartularia-storage-description',
+]);
 
 export class LiveSyncCommandError extends Error {
   constructor(code, message) {
@@ -35,6 +43,10 @@ const asYear = (value, fallback) => {
   const match = String(value ?? '').match(/(?:19|20)\d{2}/);
   return match ? Number(match[0]) : fallback;
 };
+
+const asNonNegativeNumber = (value, fallback = null) => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
+);
 
 const specificationValue = (groups, id, label) => {
   if (!Array.isArray(groups)) return null;
@@ -101,8 +113,12 @@ const loadDraft = async (firestore, ownerUid, cartularyId) => {
   if (!draft.exists || draft.data().status !== 'active') {
     throw new LiveSyncCommandError('draft_not_ready', 'Le brouillon privé actif est introuvable.');
   }
-  const states = new Map(stateSnapshot.docs.map((document) => [document.id, { key: document.id, ...document.data() }]));
-  const binaries = new Map(binarySnapshot.docs.map((document) => [document.id, { binaryId: document.id, ...document.data() }]));
+  const states = new Map(stateSnapshot.docs
+    .filter((document) => !REGISTRY_FORBIDDEN_STATE_KEYS.has(document.id))
+    .map((document) => [document.id, { key: document.id, ...document.data() }]));
+  const binaries = new Map(binarySnapshot.docs
+    .filter((document) => document.data().kind !== 'owner_document')
+    .map((document) => [document.id, { binaryId: document.id, ...document.data() }]));
   const digest = sha256Digest({
     state: [...states.values()].map((record) => ({
       key: record.key,
@@ -187,11 +203,12 @@ export const processCartularySyncRequest = async ({
   if (!claim.claimed) return { requestDocumentId, status: 'ignored', reason: claim.reason };
 
   const rootRef = firestore.doc(`cartularies/${cartularyId}`);
-  const [root, auditSnapshot, draft, existingAssetsSnapshot] = await Promise.all([
+  const [root, auditSnapshot, draft, existingAssetsSnapshot, existingRemindersSnapshot] = await Promise.all([
     rootRef.get(),
     rootRef.collection('auditEvents').orderBy('sequence').get(),
     loadDraft(firestore, ownerUid, cartularyId),
     rootRef.collection('assets').get(),
+    rootRef.collection('reminders').get(),
   ]);
   if (!root.exists) throw new LiveSyncCommandError('cartulary_not_found', `Cartulaire ${cartularyId} introuvable.`);
   const rootData = root.data();
@@ -204,6 +221,33 @@ export const processCartularySyncRequest = async ({
 
   const specifications = stateValue(draft.states, 'cartularia-specification-groups');
   const media = stateValue(draft.states, 'cartularia-media-assets-v3');
+  const collectionId = asText(stateValue(draft.states, 'cartularia-collection-id'), rootData.collectionId);
+  const publicationCollectionIdsState = stateValue(draft.states, 'cartularia-publication-collection-ids');
+  const collectionIds = [...new Set([
+    ...(Array.isArray(publicationCollectionIdsState) ? publicationCollectionIdsState : rootData.collectionIds || []),
+    collectionId,
+  ].filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim()))];
+  const patrimonialStatus = asText(stateValue(draft.states, 'cartularia-watch-status'), rootData.patrimonialStatus || 'Patrimonial');
+  const userAlias = asText(stateValue(draft.states, 'cartularia-user-alias'), rootData.userAlias || null);
+  const objectCode = asText(stateValue(draft.states, 'cartularia-object-code'), rootData.objectCode || null);
+  const storageCodeState = stateValue(draft.states, 'cartularia-storage-code-names');
+  const storageCodeNames = Array.isArray(storageCodeState)
+    ? storageCodeState.flatMap((item) => typeof item?.codeName === 'string' && item.codeName.trim() ? [item.codeName.trim().slice(0, 80)] : [])
+    : Array.isArray(rootData.storageCodeNames) ? rootData.storageCodeNames : [];
+  const purchase = stateValue(draft.states, 'cartularia-purchase') || {};
+  const purchaseExpenses = stateValue(draft.states, 'cartularia-purchase-expenses');
+  const retainedValuation = stateValue(draft.states, 'cartularia-retained-valuation') || {};
+  const creationProfile = stateValue(draft.states, 'cartularia-creation-profile') || {};
+  const purchasePrice = asNonNegativeNumber(purchase.purchasePrice);
+  const costBasis = purchasePrice === null ? null : purchasePrice + (Array.isArray(purchaseExpenses)
+    ? purchaseExpenses.reduce((sum, expense) => sum + (asNonNegativeNumber(expense?.amount, 0) || 0), 0)
+    : 0);
+  const grossValuation = asNonNegativeNumber(retainedValuation.amount);
+  const saleCostAmount = asNonNegativeNumber(retainedValuation.saleCostAmount, 0) || 0;
+  const taxAmount = asNonNegativeNumber(retainedValuation.taxAmount, 0) || 0;
+  const netValuation = grossValuation === null ? null : Math.max(0, grossValuation - saleCostAmount);
+  const netAfterTaxValuation = netValuation === null ? null : Math.max(0, netValuation - taxAmount);
+  const valuationCurrency = asText(creationProfile.currency, rootData.valuationCurrency || rootData.currency || 'EUR');
   const makerName = asText(specificationValue(specifications, 'brand', 'Marque'), rootData.makerName);
   const modelName = asText(specificationValue(specifications, 'model', 'Modèle'), rootData.modelName);
   const referenceCode = asText(specificationValue(specifications, 'reference', 'Numéro de référence'), rootData.referenceCode);
@@ -213,6 +257,24 @@ export const processCartularySyncRequest = async ({
     || rootData.primaryAssetId
     || null;
   const existingAssets = new Map(existingAssetsSnapshot.docs.map((document) => [document.id, document.data()]));
+  const existingReminders = new Map(existingRemindersSnapshot.docs.map((document) => [document.id, document.data()]));
+  const followUps = stateValue(draft.states, 'cartularia-todos');
+  const reminderPatches = (Array.isArray(followUps) ? followUps : []).flatMap((item) => {
+    if (!item || typeof item.id !== 'string' || typeof item.text !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.dueAt || '')) return [];
+    return [{
+      id: item.id,
+      cartularyId,
+      organizationId: rootData.organizationId,
+      title: item.text.trim(),
+      category: ['insurance', 'visual_evidence', 'maintenance', 'custom'].includes(item.category) ? item.category : 'custom',
+      dueAt: `${item.dueAt}T00:00:00.000Z`,
+      reminderStatus: ['planned', 'active', 'completed', 'dismissed'].includes(item.status) ? item.status : 'planned',
+      visibility: 'secret',
+      liveSyncManaged: true,
+      liveStateDigest: draft.digest,
+      updatedAt: FieldValue.serverTimestamp(),
+    }];
+  });
   const assetPatches = mediaAssets.map((asset) => buildAssetPatch({
     asset,
     existing: existingAssets.get(asset.id),
@@ -268,7 +330,8 @@ export const processCartularySyncRequest = async ({
       cartularyId,
       organizationId: currentRootData.organizationId,
       registryId: currentRootData.registryId,
-      collectionId: currentRootData.collectionId,
+      collectionId,
+      collectionIds,
       assetType: currentRootData.assetType,
       displayTitle: `${makerName} ${modelName}`.trim(),
       makerName,
@@ -277,6 +340,15 @@ export const processCartularySyncRequest = async ({
       manufactureYear,
       lifecycleStatus: currentRootData.lifecycleStatus,
       possessionStatus: currentRootData.possessionStatus,
+      patrimonialStatus,
+      userAlias,
+      objectCode,
+      purchasePrice,
+      costBasis,
+      grossValuation,
+      netValuation,
+      netAfterTaxValuation,
+      valuationCurrency,
       completenessLevel: currentRootData.completenessLevel,
       primaryAssetId,
       sourceRevision: nextRevision,
@@ -291,6 +363,12 @@ export const processCartularySyncRequest = async ({
       modelName,
       referenceCode,
       manufactureYear,
+      collectionId,
+      collectionIds,
+      patrimonialStatus,
+      userAlias,
+      objectCode,
+      storageCodeNames,
       primaryAssetId,
       revision: nextRevision,
       liveStateDigest: draft.digest,
@@ -325,6 +403,11 @@ export const processCartularySyncRequest = async ({
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
       }
+    }
+    for (const patch of reminderPatches) transaction.set(rootRef.collection('reminders').doc(patch.id), patch, { merge: true });
+    const activeReminderIds = new Set(reminderPatches.map((reminder) => reminder.id));
+    for (const [reminderId, existing] of existingReminders) {
+      if (existing.liveSyncManaged === true && !activeReminderIds.has(reminderId)) transaction.delete(rootRef.collection('reminders').doc(reminderId));
     }
     transaction.set(registryItemRef, {
       ...projection,

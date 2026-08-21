@@ -38,8 +38,50 @@ service cloud.firestore {
         && registryIsInScope(organizationId, registryId);
     }
 
-    function canReadCartulary(organizationId, registryId) {
+    function membershipIsInvitationManaged(organizationId) {
+      return hasActiveMembership(organizationId)
+        && get(membershipPath(organizationId)).data.get('invitationManaged', false) == true;
+    }
+
+    function invitationGrant(organizationId, registryId) {
+      return get(membershipPath(organizationId)).data.get('invitationGrants', {}).get(
+        registryId,
+        { 'registry': false, 'collectionIds': [], 'cartularyIds': [] }
+      );
+    }
+
+    function canReadRegistryItem(organizationId, registryId, cartularyId, collectionId, collectionIds) {
+      return canReadRegistry(organizationId, registryId)
+        && (
+          !membershipIsInvitationManaged(organizationId)
+          || invitationGrant(organizationId, registryId).registry == true
+          || cartularyId in invitationGrant(organizationId, registryId).cartularyIds
+          || collectionId in invitationGrant(organizationId, registryId).collectionIds
+          || (collectionIds is list && collectionIds.hasAny(invitationGrant(organizationId, registryId).collectionIds))
+        );
+    }
+
+    function canReadRegistryCollection(organizationId, registryId, collectionId) {
+      return canReadRegistry(organizationId, registryId)
+        && (
+          !membershipIsInvitationManaged(organizationId)
+          || invitationGrant(organizationId, registryId).registry == true
+          || collectionId in invitationGrant(organizationId, registryId).collectionIds
+        );
+    }
+
+    function canReadCartulary(organizationId, registryId, cartularyId) {
       return hasPermission(organizationId, 'cartulary.read')
+        && registryIsInScope(organizationId, registryId)
+        && (
+          !membershipIsInvitationManaged(organizationId)
+          || invitationGrant(organizationId, registryId).registry == true
+          || cartularyId in invitationGrant(organizationId, registryId).cartularyIds
+        );
+    }
+
+    function canManageRegistry(organizationId, registryId) {
+      return hasPermission(organizationId, 'cartulary.edit')
         && registryIsInScope(organizationId, registryId);
     }
 
@@ -106,11 +148,62 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
 
       match /items/{cartularyId} {
-        allow get, list: if canReadRegistry(
+        allow get, list: if canReadRegistryItem(
           get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
-          registryId
+          registryId,
+          cartularyId,
+          resource.data.collectionId,
+          resource.data.get('collectionIds', [])
         );
         allow create, update, delete: if false;
+      }
+
+      match /collections/{collectionId} {
+        allow get, list: if canReadRegistryCollection(
+          get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+          registryId,
+          collectionId
+        );
+        allow create: if canManageRegistry(
+            get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+            registryId
+          )
+          && request.resource.data.id == collectionId
+          && request.resource.data.registryId == registryId
+          && request.resource.data.organizationId == get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId
+          && request.resource.data.name is string
+          && request.resource.data.websiteSlug is string
+          && request.resource.data.status in ['draft', 'published', 'archived']
+          && request.resource.data.visibility in ['secret', 'public']
+          && request.resource.data.get('publicationConsent', false) is bool
+          && request.resource.data.get('publishedCartularyIds', []) is list
+          && request.resource.data.get('publishedCartularyIds', []).size() <= 200
+          && (
+            request.resource.data.get('publicationConsent', false) == true
+              ? request.resource.data.status == 'published'
+                && request.resource.data.visibility == 'public'
+                && request.resource.data.get('publishedCartularyIds', []).size() > 0
+              : request.resource.data.status in ['draft', 'archived'] && request.resource.data.visibility == 'secret'
+          );
+        allow update: if canManageRegistry(resource.data.organizationId, registryId)
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.registryId == resource.data.registryId
+          && request.resource.data.organizationId == resource.data.organizationId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'description', 'websiteTitle', 'websiteSlug', 'status', 'visibility',
+            'publicationConsent', 'publishedCartularyIds', 'publishedAt', 'updatedAt'
+          ])
+          && request.resource.data.get('publicationConsent', false) is bool
+          && request.resource.data.get('publishedCartularyIds', []) is list
+          && request.resource.data.get('publishedCartularyIds', []).size() <= 200
+          && (
+            request.resource.data.get('publicationConsent', false) == true
+              ? request.resource.data.status == 'published'
+                && request.resource.data.visibility == 'public'
+                && request.resource.data.get('publishedCartularyIds', []).size() > 0
+              : request.resource.data.status in ['draft', 'archived'] && request.resource.data.visibility == 'secret'
+          );
+        allow delete: if canManageRegistry(resource.data.organizationId, registryId);
       }
 
       match /accesses/{accessId} {
@@ -125,6 +218,105 @@ service cloud.firestore {
       }
     }
 
+    // Projection publique minimale d’un mini-site de Collection. Elle ne contient
+    // ni données privées du Registre, ni documents, ni originaux des Cartulaires.
+    match /collectionPublications/{publicationId} {
+      function privateCollectionAfter(data) {
+        return getAfter(
+          /databases/$(database)/documents/registries/$(data.registryId)/collections/$(data.collectionId)
+        );
+      }
+
+      function publicationMatchesPrivateCollection(data) {
+        return existsAfter(
+            /databases/$(database)/documents/registries/$(data.registryId)/collections/$(data.collectionId)
+          )
+          && privateCollectionAfter(data).data.organizationId == data.organizationId
+          && privateCollectionAfter(data).data.registryId == data.registryId
+          && privateCollectionAfter(data).data.id == data.collectionId
+          && data.itemCount == privateCollectionAfter(data).data.get('publishedCartularyIds', []).size()
+          && (
+            data.status == 'published'
+              ? privateCollectionAfter(data).data.get('publicationConsent', false) == true
+                && privateCollectionAfter(data).data.status == 'published'
+                && privateCollectionAfter(data).data.visibility == 'public'
+              : privateCollectionAfter(data).data.get('publicationConsent', false) == false
+                && privateCollectionAfter(data).data.status in ['draft', 'archived']
+                && privateCollectionAfter(data).data.visibility == 'secret'
+          );
+      }
+
+      function validCollectionPublication(data) {
+        return data.keys().hasOnly([
+            'publicationId', 'organizationId', 'registryId', 'collectionId',
+            'websiteTitle', 'websiteSlug', 'description', 'status', 'itemCount',
+            'publishedAt', 'updatedAt'
+          ])
+          && data.publicationId == publicationId
+          && data.publicationId == data.registryId + '--' + data.collectionId
+          && data.organizationId is string
+          && data.registryId is string
+          && data.collectionId is string
+          && data.websiteTitle is string
+          && data.websiteTitle.size() <= 160
+          && data.websiteSlug is string
+          && data.websiteSlug.matches('^[a-z0-9][a-z0-9-]{0,63}$')
+          && data.description is string
+          && data.description.size() <= 2000
+          && data.status in ['published', 'revoked']
+          && data.itemCount is int
+          && data.itemCount >= 0
+          && data.itemCount <= 200
+          && publicationMatchesPrivateCollection(data);
+      }
+
+      allow get: if resource.data.status == 'published'
+        || canManageRegistry(resource.data.organizationId, resource.data.registryId);
+      allow list: if false;
+      allow create: if validCollectionPublication(request.resource.data)
+        && canManageRegistry(request.resource.data.organizationId, request.resource.data.registryId);
+      allow update: if validCollectionPublication(request.resource.data)
+        && request.resource.data.publicationId == resource.data.publicationId
+        && request.resource.data.organizationId == resource.data.organizationId
+        && request.resource.data.registryId == resource.data.registryId
+        && request.resource.data.collectionId == resource.data.collectionId
+        && canManageRegistry(resource.data.organizationId, resource.data.registryId);
+      allow delete: if canManageRegistry(resource.data.organizationId, resource.data.registryId);
+
+      match /items/{cartularyId} {
+        function publication() {
+          return get(/databases/$(database)/documents/collectionPublications/$(publicationId));
+        }
+
+        function publicationAfter() {
+          return getAfter(/databases/$(database)/documents/collectionPublications/$(publicationId));
+        }
+
+        function validCollectionPublicationItem(data) {
+          return data.keys().hasOnly([
+              'cartularyId', 'collectionId', 'assetType', 'displayTitle', 'makerName',
+              'modelName', 'referenceCode', 'manufactureYear', 'publicCode'
+            ])
+            && data.cartularyId == cartularyId
+            && data.collectionId == publicationAfter().data.collectionId
+            && data.cartularyId in privateCollectionAfter(publicationAfter().data).data.get('publishedCartularyIds', [])
+            && data.assetType is string
+            && data.displayTitle is string
+            && data.makerName is string
+            && data.modelName is string
+            && (data.referenceCode == null || data.referenceCode is string)
+            && (data.manufactureYear == null || data.manufactureYear is int)
+            && (data.publicCode == null || data.publicCode is string);
+        }
+
+        allow get, list: if publication().data.status == 'published'
+          || canManageRegistry(publication().data.organizationId, publication().data.registryId);
+        allow create, update: if validCollectionPublicationItem(request.resource.data)
+          && canManageRegistry(publicationAfter().data.organizationId, publicationAfter().data.registryId);
+        allow delete: if canManageRegistry(publicationAfter().data.organizationId, publicationAfter().data.registryId);
+      }
+    }
+
     match /schemaCatalog/{assetType} {
       allow get, list: if signedIn();
       allow create, update, delete: if false;
@@ -136,21 +328,92 @@ service cloud.firestore {
     }
 
     match /cartularies/{cartularyId} {
-      allow get: if canReadCartulary(resource.data.organizationId, resource.data.registryId);
+      allow get: if canReadCartulary(resource.data.organizationId, resource.data.registryId, cartularyId);
       allow list, create, update, delete: if false;
+
+      match /reminders/{reminderId} {
+        function cartularyRoot() {
+          return get(/databases/$(database)/documents/cartularies/$(cartularyId)).data;
+        }
+
+        function validReminderDocument() {
+          return request.resource.data.id == reminderId
+            && request.resource.data.cartularyId == cartularyId
+            && request.resource.data.organizationId == cartularyRoot().organizationId
+            && request.resource.data.title is string
+            && request.resource.data.title.size() > 0
+            && request.resource.data.title.size() <= 200
+            && request.resource.data.dueAt is string
+            && request.resource.data.category in ['insurance', 'visual_evidence', 'maintenance', 'custom']
+            && request.resource.data.reminderStatus in ['planned', 'active', 'completed', 'dismissed']
+            && request.resource.data.visibility == 'secret';
+        }
+
+        allow create: if canManageRegistry(cartularyRoot().organizationId, cartularyRoot().registryId)
+          && request.resource.data.keys().hasOnly([
+            'id', 'cartularyId', 'organizationId', 'title', 'dueAt', 'category',
+            'reminderStatus', 'visibility', 'source', 'createdBy', 'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'id', 'cartularyId', 'organizationId', 'title', 'dueAt', 'category',
+            'reminderStatus', 'visibility', 'source', 'createdBy', 'createdAt', 'updatedAt'
+          ])
+          && validReminderDocument()
+          && request.resource.data.source in ['cartulary', 'registry']
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if canManageRegistry(cartularyRoot().organizationId, cartularyRoot().registryId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'title', 'dueAt', 'category', 'reminderStatus', 'updatedAt'
+          ])
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.cartularyId == resource.data.cartularyId
+          && request.resource.data.organizationId == resource.data.organizationId
+          && request.resource.data.visibility == resource.data.visibility
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 200
+          && request.resource.data.dueAt is string
+          && (!('category' in request.resource.data) || request.resource.data.category in ['insurance', 'visual_evidence', 'maintenance', 'custom'])
+          && request.resource.data.reminderStatus in ['planned', 'active', 'completed', 'dismissed']
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if canManageRegistry(cartularyRoot().organizationId, cartularyRoot().registryId);
+      }
 
       match /{cartularyDocument=**} {
         allow get, list: if canReadCartulary(
           get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.organizationId,
-          get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.registryId
+          get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.registryId,
+          cartularyId
         );
         allow create, update, delete: if false;
       }
     }
 
+    // Documents exclusivement administrés par les Functions d'invitation.
+    match /registryInvitations/{invitationId} {
+      allow read, write: if false;
+    }
+
+    match /mail/{mailId} {
+      allow read, write: if false;
+    }
+
     // Copie privée de synchronisation du prototype. Elle appartient au compte,
     // reste séparée du Cartulaire autoritaire et ne peut alimenter aucune publication.
     match /privateDrafts/{uid} {
+      function registrySafeStateKey(stateKey) {
+        return !(stateKey in [
+          'cartularia-owner-fields',
+          'cartularia-owner-type',
+          'cartularia-owner-documents',
+          'cartularia-transmission-recipients',
+          'cartularia-storage-locations',
+          'cartularia-storage-description'
+        ]);
+      }
+
       allow read, write: if false;
 
       match /cartularies/{cartularyId} {
@@ -184,6 +447,7 @@ service cloud.firestore {
             && request.resource.data.ownerUid == uid
             && request.resource.data.cartularyId == cartularyId
             && request.resource.data.key == stateKey
+            && registrySafeStateKey(stateKey)
             && stateKey.matches('^cartularia-[A-Za-z0-9:_-]+$')
             && request.resource.data.revision is int
             && request.resource.data.revision > 0
@@ -230,7 +494,7 @@ service cloud.firestore {
               && request.resource.data.size is int
               && request.resource.data.size >= 0
               && request.resource.data.sha256.matches('^sha256:[a-f0-9]{64}$')
-              && request.resource.data.kind in ['media', 'owner_document', 'condition_attachment']
+              && request.resource.data.kind in ['media', 'condition_attachment']
               && (
                 (
                   request.resource.data.deleted == true
@@ -597,7 +861,8 @@ service cloud.firestore {
     match /integrityProjections/{cartularyId} {
       allow get: if canReadCartulary(
         get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.organizationId,
-        get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.registryId
+        get(/databases/$(database)/documents/cartularies/$(cartularyId)).data.registryId,
+        cartularyId
       );
       allow list, create, update, delete: if false;
     }

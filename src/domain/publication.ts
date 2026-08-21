@@ -1,4 +1,4 @@
-export const PUBLICATION_POLICY_VERSION = 'publication-policy-v1' as const;
+export const PUBLICATION_POLICY_VERSION = 'publication-policy-v2' as const;
 
 export const PUBLISHED_BLOCK_IDS = [
   'cover-watch',
@@ -30,9 +30,45 @@ export const PUBLISHED_BLOCK_IDS = [
 ] as const;
 
 export type PublishedBlockId = typeof PUBLISHED_BLOCK_IDS[number];
-export type PublicationDestination = 'website' | 'report' | 'community';
+export type PublicationDestination = 'website' | 'collection' | 'report' | 'community';
 export type PublicationAction = 'activate' | 'validate' | 'revoke';
 export type PublicationPrerequisiteId = 'brand' | 'model' | 'main-photo';
+
+export interface PublicationBlockDefinition {
+  id: PublishedBlockId;
+  pageNumber: '00' | '01' | '02' | '03' | '04';
+  pageLabel: string;
+  title: string;
+}
+
+export const PUBLICATION_BLOCK_CATALOG: readonly PublicationBlockDefinition[] = [
+  { id: 'cover-watch', pageNumber: '00', pageLabel: 'Accueil', title: "Accueil de l’objet" },
+  { id: 'cover-owner', pageNumber: '00', pageLabel: 'Accueil', title: 'Propriétaire' },
+  { id: 'cover-ownership-history', pageNumber: '00', pageLabel: 'Accueil', title: "Histoire de l’objet" },
+  { id: 'cover-transmission', pageNumber: '00', pageLabel: 'Accueil', title: 'Transmission' },
+  { id: 'cover-storage', pageNumber: '00', pageLabel: 'Accueil', title: 'Stockage' },
+  { id: 'media-hero', pageNumber: '01', pageLabel: 'Médias', title: 'Présentation principale' },
+  { id: 'media-motion', pageNumber: '01', pageLabel: 'Médias', title: "L’objet en mouvement" },
+  { id: 'media-spin', pageNumber: '01', pageLabel: 'Médias', title: 'Revue à 360°' },
+  { id: 'media-slideshow', pageNumber: '01', pageLabel: 'Médias', title: 'Diaporama' },
+  { id: 'media-library', pageNumber: '01', pageLabel: 'Médias', title: 'Bibliothèque média' },
+  { id: 'reference-history', pageNumber: '02', pageLabel: 'La référence', title: 'Origines' },
+  { id: 'reference-specs', pageNumber: '02', pageLabel: 'La référence', title: 'Spécifications de la référence' },
+  { id: 'reference-checks', pageNumber: '02', pageLabel: 'La référence', title: 'Points à contrôler' },
+  { id: 'reference-popularity', pageNumber: '02', pageLabel: 'La référence', title: 'Popularité du modèle' },
+  { id: 'condition-description', pageNumber: '03', pageLabel: "L’objet", title: "Description de l’objet" },
+  { id: 'condition-summary', pageNumber: '03', pageLabel: "L’objet", title: 'État actuel' },
+  { id: 'condition-documentation', pageNumber: '03', pageLabel: "L’objet", title: 'Papiers, documentation et accessoires' },
+  { id: 'condition-reference-report', pageNumber: '03', pageLabel: "L’objet", title: "Rapport sur l’état de l’objet" },
+  { id: 'condition-prior-reviews', pageNumber: '03', pageLabel: "L’objet", title: 'Revues antérieures' },
+  { id: 'value-market', pageNumber: '04', pageLabel: 'Valorisation', title: 'Données de marché' },
+  { id: 'value-comparables-listings', pageNumber: '04', pageLabel: 'Valorisation', title: 'Annonces en cours' },
+  { id: 'value-comparables-transactions', pageNumber: '04', pageLabel: 'Valorisation', title: 'Transactions réalisées' },
+  { id: 'value-comparables-analysis', pageNumber: '04', pageLabel: 'Valorisation', title: "Synthèse de l’analyse" },
+  { id: 'value-cost-basis', pageNumber: '04', pageLabel: 'Valorisation', title: 'Prix de revient' },
+  { id: 'value-performance', pageNumber: '04', pageLabel: 'Valorisation', title: 'Plus-value, moins-value et TRI' },
+  { id: 'value-sensitivity', pageNumber: '04', pageLabel: 'Valorisation', title: 'Prix de vente et coût de cession' },
+];
 
 // Must remain aligned with scripts/lib/projection-command.mjs. The server still
 // performs the authoritative recursive inspection of every projected payload.
@@ -60,6 +96,12 @@ const COMMUNITY_FORBIDDEN_BLOCKS: readonly PublishedBlockId[] = [
   'cover-storage',
   'value-cost-basis',
   'value-performance',
+];
+
+const NON_PROJECTABLE_PERSONAL_BLOCKS: readonly PublishedBlockId[] = [
+  'cover-owner',
+  'cover-transmission',
+  'cover-storage',
 ];
 
 export interface PublicationMainPhoto {
@@ -105,13 +147,14 @@ export interface PublicationDecision {
 }
 
 export const destinationLabel = (destination: PublicationDestination) => (
-  destination === 'website' ? 'Watch website'
-    : destination === 'report' ? 'rapport R'
+  destination === 'website' ? 'publication extérieure du Cartulaire'
+    : destination === 'collection' ? 'Collection'
+    : destination === 'report' ? 'rapport PDF'
       : 'Cercle'
 );
 
 export const destinationMarker = (destination: PublicationDestination) => (
-  destination === 'website' ? 'W' : destination === 'report' ? 'R' : 'C'
+  destination === 'website' ? 'Cartulaire' : destination === 'collection' ? 'Collection' : destination === 'report' ? 'PDF' : 'Cercle'
 );
 
 export const evaluatePublicationEligibility = ({
@@ -133,13 +176,13 @@ export const evaluatePublicationEligibility = ({
     && mainPhoto.status === 'Archived'
     && (mainPhoto.binaryId || mainPhoto.url),
   );
-  const photoVisibilityAllowed = destination === 'website'
+  const photoVisibilityAllowed = destination === 'website' || destination === 'collection'
     ? mainPhoto?.visibility === 'Tous'
     : destination === 'community'
       ? mainPhoto?.visibility !== 'Secret'
       : Boolean(mainPhoto);
   const photoSatisfied = photoIsDurable && photoVisibilityAllowed;
-  const destinationVisibility = destination === 'website'
+  const destinationVisibility = destination === 'website' || destination === 'collection'
     ? 'visible par Tous'
     : destination === 'community'
       ? 'visible par la Communauté ou Tous'
@@ -179,13 +222,16 @@ export const getPublicationPolicy = (
   destination: PublicationDestination,
   blockId: PublishedBlockId,
 ): PublicationPolicyResult => {
-  if (destination === 'report') {
-    return { allowed: true, reason: 'Le rapport R reste une projection privée du propriétaire.' };
+  if (NON_PROJECTABLE_PERSONAL_BLOCKS.includes(blockId)) {
+    return { allowed: false, reason: 'Ce bloc reste limité au Cartulaire privé ou au Coffre personnel séparé.' };
   }
-  if (destination === 'website') {
+  if (destination === 'report') {
+    return { allowed: true, reason: 'Le rapport PDF reste une projection privée du propriétaire.' };
+  }
+  if (destination === 'website' || destination === 'collection') {
     return WEBSITE_BLOCK_ALLOWLIST.includes(blockId)
-      ? { allowed: true, reason: 'Bloc admis par la liste blanche W ; le contenu reste contrôlé côté serveur.' }
-      : { allowed: false, reason: 'Ce bloc est exclu de la liste blanche publique W.' };
+      ? { allowed: true, reason: 'Bloc admis pour cette publication ; le contenu reste contrôlé côté serveur.' }
+      : { allowed: false, reason: 'Ce bloc est exclu de cette publication.' };
   }
   return COMMUNITY_FORBIDDEN_BLOCKS.includes(blockId)
     ? { allowed: false, reason: 'Ce bloc contient des données privées incompatibles avec une projection Cercle.' }

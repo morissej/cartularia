@@ -70,3 +70,8 @@ export interface LoadedCommunityPost {
   blocks: CommunityBlock[];
   comments: CommunityComment[];
 }
+
+export interface LoadedCommunityPublication {
+  publication: CommunityPublication;
+  blocks: CommunityBlock[];
+}

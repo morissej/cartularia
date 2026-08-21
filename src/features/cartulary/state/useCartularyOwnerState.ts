@@ -1,99 +1,62 @@
 import { useCallback } from 'react';
 import type { OwnershipHistoryEntry } from '../../../domain/ownershipHistory';
-import type {
-  AssetKind,
-  OwnerDocument,
-  OwnerField,
-  OwnerType,
-  StorageLocation,
-  TransmissionRecipient,
-  WatchPatrimonialStatus,
-} from './cartularyStateTypes';
+import type { AssetKind, WatchPatrimonialStatus } from './cartularyStateTypes';
+import type { StorageCodeReference, TransmissionCodeReference } from '../../../domain/personalDataBoundary';
 import { usePersistentCartularyState } from './usePersistentCartularyState';
 
 interface OwnerStateOptions {
-  loadFields: () => OwnerField[];
-  loadType: () => OwnerType;
-  loadDocuments: () => OwnerDocument[];
   loadHistory: () => OwnershipHistoryEntry[];
   loadAssetKind: () => AssetKind;
   loadWatchStatus: () => WatchPatrimonialStatus;
-  loadRecipients: () => TransmissionRecipient[];
-  loadLocations: () => StorageLocation[];
+  loadCollectionId: () => string;
+  loadUserAlias: () => string;
+  loadObjectCode: () => string;
+  loadStorageCodes: () => StorageCodeReference[];
+  loadTransmissionCodes: () => TransmissionCodeReference[];
 }
 
 export const useCartularyOwnerState = (options: OwnerStateOptions) => {
-  const fields = usePersistentCartularyState({ key: 'cartularia-owner-fields', load: options.loadFields });
-  const type = usePersistentCartularyState({ key: 'cartularia-owner-type', load: options.loadType });
-  const documents = usePersistentCartularyState({
-    key: 'cartularia-owner-documents',
-    load: options.loadDocuments,
-    serialize: (items: OwnerDocument[]) => items.map((document) => ({
-      ...document,
-      url: document.url?.startsWith('blob:') ? undefined : document.url,
-    })),
-  });
   const history = usePersistentCartularyState({ key: 'cartularia-ownership-history', load: options.loadHistory });
   const assetKind = usePersistentCartularyState({ key: 'cartularia-asset-kind', load: options.loadAssetKind });
   const watchStatus = usePersistentCartularyState({ key: 'cartularia-watch-status', load: options.loadWatchStatus });
-  const recipients = usePersistentCartularyState({ key: 'cartularia-transmission-recipients', load: options.loadRecipients });
-  const locations = usePersistentCartularyState({
-    key: 'cartularia-storage-locations',
-    reloadKeys: ['cartularia-storage-locations', 'cartularia-storage-description'],
-    load: options.loadLocations,
-  });
-  const reloadFields = fields.reloadIfPresent;
-  const reloadType = type.reloadIfPresent;
-  const reloadDocuments = documents.reloadIfPresent;
-  const reloadHistory = history.reloadIfPresent;
-  const reloadAssetKind = assetKind.reloadIfPresent;
-  const reloadWatchStatus = watchStatus.reloadIfPresent;
-  const reloadRecipients = recipients.reloadIfPresent;
-  const reloadLocations = locations.reloadIfPresent;
+  const collectionId = usePersistentCartularyState({ key: 'cartularia-collection-id', load: options.loadCollectionId });
+  const userAlias = usePersistentCartularyState({ key: 'cartularia-user-alias', load: options.loadUserAlias });
+  const objectCode = usePersistentCartularyState({ key: 'cartularia-object-code', load: options.loadObjectCode });
+  const storageCodes = usePersistentCartularyState({ key: 'cartularia-storage-code-names', load: options.loadStorageCodes });
+  const transmissionCodes = usePersistentCartularyState({ key: 'cartularia-transmission-code-references', load: options.loadTransmissionCodes });
   const reloadOwnerState = useCallback((keys: ReadonlySet<string>) => [
-    reloadFields(keys),
-    reloadType(keys),
-    reloadDocuments(keys),
-    reloadHistory(keys),
-    reloadAssetKind(keys),
-    reloadWatchStatus(keys),
-    reloadRecipients(keys),
-    reloadLocations(keys),
-  ].some(Boolean), [
-    reloadFields,
-    reloadType,
-    reloadDocuments,
-    reloadHistory,
-    reloadAssetKind,
-    reloadWatchStatus,
-    reloadRecipients,
-    reloadLocations,
-  ]);
+    history.reloadIfPresent(keys),
+    assetKind.reloadIfPresent(keys),
+    watchStatus.reloadIfPresent(keys),
+    collectionId.reloadIfPresent(keys),
+    userAlias.reloadIfPresent(keys),
+    objectCode.reloadIfPresent(keys),
+    storageCodes.reloadIfPresent(keys),
+    transmissionCodes.reloadIfPresent(keys),
+  ].some(Boolean), [history, assetKind, watchStatus, collectionId, userAlias, objectCode, storageCodes, transmissionCodes]);
 
   return {
-    ownerFields: fields.value,
-    ownerType: type.value,
-    ownerDocuments: documents.value,
     ownershipHistory: history.value,
     assetKind: assetKind.value,
     watchStatus: watchStatus.value,
-    transmissionRecipients: recipients.value,
-    storageLocations: locations.value,
+    collectionId: collectionId.value,
+    userAlias: userAlias.value,
+    objectCode: objectCode.value,
+    storageCodes: storageCodes.value,
+    transmissionCodes: transmissionCodes.value,
     reloadOwnerState,
     commands: {
-      replaceFields: fields.replace,
-      setOwnerType: type.replace,
-      replaceDocuments: documents.replace,
       replaceHistory: history.replace,
       setAssetKind: assetKind.replace,
       setWatchStatus: watchStatus.replace,
-      replaceRecipients: recipients.replace,
-      replaceLocations: locations.replace,
-      updateField: (id: string, patch: Partial<OwnerField>) => fields.replace((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)),
-      updateDocument: (id: string, patch: Partial<OwnerDocument>) => documents.replace((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)),
+      setCollectionId: collectionId.replace,
+      setUserAlias: userAlias.replace,
+      setObjectCode: objectCode.replace,
+      replaceStorageCodes: storageCodes.replace,
+      replaceTransmissionCodes: transmissionCodes.replace,
       updateHistory: (id: string, patch: Partial<OwnershipHistoryEntry>) => history.replace((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)),
-      updateRecipient: (id: string, patch: Partial<TransmissionRecipient>) => recipients.replace((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)),
-      updateLocation: (id: string, patch: Partial<StorageLocation>) => locations.replace((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)),
+      updateStorageCode: (id: string, patch: Partial<StorageCodeReference>) => storageCodes.replace((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)),
+      updateTransmissionCode: (id: string, patch: Partial<TransmissionCodeReference>) => transmissionCodes.replace((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item)),
     },
   };
 };

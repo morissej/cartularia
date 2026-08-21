@@ -29,3 +29,7 @@ export function ConditionPage(props: CartularyPageProps) {
 export function ValuePage(props: CartularyPageProps) {
   return <CartularyPageFrame {...props} />;
 }
+
+export function PublicationPage(props: CartularyPageProps) {
+  return <CartularyPageFrame {...props} className="publication-page" />;
+}

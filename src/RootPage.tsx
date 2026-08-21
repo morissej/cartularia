@@ -4,8 +4,12 @@ import { applicationRouteFromPathname } from './utils/interfaceState';
 
 const CartularyApp = lazy(() => import('./App.tsx'));
 const GenericCartularyPage = lazy(() => import('./components/GenericCartularyPage.tsx').then((module) => ({ default: module.GenericCartularyPage })));
+const CollectionWebsitePage = lazy(() => import('./components/CollectionWebsitePage.tsx').then((module) => ({ default: module.CollectionWebsitePage })));
 const CommunityPage = lazy(() => import('./components/CommunityPage.tsx').then((module) => ({ default: module.CommunityPage })));
 const RegistryApp = lazy(() => import('./features/registry/RegistryApp.tsx').then((module) => ({ default: module.RegistryApp })));
+const RegistryInvitationPage = lazy(() => import('./features/registry/RegistryInvitationPage.tsx'));
+const HomePage = lazy(() => import('./features/public/HomePage.tsx').then((module) => ({ default: module.HomePage })));
+const AccountAccessPage = lazy(() => import('./features/public/AccountAccessPage.tsx').then((module) => ({ default: module.AccountAccessPage })));
 
 export function RootPage() {
   const route = applicationRouteFromPathname(window.location.pathname);
@@ -18,15 +22,23 @@ export function RootPage() {
           <h1>Vos données privées ont été supprimées</h1>
           <p>Le coffre local a été effacé. Si une session était active, la copie privée cloud a aussi été supprimée et remplacée par une trace technique empêchant sa recréation accidentelle.</p>
           <p>Les éventuelles publications déjà émises sont des actes distincts et ne sont pas supprimées automatiquement.</p>
-          <a className="button button--primary" href="/#cover">Revenir à la maquette de démonstration</a>
+          <a className="button button--primary" href="/cartulary#cover">Revenir au Cartulaire</a>
         </section>
       </main>
     );
   }
-  const Page = route === 'cartulary-view'
+  const Page = route === 'home'
+    ? HomePage
+    : route === 'account-create' || route === 'account-sign-in'
+      ? AccountAccessPage
+    : route === 'cartulary-view'
     ? GenericCartularyPage
+    : route === 'collection-website'
+      ? CollectionWebsitePage
     : route === 'community'
       ? CommunityPage
+      : route === 'invitation'
+        ? RegistryInvitationPage
       : route === 'registry'
         ? RegistryApp
         : route === 'cartulary' || route === 'watch-website'
@@ -40,7 +52,7 @@ export function RootPage() {
         <span className="eyebrow">Erreur 404</span>
         <h1>Cette page n’existe pas</h1>
         <p>L’adresse demandée ne correspond à aucune surface Cartularia. Aucune donnée du dossier n’a été affichée.</p>
-        <a className="button button--primary" href="/#cover">Revenir au Cartulaire</a>
+        <a className="button button--primary" href="/">Revenir à l’accueil</a>
       </main>
     );
   }

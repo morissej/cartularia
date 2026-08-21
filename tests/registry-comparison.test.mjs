@@ -21,6 +21,7 @@ const item = (overrides) => ({
   referenceCode: null,
   manufactureYear: null,
   lifecycleStatus: 'active',
+  patrimonialStatus: 'Patrimonial',
   possessionStatus: 'in_possession',
   completenessLevel: 'documented',
   primaryAssetId: 'asset-secret',
@@ -63,6 +64,7 @@ test('la matrice signale les différences sans modifier les projections sources'
   const rows = buildRegistryComparisonRows(source);
   assert.equal(rows.find(({ id }) => id === 'assetType').allEqual, false);
   assert.equal(rows.find(({ id }) => id === 'completenessLevel').allEqual, true);
+  assert.equal(rows.find(({ id }) => id === 'purchasePrice').values[0], 'Non renseignée');
   assert.deepEqual(source, before);
 });
 
@@ -78,7 +80,13 @@ test('la liste blanche exclut identifiants internes, médias, empreintes et donn
     'referenceCode',
     'manufactureYear',
     'possessionStatus',
+    'patrimonialStatus',
     'lifecycleStatus',
+    'purchasePrice',
+    'costBasis',
+    'grossValuation',
+    'netValuation',
+    'netAfterTaxValuation',
     'completenessLevel',
     'sourceRevision',
     'updatedAt',

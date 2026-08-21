@@ -1,116 +1,139 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ExternalLink, Filter, Users } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
-import type { LoadedCommunityPost } from '../domain/community.ts';
-import { loadCommunityFeed } from '../services/community.ts';
+import { auth } from '../firebase.ts';
+import type { LoadedCommunityPublication } from '../domain/community.ts';
+import { PUBLICATION_BLOCK_CATALOG } from '../domain/publication.ts';
+import { loadCommunityCatalog } from '../services/community.ts';
 import { formatGenericValue } from '../schema/fieldPresentation.ts';
-import { BrandLogo } from './BrandLogo';
+import { BrandLogo } from './BrandLogo.tsx';
 
 type CommunityState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'denied';
 
+interface LocalCommunityPreview {
+  cartularyId: string;
+  displayTitle: string;
+  makerName: string;
+  modelName: string;
+  assetType: string;
+  blockIds: string[];
+  cartularyUrl: string | null;
+}
+
+const parseLocalPreview = (search: string): LocalCommunityPreview | null => {
+  const parameters = new URLSearchParams(search);
+  if (parameters.get('preview') !== 'local') return null;
+  const cartularyId = parameters.get('cartularyId') || '';
+  const displayTitle = parameters.get('displayTitle') || '';
+  if (!cartularyId || !displayTitle) return null;
+  return {
+    cartularyId,
+    displayTitle,
+    makerName: parameters.get('makerName') || '',
+    modelName: parameters.get('modelName') || '',
+    assetType: parameters.get('assetType') || 'other',
+    blockIds: [...new Set((parameters.get('blocks') || '').split(',').filter(Boolean))],
+    cartularyUrl: parameters.get('cartularyUrl'),
+  };
+};
+
+const assetTypeLabel = (assetType: string) => assetType === 'watch'
+  ? 'Montres'
+  : assetType === 'car'
+    ? 'Automobiles'
+    : assetType || 'Autres objets';
+
 export const CommunityPage = () => {
+  const localPreview = useMemo(() => parseLocalPreview(window.location.search), []);
   const [state, setState] = useState<CommunityState>('auth-loading');
-  const [feed, setFeed] = useState<LoadedCommunityPost[]>([]);
+  const [catalog, setCatalog] = useState<LoadedCommunityPublication[]>([]);
+  const [assetType, setAssetType] = useState('all');
 
   useEffect(() => onAuthStateChanged(auth, (user) => {
     if (!user) {
-      setFeed([]);
+      setCatalog([]);
       setState('signed-out');
       return;
     }
     setState('loading');
-    loadCommunityFeed()
+    loadCommunityCatalog()
       .then((loaded) => {
-        setFeed(loaded);
+        setCatalog(loaded);
         setState('ready');
       })
       .catch(() => setState('denied'));
   }), []);
 
+  const assetTypes = [...new Set([
+    ...catalog.map(({ publication }) => publication.assetType),
+    ...(localPreview ? [localPreview.assetType] : []),
+  ].filter(Boolean))].sort();
+  const visibleCatalog = catalog.filter(({ publication }) => assetType === 'all' || publication.assetType === assetType);
+  const showLocalPreview = localPreview && (assetType === 'all' || localPreview.assetType === assetType);
+
   if (state !== 'ready') {
     const heading = state === 'denied'
-      ? 'Admission communautaire requise'
+      ? 'Admission au Cercle requise'
       : state === 'signed-out'
-        ? 'Communauté privée'
-        : 'Chargement de la communauté';
+        ? 'Connexion au Cercle requise'
+        : 'Chargement du Cercle';
     return (
       <main className="community-state">
         <BrandLogo />
         <h1>{heading}</h1>
-        <p>Cette surface est réservée aux profils authentifiés et admis. Elle ne lit jamais le Cartulaire maître.</p>
-        <a className="button button--quiet community-back-link" href="/#cover">Retour au Cartulaire</a>
+        <p>Le Cercle agrège uniquement les projections choisies par leurs propriétaires. Il ne lit jamais les Cartulaires maîtres.</p>
+        <a className="button button--quiet community-back-link" href="/registry">Retour au Registre</a>
       </main>
     );
   }
 
   return (
-    <div className="community-page">
-      <header className="community-page__header">
-        <BrandLogo />
+    <div className="community-page catalog-site">
+      <header className="community-page__header catalog-site__header">
+        <a href="/registry" aria-label="Ouvrir le Registre"><BrandLogo /></a>
         <div>
-          <span className="eyebrow">Cercle pilote · accès authentifié</span>
-          <h1>Communauté Cartularia</h1>
-          <p>Publications choisies, profils pseudonymes et échanges sans accès au dossier patrimonial.</p>
-          <a className="button button--quiet community-back-link" href="/#cover">Retour au Cartulaire</a>
+          <span className="eyebrow">Le Cercle · Cartularia</span>
+          <h1>Objets publiés dans Le Cercle</h1>
+          <p>Une vue agrégée des Cartulaires publiés, filtrable par type d’objet, sans accès aux dossiers privés.</p>
         </div>
       </header>
 
-      <main className="community-feed">
-        {feed.length === 0 && (
-          <section className="community-empty">
-            <h2>Aucune publication active</h2>
-            <p>Une publication suspendue par la modération disparaît immédiatement de cette surface.</p>
-          </section>
-        )}
-        {feed.map(({ post, profile, publication, blocks, comments }) => (
-          <article className="community-post" key={post.postId}>
-            <header className="community-post__author">
-              <div className="community-avatar" aria-hidden="true">
-                {(profile?.pseudonym ?? post.authorPseudonym).slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <strong>{profile?.pseudonym ?? post.authorPseudonym}</strong>
-                <span>Profil communautaire · {post.publishedAtIso.slice(0, 10)}</span>
-              </div>
-            </header>
-            <p className="community-post__body">{post.body}</p>
+      <main className="community-feed catalog-site__main">
+        <section className="catalog-site__filters" aria-label="Filtrer Le Cercle par type d’objet">
+          <Filter aria-hidden="true" />
+          <button type="button" className={assetType === 'all' ? 'is-active' : undefined} onClick={() => setAssetType('all')}>Tous les objets</button>
+          {assetTypes.map((type) => <button type="button" className={assetType === type ? 'is-active' : undefined} onClick={() => setAssetType(type)} key={type}>{assetTypeLabel(type)}</button>)}
+        </section>
 
-            <section className="community-publication-card">
-              <span className="eyebrow">Projection community · {publication.assetType}</span>
+        <section className="community-catalog" aria-label="Cartulaires publiés dans Le Cercle">
+          {showLocalPreview && (
+            <article className="community-publication-card community-publication-card--preview">
+              <span className="eyebrow">Aperçu local · {assetTypeLabel(localPreview.assetType)}</span>
+              <h2>{localPreview.displayTitle}</h2>
+              <p>{localPreview.makerName} · {localPreview.modelName}</p>
+              <div className="community-block-list">
+                {localPreview.blockIds.map((blockId) => <span key={blockId}>{PUBLICATION_BLOCK_CATALOG.find((entry) => entry.id === blockId)?.title || blockId}</span>)}
+              </div>
+              {localPreview.cartularyUrl && <a href={localPreview.cartularyUrl} target="_blank" rel="noreferrer">Voir la publication contrôlée <ExternalLink aria-hidden="true" /></a>}
+            </article>
+          )}
+          {visibleCatalog.map(({ publication, blocks }) => (
+            <article className="community-publication-card" key={publication.publicationId}>
+              <span className="eyebrow">{assetTypeLabel(publication.assetType)} · projection approuvée</span>
               <h2>{publication.displayTitle}</h2>
               <p>{publication.makerName} · {publication.modelName}</p>
               {blocks.map((block) => (
-                <div className="community-block" key={block.blockId}>
-                  <h3>{block.title}</h3>
+                <details className="community-block" key={block.blockId}>
+                  <summary>{block.title}</summary>
                   <dl>
-                    {Object.entries(block.fields).map(([fieldId, value]) => (
-                      <div key={fieldId}>
-                        <dt>{fieldId}</dt>
-                        <dd>{formatGenericValue(value)}</dd>
-                      </div>
-                    ))}
+                    {Object.entries(block.fields).map(([fieldId, value]) => <div key={fieldId}><dt>{fieldId}</dt><dd>{formatGenericValue(value)}</dd></div>)}
                   </dl>
-                </div>
+                </details>
               ))}
-            </section>
-
-            <div className="community-post__counts">
-              <span>{post.reactionCount} réaction{post.reactionCount > 1 ? 's' : ''}</span>
-              <span>{post.commentCount} commentaire{post.commentCount > 1 ? 's' : ''}</span>
-            </div>
-            {comments.length > 0 && (
-              <section className="community-comments" aria-label="Commentaires">
-                {comments.map((comment) => (
-                  <div key={comment.commentId}>
-                    <strong>{comment.authorPseudonym}</strong>
-                    <p>{comment.body}</p>
-                    <small>Échange communautaire · aucune valeur de preuve</small>
-                  </div>
-                ))}
-              </section>
-            )}
-          </article>
-        ))}
+            </article>
+          ))}
+          {!showLocalPreview && visibleCatalog.length === 0 && <div className="community-empty"><Users aria-hidden="true" /><h2>Aucun Cartulaire publié pour ce filtre</h2></div>}
+        </section>
       </main>
     </div>
   );

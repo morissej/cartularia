@@ -14,14 +14,12 @@ import {
   RefreshCw,
   Scale,
   Search,
-  ShieldCheck,
-  SlidersHorizontal,
   Watch,
   Wine,
 } from 'lucide-react';
 import type { RegistryDocument } from '../../domain/foundations.ts';
-import type { RegistryItemProjection } from '../../domain/projections.ts';
-import { loadRegistryItems, observeRegistryItems } from '../../services/projections.ts';
+import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
+import { loadScopedRegistryItems, observeRegistryItems } from '../../services/projections.ts';
 import {
   buildRegistryComparisonHref,
   REGISTRY_COMPARISON_MAX,
@@ -41,6 +39,7 @@ import {
   LIFECYCLE_LABELS,
   POSSESSION_LABELS,
 } from './registryPresentation.ts';
+import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
 
 type CatalogView = 'grid' | 'list';
 type CatalogLoadState = 'loading' | 'ready' | 'error';
@@ -54,19 +53,23 @@ const AssetIcon = ({ assetType }: { assetType: string }) => {
   return <Package aria-hidden="true" />;
 };
 
-const optionValues = (items: RegistryItemProjection[], field: 'assetType' | 'collectionId' | 'lifecycleStatus') =>
+const optionValues = (items: RegistryItemProjection[], field: 'assetType' | 'collectionId') =>
   [...new Set(items.map((item) => item[field]).filter(Boolean))].sort((left, right) => left.localeCompare(right, 'fr'));
 
 const readInitialParameter = (name: string, fallback: string) =>
   new URLSearchParams(window.location.search).get(name) || fallback;
 
-export function RegistryItems({ registry, canCreateCartularies = false }: { registry: RegistryDocument; canCreateCartularies?: boolean }) {
+export function RegistryItems({ registry, canCreateCartularies = false, invitationGrant }: {
+  registry: RegistryDocument;
+  canCreateCartularies?: boolean;
+  invitationGrant?: { registry: boolean; collectionIds: string[]; cartularyIds: string[] };
+}) {
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [loadState, setLoadState] = useState<CatalogLoadState>('loading');
   const [query, setQuery] = useState(() => readInitialParameter('q', ''));
   const [assetType, setAssetType] = useState(() => readInitialParameter('type', 'all'));
   const [collectionId, setCollectionId] = useState(() => readInitialParameter('collection', 'all'));
-  const [lifecycleStatus, setLifecycleStatus] = useState(() => readInitialParameter('status', 'all'));
+  const [patrimonialStatus, setPatrimonialStatus] = useState(() => readInitialParameter('status', 'all'));
   const [sort, setSort] = useState<RegistryCatalogSort>(() => {
     const candidate = readInitialParameter('sort', DEFAULT_REGISTRY_CATALOG_FILTERS.sort);
     return candidate === 'title-asc' || candidate === 'year-desc' ? candidate : 'updated-desc';
@@ -77,16 +80,20 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
   const reload = useCallback(async () => {
     setLoadState('loading');
     try {
-      setItems(await loadRegistryItems(registry.id));
+      setItems(await loadScopedRegistryItems(registry.id, invitationGrant));
       setLoadState('ready');
     } catch {
       setItems([]);
       setLoadState('error');
     }
-  }, [registry.id]);
+  }, [invitationGrant, registry.id]);
 
   useEffect(() => {
     setLoadState('loading');
+    if (invitationGrant && !invitationGrant.registry) {
+      void reload();
+      return undefined;
+    }
     return observeRegistryItems(registry.id, (nextItems) => {
       setItems(nextItems);
       setLoadState('ready');
@@ -94,19 +101,19 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
       setItems([]);
       setLoadState('error');
     });
-  }, [registry.id]);
+  }, [invitationGrant, registry.id, reload]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     if (query.trim()) params.set('q', query.trim());
     if (assetType !== 'all') params.set('type', assetType);
     if (collectionId !== 'all') params.set('collection', collectionId);
-    if (lifecycleStatus !== 'all') params.set('status', lifecycleStatus);
+    if (patrimonialStatus !== 'all') params.set('status', patrimonialStatus);
     if (sort !== 'updated-desc') params.set('sort', sort);
     if (view !== 'grid') params.set('view', view);
     if (comparisonIds.length > 0) params.set('compare', comparisonIds.join(','));
     return params.toString();
-  }, [assetType, collectionId, comparisonIds, lifecycleStatus, query, sort, view]);
+  }, [assetType, collectionId, comparisonIds, patrimonialStatus, query, sort, view]);
 
   useEffect(() => {
     const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
@@ -117,13 +124,12 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
     query,
     assetType,
     collectionId,
-    lifecycleStatus,
+    patrimonialStatus,
     sort,
-  }), [assetType, collectionId, items, lifecycleStatus, query, sort]);
+  }), [assetType, collectionId, items, patrimonialStatus, query, sort]);
   const assetTypes = useMemo(() => optionValues(items, 'assetType'), [items]);
-  const collections = useMemo(() => optionValues(items, 'collectionId'), [items]);
-  const lifecycleStatuses = useMemo(() => optionValues(items, 'lifecycleStatus'), [items]);
-  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', lifecycleStatus !== 'all']
+  const collections = useMemo(() => [...new Set(items.flatMap(registryItemCollectionIds))].sort((left, right) => left.localeCompare(right, 'fr')), [items]);
+  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', patrimonialStatus !== 'all']
     .filter(Boolean).length;
   const returnTo = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
   const comparisonHref = buildRegistryComparisonHref(registry.id, comparisonIds, returnTo);
@@ -132,7 +138,7 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
     setQuery('');
     setAssetType('all');
     setCollectionId('all');
-    setLifecycleStatus('all');
+    setPatrimonialStatus('all');
     setSort('updated-desc');
   };
 
@@ -146,14 +152,9 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
         <div>
           <p className="registry-kicker">Catalogue privé</p>
           <h1 id="registry-catalog-title">Les Cartulaires du Registre</h1>
-          <p>Une vue transverse des dossiers autorisés, sans dupliquer leurs preuves, archives ou originaux.</p>
         </div>
         <div className="registry-catalog__heading-actions">
           {canCreateCartularies && <a href={`/registry/${encodeURIComponent(registry.id)}/new`}><Plus aria-hidden="true" /> Nouveau cartulaire</a>}
-          <div className="registry-catalog__security">
-            <ShieldCheck aria-hidden="true" />
-            <span>Projection Registre uniquement</span>
-          </div>
         </div>
       </header>
 
@@ -174,12 +175,7 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
         </button>
       </div>
 
-      <div className="registry-catalog-filters" aria-label="Filtres du catalogue">
-        <div className="registry-filter-title">
-          <SlidersHorizontal aria-hidden="true" />
-          <span>Filtrer</span>
-          {activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}
-        </div>
+      <RegistryFilterPanel className="registry-catalog-filters" label="Filtres du catalogue" activeFilterCount={activeFilterCount}>
         <label>
           <span>Type d’actif</span>
           <select value={assetType} onChange={(event) => setAssetType(event.target.value)}>
@@ -195,10 +191,12 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
           </select>
         </label>
         <label>
-          <span>Statut</span>
-          <select value={lifecycleStatus} onChange={(event) => setLifecycleStatus(event.target.value)}>
+          <span>Statut patrimonial</span>
+          <select value={patrimonialStatus} onChange={(event) => setPatrimonialStatus(event.target.value)}>
             <option value="all">Tous les statuts</option>
-            {lifecycleStatuses.map((value) => <option value={value} key={value}>{LIFECYCLE_LABELS[value] || labelFromIdentifier(value)}</option>)}
+            <option value="Patrimonial">Patrimonial</option>
+            <option value="À vendre">À vendre</option>
+            <option value="Ouvert à proposition">Ouvert à proposition</option>
           </select>
         </label>
         <label>
@@ -210,7 +208,7 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
           </select>
         </label>
         {activeFilterCount > 0 && <button type="button" className="registry-filter-reset" onClick={resetFilters}>Effacer</button>}
-      </div>
+      </RegistryFilterPanel>
 
       <div className="registry-results-heading">
         <p aria-live="polite">
@@ -278,6 +276,8 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
                 <h2>{item.displayTitle}</h2>
                 <p>{[item.makerName, item.modelName].filter(Boolean).join(' · ')}</p>
                 <dl>
+                  <div><dt>Utilisateur</dt><dd>{item.userAlias || 'Pseudonyme à définir'}</dd></div>
+                  <div><dt>Code objet</dt><dd>{item.objectCode || '—'}</dd></div>
                   <div><dt>Référence</dt><dd>{item.referenceCode || 'Non renseignée'}</dd></div>
                   <div><dt>Année</dt><dd>{item.manufactureYear || '—'}</dd></div>
                   <div><dt>Situation</dt><dd>{POSSESSION_LABELS[item.possessionStatus] || labelFromIdentifier(item.possessionStatus)}</dd></div>
@@ -286,7 +286,7 @@ export function RegistryItems({ registry, canCreateCartularies = false }: { regi
               <footer className="registry-item__footer">
                 <div>
                   <span className={`registry-item-status registry-item-status--${item.lifecycleStatus}`}>
-                    {LIFECYCLE_LABELS[item.lifecycleStatus] || labelFromIdentifier(item.lifecycleStatus)}
+                    {item.patrimonialStatus || LIFECYCLE_LABELS[item.lifecycleStatus] || labelFromIdentifier(item.lifecycleStatus)}
                   </span>
                   <small>{COMPLETENESS_LABELS[item.completenessLevel] || labelFromIdentifier(item.completenessLevel)}</small>
                 </div>

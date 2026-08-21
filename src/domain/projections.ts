@@ -5,6 +5,7 @@ export interface RegistryItemProjection {
   organizationId: string;
   registryId: string;
   collectionId: string;
+  collectionIds?: string[];
   assetType: string;
   displayTitle: string;
   makerName: string;
@@ -12,7 +13,16 @@ export interface RegistryItemProjection {
   referenceCode: string | null;
   manufactureYear: number | null;
   lifecycleStatus: string;
+  patrimonialStatus?: 'Patrimonial' | 'À vendre' | 'Ouvert à proposition' | null;
+  userAlias?: string | null;
+  objectCode?: string | null;
   possessionStatus: string;
+  purchasePrice?: number | null;
+  costBasis?: number | null;
+  grossValuation?: number | null;
+  netValuation?: number | null;
+  netAfterTaxValuation?: number | null;
+  valuationCurrency?: string | null;
   completenessLevel: string;
   primaryAssetId: string | null;
   sourceRevision: number;
@@ -21,6 +31,10 @@ export interface RegistryItemProjection {
   generatedAt?: { seconds: number; nanoseconds: number };
   updatedAt?: { seconds: number; nanoseconds: number };
 }
+
+export const registryItemCollectionIds = (item: Pick<RegistryItemProjection, 'collectionId' | 'collectionIds'>): string[] => (
+  [...new Set([...(item.collectionIds || []), item.collectionId].filter(Boolean))]
+);
 
 export interface PublicDerivativeProjection {
   assetId: string;

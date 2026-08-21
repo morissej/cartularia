@@ -3,6 +3,7 @@ import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-ch
 import { connectAuthEmulator, getAuth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import { installSessionLock } from './security/sessionSecurity';
 
 const firebaseConfig = {
@@ -31,6 +32,7 @@ export const appCheck = !usesFirebaseEmulators && appCheckSiteKey
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+export const functions = getFunctions(app, 'us-central1');
 
 if (!usesFirebaseEmulators) installSessionLock(auth);
 
@@ -43,10 +45,12 @@ if (usesFirebaseEmulators && !emulatorState.__cartulariaFirebaseEmulatorsConnect
   const authPort = Number(import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_PORT || 9099);
   const firestorePort = Number(import.meta.env.VITE_FIREBASE_FIRESTORE_EMULATOR_PORT || 8080);
   const storagePort = Number(import.meta.env.VITE_FIREBASE_STORAGE_EMULATOR_PORT || 9199);
+  const functionsPort = Number(import.meta.env.VITE_FIREBASE_FUNCTIONS_EMULATOR_PORT || 5001);
 
   connectAuthEmulator(auth, `http://${host}:${authPort}`, { disableWarnings: true });
   connectFirestoreEmulator(db, host, firestorePort);
   connectStorageEmulator(storage, host, storagePort);
+  connectFunctionsEmulator(functions, host, functionsPort);
   emulatorState.__cartulariaFirebaseEmulatorsConnected = true;
 }
 

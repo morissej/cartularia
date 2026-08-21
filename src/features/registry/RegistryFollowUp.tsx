@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   Watch,
   Wrench,
@@ -31,6 +30,7 @@ import {
   type FollowUpTimeStatus,
 } from './registryFollowUp.ts';
 import { assetTypeLabel, labelFromIdentifier } from './registryPresentation.ts';
+import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
 
 type FollowUpLoadState = 'loading' | 'ready' | 'error';
 
@@ -169,7 +169,6 @@ export function RegistryFollowUp({ registry, canReadCartularies }: {
           <h1 id="registry-follow-up-title">Échéances et rappels</h1>
           <p>Les actions à venir de vos Cartulaires, réunies sans déplacer leurs preuves, archives ou médias.</p>
         </div>
-        <div className="registry-follow-up__security"><ShieldCheck aria-hidden="true" /><span>Lecture privée autorisée</span></div>
       </header>
 
       <div className="registry-follow-up-facts" aria-label="Synthèse des échéances">
@@ -199,8 +198,7 @@ export function RegistryFollowUp({ registry, canReadCartularies }: {
         </button>
       </div>
 
-      <div className="registry-follow-up-filters" aria-label="Filtres du centre de suivi">
-        <div className="registry-filter-title"><SlidersHorizontal aria-hidden="true" /><span>Filtrer</span>{activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}</div>
+      <RegistryFilterPanel className="registry-follow-up-filters" label="Filtres du suivi" activeFilterCount={activeFilterCount}>
         <label><span>Échéance</span><select value={timeStatus} onChange={(event) => setTimeStatus(event.target.value as 'all' | FollowUpTimeStatus)}>
           <option value="all">Toutes les échéances</option>
           {Object.entries(TIME_STATUS_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
@@ -214,7 +212,7 @@ export function RegistryFollowUp({ registry, canReadCartularies }: {
           {collections.map((value) => <option value={value} key={value}>{labelFromIdentifier(value)}</option>)}
         </select></label>
         {activeFilterCount > 0 && <button type="button" className="registry-filter-reset" onClick={resetFilters}>Effacer</button>}
-      </div>
+      </RegistryFilterPanel>
 
       <div className="registry-follow-up-results">
         <p aria-live="polite"><strong>{filteredItems.length}</strong> rappel{filteredItems.length > 1 ? 's' : ''}{filteredItems.length !== summary.total && <span> sur {summary.total}</span>}</p>
@@ -246,7 +244,6 @@ export function RegistryFollowUp({ registry, canReadCartularies }: {
         </div>
       )}
 
-      <aside className="registry-follow-up-boundary"><ShieldCheck aria-hidden="true" /><div><h2>Une vue transverse, pas une copie</h2><p>Le Registre réunit les échéances minimales autorisées. Le détail, la modification et les éléments probants restent dans chaque Cartulaire.</p></div></aside>
     </section>
   );
 }

@@ -77,7 +77,7 @@ service firebase.storage {
         && resource.metadata.cartularyId == cartularyId
         && resource.metadata.binaryId == binaryId
         && resource.metadata.sha256 == 'sha256:' + digest
-        && resource.metadata.kind in ['media', 'owner_document', 'condition_attachment'];
+        && resource.metadata.kind in ['media', 'condition_attachment'];
       allow create: if ownsPrivateDraft(uid, cartularyId)
         && resource == null
         && validPrivateOriginalContent()
@@ -85,7 +85,7 @@ service firebase.storage {
         && request.resource.metadata.cartularyId == cartularyId
         && request.resource.metadata.binaryId == binaryId
         && request.resource.metadata.sha256 == 'sha256:' + digest
-        && request.resource.metadata.kind in ['media', 'owner_document', 'condition_attachment'];
+        && request.resource.metadata.kind in ['media', 'condition_attachment'];
       // Le chemin contient l'empreinte : un original accepté n'est jamais remplacé.
       allow update: if false;
       allow delete: if request.auth != null && request.auth.uid == uid;

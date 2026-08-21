@@ -1,6 +1,7 @@
 export const REGISTRY_SECTIONS = [
   'overview',
   'items',
+  'collections',
   'new',
   'gallery',
   'compare',

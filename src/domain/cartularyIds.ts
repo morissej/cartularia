@@ -4,8 +4,13 @@ export const ROLEX_CARTULARY_ID = 'cart_rolex_gmt_master_mark_i_long_e_1675_642c
 const SAFE_CARTULARY_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{5,159}$/;
 
 export const cartularyIdFromLocation = (location: Pick<Location, 'pathname' | 'search'> | null | undefined) => {
-  if (!location || location.pathname.replace(/\/$/, '') !== '') return IWC_CARTULARY_ID;
-  const requested = new URLSearchParams(location.search).get('cartularyId');
+  if (!location) return IWC_CARTULARY_ID;
+  const normalizedPath = location.pathname.replace(/\/$/, '');
+  const parameters = new URLSearchParams(location.search);
+  const isLocalPublicationPreview = normalizedPath === '/watch-website' && parameters.get('preview') === 'local';
+  const supportsCartularySelection = normalizedPath === '/cartulary' || isLocalPublicationPreview;
+  if (!supportsCartularySelection) return IWC_CARTULARY_ID;
+  const requested = parameters.get('cartularyId');
   return requested && SAFE_CARTULARY_ID.test(requested) ? requested : IWC_CARTULARY_ID;
 };
 

@@ -60,22 +60,22 @@ describe('hooks de domaine du Cartulaire', () => {
     ));
   });
 
-  it('recharge le domaine propriétaire avec l’ancienne clé de lieu', () => {
-    let locationName = 'Coffre A';
+  it('recharge les seuls noms de code de stockage du Cartulaire', () => {
+    let codeName = 'Résidence secondaire';
     const { result } = renderHook(() => useCartularyOwnerState({
-      loadFields: () => [],
-      loadType: () => 'Personne physique',
-      loadDocuments: () => [],
       loadHistory: () => [],
       loadAssetKind: () => 'Montre',
       loadWatchStatus: () => 'Patrimonial',
-      loadRecipients: () => [],
-      loadLocations: () => [{ id: 'location-1', name: locationName, contents: '', description: '' }],
+      loadCollectionId: () => 'col_pilots',
+      loadUserAlias: () => 'Atlas-17',
+      loadObjectCode: () => 'OBJ-123456',
+      loadStorageCodes: () => [{ id: 'storage-1', correspondenceCode: 'LIE-A1B2C3D4', codeName, note: '' }],
+      loadTransmissionCodes: () => [],
     }));
 
-    locationName = 'Coffre B';
-    act(() => result.current.reloadOwnerState(new Set(['cartularia-storage-description'])));
-    expect(result.current.storageLocations[0].name).toBe('Coffre B');
+    codeName = 'Dépôt B';
+    act(() => result.current.reloadOwnerState(new Set(['cartularia-storage-code-names'])));
+    expect(result.current.storageCodes[0].codeName).toBe('Dépôt B');
   });
 
   it('expose les commandes de valorisation sur les contrats existants', () => {
@@ -86,7 +86,7 @@ describe('hooks de domaine du Cartulaire', () => {
       loadComparableAnalysis: () => [{ id: 'analysis-1', angle: 'Marché', finding: '', reading: '' }],
       loadSensitivityPrices: () => [1, 2, 3],
       loadSensitivityCosts: () => [5, 10],
-      loadRetainedValuation: () => ({ amount: 2, explanation: '' }),
+      loadRetainedValuation: () => ({ amount: 2, saleCostAmount: 0, taxAmount: 0, explanation: '' }),
       loadPurchase: () => ({ date: '2020-01-01', purchasePrice: 1 }),
       loadPurchaseExpenses: () => [{ id: 'expense-1', kind: 'Autre', date: '', label: '', amount: 0 }],
       loadExitAssumptions: () => ({ saleDate: '2026-08-17', salePrice: 3, disposalCostPct: 10 }),
@@ -103,6 +103,11 @@ describe('hooks de domaine du Cartulaire', () => {
       loadWebsiteBlocks: () => [],
       loadReportBlocks: () => [],
       loadCommunityBlocks: () => [],
+      loadCollectionBlocks: () => [],
+      loadCollectionIds: () => [],
+      loadExternalEnabled: () => false,
+      loadCollectionEnabled: () => false,
+      loadCommunityEnabled: () => false,
       loadDecisions: () => [],
       loadSourceBinding: () => ({ revision: 0, digest: '', updatedAt: '' }),
     }));
