@@ -38,6 +38,8 @@ test('les routes inconnues ne sont pas assimilées au Cartulaire privé', () => 
   assert.equal(applicationRouteFromPathname('/community/'), 'community');
   assert.equal(applicationRouteFromPathname('/registry/example'), 'registry');
   assert.equal(applicationRouteFromPathname('/invitation/accept'), 'invitation');
+  assert.equal(applicationRouteFromPathname('/personal-vault'), 'personal-vault');
+  assert.equal(applicationRouteFromPathname('/personal-vault.html'), 'personal-vault');
   assert.equal(applicationRouteFromPathname('/adresse-inconnue'), 'not-found');
 });
 

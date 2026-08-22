@@ -27,6 +27,7 @@
     ]
   },
   "hosting": {
+    "site": "studio-2614005370-a3e51",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -56,6 +57,15 @@
           {
             "key": "X-Frame-Options",
             "value": "DENY"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(html|htm)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
           }
         ]
       }

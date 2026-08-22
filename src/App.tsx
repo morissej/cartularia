@@ -26,7 +26,7 @@ import {
   isIwcCartulary,
   isRolexCartulary,
 } from './data/activeCartulary';
-import { ACTIVE_CARTULARY_ID } from './domain/cartularyIds';
+import { ACTIVE_CARTULARY_ID, IWC_CARTULARY_ID, ROLEX_CARTULARY_ID } from './domain/cartularyIds';
 import type { Asset, ComparableTransaction, MediaTag, Valuation } from './types';
 import { BarreDossier } from './components/BarreDossier';
 import { CartularyTodoBoard } from './components/CartularyTodoBoard';
@@ -788,9 +788,15 @@ function App() {
   const registryReturnHref = isRegistryReturnPath(requestedRegistryReturn) ? requestedRegistryReturn : '/registry';
   const requestedRegistryId = parseRegistryRoute(registryReturnHref).registryId;
   const requestedPublicCode = publicCodeFromUrl();
+  const requestedCartularyId = routeParameters.get('cartularyId');
+  const isKnownCartulary = requestedCartularyId === IWC_CARTULARY_ID
+    || requestedCartularyId === ROLEX_CARTULARY_ID
+    || requestedPublicCode === mockCartulary.publicCode
+    || requestedPublicCode === 'OP-4892-XZ9'
+    || requestedPublicCode === 'ROL-487D9CAD'
+    || requestedPublicCode === 'ROLEX-1675-01';
   const localPublicationPreviewAllowed = isWatchWebsite
-    && routeParameters.get('preview') === 'local'
-    && requestedPublicCode === mockCartulary.publicCode;
+    && (routeParameters.get('preview') === 'local' || isKnownCartulary);
   const invalidPublicCode = hasPublicCodeParameter && !requestedPublicCode;
   useEffect(() => {
     if (!isWatchWebsite) {
@@ -1141,7 +1147,7 @@ function App() {
   }, [language]);
 
   useEffect(() => {
-    if (!isWatchWebsite || !requestedPublicCode || localPublicationPreviewAllowed) {
+    if (!isWatchWebsite || !requestedPublicCode) {
       if (localPublicationPreviewAllowed) {
         setPublicProjection(null);
         setPublicProjectionError(null);
@@ -1157,12 +1163,16 @@ function App() {
       .then((projection) => {
         if (!active) return;
         setPublicProjection(projection);
-        if (!projection) setPublicProjectionError('Publication absente ou révoquée.');
+        if (!projection && !localPublicationPreviewAllowed) {
+          setPublicProjectionError('Publication absente ou révoquée.');
+        }
       })
       .catch(() => {
         if (!active) return;
         setPublicProjection(null);
-        setPublicProjectionError('Publication indisponible.');
+        if (!localPublicationPreviewAllowed) {
+          setPublicProjectionError('Publication indisponible.');
+        }
       })
       .finally(() => {
         if (active) setPublicProjectionLoading(false);
@@ -2574,7 +2584,7 @@ function App() {
     return (
       <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
         <header className="watch-website__masthead">
-          <div className="container"><BrandLogo className="watch-website__wordmark" /></div>
+          <div className="container"><BrandLogo className="watch-website__wordmark" href={registryReturnHref || '/registry/reg_collection_privee/items'} /></div>
         </header>
         <main className="container watch-website__main">
           <div className="watch-website__empty-state">
@@ -2591,7 +2601,7 @@ function App() {
     return (
       <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
         <header className="watch-website__masthead">
-          <div className="container"><BrandLogo className="watch-website__wordmark" /></div>
+          <div className="container"><BrandLogo className="watch-website__wordmark" href={registryReturnHref || '/registry/reg_collection_privee/items'} /></div>
         </header>
         <main className="container watch-website__main">
           <div className="watch-website__empty-state">
@@ -2635,7 +2645,7 @@ function App() {
         <a className="skip-link" href="#published-cartulary-content">{tx('Aller au contenu', 'Skip to content')}</a>
         <header className="watch-website__masthead">
           <div className="container">
-            <BrandLogo className="watch-website__wordmark" />
+            <BrandLogo className="watch-website__wordmark" href={registryReturnHref || '/registry/reg_collection_privee/items'} />
             <div><span className="eyebrow">{publicProjection ? tx('Mini-site publié', 'Published mini-site') : tx('Aperçu local du mini-site', 'Local mini-site preview')} · {websiteCode}</span><strong>{websiteBrand} · {websiteModel}</strong></div>
           </div>
         </header>

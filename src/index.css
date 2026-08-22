@@ -3673,12 +3673,18 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
 .community-catalog { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
 .catalog-site__grid > article { display: grid; align-content: start; gap: var(--s3); min-height: 280px; padding: clamp(22px, 4vw, 38px); border: 1px solid var(--rule); background: var(--sheet); }
 .catalog-site__grid > article > span { color: var(--muted); font: 9px var(--font-mono); text-transform: uppercase; }
-.catalog-site__grid h3 { font-family: var(--font-display); font-size: 34px; font-weight: 400; }
+.catalog-site__grid h3 { font-family: var(--font-display); font-size: clamp(26px, 3vw, 34px); line-height: 1.15; font-weight: 400; word-break: break-word; overflow-wrap: break-word; }
 .catalog-site__grid p { color: var(--muted); }
 .catalog-site__grid dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: auto; border-top: 1px solid var(--rule); }
 .catalog-site__grid dl > div { padding: var(--s3) 0; }
 .catalog-site__grid dt { color: var(--muted); font: 9px var(--font-mono); text-transform: uppercase; }
-.catalog-site__grid dd { margin: var(--s1) 0 0; }
+.catalog-site__grid h3 a { color: inherit; text-decoration: none; font-family: inherit; font-size: inherit; }
+.catalog-site__grid h3 a:hover { color: var(--mark); }
+.catalog-site__grid footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: auto; padding-top: var(--s3); border-top: 1px solid var(--rule); }
+.catalog-site__grid footer a { display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); min-height: 38px; padding: 0 var(--s3); border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); font-size: 10px; font-weight: 700; text-decoration: none; text-transform: uppercase; cursor: pointer; }
+.catalog-site__grid footer a.is-primary { border-color: var(--ink); background: var(--ink); color: var(--sheet); }
+.catalog-site__grid footer a:hover { border-color: var(--mark); color: var(--mark); }
+.catalog-site__grid footer a.is-primary:hover { border-color: var(--mark); background: var(--mark); color: var(--sheet); }
 .catalog-site__grid a,
 .community-publication-card > a { display: inline-flex; align-items: center; gap: var(--s2); width: max-content; color: var(--ink); font-weight: 650; text-decoration: none; }
 .catalog-site__grid a:hover,

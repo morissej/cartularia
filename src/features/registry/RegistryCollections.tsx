@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Archive, Check, Copy, ExternalLink, Globe2, Layers3, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Archive, Check, Copy, ExternalLink, Globe2, Layers3, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import {
   collectionWebsiteIsPublished,
   collectionWebsitePath,
@@ -96,12 +96,29 @@ export function RegistryCollections({ registry, canManage }: { registry: Registr
     ? []
     : items.filter((item) => registryItemCollectionIds(item).includes(editingId) && item.projectionStatus === 'active');
 
+  const currentEditingDocument = editingId ? collections.find((c) => c.id === editingId) : null;
+  const isEditingDocumentPublished = currentEditingDocument ? collectionWebsiteIsPublished(currentEditingDocument) : false;
+
   const togglePublishedItem = (cartularyId: string) => {
     setForm((current) => ({
       ...current,
       publishedCartularyIds: current.publishedCartularyIds.includes(cartularyId)
         ? current.publishedCartularyIds.filter((id) => id !== cartularyId)
         : [...current.publishedCartularyIds, cartularyId],
+    }));
+  };
+
+  const selectAllItems = () => {
+    setForm((current) => ({
+      ...current,
+      publishedCartularyIds: editingCollectionItems.map((item) => item.cartularyId),
+    }));
+  };
+
+  const deselectAllItems = () => {
+    setForm((current) => ({
+      ...current,
+      publishedCartularyIds: [],
     }));
   };
 
@@ -160,7 +177,7 @@ export function RegistryCollections({ registry, canManage }: { registry: Registr
                     visibility: event.target.checked ? 'public' : 'secret',
                   }))}
                 />
-                <span>{form.publicationConsent ? 'Publication du mini-site confirmée' : 'Je confirme la publication du mini-site'}</span>
+                <span>{form.publicationConsent ? 'Publication du mini-site activée' : 'Je souhaite publier le mini-site'}</span>
               </label>
             </header>
             <p><strong>L’état interne</strong> sert à gérer la Collection dans votre Registre. <strong>La publication</strong> rend publique une projection séparée contenant uniquement les objets cochés ci-dessous.</p>
@@ -169,7 +186,33 @@ export function RegistryCollections({ registry, canManage }: { registry: Registr
               <p className="registry-collection-publication__notice">Enregistrez d’abord la nouvelle Collection ; vous pourrez ensuite choisir les objets et publier son mini-site.</p>
             ) : editingCollectionItems.length > 0 ? (
               <fieldset>
-                <legend>Objets à afficher sur le mini-site</legend>
+                <legend style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+                  <span>Objets à afficher sur le mini-site ({form.publishedCartularyIds.length} / {editingCollectionItems.length} sélectionnés)</span>
+                  {editingCollectionItems.length > 1 && (
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={selectAllItems}
+                        style={{ background: 'transparent', border: '1px solid var(--rule)', padding: '2px 8px', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}
+                      >
+                        Tout cocher
+                      </button>
+                      <button
+                        type="button"
+                        onClick={deselectAllItems}
+                        style={{ background: 'transparent', border: '1px solid var(--rule)', padding: '2px 8px', fontSize: '9px', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'var(--font-mono)' }}
+                      >
+                        Tout décocher
+                      </button>
+                    </div>
+                  )}
+                </legend>
+                {form.publicationConsent && form.publishedCartularyIds.length === 0 && (
+                  <div style={{ gridColumn: '1 / -1', padding: '10px 14px', background: 'rgba(235, 90, 60, 0.08)', border: '1px solid var(--mark)', color: 'var(--mark)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle size={16} aria-hidden="true" />
+                    <span>Cochez au moins un objet ci-dessous pour inclure du contenu sur le mini-site.</span>
+                  </div>
+                )}
                 {editingCollectionItems.map((item) => (
                   <label key={item.cartularyId} className={form.publishedCartularyIds.includes(item.cartularyId) ? 'is-selected' : undefined}>
                     <input type="checkbox" checked={form.publishedCartularyIds.includes(item.cartularyId)} onChange={() => togglePublishedItem(item.cartularyId)} />
@@ -182,14 +225,32 @@ export function RegistryCollections({ registry, canManage }: { registry: Registr
 
             {form.publicationConsent && editingId && (
               <div className="registry-collection-publication__url">
-                <label><span>Adresse publique</span><input value={`${window.location.origin}${collectionWebsitePath(registry.id, editingId)}`} readOnly /></label>
+                <label>
+                  <span>{isEditingDocumentPublished ? 'Adresse publique (actuellement en ligne)' : 'Adresse publique (active dès enregistrement)'}</span>
+                  <input value={`${window.location.origin}${collectionWebsitePath(registry.id, editingId)}`} readOnly />
+                </label>
                 <button type="button" onClick={() => void copyWebsiteUrl(editingId)}><Copy aria-hidden="true" />{copiedCollectionId === editingId ? 'Copiée' : 'Copier'}</button>
-                <a href={collectionWebsitePath(registry.id, editingId)} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />Accéder au mini-site</a>
+                {isEditingDocumentPublished ? (
+                  <a href={collectionWebsitePath(registry.id, editingId)} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />Accéder au mini-site</a>
+                ) : (
+                  <span style={{ fontSize: '9px', fontStyle: 'italic', color: 'var(--muted)', alignSelf: 'center', padding: '0 4px' }}>
+                    Enregistrez pour mettre en ligne
+                  </span>
+                )}
               </div>
             )}
           </section>
 
-          <button type="submit" disabled={saving || !form.name.trim() || (form.publicationConsent && form.publishedCartularyIds.length === 0)}><Save aria-hidden="true" />{saving ? 'Enregistrement…' : form.publicationConsent ? 'Enregistrer et publier' : 'Enregistrer'}</button>
+          <button type="submit" disabled={saving || !form.name.trim() || (form.publicationConsent && form.publishedCartularyIds.length === 0)}>
+            <Save aria-hidden="true" />
+            {saving
+              ? 'Enregistrement…'
+              : form.publicationConsent && form.publishedCartularyIds.length === 0
+                ? 'Sélectionnez au moins un objet pour publier'
+                : form.publicationConsent
+                  ? 'Enregistrer et publier'
+                  : 'Enregistrer'}
+          </button>
         </form>
       )}
 

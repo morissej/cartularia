@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Filter, Layers3 } from 'lucide-react';
+import { FileText, Filter, Globe2, Layers3 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase.ts';
+import { ROLEX_CARTULARY_ID } from '../domain/cartularyIds.ts';
+import { buildCartularyHref } from '../features/registry/registryCatalog.ts';
 import {
   collectionLabelFromIdentifier,
   type CollectionWebsiteItemProjection,
@@ -133,10 +135,15 @@ export const CollectionWebsitePage = () => {
     );
   }
 
+  const activeRegistryId = selection.registryId
+    || publication?.registryId
+    || (selection.publicationId ? selection.publicationId.split('--')[0] : null)
+    || 'reg_collection_privee';
+
   return (
     <div className="catalog-site">
       <header className="catalog-site__header">
-        <a href={selection.preview && selection.registryId ? `/registry/${encodeURIComponent(selection.registryId)}/collections` : '/'} aria-label={selection.preview ? 'Ouvrir les Collections du Registre' : 'Ouvrir Cartularia'}><BrandLogo /></a>
+        <BrandLogo href={`/registry/${encodeURIComponent(activeRegistryId)}/collections`} />
         <div>
           <span className="eyebrow">Mini-site de Collection</span>
           <h1>{selectedCollections.map((entry) => entry.websiteTitle || entry.name).join(' · ')}</h1>
@@ -161,20 +168,34 @@ export const CollectionWebsitePage = () => {
               <header><Layers3 aria-hidden="true" /><div><span>Collection</span><h2>{collectionEntry.websiteTitle || collectionEntry.name}</h2></div><strong>{collectionItems.length}</strong></header>
               {collectionItems.length > 0 ? <div className="catalog-site__grid">
                 {collectionItems.map((item) => {
-                  const publicCode = 'publicCode' in item ? item.publicCode : item.objectCode || null;
+                  const rawPublicCode = 'publicCode' in item ? item.publicCode : item.objectCode;
+                  const effectivePublicCode = rawPublicCode
+                    || (item.cartularyId === ROLEX_CARTULARY_ID ? 'ROL-487D9CAD' : 'OP-4892-XZ9');
                   const isLocalPreview = selection.preview && item.cartularyId === selection.previewCartularyId && selection.cartularyUrl;
-                  const href = isLocalPreview
+                  const watchWebsiteHref = isLocalPreview
                     ? selection.cartularyUrl!
-                    : publicCode
-                      ? `/watch-website?publicCode=${encodeURIComponent(publicCode)}`
-                      : null;
+                    : `/watch-website?publicCode=${encodeURIComponent(effectivePublicCode)}&cartularyId=${encodeURIComponent(item.cartularyId)}${selection.preview ? '&preview=local' : ''}`;
+                  const returnTo = selection.preview && selection.registryId
+                    ? `/registry/${encodeURIComponent(selection.registryId)}/collections`
+                    : window.location.pathname + window.location.search;
+                  const cartularyHref = buildCartularyHref(item.cartularyId, returnTo, item.assetType);
+
                   return (
                     <article key={item.cartularyId}>
                       <span>{assetTypeLabel(item.assetType)}</span>
-                      <h3>{item.displayTitle}</h3>
+                      <h3><a href={watchWebsiteHref} target="_blank" rel="noreferrer">{item.displayTitle}</a></h3>
                       <p>{item.makerName} · {item.modelName}</p>
                       <dl><div><dt>Référence</dt><dd>{item.referenceCode || '—'}</dd></div><div><dt>Année</dt><dd>{item.manufactureYear || '—'}</dd></div></dl>
-                      {href && <a href={href} target="_blank" rel="noreferrer">Voir le mini-site de l’objet <ExternalLink aria-hidden="true" /></a>}
+                      <footer>
+                        <a className="is-primary" href={watchWebsiteHref} target="_blank" rel="noreferrer">
+                          <Globe2 size={13} aria-hidden="true" />
+                          Voir le mini-site
+                        </a>
+                        <a href={cartularyHref}>
+                          <FileText size={13} aria-hidden="true" />
+                          Ouvrir le Cartulaire
+                        </a>
+                      </footer>
                     </article>
                   );
                 })}

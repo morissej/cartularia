@@ -144,7 +144,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
       }}>
         {/* Logo / Nom du Service */}
         <div className="dossier-bar__logo">
-          <BrandLogo />
+          <BrandLogo href={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('returnTo') || '/registry/reg_collection_privee/items') : '/registry/reg_collection_privee/items'} />
         </div>
 
         {/* Identité de l’objet (centrée) */}

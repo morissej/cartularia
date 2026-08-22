@@ -35,8 +35,8 @@ export const filterAndSortRegistryItems = (
   filters: RegistryCatalogFilters,
 ): RegistryItemProjection[] => {
   const searchTokens = normalize(filters.query).split(/\s+/).filter(Boolean);
-  const filtered = items.filter((item) => {
-    if (item.projectionStatus !== 'active') return false;
+  const filtered = (items || []).filter((item) => {
+    if (!item || item.projectionStatus !== 'active') return false;
     if (filters.assetType !== 'all' && item.assetType !== filters.assetType) return false;
     if (filters.collectionId !== 'all' && !registryItemCollectionIds(item).includes(filters.collectionId)) return false;
     if (filters.patrimonialStatus !== 'all' && item.patrimonialStatus !== filters.patrimonialStatus) return false;
@@ -57,15 +57,17 @@ export const filterAndSortRegistryItems = (
   });
 
   return [...filtered].sort((left, right) => {
+    const leftTitle = String(left?.displayTitle || '');
+    const rightTitle = String(right?.displayTitle || '');
     if (filters.sort === 'title-asc') {
-      return left.displayTitle.localeCompare(right.displayTitle, 'fr', { sensitivity: 'base' });
+      return leftTitle.localeCompare(rightTitle, 'fr', { sensitivity: 'base' });
     }
     if (filters.sort === 'year-desc') {
-      const yearDifference = (right.manufactureYear ?? -1) - (left.manufactureYear ?? -1);
-      return yearDifference || left.displayTitle.localeCompare(right.displayTitle, 'fr', { sensitivity: 'base' });
+      const yearDifference = (right?.manufactureYear ?? -1) - (left?.manufactureYear ?? -1);
+      return yearDifference || leftTitle.localeCompare(rightTitle, 'fr', { sensitivity: 'base' });
     }
     return updatedAtValue(right) - updatedAtValue(left)
-      || left.displayTitle.localeCompare(right.displayTitle, 'fr', { sensitivity: 'base' });
+      || leftTitle.localeCompare(rightTitle, 'fr', { sensitivity: 'base' });
   });
 };
 

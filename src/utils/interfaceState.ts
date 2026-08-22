@@ -1,7 +1,7 @@
 export const CARTULARY_PAGE_IDS = ['cover', 'media', 'reference', 'condition', 'value', 'publication'] as const;
 export type CartularyPage = (typeof CARTULARY_PAGE_IDS)[number];
 export type InterfaceLanguage = 'FR' | 'EN';
-export type ApplicationRoute = 'home' | 'account-create' | 'account-sign-in' | 'cartulary' | 'watch-website' | 'collection-website' | 'cartulary-view' | 'community' | 'registry' | 'invitation' | 'not-found';
+export type ApplicationRoute = 'home' | 'account-create' | 'account-sign-in' | 'cartulary' | 'watch-website' | 'collection-website' | 'cartulary-view' | 'community' | 'registry' | 'invitation' | 'personal-vault' | 'not-found';
 
 export const INTERFACE_LANGUAGE_STORAGE_KEY = 'cartularia-interface-language';
 
@@ -32,5 +32,6 @@ export const applicationRouteFromPathname = (pathname: string): ApplicationRoute
   if (normalized === '/community') return 'community';
   if (normalized === '/registry' || normalized.startsWith('/registry/')) return 'registry';
   if (normalized === '/invitation/accept') return 'invitation';
+  if (normalized === '/personal-vault' || normalized === '/personal-vault.html') return 'personal-vault';
   return 'not-found';
 };

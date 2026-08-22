@@ -10,6 +10,7 @@ const RegistryApp = lazy(() => import('./features/registry/RegistryApp.tsx').the
 const RegistryInvitationPage = lazy(() => import('./features/registry/RegistryInvitationPage.tsx'));
 const HomePage = lazy(() => import('./features/public/HomePage.tsx').then((module) => ({ default: module.HomePage })));
 const AccountAccessPage = lazy(() => import('./features/public/AccountAccessPage.tsx').then((module) => ({ default: module.AccountAccessPage })));
+const PersonalVaultApp = lazy(() => import('./personalVault/PersonalVaultApp.tsx').then((module) => ({ default: module.PersonalVaultApp })));
 
 export function RootPage() {
   const route = applicationRouteFromPathname(window.location.pathname);
@@ -41,6 +42,8 @@ export function RootPage() {
         ? RegistryInvitationPage
       : route === 'registry'
         ? RegistryApp
+      : route === 'personal-vault'
+        ? PersonalVaultApp
         : route === 'cartulary' || route === 'watch-website'
           ? CartularyApp
           : null;

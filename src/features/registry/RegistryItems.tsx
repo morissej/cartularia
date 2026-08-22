@@ -4,6 +4,7 @@ import {
   Building2,
   CarFront,
   ExternalLink,
+  Globe2,
   Grid2X2,
   Landmark,
   List,
@@ -17,6 +18,7 @@ import {
   Watch,
   Wine,
 } from 'lucide-react';
+import { ROLEX_CARTULARY_ID } from '../../domain/cartularyIds.ts';
 import type { RegistryDocument } from '../../domain/foundations.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
 import { loadScopedRegistryItems, observeRegistryItems } from '../../services/projections.ts';
@@ -300,6 +302,15 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
                   >
                     <Scale aria-hidden="true" />{comparisonIds.includes(item.cartularyId) ? 'Sélectionné' : 'Ajouter à la comparaison'}
                   </button>
+                  {item.assetType === 'watch' && (
+                    <a
+                      href={`/watch-website?publicCode=${encodeURIComponent(item.objectCode || (item.cartularyId === ROLEX_CARTULARY_ID ? 'ROL-487D9CAD' : 'OP-4892-XZ9'))}&cartularyId=${encodeURIComponent(item.cartularyId)}&returnTo=${encodeURIComponent(returnTo)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Voir le mini-site <Globe2 aria-hidden="true" />
+                    </a>
+                  )}
                   <a href={buildCartularyHref(item.cartularyId, returnTo, item.assetType)}>
                     Ouvrir le Cartulaire <ExternalLink aria-hidden="true" />
                   </a>

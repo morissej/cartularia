@@ -7,11 +7,16 @@ export const cartularyIdFromLocation = (location: Pick<Location, 'pathname' | 's
   if (!location) return IWC_CARTULARY_ID;
   const normalizedPath = location.pathname.replace(/\/$/, '');
   const parameters = new URLSearchParams(location.search);
-  const isLocalPublicationPreview = normalizedPath === '/watch-website' && parameters.get('preview') === 'local';
-  const supportsCartularySelection = normalizedPath === '/cartulary' || isLocalPublicationPreview;
+  const isWatchWebsite = normalizedPath === '/watch-website';
+  const isLocalPublicationPreview = isWatchWebsite && parameters.get('preview') === 'local';
+  const supportsCartularySelection = normalizedPath === '/cartulary' || normalizedPath === '/cartulary-view' || isWatchWebsite || isLocalPublicationPreview;
   if (!supportsCartularySelection) return IWC_CARTULARY_ID;
   const requested = parameters.get('cartularyId');
-  return requested && SAFE_CARTULARY_ID.test(requested) ? requested : IWC_CARTULARY_ID;
+  if (requested && SAFE_CARTULARY_ID.test(requested)) return requested;
+  const publicCode = parameters.get('publicCode');
+  if (publicCode === 'ROL-487D9CAD' || publicCode === 'ROLEX-1675-01') return ROLEX_CARTULARY_ID;
+  if (publicCode === 'OP-4892-XZ9') return IWC_CARTULARY_ID;
+  return IWC_CARTULARY_ID;
 };
 
 export const ACTIVE_CARTULARY_ID = typeof window === 'undefined'

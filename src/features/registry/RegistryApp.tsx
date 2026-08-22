@@ -1,12 +1,14 @@
-import { lazy, Suspense, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, Suspense, type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, MouseEventHandler } from 'react';
 import type { User } from 'firebase/auth';
 import {
+  Archive,
   Bell,
   BookOpen,
   Building2,
   ChevronRight,
   Fingerprint,
+  Home,
   Images,
   KeyRound,
   Layers3,
@@ -33,6 +35,15 @@ import {
   signOutOfCartularia,
 } from '../../services/foundations';
 import { RegistryOverview } from './RegistryOverview.tsx';
+import { RegistryItems } from './RegistryItems.tsx';
+import { RegistryCollections } from './RegistryCollections.tsx';
+import { RegistryComparison } from './RegistryComparison.tsx';
+import { RegistryAdministration } from './RegistryAdministration.tsx';
+import { RegistryAccessCenter } from './RegistryAccessCenter.tsx';
+import { RegistryFollowUp } from './RegistryFollowUp.tsx';
+import { RegistryGallery } from './RegistryGallery.tsx';
+import { RegistryIntegrity } from './RegistryIntegrity.tsx';
+import { NewCartularyPage } from './NewCartularyPage.tsx';
 import { ROLE_LABELS } from './registryAdministration.ts';
 import {
   parseRegistryRoute,
@@ -43,15 +54,31 @@ import {
 } from './registryRouting.ts';
 import './registry.css';
 
-const RegistryItems = lazy(() => import('./RegistryItems.tsx').then((module) => ({ default: module.RegistryItems })));
-const RegistryComparison = lazy(() => import('./RegistryComparison.tsx').then((module) => ({ default: module.RegistryComparison })));
-const RegistryCollections = lazy(() => import('./RegistryCollections.tsx').then((module) => ({ default: module.RegistryCollections })));
-const RegistryAdministration = lazy(() => import('./RegistryAdministration.tsx').then((module) => ({ default: module.RegistryAdministration })));
-const RegistryAccessCenter = lazy(() => import('./RegistryAccessCenter.tsx').then((module) => ({ default: module.RegistryAccessCenter })));
-const RegistryFollowUp = lazy(() => import('./RegistryFollowUp.tsx').then((module) => ({ default: module.RegistryFollowUp })));
-const RegistryGallery = lazy(() => import('./RegistryGallery.tsx').then((module) => ({ default: module.RegistryGallery })));
-const RegistryIntegrity = lazy(() => import('./RegistryIntegrity.tsx').then((module) => ({ default: module.RegistryIntegrity })));
-const NewCartularyPage = lazy(() => import('./NewCartularyPage.tsx').then((module) => ({ default: module.NewCartularyPage })));
+class RegistrySectionErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error('Erreur section Registre:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="registry-state-page registry-state-page--error" role="alert">
+          <Archive aria-hidden="true" />
+          <h1>Vue temporairement indisponible</h1>
+          <p>Une mise à jour de l’application a été déployée ou les données doivent être rechargées.</p>
+          <button type="button" onClick={() => window.location.reload()}>Recharger la vue</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface RegistryChoice {
   registry: RegistryDocument;
@@ -133,7 +160,7 @@ function RegistrySignIn() {
   return (
     <main className="registry-auth-page">
       <section className="registry-auth-intro" aria-labelledby="registry-auth-title">
-        <div className="registry-auth-logo"><BrandLogo /></div>
+        <div className="registry-auth-logo"><BrandLogo href="/" /></div>
         <p className="registry-kicker">Espace authentifié</p>
         <h1 id="registry-auth-title">Accéder à votre Registre</h1>
         <p>
@@ -194,10 +221,16 @@ function RegistryChooser({ choices, user, onRegistryClick }: {
   return (
     <div className="registry-app" onClick={onRegistryClick}>
       <header className="registry-topbar registry-topbar--chooser">
-        <div className="registry-brand"><BrandLogo /></div>
-        <button type="button" className="registry-signout" onClick={handleSignOut}>
-          <LogOut aria-hidden="true" /> Déconnexion
-        </button>
+        <div className="registry-brand"><BrandLogo href="/registry" /></div>
+        <div className="registry-account-controls">
+          <a className="registry-home-link" href="/" title="Retourner au site d’accueil Cartularia">
+            <Home aria-hidden="true" size={14} />
+            <span>Site d’accueil</span>
+          </a>
+          <button type="button" className="registry-signout" onClick={handleSignOut}>
+            <LogOut aria-hidden="true" /> Déconnexion
+          </button>
+        </div>
       </header>
       <main className="registry-chooser">
         <div className="registry-chooser__intro">
@@ -237,6 +270,7 @@ function RegistryNoAccess({ user }: { user: User }) {
       <p>Votre compte est authentifié, mais aucun membership actif ne lui donne actuellement accès à un Registre.</p>
       <div className="registry-state-actions">
         <span>{registryAccountLabel(user)}</span>
+        <a className="button button--secondary" href="/">Retour à l’accueil</a>
         <button type="button" onClick={() => signOutOfCartularia()}>Changer de compte</button>
       </div>
     </main>
@@ -265,12 +299,16 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
     <div className="registry-app" onClick={onRegistryClick}>
       <a className="registry-skip-link" href="#registry-main-content">Aller au contenu principal</a>
       <header className="registry-topbar">
-        <div className="registry-brand"><BrandLogo /></div>
+        <div className="registry-brand"><BrandLogo href={registryHref(registry.id)} /></div>
         <div className="registry-product-label">
           <span>Registre</span>
           <strong>{registry.name}</strong>
         </div>
         <div className="registry-account-controls">
+          <a className="registry-home-link" href="/" title="Retourner au site d’accueil Cartularia">
+            <Home aria-hidden="true" size={14} />
+            <span>Site d’accueil</span>
+          </a>
           {choices.length > 1 && (
             <label className="registry-context-select">
               <span>Contexte</span>
@@ -317,6 +355,12 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
               );
             })}
           </nav>
+          <div className="registry-sidebar__home">
+            <a href="/" className="registry-sidebar__home-btn">
+              <Home aria-hidden="true" size={14} />
+              <span>Site d’accueil Cartularia</span>
+            </a>
+          </div>
           <div className="registry-sidebar__security">
             <ShieldCheck aria-hidden="true" />
             <span>Secret par défaut</span>
@@ -324,67 +368,69 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
         </aside>
 
         <main className="registry-main" id="registry-main-content" tabIndex={-1}>
-          <Suspense fallback={<RegistrySectionLoading />}>
-            {effectiveSection === 'overview' && (
-              <RegistryOverview registry={registry} organization={organization} membership={choice.membership} />
-            )}
-            {effectiveSection === 'items' && (
-              <RegistryItems
-                registry={registry}
-                canCreateCartularies={choice.membership.permissions.includes('cartulary.edit')}
-                invitationGrant={invitationGrant}
-              />
-            )}
-            {effectiveSection === 'collections' && (
-              <RegistryCollections
-                registry={registry}
-                canManage={choice.membership.permissions.includes('cartulary.edit')}
-              />
-            )}
-            {effectiveSection === 'new' && choice.membership.permissions.includes('cartulary.edit') && (
-              <NewCartularyPage user={user} organization={organization} registry={registry} />
-            )}
-            {effectiveSection === 'new' && !choice.membership.permissions.includes('cartulary.edit') && (
-              <section className="registry-create-denied"><LockKeyhole aria-hidden="true" /><h1>Création non autorisée</h1><p>Votre rôle permet de consulter ce Registre, mais pas d’y créer un Cartulaire.</p></section>
-            )}
-            {effectiveSection === 'gallery' && (
-              <RegistryGallery
-                registry={registry}
-                canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
-              />
-            )}
-            {effectiveSection === 'compare' && <RegistryComparison registry={registry} />}
-            {effectiveSection === 'follow-up' && (
-              <RegistryFollowUp
-                registry={registry}
-                canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
-              />
-            )}
-            {effectiveSection === 'access' && (
-              <RegistryAccessCenter
-                registry={registry}
-                canReadAccesses={choice.membership.permissions.includes('access.read')}
-                canManageAccesses={choice.membership.permissions.includes('cartulary.edit')}
-              />
-            )}
-            {effectiveSection === 'integrity' && (
-              <RegistryIntegrity
-                registry={registry}
-                canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
-              />
-            )}
-            {effectiveSection === 'admin' && (
-              <RegistryAdministration
-                registry={registry}
-                organization={organization}
-                membership={choice.membership}
-                organizationRegistries={choices
-                  .filter((candidate) => candidate.organization.id === organization.id)
-                  .map((candidate) => candidate.registry)}
-                currentUid={user.uid}
-              />
-            )}
-          </Suspense>
+          <RegistrySectionErrorBoundary>
+            <Suspense fallback={<RegistrySectionLoading />}>
+              {effectiveSection === 'overview' && (
+                <RegistryOverview registry={registry} organization={organization} membership={choice.membership} />
+              )}
+              {effectiveSection === 'items' && (
+                <RegistryItems
+                  registry={registry}
+                  canCreateCartularies={choice.membership.permissions.includes('cartulary.edit')}
+                  invitationGrant={invitationGrant}
+                />
+              )}
+              {effectiveSection === 'collections' && (
+                <RegistryCollections
+                  registry={registry}
+                  canManage={choice.membership.permissions.includes('cartulary.edit')}
+                />
+              )}
+              {effectiveSection === 'new' && choice.membership.permissions.includes('cartulary.edit') && (
+                <NewCartularyPage user={user} organization={organization} registry={registry} />
+              )}
+              {effectiveSection === 'new' && !choice.membership.permissions.includes('cartulary.edit') && (
+                <section className="registry-create-denied"><LockKeyhole aria-hidden="true" /><h1>Création non autorisée</h1><p>Votre rôle permet de consulter ce Registre, mais pas d’y créer un Cartulaire.</p></section>
+              )}
+              {effectiveSection === 'gallery' && (
+                <RegistryGallery
+                  registry={registry}
+                  canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
+                />
+              )}
+              {effectiveSection === 'compare' && <RegistryComparison registry={registry} />}
+              {effectiveSection === 'follow-up' && (
+                <RegistryFollowUp
+                  registry={registry}
+                  canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
+                />
+              )}
+              {effectiveSection === 'access' && (
+                <RegistryAccessCenter
+                  registry={registry}
+                  canReadAccesses={choice.membership.permissions.includes('access.read')}
+                  canManageAccesses={choice.membership.permissions.includes('cartulary.edit')}
+                />
+              )}
+              {effectiveSection === 'integrity' && (
+                <RegistryIntegrity
+                  registry={registry}
+                  canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
+                />
+              )}
+              {effectiveSection === 'admin' && (
+                <RegistryAdministration
+                  registry={registry}
+                  organization={organization}
+                  membership={choice.membership}
+                  organizationRegistries={choices
+                    .filter((candidate) => candidate.organization.id === organization.id)
+                    .map((candidate) => candidate.registry)}
+                  currentUid={user.uid}
+                />
+              )}
+            </Suspense>
+          </RegistrySectionErrorBoundary>
         </main>
       </div>
     </div>

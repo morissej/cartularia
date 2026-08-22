@@ -867,6 +867,115 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
+    function ownsVault(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function validEncryptedAccount(uid) {
+      return request.resource.data.keys().hasOnly([
+          'schemaVersion', 'ownerUid', 'accountId', 'version', 'algorithm',
+          'keyDerivation', 'iterations', 'salt', 'iv', 'ciphertext', 'updatedAt'
+        ])
+        && request.resource.data.schemaVersion == 'encrypted-personal-account@2.0.0'
+        && request.resource.data.ownerUid == uid
+        && request.resource.data.accountId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.version == 2
+        && request.resource.data.algorithm == 'AES-GCM'
+        && request.resource.data.keyDerivation == 'PBKDF2-SHA-256'
+        && request.resource.data.iterations >= 600000
+        && request.resource.data.salt is string
+        && request.resource.data.salt.size() <= 64
+        && request.resource.data.iv is string
+        && request.resource.data.iv.size() <= 64
+        && request.resource.data.ciphertext is string
+        && request.resource.data.ciphertext.size() <= 900000;
+    }
+
+    match /vaultUsers/{uid} {
+      allow read, write: if false;
+
+      match /vault/{vaultId} {
+        allow get: if vaultId == 'profile' && ownsVault(uid);
+        allow list: if false;
+        allow create, update: if vaultId == 'profile' && ownsVault(uid) && validEncryptedAccount(uid);
+        allow delete: if vaultId == 'profile' && ownsVault(uid) && resource.data.ownerUid == uid;
+      }
+    }
+
+    function bridgeBaseIsValid(uid, code) {
+      return request.resource.data.ownerUid == uid
+        && request.resource.data.code == code
+        && request.resource.data.schemaVersion == 'code-correspondence@1.0.0';
+    }
+
+    function bridgeSimpleCodeIsValid(uid, code) {
+      return request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'updatedAt'])
+        && bridgeBaseIsValid(uid, code)
+        && code.matches('^(TRN|LIE|GES)-[A-F0-9]{8}$');
+    }
+
+    function bridgeLabeledCodeIsValid(uid, code, codePattern, labelPattern) {
+      return request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'genericLabel', 'updatedAt'])
+        && bridgeBaseIsValid(uid, code)
+        && code.matches(codePattern)
+        && request.resource.data.genericLabel is string
+        && request.resource.data.genericLabel.matches(labelPattern);
+    }
+
+    match /codeAccounts/{uid} {
+      allow read, write: if false;
+
+      match /account/{documentId} {
+        allow read: if documentId == 'profile' && ownsVault(uid);
+        allow create, update: if documentId == 'profile'
+          && ownsVault(uid)
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'primaryClientNumber', 'updatedAt'])
+          && request.resource.data.schemaVersion == 'code-account-link@1.0.0'
+          && request.resource.data.ownerUid == uid
+          && request.resource.data.primaryClientNumber.matches('^CLI-[A-F0-9]{8}$');
+        allow delete: if documentId == 'profile' && ownsVault(uid) && resource.data.ownerUid == uid;
+      }
+
+      match /clients/{clientNumber} {
+        allow read: if ownsVault(uid);
+        allow create: if ownsVault(uid)
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'updatedAt'])
+          && bridgeBaseIsValid(uid, clientNumber)
+          && clientNumber.matches('^CLI-[A-F0-9]{8}$')
+          && request.resource.data.objectCodes is list
+          && request.resource.data.objectCodes.size() == 0;
+        allow update: if ownsVault(uid)
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'updatedAt'])
+          && bridgeBaseIsValid(uid, clientNumber)
+          && request.resource.data.objectCodes == resource.data.objectCodes;
+        allow delete: if false;
+      }
+
+      match /transmissions/{code} {
+        allow read: if ownsVault(uid);
+        allow create, update: if ownsVault(uid) && bridgeSimpleCodeIsValid(uid, code) && code.matches('^TRN-[A-F0-9]{8}$');
+        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+      }
+
+      match /locations/{code} {
+        allow read: if ownsVault(uid);
+        allow create, update: if ownsVault(uid) && bridgeLabeledCodeIsValid(uid, code, '^LIE-[A-F0-9]{8}$', '^Lieu [1-9][0-9]*$');
+        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+      }
+
+      match /managers/{code} {
+        allow read: if ownsVault(uid);
+        allow create, update: if ownsVault(uid) && bridgeSimpleCodeIsValid(uid, code) && code.matches('^GES-[A-F0-9]{8}$');
+        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+      }
+
+      match /people/{code} {
+        allow read: if ownsVault(uid);
+        allow create, update: if ownsVault(uid) && bridgeLabeledCodeIsValid(uid, code, '^(CLI|PER|GES)-[A-F0-9]{8}$', '^Personne [1-9][0-9]*$');
+        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -126,6 +126,54 @@
 .registry-signout svg { width: 15px; }
 .registry-signout--icon { width: 40px; padding: 0; }
 
+.registry-home-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+}
+
+.registry-home-link:hover { border-color: var(--mark); color: var(--mark); }
+.registry-home-link svg { width: 14px; height: 14px; }
+
+.registry-sidebar__home {
+  margin-top: auto;
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--rule);
+}
+
+.registry-sidebar__home-btn {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.registry-sidebar__home-btn:hover { border-color: var(--mark); color: var(--mark); }
+.registry-sidebar__home-btn svg { width: 14px; height: 14px; color: var(--muted); }
+.registry-sidebar__home-btn:hover svg { color: var(--mark); }
+
 .registry-layout {
   display: grid;
   min-height: calc(100vh - 77px);

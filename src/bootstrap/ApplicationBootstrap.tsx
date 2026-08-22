@@ -1,5 +1,5 @@
-import { Suspense, useEffect, useState } from 'react';
-import type { ComponentType } from 'react';
+import { Component, Suspense, useEffect, useState } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { BrandLogo } from '../components/BrandLogo.tsx';
 import { RootPage } from '../RootPage.tsx';
 import {
@@ -16,6 +16,41 @@ interface ApplicationBootstrapProps {
   location?: Pick<Location, 'pathname' | 'search'>;
   bootstrap?: () => Promise<PrivateBootstrapOutcome>;
   PageComponent?: ComponentType;
+}
+
+class ApplicationErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error('Erreur globale Cartularia:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="application-shell" role="alert" aria-live="assertive">
+          <BrandLogo variant="color" />
+          <div className="application-shell__rule" aria-hidden="true" />
+          <span className="eyebrow">Actualisation requise</span>
+          <h1>Cartularia</h1>
+          <p>Une mise à jour a été appliquée. Veuillez recharger votre page.</p>
+          <button
+            type="button"
+            className="button button--primary"
+            style={{ marginTop: '16px' }}
+            onClick={() => window.location.reload()}
+          >
+            Recharger Cartularia
+          </button>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 let defaultPrivateBootstrap: Promise<PrivateBootstrapOutcome> | null = null;
@@ -76,7 +111,7 @@ export function ApplicationBootstrap({
 
   const degraded = bootState.outcome?.status === 'degraded' ? bootState.outcome : null;
   return (
-    <>
+    <ApplicationErrorBoundary>
       {degraded && !noticeDismissed && (
         <aside className="application-bootstrap-notice" role="status" aria-live="polite">
           <div>
@@ -89,6 +124,6 @@ export function ApplicationBootstrap({
       <Suspense fallback={<ApplicationShell label="Ouverture de votre espace Cartularia…" />}>
         <PageComponent />
       </Suspense>
-    </>
+    </ApplicationErrorBoundary>
   );
 }

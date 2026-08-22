@@ -20,6 +20,7 @@ import {
   type PersonalTransmissionRecipient,
   type PersonalVaultPayload,
 } from './types';
+import './personalVault.css';
 
 const newId = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 const isAddressField = (field: OwnerField) => field.label.trim().toLocaleLowerCase('fr').includes('adresse');

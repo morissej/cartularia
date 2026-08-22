@@ -27,6 +27,7 @@ cartularia-production-readiness*.json
 !.vscode/extensions.json
 .idea
 .DS_Store
+* 2.*
 *.suo
 *.ntvs*
 *.njsproj
