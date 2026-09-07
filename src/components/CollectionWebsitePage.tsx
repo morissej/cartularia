@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { FileText, Filter, Globe2, Layers3 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase.ts';
-import { ROLEX_CARTULARY_ID } from '../domain/cartularyIds.ts';
 import { buildCartularyHref } from '../features/registry/registryCatalog.ts';
 import {
   collectionLabelFromIdentifier,
@@ -12,10 +11,10 @@ import {
 } from '../domain/collections.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../domain/projections.ts';
 import { loadCollectionWebsitePublication, loadRegistryCollections } from '../services/collections.ts';
-import { loadRegistryItems } from '../services/projections.ts';
+import { loadRegistryItems, loadPublicPublicationStatuses } from '../services/projections.ts';
 import { BrandLogo } from './BrandLogo.tsx';
 
-type CollectionWebsiteState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'not-published' | 'denied' | 'invalid';
+type CollectionWebsiteState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'not-published' | 'denied' | 'invalid' | 'error';
 
 const safeIdentifier = (value: string) => /^[A-Za-z0-9_-]{1,160}$/.test(value) ? value : null;
 
@@ -33,7 +32,7 @@ const parseCollectionWebsiteSelection = (search: string) => {
     registryId,
     collectionIds,
     previewCartularyId: safeIdentifier(parameters.get('cartularyId') || ''),
-    cartularyUrl: parameters.get('cartularyUrl') || null,
+    cartularyUrl: (() => { const value = parameters.get('cartularyUrl'); return value?.startsWith('/watch-website?') ? value : null; })(),
   };
 };
 
@@ -53,21 +52,23 @@ export const CollectionWebsitePage = () => {
   const [collections, setCollections] = useState<RegistryCollectionDocument[]>([]);
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [assetType, setAssetType] = useState('all');
+  const [publicStatuses, setPublicStatuses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (selection.publicationId) {
       setState('loading');
       void loadCollectionWebsitePublication(selection.publicationId)
-        .then((result) => {
+        .then(async (result) => {
           if (!result) {
             setState('not-published');
             return;
           }
           setPublication(result.publication);
           setPublicationItems(result.items);
+          setPublicStatuses(await loadPublicPublicationStatuses(result.items.flatMap((item) => item.publicCode ? [item.publicCode] : [])));
           setState('ready');
         })
-        .catch(() => setState('not-published'));
+        .catch((error: { code?: string }) => setState(error.code === 'permission-denied' ? 'not-published' : 'error'));
       return undefined;
     }
     const registryId = selection.registryId;
@@ -124,13 +125,15 @@ export const CollectionWebsitePage = () => {
           ? 'Mini-site non publié'
         : state === 'denied'
           ? 'Accès aux Collections refusé'
+        : state === 'error' ? 'Chargement temporairement indisponible'
           : 'Chargement des Collections';
     return (
       <main className="catalog-site-state">
-        <BrandLogo />
+        <BrandLogo href="/" />
         <h1>{heading}</h1>
         <p>Ce mini-site lit uniquement une projection de publication dédiée et ne donne jamais accès aux Cartulaires maîtres ni aux données privées du Registre.</p>
         <a className="button button--quiet" href={selection.preview && selection.registryId ? `/registry/${encodeURIComponent(selection.registryId)}/collections` : '/'}>{selection.preview ? 'Retour au Registre' : 'Retour à Cartularia'}</a>
+        {state === 'error' && <button type="button" onClick={() => window.location.reload()}>Réessayer</button>}
       </main>
     );
   }
@@ -138,12 +141,12 @@ export const CollectionWebsitePage = () => {
   const activeRegistryId = selection.registryId
     || publication?.registryId
     || (selection.publicationId ? selection.publicationId.split('--')[0] : null)
-    || 'reg_collection_privee';
+    || '';
 
   return (
     <div className="catalog-site">
       <header className="catalog-site__header">
-        <BrandLogo href={`/registry/${encodeURIComponent(activeRegistryId)}/collections`} />
+        <BrandLogo href={selection.preview ? `/registry/${encodeURIComponent(activeRegistryId)}/collections` : '/'} />
         <div>
           <span className="eyebrow">Mini-site de Collection</span>
           <h1>{selectedCollections.map((entry) => entry.websiteTitle || entry.name).join(' · ')}</h1>
@@ -170,11 +173,12 @@ export const CollectionWebsitePage = () => {
                 {collectionItems.map((item) => {
                   const rawPublicCode = 'publicCode' in item ? item.publicCode : item.objectCode;
                   const effectivePublicCode = rawPublicCode
-                    || (item.cartularyId === ROLEX_CARTULARY_ID ? 'ROL-487D9CAD' : 'OP-4892-XZ9');
+                    || '';
                   const isLocalPreview = selection.preview && item.cartularyId === selection.previewCartularyId && selection.cartularyUrl;
                   const watchWebsiteHref = isLocalPreview
                     ? selection.cartularyUrl!
-                    : `/watch-website?publicCode=${encodeURIComponent(effectivePublicCode)}&cartularyId=${encodeURIComponent(item.cartularyId)}${selection.preview ? '&preview=local' : ''}`;
+                    : `/watch-website?publicCode=${encodeURIComponent(effectivePublicCode)}`;
+                  const hasPublicWebsite = Boolean(isLocalPreview || publicStatuses[effectivePublicCode]);
                   const returnTo = selection.preview && selection.registryId
                     ? `/registry/${encodeURIComponent(selection.registryId)}/collections`
                     : window.location.pathname + window.location.search;
@@ -183,18 +187,18 @@ export const CollectionWebsitePage = () => {
                   return (
                     <article key={item.cartularyId}>
                       <span>{assetTypeLabel(item.assetType)}</span>
-                      <h3><a href={watchWebsiteHref} target="_blank" rel="noreferrer">{item.displayTitle}</a></h3>
+                      <h3>{hasPublicWebsite ? <a href={watchWebsiteHref} target="_blank" rel="noreferrer">{item.displayTitle}</a> : item.displayTitle}</h3>
                       <p>{item.makerName} · {item.modelName}</p>
                       <dl><div><dt>Référence</dt><dd>{item.referenceCode || '—'}</dd></div><div><dt>Année</dt><dd>{item.manufactureYear || '—'}</dd></div></dl>
                       <footer>
-                        <a className="is-primary" href={watchWebsiteHref} target="_blank" rel="noreferrer">
+                        {hasPublicWebsite ? <a className="is-primary" href={watchWebsiteHref} target="_blank" rel="noreferrer">
                           <Globe2 size={13} aria-hidden="true" />
                           Voir le mini-site
-                        </a>
-                        <a href={cartularyHref}>
+                        </a> : <span>Mini-site de l’objet non publié</span>}
+                        {selection.preview && <a href={cartularyHref}>
                           <FileText size={13} aria-hidden="true" />
                           Ouvrir le Cartulaire
-                        </a>
+                        </a>}
                       </footer>
                     </article>
                   );

@@ -4,6 +4,12 @@ import { ACTIVE_CARTULARY_ID, IWC_CARTULARY_ID, ROLEX_CARTULARY_ID } from '../do
 import { cartulariaStorage } from '../persistence/localVault.ts';
 import { normalizeWatchCreationProfile, readValidatedStoredJson } from '../persistence/storedStateValidation.ts';
 import { mockCartulary as iwcCartulary } from './mockData.ts';
+import {
+  buildDemoCartularyAssets,
+  demoCartularyById,
+  demoCartularyContentById,
+  type DemoCartularyDefinition,
+} from './demoCartularies.ts';
 
 const parseStored = <T,>(key: string): T | null => readValidatedStoredJson({
   storage: cartulariaStorage,
@@ -38,13 +44,46 @@ const rolexFallbackProfile: WatchCartularyCreationProfile = {
   assertedAt: '2026-08-16T00:00:00.000Z',
 };
 
-export const activeCreationProfile = normalizeWatchCreationProfile(parseStored<unknown>('cartularia-creation-profile')) as WatchCartularyCreationProfile | null
-  ?? (ACTIVE_CARTULARY_ID === ROLEX_CARTULARY_ID ? rolexFallbackProfile : null);
+export const activeDemoCartulary = demoCartularyById(ACTIVE_CARTULARY_ID);
+export const activeDemoContent = demoCartularyContentById(ACTIVE_CARTULARY_ID);
+
+const demoCreationProfile = (cartulary: DemoCartularyDefinition): WatchCartularyCreationProfile => ({
+  profileVersion: '1.0.0',
+  assetType: 'watch',
+  schemaId: 'watch',
+  schemaVersion: '1.6.0',
+  collectionId: 'col_demo_montres',
+  brand: cartulary.brand,
+  model: cartulary.model,
+  reference: cartulary.reference,
+  manufactureYear: cartulary.manufactureYear,
+  serialNumber: cartulary.serialNumber,
+  caliber: cartulary.caliber,
+  description: cartulary.description,
+  conditionSummary: cartulary.conditionSummary,
+  purchaseDate: cartulary.purchaseDate,
+  purchasePrice: cartulary.purchasePrice,
+  currency: cartulary.currency,
+  seller: demoCartularyContentById(cartulary.id)?.seller || 'Démonstration Cartularia · vendeur fictif',
+  valuationDate: cartulary.valuationDate,
+  valuationLow: cartulary.valuationLow,
+  valuationMid: cartulary.valuationMid,
+  valuationHigh: cartulary.valuationHigh,
+  sourceLabel: cartulary.sourceLabel,
+  assertedAt: '2026-08-22T08:00:00.000Z',
+});
+
+export const activeCreationProfile = activeDemoCartulary
+  ? demoCreationProfile(activeDemoCartulary)
+  : normalizeWatchCreationProfile(parseStored<unknown>('cartularia-creation-profile')) as WatchCartularyCreationProfile | null
+    ?? (ACTIVE_CARTULARY_ID === ROLEX_CARTULARY_ID ? rolexFallbackProfile : null);
 
 export const isIwcCartulary = ACTIVE_CARTULARY_ID === IWC_CARTULARY_ID;
 export const isRolexCartulary = ACTIVE_CARTULARY_ID === ROLEX_CARTULARY_ID;
+export const isDemoCartulary = Boolean(activeDemoCartulary);
 
 const fallbackPublicCode = () => {
+  if (activeDemoCartulary) return activeDemoCartulary.publicCode;
   const stored = parseStored<string>('cartularia-public-code');
   if (stored) return stored;
   if (ACTIVE_CARTULARY_ID === ROLEX_CARTULARY_ID) return 'ROL-487D9CAD';
@@ -151,11 +190,11 @@ const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): 
         model: safeProfile.model,
         reference: safeProfile.reference,
         caliber: safeProfile.caliber || 'À documenter',
-        powerReserve: 'À documenter',
-        material: 'Acier inoxydable',
-        diameter: 39,
-        thickness: 13,
-        waterResistance: 'Étanchéité non garantie',
+        powerReserve: activeDemoCartulary?.powerReserve ?? 'À documenter',
+        material: activeDemoCartulary?.caseMaterial ?? 'Acier inoxydable',
+        diameter: activeDemoCartulary?.diameter ?? 39,
+        thickness: activeDemoCartulary?.thickness ?? 13,
+        waterResistance: activeDemoCartulary?.waterResistance ?? 'Étanchéité non garantie',
       },
       observations: [{
         id: 'observation-imported-condition',
@@ -165,8 +204,14 @@ const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): 
         confidence: 'Faible',
         date: reviewDate,
       }],
-      valuations: [valuation],
-      reminders: [],
+      valuations: activeDemoContent?.valuationHistory ?? [valuation],
+      reminders: activeDemoCartulary ? [{
+        id: `${activeDemoCartulary.mediaSlug}-reminder`,
+        title: 'Renouveler le contrôle annuel fictif',
+        dueDate: '2027-06-30',
+        status: 'À faire',
+        description: 'Échéance pédagogique de démonstration, sans lien avec un objet réel.',
+      }] : [],
     },
     sections: {
       '01': { sectionId: '01', visibility: 'Secret' },
@@ -181,20 +226,28 @@ const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): 
       '10': { sectionId: '10', visibility: 'Secret' },
       '11': { sectionId: '11', visibility: 'Secret' },
     },
-    assets: [],
-    mediaDossiers: [],
-    comparables: isRolexCartulary ? rolexComparables : [],
+    assets: activeDemoCartulary ? buildDemoCartularyAssets(activeDemoCartulary) : [],
+    mediaDossiers: activeDemoCartulary ? [{
+      id: `${activeDemoCartulary.mediaSlug}-media-dossier`,
+      date: '2026-08-22',
+      title: 'Dossier média fictif complet',
+      summary: 'Vue principale, vue arrière, ensemble associé et animation éditoriale de démonstration.',
+      assetIds: buildDemoCartularyAssets(activeDemoCartulary).map((asset) => asset.id),
+      author: 'Cartularia Demo',
+      status: 'Reviewed',
+    }] : [],
+    comparables: activeDemoContent?.comparables ?? (isRolexCartulary ? rolexComparables : []),
     marketSnapshot: {
       date: valuation.date,
-      activeListings: isRolexCartulary ? 56 : 0,
-      observedTransactions90d: 0,
-      medianDaysOnMarket: 0,
+      activeListings: activeDemoContent?.marketDepth.activeListings ?? (isRolexCartulary ? 56 : 0),
+      observedTransactions90d: activeDemoContent?.marketDepth.transactions12m ?? 0,
+      medianDaysOnMarket: activeDemoContent?.marketDepth.medianDaysOnMarket ?? 0,
       lowValue: valuation.lowValue,
       midValue: valuation.midValue,
       highValue: valuation.highValue,
       currency: valuation.currency,
     },
-    conditionReports: [{
+    conditionReports: activeDemoContent?.conditionReports ?? [{
       id: 'condition-imported-declaration',
       date: reviewDate,
       title: 'État déclaré — revue requise',
@@ -202,7 +255,7 @@ const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): 
       summary: safeProfile.conditionSummary || 'État à documenter.',
       dossierId: 'creation-import',
     }],
-    insurance: {
+    insurance: activeDemoContent?.insurance ?? {
       status: 'Pending',
       insurer: 'À documenter',
       insuredValue: valuation.midValue,
@@ -210,7 +263,7 @@ const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): 
       currency: valuation.currency,
       renewalDate: '',
     },
-    location: {
+    location: activeDemoContent?.location ?? {
       city: 'À documenter',
       country: 'À documenter',
       storageType: 'Emplacement privé',

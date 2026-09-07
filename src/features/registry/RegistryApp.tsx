@@ -1,6 +1,8 @@
-import { Component, Suspense, type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, lazy, Suspense, type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, MouseEventHandler } from 'react';
 import type { User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../firebase.ts';
 import {
   Archive,
   Bell,
@@ -22,6 +24,8 @@ import {
   UserRound,
 } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
+import { confirmUnsavedNavigation } from '../../hooks/useUnsavedChangesGuard';
+import { DEMO_ACCOUNT } from '../../data/demoCartularies';
 import type {
   AccountOrganizationContext,
   MembershipDocument,
@@ -35,15 +39,6 @@ import {
   signOutOfCartularia,
 } from '../../services/foundations';
 import { RegistryOverview } from './RegistryOverview.tsx';
-import { RegistryItems } from './RegistryItems.tsx';
-import { RegistryCollections } from './RegistryCollections.tsx';
-import { RegistryComparison } from './RegistryComparison.tsx';
-import { RegistryAdministration } from './RegistryAdministration.tsx';
-import { RegistryAccessCenter } from './RegistryAccessCenter.tsx';
-import { RegistryFollowUp } from './RegistryFollowUp.tsx';
-import { RegistryGallery } from './RegistryGallery.tsx';
-import { RegistryIntegrity } from './RegistryIntegrity.tsx';
-import { NewCartularyPage } from './NewCartularyPage.tsx';
 import { ROLE_LABELS } from './registryAdministration.ts';
 import {
   parseRegistryRoute,
@@ -53,6 +48,16 @@ import {
   type RegistrySection,
 } from './registryRouting.ts';
 import './registry.css';
+
+const RegistryItems = lazy(() => import('./RegistryItems.tsx').then((module) => ({ default: module.RegistryItems })));
+const RegistryCollections = lazy(() => import('./RegistryCollections.tsx').then((module) => ({ default: module.RegistryCollections })));
+const RegistryComparison = lazy(() => import('./RegistryComparison.tsx').then((module) => ({ default: module.RegistryComparison })));
+const RegistryAdministration = lazy(() => import('./RegistryAdministration.tsx').then((module) => ({ default: module.RegistryAdministration })));
+const RegistryAccessCenter = lazy(() => import('./RegistryAccessCenter.tsx').then((module) => ({ default: module.RegistryAccessCenter })));
+const RegistryFollowUp = lazy(() => import('./RegistryFollowUp.tsx').then((module) => ({ default: module.RegistryFollowUp })));
+const RegistryGallery = lazy(() => import('./RegistryGallery.tsx').then((module) => ({ default: module.RegistryGallery })));
+const RegistryIntegrity = lazy(() => import('./RegistryIntegrity.tsx').then((module) => ({ default: module.RegistryIntegrity })));
+const NewCartularyPage = lazy(() => import('./NewCartularyPage.tsx').then((module) => ({ default: module.NewCartularyPage })));
 
 class RegistrySectionErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -112,7 +117,7 @@ const SECTION_META: Array<{
   { section: 'follow-up', label: 'Suivi', icon: Bell },
   { section: 'access', label: 'Accès', icon: KeyRound },
   { section: 'integrity', label: 'Preuves', icon: Fingerprint },
-  { section: 'admin', label: 'Administration', icon: Settings },
+  { section: 'admin', label: 'Organisation et droits', icon: Settings },
 ];
 
 const flattenRegistryChoices = (contexts: AccountOrganizationContext[]): RegistryChoice[] => {
@@ -150,8 +155,12 @@ function RegistrySignIn() {
     setError(null);
     try {
       await signInToCartularia(identifier.trim(), password);
-    } catch {
-      setError("Connexion impossible. Vérifiez vos identifiants et réessayez.");
+    } catch (failure) {
+      const code = String((failure as { code?: string }).code || '');
+      setError(code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')
+        ? 'Nom utilisateur ou mot de passe du Registre incorrect.'
+        : code.includes('too-many-requests') ? 'Trop de tentatives. Patientez quelques minutes avant de réessayer.'
+        : 'Le service de connexion n’a pas confirmé l’ouverture du Registre. Vérifiez votre connexion et réessayez.');
     } finally {
       setSubmitting(false);
     }
@@ -203,6 +212,7 @@ function RegistrySignIn() {
             {submitting ? 'Connexion…' : 'Ouvrir le Registre'}
           </button>
           <a className="registry-auth-create-link" href="/account/create">Créer un compte Cartularia</a>
+          <a className="registry-auth-create-link" href="/account/recovery">Mot de passe oublié ? Utiliser mon kit de secours</a>
         </form>
       </section>
     </main>
@@ -215,6 +225,7 @@ function RegistryChooser({ choices, user, onRegistryClick }: {
   onRegistryClick: MouseEventHandler<HTMLElement>;
 }) {
   const handleSignOut = async () => {
+    if (!confirmUnsavedNavigation()) return;
     await signOutOfCartularia();
   };
 
@@ -223,12 +234,13 @@ function RegistryChooser({ choices, user, onRegistryClick }: {
       <header className="registry-topbar registry-topbar--chooser">
         <div className="registry-brand"><BrandLogo href="/registry" /></div>
         <div className="registry-account-controls">
+          {choices.some((choice) => choice.registry.id !== DEMO_ACCOUNT.registryId) && <a className="registry-home-link" href="/account/security"><KeyRound aria-hidden="true" size={14} /><span>Sécurité et kit de secours</span></a>}
           <a className="registry-home-link" href="/" title="Retourner au site d’accueil Cartularia">
             <Home aria-hidden="true" size={14} />
             <span>Site d’accueil</span>
           </a>
           <button type="button" className="registry-signout" onClick={handleSignOut}>
-            <LogOut aria-hidden="true" /> Déconnexion
+            <LogOut aria-hidden="true" /> Se déconnecter
           </button>
         </div>
       </header>
@@ -262,16 +274,24 @@ function RegistryChooser({ choices, user, onRegistryClick }: {
 }
 
 function RegistryNoAccess({ user }: { user: User }) {
+  const [activationMissing, setActivationMissing] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setActivationMissing(false);
+    void getDoc(doc(db, 'users', user.uid)).then((snapshot) => active && setActivationMissing(!snapshot.exists())).catch(() => {});
+    return () => { active = false; };
+  }, [user.uid]);
   return (
     <main className="registry-state-page registry-state-page--empty">
       <LockKeyhole aria-hidden="true" />
       <p className="registry-kicker">Aucun Registre</p>
       <h1>Aucun contexte ne vous est attribué</h1>
-      <p>Votre compte est authentifié, mais aucun membership actif ne lui donne actuellement accès à un Registre.</p>
+      <p>Votre compte est authentifié, mais aucun droit actif ne lui donne actuellement accès à un Registre.</p>
+      {activationMissing && <p><a href={`/account/sign-in?resume=1&returnTo=${encodeURIComponent('/registry')}`}>Terminer la création du Registre</a></p>}
       <div className="registry-state-actions">
         <span>{registryAccountLabel(user)}</span>
         <a className="button button--secondary" href="/">Retour à l’accueil</a>
-        <button type="button" onClick={() => signOutOfCartularia()}>Changer de compte</button>
+        <button type="button" onClick={() => { if (confirmUnsavedNavigation()) void signOutOfCartularia(); }}>Changer de compte</button>
       </div>
     </main>
   );
@@ -305,6 +325,7 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
           <strong>{registry.name}</strong>
         </div>
         <div className="registry-account-controls">
+          {registry.id !== DEMO_ACCOUNT.registryId && <a className="registry-home-link" href={`/account/security?returnTo=${encodeURIComponent(registryHref(registry.id))}`}><KeyRound aria-hidden="true" size={14} /><span>Sécurité et kit de secours</span></a>}
           <a className="registry-home-link" href="/" title="Retourner au site d’accueil Cartularia">
             <Home aria-hidden="true" size={14} />
             <span>Site d’accueil</span>
@@ -325,8 +346,8 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
             <UserRound aria-hidden="true" />
             <span><strong>{registryAccountLabel(user)}</strong><small>Compte authentifié</small></span>
           </div>
-          <button type="button" className="registry-signout registry-signout--icon" onClick={() => signOutOfCartularia()} aria-label="Se déconnecter">
-            <LogOut aria-hidden="true" />
+          <button type="button" className="registry-signout registry-signout--account" onClick={() => { if (confirmUnsavedNavigation()) void signOutOfCartularia(); }}>
+            <LogOut aria-hidden="true" /> Se déconnecter
           </button>
         </div>
       </header>
@@ -355,12 +376,6 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
               );
             })}
           </nav>
-          <div className="registry-sidebar__home">
-            <a href="/" className="registry-sidebar__home-btn">
-              <Home aria-hidden="true" size={14} />
-              <span>Site d’accueil Cartularia</span>
-            </a>
-          </div>
           <div className="registry-sidebar__security">
             <ShieldCheck aria-hidden="true" />
             <span>Secret par défaut</span>
@@ -384,6 +399,7 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
                 <RegistryCollections
                   registry={registry}
                   canManage={choice.membership.permissions.includes('cartulary.edit')}
+                  canPublish={choice.membership.permissions.includes('publication.manage')}
                 />
               )}
               {effectiveSection === 'new' && choice.membership.permissions.includes('cartulary.edit') && (
@@ -403,6 +419,7 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
                 <RegistryFollowUp
                   registry={registry}
                   canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
+                  canManage={choice.membership.permissions.includes('cartulary.edit')}
                 />
               )}
               {effectiveSection === 'access' && (
@@ -446,6 +463,7 @@ export function RegistryApp() {
   const choices = useMemo(() => flattenRegistryChoices(contexts), [contexts]);
 
   const navigateRegistry = useCallback<NavigateRegistry>((href, options = {}) => {
+    if (!options.replace && !confirmUnsavedNavigation()) return;
     const target = registryNavigationTarget(href, window.location.href);
     if (!target) {
       window.location.assign(href);
@@ -457,6 +475,7 @@ export function RegistryApp() {
       else window.history.pushState(window.history.state, '', target);
     }
     setRoute(parseRegistryRoute(new URL(target, window.location.href).pathname));
+    window.scrollTo({ top: 0, behavior: 'instant' });
     if (options.focus !== false) focusRegistryMainContent();
   }, []);
 
@@ -569,6 +588,7 @@ export function RegistryApp() {
 
   return (
     <RegistryShell
+      key={selectedChoice.registry.id}
       choice={selectedChoice}
       choices={choices}
       section={route.section}

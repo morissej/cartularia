@@ -33,7 +33,7 @@ export function BrandLogo({ className = '', decorative = false, href = '/registr
   }
 
   return (
-    <a className="brand-logo-link" href={href} aria-label="Ouvrir le Registre Cartularia">
+    <a className="brand-logo-link" href={href} aria-label={href === '/' ? 'Accueil public Cartularia' : href.startsWith('/administration') ? 'Administration Cartularia' : href.startsWith('/registry') ? 'Ouvrir le Registre Cartularia' : 'Retour à Cartularia'}>
       {image}
     </a>
   );

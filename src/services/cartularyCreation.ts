@@ -13,6 +13,9 @@ import {
 import {
   CARTULARY_CREATION_TIMEOUT_MESSAGE,
   CARTULARY_CREATION_PROFILE_VERSION,
+  SUPPORTED_CREATION_PROFILES,
+  type CartularyCreationProfile,
+  type SupportedCreationAssetType,
   type CartularyCreationMediaAsset,
   type CartularyCreationResult,
   type WatchCartularyCreationProfile,
@@ -24,6 +27,7 @@ import { waitForPrivateUploadVerification } from './privateUploadVerification.ts
 import { generateCorrespondenceCode } from '../domain/correspondenceCodes.ts';
 
 export interface CreateWatchCartularyInput {
+  assetType?: SupportedCreationAssetType;
   user: User;
   organizationId: string;
   registryId: string;
@@ -150,7 +154,37 @@ const uploadFile = async ({
   return storagePath;
 };
 
-export const createWatchCartulary = async ({
+/** Same private upload/manifest/verification pipeline for creation and later enrichment. */
+export const uploadVerifiedCartularyMedia = async ({ user, cartularyId, file, inspection: inspected, onProgress }: {
+  user: User; cartularyId: string; file: File; inspection?: TrustedFileInspection;
+  onProgress?: (phase: 'hashing' | 'uploading' | 'verifying', uploadedBytes: number) => void;
+}): Promise<CartularyCreationMediaAsset> => {
+  const inspection = inspected || await validateFileForUpload({ blob: file, fileName: file.name, declaredMimeType: file.type });
+  onProgress?.('hashing', 0);
+  const digest = await sha256(file);
+  const binaryId = `bin_${randomToken(28)}`;
+  const assetId = `asset_${randomToken(28)}`;
+  const storagePath = `private-drafts/${user.uid}/${cartularyId}/${binaryId}/${digest.slice('sha256:'.length)}/original`;
+  await setDoc(doc(db, 'privateDrafts', user.uid, 'cartularies', cartularyId, 'binaries', binaryId), {
+    ownerUid: user.uid, cartularyId, binaryId, deleted: false, revision: 1,
+    fileName: file.name, mimeType: inspection.canonicalMimeType, size: file.size, sha256: digest,
+    kind: 'media', storagePath, clientUpdatedAt: Date.now(), uploadStatus: 'pending_upload', updatedAt: serverTimestamp(),
+  });
+  onProgress?.('uploading', 0);
+  await uploadFile({ user, cartularyId, file, binaryId, digest, uploadedBefore: 0, totalBytes: file.size, inspection, progress: (bytes) => onProgress?.('uploading', bytes) });
+  onProgress?.('verifying', file.size);
+  const verification = await waitForPrivateUploadVerification({ uid: user.uid, cartularyId, binaryId });
+  return { id: assetId, name: file.name, originalFileName: file.name, type: inspection.kind,
+    mimeType: verification.detectedMimeType, url: '', hash: digest, status: 'Archived', binaryId,
+    tags: inspection.kind === 'image' ? ['slideshow'] : inspection.kind === 'video' ? ['main-video'] : ['documentation'],
+    category: inspection.kind === 'document' ? 'documentation' : 'ensemble', visibility: 'Secret', fileSize: fileSizeLabel(file.size),
+    derivativeStatus: verification.derivativeStatus,
+    capturedAt: verification.capturedAt || (Number.isFinite(file.lastModified) && file.lastModified > 0 ? new Date(file.lastModified).toISOString() : new Date().toISOString()),
+    timestampSource: verification.timestampSource || 'file.lastModified' };
+};
+
+export const createCartulary = async ({
+  assetType = 'watch',
   user,
   organizationId,
   registryId,
@@ -159,6 +193,8 @@ export const createWatchCartulary = async ({
   files,
   onProgress,
 }: CreateWatchCartularyInput): Promise<CartularyCreationResult> => {
+  const definition = SUPPORTED_CREATION_PROFILES[assetType];
+  if (!definition) throw new Error('Ce type d’objet n’est pas encore proposé à la création.');
   const cartularySlug = slugify([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'objet';
   const cartularyId = `cart_${cartularySlug}_${randomToken()}`;
   const publicCode = generateCorrespondenceCode('object', profile.brand || 'WCH');
@@ -201,92 +237,21 @@ export const createWatchCartulary = async ({
 
   const mediaAssets: CartularyCreationMediaAsset[] = [];
   for (const [index, file] of allFiles.entries()) {
-    emit('hashing', file.name);
-    const digest = await sha256(file);
-    const binaryId = `bin_${randomToken(28)}`;
-    const assetId = `asset_${randomToken(28)}`;
-    const inspection = inspections.get(file)!;
-    const type = inspection.kind;
     const uploadedBefore = uploadedBytes;
-    const storagePath = `private-drafts/${user.uid}/${cartularyId}/${binaryId}/${digest.slice('sha256:'.length)}/original`;
-    const binaryDocumentRef = doc(draftRef, 'binaries', binaryId);
-    await setDoc(binaryDocumentRef, {
-      ownerUid: user.uid,
-      cartularyId,
-      binaryId,
-      deleted: false,
-      revision: 1,
-      fileName: file.name,
-      mimeType: inspection.canonicalMimeType,
-      size: file.size,
-      sha256: digest,
-      kind: 'media',
-      storagePath,
-      clientUpdatedAt: Date.now(),
-      uploadStatus: 'pending_upload',
-      updatedAt: serverTimestamp(),
-    });
-    emit('uploading', file.name);
-    await uploadFile({
-      user,
-      cartularyId,
-      file,
-      binaryId,
-      digest,
-      uploadedBefore,
-      totalBytes,
-      inspection,
-      progress: (nextUploadedBytes) => {
-        uploadedBytes = nextUploadedBytes;
-        emit('uploading', file.name);
-      },
-    });
+    const asset = await uploadVerifiedCartularyMedia({ user, cartularyId, file, inspection: inspections.get(file), onProgress: (phase, bytes) => { uploadedBytes = uploadedBefore + bytes; emit(phase, file.name); } });
     uploadedBytes = uploadedBefore + file.size;
-    emit('verifying', file.name);
-    const verification = await waitForPrivateUploadVerification({
-      uid: user.uid,
-      cartularyId,
-      binaryId,
-    });
     completedFiles += 1;
-
-    const capturedAt = verification.capturedAt || (Number.isFinite(file.lastModified) && file.lastModified > 0
-      ? new Date(file.lastModified).toISOString()
-      : new Date().toISOString());
-    mediaAssets.push({
-      id: assetId,
-      name: file.name,
-      originalFileName: file.name,
-      type,
-      mimeType: verification.detectedMimeType,
-      url: '',
-      hash: digest,
-      status: 'Archived',
-      binaryId,
-      tags: index === 0
-        ? ['main-photo', 'slideshow']
-        : type === 'image'
-          ? ['slideshow']
-          : type === 'video'
-            ? ['main-video']
-            : ['documentation'],
-      category: type === 'document' ? 'documentation' : 'ensemble',
-      visibility: 'Secret',
-      fileSize: fileSizeLabel(file.size),
-      derivativeStatus: verification.derivativeStatus,
-      capturedAt,
-      timestampSource: verification.timestampSource || 'file.lastModified',
-    });
+    mediaAssets.push({ ...asset, ...(index === 0 ? { tags: ['main-photo', 'slideshow'] } : {}) });
     emit('uploading', file.name);
   }
 
   uploadedBytes = totalBytes;
   emit('finalizing', null);
-  const creationProfile: WatchCartularyCreationProfile = {
+  const creationProfile: CartularyCreationProfile = {
     profileVersion: CARTULARY_CREATION_PROFILE_VERSION,
-    assetType: 'watch',
-    schemaId: 'watch',
-    schemaVersion: '1.6.0',
+    assetType,
+    schemaId: definition.schemaId,
+    schemaVersion: definition.schemaVersion,
     ...profile,
     assertedAt: new Date().toISOString(),
   };
@@ -294,11 +259,11 @@ export const createWatchCartulary = async ({
     id: 'identity',
     label: 'Identification',
     items: [
-      { id: 'brand', label: 'Marque', value: profile.brand },
+      { id: 'brand', label: definition.makerLabel, value: profile.brand },
       { id: 'model', label: 'Modèle', value: profile.model },
-      { id: 'reference', label: 'Numéro de référence', value: profile.reference },
+      { id: 'reference', label: definition.referenceLabel, value: profile.reference },
       { id: 'year', label: 'Année de fabrication', value: profile.manufactureYear ? String(profile.manufactureYear) : '' },
-      { id: 'caliber', label: 'Calibre', value: profile.caliber },
+      { id: 'caliber', label: definition.technicalLabel, value: profile.caliber },
     ],
   }];
 
@@ -340,6 +305,9 @@ export const createWatchCartulary = async ({
   emit('processing', null);
   return { cartularyId, requestId, publicCode, uploadedFileCount: allFiles.length, uploadedBytes: totalBytes };
 };
+
+/** Compatibility for callers explicitly creating a watch. */
+export const createWatchCartulary = (input: CreateWatchCartularyInput) => createCartulary({ ...input, assetType: 'watch' });
 
 export const waitForCartularyCreation = async (
   cartularyId: string,

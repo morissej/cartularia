@@ -22,5 +22,8 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Historical local copies already ignored by Git; preserve them on disk,
+  // but type-check only the active source tree. Imported files remain checked.
+  "exclude": ["src/**/* 2.ts", "src/**/* 2.tsx"]
 }

@@ -1,9 +1,11 @@
 import type { FirestoreTimestampValue } from './foundations.ts';
 import type { RegistryItemProjection } from './projections.ts';
+export { registryCollectionVersion } from '../../scripts/lib/collection-policy.mjs';
 
 export type RegistryCollectionStatus = 'draft' | 'published' | 'archived';
 
 export interface RegistryCollectionDocument {
+  versionToken?: string;
   id: string;
   organizationId: string;
   registryId: string;
@@ -30,6 +32,12 @@ export interface RegistryCollectionInput {
   publicationConsent: boolean;
   publishedCartularyIds: string[];
 }
+
+export const activeRegistryCollections = (collections: RegistryCollectionDocument[]) => collections.filter((collection) => collection.status !== 'archived');
+export const defaultActiveCollectionId = (collections: RegistryCollectionDocument[], preferredId = '') => {
+  const active = activeRegistryCollections(collections);
+  return active.find((collection) => collection.id === preferredId)?.id || active[0]?.id || '';
+};
 
 export interface CollectionWebsitePublication {
   publicationId: string;

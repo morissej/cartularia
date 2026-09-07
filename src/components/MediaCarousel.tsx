@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, FileText, Play } from 'lucide-react';
 import type { Asset } from '../types';
 import { horizontalNavigationDirection, targetConsumesHorizontalNavigation } from '../utils/horizontalNavigation.ts';
 import { PrivateMediaImage } from './PrivateMediaImage.tsx';
 import { PresentationImage } from './PresentationImage.tsx';
-import { presentationDerivativeUrl } from '../media/presentationDerivatives.ts';
+import { MediaDownloadLink } from './MediaDownloadLink.tsx';
+import { MediaVideo } from './MediaVideo';
 
 interface MediaCarouselProps {
   assets: Asset[];
@@ -21,15 +22,11 @@ export function MediaCarousel({
   onOpen,
   compact = false,
 }: MediaCarouselProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [assets]);
-
-  const move = useCallback((direction: -1 | 1) => {
-    setCurrentIndex((previous) => (previous + direction + assets.length) % assets.length);
-  }, [assets.length]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const currentIndex = Math.max(0, assets.findIndex((asset) => asset.id === selectedId));
+  const move = (direction: -1 | 1) => {
+    if (assets.length) setSelectedId(assets[(currentIndex + direction + assets.length) % assets.length].id);
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     const direction = horizontalNavigationDirection(event.key);
@@ -47,7 +44,7 @@ export function MediaCarousel({
   const timestamp = current.metadataTimestamp || current.capturedAt;
   const timestampDate = timestamp ? new Date(timestamp) : null;
   const formattedTimestamp = timestampDate && !Number.isNaN(timestampDate.getTime())
-    ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(timestampDate)
+    ? new Intl.DateTimeFormat(language === 'FR' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(timestampDate)
     : null;
 
   return (
@@ -68,7 +65,7 @@ export function MediaCarousel({
           {current.type === 'document' ? (
             <span className="media-carousel__document"><FileText size={52} /><strong>{current.originalFileName || current.name}</strong><small>{current.mimeType || 'Document'}</small></span>
           ) : current.type === 'video' ? (
-            <video src={current.url} poster={presentationDerivativeUrl(current.posterUrl || current.thumbnailUrl, 768)} preload="metadata" muted aria-label={current.name} />
+            <MediaVideo asset={current} language={language} controls={false} muted />
           ) : (
             <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} sizes="(max-width: 720px) 100vw, 900px" eager />
           )}
@@ -106,18 +103,21 @@ export function MediaCarousel({
           {eyebrow && <span className="eyebrow">{eyebrow}</span>}
           <h3>{current.name}</h3>
           <div className="media-carousel__tags">
-            {current.tags.map((tag) => <span key={tag}>{tag.replace(/-/g, ' ')}</span>)}
+            {current.tags.map((tag) => <span key={tag}>{({ 'main-photo': language === 'FR' ? 'Photo principale' : 'Main photo', 'main-video': language === 'FR' ? 'Vidéo principale' : 'Main video', 'spin-3d': '360°', slideshow: language === 'FR' ? 'Diaporama' : 'Slideshow', accessories: language === 'FR' ? 'Accessoires' : 'Accessories', documentation: 'Documentation', other: language === 'FR' ? 'Autre' : 'Other' })[tag]}</span>)}
           </div>
           {timestamp && (
             <time className="media-carousel__timestamp" dateTime={timestamp}>
-              {formattedTimestamp ? `Horodaté le ${formattedTimestamp}` : 'Horodatage à vérifier'}
+              {formattedTimestamp ? `${language === 'FR' ? 'Date du média :' : 'Media date:'} ${formattedTimestamp}` : language === 'FR' ? 'Date à vérifier' : 'Date to verify'}
             </time>
           )}
         </div>
-        <div className="media-carousel__count">
-          <span>{String(currentIndex + 1).padStart(2, '0')}</span>
-          <span>/</span>
-          <span>{String(assets.length).padStart(2, '0')}</span>
+        <div className="media-carousel__actions">
+          <MediaDownloadLink media={current} language={language} compact />
+          <div className="media-carousel__count">
+            <span>{String(currentIndex + 1).padStart(2, '0')}</span>
+            <span>/</span>
+            <span>{String(assets.length).padStart(2, '0')}</span>
+          </div>
         </div>
       </div>
 
@@ -131,7 +131,7 @@ export function MediaCarousel({
                 type="button"
                 key={asset.id}
                 className={index === currentIndex ? 'is-active' : ''}
-                onClick={() => setCurrentIndex(index)}
+                onClick={() => setSelectedId(asset.id)}
                 aria-label={`${index + 1}. ${asset.name}`}
                 aria-current={index === currentIndex ? 'true' : undefined}
               >

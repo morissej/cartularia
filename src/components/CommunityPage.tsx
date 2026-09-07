@@ -7,8 +7,9 @@ import { PUBLICATION_BLOCK_CATALOG } from '../domain/publication.ts';
 import { loadCommunityCatalog } from '../services/community.ts';
 import { formatGenericValue } from '../schema/fieldPresentation.ts';
 import { BrandLogo } from './BrandLogo.tsx';
+import { schemaFieldLabel } from '../schema/schemaLabels.ts';
 
-type CommunityState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'denied';
+type CommunityState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'denied' | 'error';
 
 interface LocalCommunityPreview {
   cartularyId: string;
@@ -26,6 +27,12 @@ const parseLocalPreview = (search: string): LocalCommunityPreview | null => {
   const cartularyId = parameters.get('cartularyId') || '';
   const displayTitle = parameters.get('displayTitle') || '';
   if (!cartularyId || !displayTitle) return null;
+  const candidateUrl = parameters.get('cartularyUrl');
+  let cartularyUrl: string | null = null;
+  try {
+    const candidate = new URL(candidateUrl || '', window.location.origin);
+    if (candidate.origin === window.location.origin && candidate.pathname === '/watch-website' && candidate.searchParams.get('publicCode')) cartularyUrl = `${candidate.pathname}${candidate.search}`;
+  } catch { /* A preview must never turn an arbitrary query into a trusted link. */ }
   return {
     cartularyId,
     displayTitle,
@@ -33,7 +40,7 @@ const parseLocalPreview = (search: string): LocalCommunityPreview | null => {
     modelName: parameters.get('modelName') || '',
     assetType: parameters.get('assetType') || 'other',
     blockIds: [...new Set((parameters.get('blocks') || '').split(',').filter(Boolean))],
-    cartularyUrl: parameters.get('cartularyUrl'),
+    cartularyUrl,
   };
 };
 
@@ -48,8 +55,12 @@ export const CommunityPage = () => {
   const [state, setState] = useState<CommunityState>('auth-loading');
   const [catalog, setCatalog] = useState<LoadedCommunityPublication[]>([]);
   const [assetType, setAssetType] = useState('all');
+  const [attempt, setAttempt] = useState(0);
 
-  useEffect(() => onAuthStateChanged(auth, (user) => {
+  useEffect(() => {
+    let generation = 0;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const request = ++generation;
     if (!user) {
       setCatalog([]);
       setState('signed-out');
@@ -58,11 +69,17 @@ export const CommunityPage = () => {
     setState('loading');
     loadCommunityCatalog()
       .then((loaded) => {
+        if (request !== generation) return;
         setCatalog(loaded);
         setState('ready');
       })
-      .catch(() => setState('denied'));
-  }), []);
+      .catch((error: { code?: string }) => {
+        if (request !== generation) return;
+        setState(error?.code === 'community/signed-out' ? 'signed-out' : error?.code === 'community/admission-required' ? 'denied' : 'error');
+      });
+    });
+    return () => { generation += 1; unsubscribe(); };
+  }, [attempt]);
 
   const assetTypes = [...new Set([
     ...catalog.map(({ publication }) => publication.assetType),
@@ -72,7 +89,7 @@ export const CommunityPage = () => {
   const showLocalPreview = localPreview && (assetType === 'all' || localPreview.assetType === assetType);
 
   if (state !== 'ready') {
-    const heading = state === 'denied'
+    const heading = state === 'error' ? 'Le Cercle est momentanément indisponible' : state === 'denied'
       ? 'Admission au Cercle requise'
       : state === 'signed-out'
         ? 'Connexion au Cercle requise'
@@ -82,6 +99,9 @@ export const CommunityPage = () => {
         <BrandLogo />
         <h1>{heading}</h1>
         <p>Le Cercle agrège uniquement les projections choisies par leurs propriétaires. Il ne lit jamais les Cartulaires maîtres.</p>
+        {state === 'signed-out' && <a className="button button--primary" href="/account/sign-in?returnTo=%2Fcommunity">Se connecter pour ouvrir Le Cercle</a>}
+        {state === 'denied' && <><p>L’accès au Registre ne vaut pas admission au Cercle. Contactez Cartularia en indiquant votre nom utilisateur pour demander les modalités d’admission.</p><a className="button button--primary" href="/#contact">Demander les modalités d’admission</a></>}
+        {state === 'error' && <><p role="alert">La lecture n’a pas abouti. Il peut s’agir d’une interruption réseau ou d’un droit modifié ; aucune décision d’admission ne peut être déduite de cette erreur.</p><button type="button" className="button button--primary" onClick={() => setAttempt((value) => value + 1)}>Réessayer</button></>}
         <a className="button button--quiet community-back-link" href="/registry">Retour au Registre</a>
       </main>
     );
@@ -90,7 +110,7 @@ export const CommunityPage = () => {
   return (
     <div className="community-page catalog-site">
       <header className="community-page__header catalog-site__header">
-        <a href="/registry" aria-label="Ouvrir le Registre"><BrandLogo /></a>
+        <BrandLogo href="/registry" />
         <div>
           <span className="eyebrow">Le Cercle · Cartularia</span>
           <h1>Objets publiés dans Le Cercle</h1>
@@ -126,7 +146,7 @@ export const CommunityPage = () => {
                 <details className="community-block" key={block.blockId}>
                   <summary>{block.title}</summary>
                   <dl>
-                    {Object.entries(block.fields).map(([fieldId, value]) => <div key={fieldId}><dt>{fieldId}</dt><dd>{formatGenericValue(value)}</dd></div>)}
+                    {Object.entries(block.fields).map(([fieldId, value]) => <div key={fieldId}><dt>{schemaFieldLabel(fieldId)}</dt><dd>{formatGenericValue(value)}</dd></div>)}
                   </dl>
                 </details>
               ))}

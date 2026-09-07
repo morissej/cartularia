@@ -491,12 +491,31 @@ export const primePrivateDraftState = async ({
   cartularyId,
   vault,
   readTimeoutMs = 5_000,
+  authoritativeHydration,
 }: {
   uid: string;
   cartularyId: string;
   vault: CartulariaLocalVault;
   readTimeoutMs?: number;
+  authoritativeHydration?: {
+    id: string;
+    stateKeys: readonly string[];
+  };
 }) => {
+  const hydrationMarkerKey = authoritativeHydration
+    ? `cartularia:cloud-hydration:${cartularyId}:${authoritativeHydration.id}`
+    : null;
+  let hydrationAlreadyApplied = false;
+  if (hydrationMarkerKey) {
+    try {
+      hydrationAlreadyApplied = globalThis.localStorage?.getItem(hydrationMarkerKey) === 'done';
+    } catch {
+      hydrationAlreadyApplied = false;
+    }
+  }
+  const authoritativeStateKeys = hydrationAlreadyApplied
+    ? new Set<string>()
+    : new Set(authoritativeHydration?.stateKeys ?? []);
   const localStates = new Map((await vault.listStateRecords())
     .filter((record) => isRegistrySafeStateKey(record.key))
     .map((record) => [record.key, record]));
@@ -519,10 +538,18 @@ export const primePrivateDraftState = async ({
     if (!isRegistrySafeStateKey(snapshot.id)) continue;
     const cloud = parseCloudState(snapshot.id, snapshot.data() as Record<string, unknown>);
     const local = localStates.get(cloud.key);
-    if (local?.dirty) continue;
-    if (local && local.cloudRevision >= cloud.revision) continue;
+    const cloudIsAuthoritative = authoritativeStateKeys.has(cloud.key);
+    if (local?.dirty && !cloudIsAuthoritative) continue;
+    if (local && local.cloudRevision >= cloud.revision && !cloudIsAuthoritative) continue;
     await pullCloudStateWithoutLocal(vault, cloud);
     pulled += 1;
+  }
+  if (hydrationMarkerKey && !hydrationAlreadyApplied) {
+    try {
+      globalThis.localStorage?.setItem(hydrationMarkerKey, 'done');
+    } catch {
+      // Le marqueur n'est qu'une optimisation locale ; la copie cloud reste intacte.
+    }
   }
   return pulled;
 };

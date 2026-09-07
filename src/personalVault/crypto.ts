@@ -81,7 +81,7 @@ export const decryptPersonalPayload = async <T,>({
     || envelope.algorithm !== 'AES-GCM'
     || envelope.keyDerivation !== 'PBKDF2-SHA-256'
     || !Number.isInteger(envelope.iterations)
-    || envelope.iterations < PBKDF2_ITERATIONS
+    || envelope.iterations !== PBKDF2_ITERATIONS
   ) throw new Error('Format chiffré non pris en charge.');
   const context = encryptionContext(userAlias);
   const salt = base64ToBytes(envelope.salt);

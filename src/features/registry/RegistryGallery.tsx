@@ -31,6 +31,7 @@ import {
 import { ASSET_TYPE_LABELS, labelFromIdentifier } from './registryPresentation.ts';
 import { useDialogFocus } from '../../hooks/useDialogFocus.ts';
 import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
+import { useRegistryCollections } from './useRegistryCollections.ts';
 
 type GalleryLoadState = 'loading' | 'ready' | 'error';
 
@@ -48,6 +49,7 @@ export function RegistryGallery({ registry, canReadCartularies }: {
   registry: RegistryDocument;
   canReadCartularies: boolean;
 }) {
+  const { collectionName } = useRegistryCollections(registry.id);
   const [entries, setEntries] = useState<RegistryGalleryEntry[]>([]);
   const [loadState, setLoadState] = useState<GalleryLoadState>('loading');
   const [query, setQuery] = useState(DEFAULT_REGISTRY_GALLERY_FILTERS.query);
@@ -233,7 +235,7 @@ export function RegistryGallery({ registry, canReadCartularies }: {
 
       <RegistryFilterPanel className="registry-gallery-filters" label="Filtres de la Galerie" activeFilterCount={activeFilterCount}>
         <label><span>Type d’actif</span><select value={assetType} onChange={(event) => setAssetType(event.target.value)}><option value="all">Tous les types</option>{assetTypes.map((value) => <option value={value} key={value}>{ASSET_TYPE_LABELS[value] || labelFromIdentifier(value)}</option>)}</select></label>
-        <label><span>Collection</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}><option value="all">Toutes les collections</option>{collections.map((value) => <option value={value} key={value}>{labelFromIdentifier(value)}</option>)}</select></label>
+        <label><span>Collection</span><select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}><option value="all">Toutes les collections</option>{collections.map((value) => <option value={value} key={value}>{collectionName(value)}</option>)}</select></label>
         <label><span>Maison / marque</span><select value={makerName} onChange={(event) => setMakerName(event.target.value)}><option value="all">Toutes les maisons</option>{makers.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
         <label><span>Vue du diaporama</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">Toutes les vues</option>{categories.map((value) => <option value={value} key={value}>{labelFromIdentifier(value)}</option>)}</select></label>
         {activeFilterCount > 0 && <button type="button" className="registry-filter-reset" onClick={resetFilters}>Effacer</button>}
@@ -270,7 +272,7 @@ export function RegistryGallery({ registry, canReadCartularies }: {
                   </div>
                 )}
                 <div className="registry-gallery-card__body">
-                  <span>{ASSET_TYPE_LABELS[entry.item.assetType] || labelFromIdentifier(entry.item.assetType)} · {labelFromIdentifier(entry.item.collectionId)}</span>
+                  <span>{ASSET_TYPE_LABELS[entry.item.assetType] || labelFromIdentifier(entry.item.assetType)} · {collectionName(entry.item.collectionId)}</span>
                   <h2>{entry.item.displayTitle}</h2>
                   <p>{entry.item.makerName} · {entry.item.modelName}</p>
                   {cover?.source === 'prototype_bundle' && <small>Aperçu intégré du Cartulaire pilote</small>}

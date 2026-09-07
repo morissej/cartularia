@@ -84,10 +84,27 @@ describe('barrière d’hydratation PF3', () => {
     expect(screen.getByText('La copie privée cloud est indisponible.')).toBeTruthy();
   });
 
+  it('propose de reprendre la connexion avant de charger les originaux distants', async () => {
+    render(
+      <ApplicationBootstrap
+        location={{ pathname: '/cartulary', search: '?cartularyId=cart-private-pf3' }}
+        bootstrap={async () => ({ status: 'ready', reason: 'signed_out' })}
+        PageComponent={ReadyPage}
+      />,
+    );
+
+    expect(await screen.findByText('Originaux distants verrouillés')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Se connecter' }).getAttribute('href')).toBe(
+      '/account/sign-in?returnTo=%2Fcartulary%3FcartularyId%3Dcart-private-pf3',
+    );
+    expect(screen.getByText('Application métier montée')).toBeTruthy();
+  });
+
   it('identifie uniquement la route privée du Cartulaire comme route à hydrater', () => {
     expect(requiresPrivateCartularyHydration({ pathname: '/', search: '' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '' })).toBe(true);
     expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '?cartularyId=cart_rolex_demo' })).toBe(true);
+    expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '?cartularyId=cart_demo_rolex_submariner_124060' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '?data-deleted=1' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/watch-website', search: '' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/cartulary-view', search: '' })).toBe(false);
@@ -130,18 +147,29 @@ describe('ordre du bootstrap privé PF3', () => {
     expect(setup.order).toEqual(['restore-local', 'load-context', 'read-auth-3000', 'prime-cloud-5000']);
   });
 
-  it('ne consulte pas Firebase pour le Cartulaire IWC local', async () => {
-    const readAuthState = vi.fn<PrivateBootstrapDependencies['readAuthState']>();
-    const primeCloudState = vi.fn<PrivateBootstrapDependencies['primeCloudState']>();
+  it('réhydrate le Cartulaire IWC depuis la copie cloud autoritaire', async () => {
+    const readAuthState = vi.fn<PrivateBootstrapDependencies['readAuthState']>(async () => ({ status: 'signed_in', user }));
+    const primeCloudState = vi.fn<PrivateBootstrapDependencies['primeCloudState']>(async () => 15);
     const setup = dependencies({
       loadCartularyContext: async () => ({ activeCartularyId: 'cart-iwc', iwcCartularyId: 'cart-iwc' }),
       readAuthState,
       primeCloudState,
     });
 
-    await expect(runPrivateCartularyBootstrap(setup.value)).resolves.toEqual({ status: 'ready', reason: 'local_ready' });
-    expect(readAuthState).not.toHaveBeenCalled();
-    expect(primeCloudState).not.toHaveBeenCalled();
+    await expect(runPrivateCartularyBootstrap(setup.value)).resolves.toEqual({ status: 'ready', reason: 'cloud_ready' });
+    expect(readAuthState).toHaveBeenCalledWith(3_000);
+    expect(primeCloudState).toHaveBeenCalledWith(expect.objectContaining({
+      cartularyId: 'cart-iwc',
+      authoritativeHydration: expect.objectContaining({
+        id: 'iwc-source-dossier-2026-08-29-v1',
+        stateKeys: expect.arrayContaining([
+          'cartularia-media-assets-v3',
+          'cartularia-retained-valuation',
+          'cartularia-purchase-expenses',
+        ]),
+      }),
+      readTimeoutMs: 5_000,
+    }));
   });
 
   it('préserve le local et saute le cloud en cas d’échec de restauration', async () => {

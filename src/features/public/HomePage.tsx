@@ -25,7 +25,11 @@ import {
   X,
 } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
+import { DEMO_SUBMARINER_CARTULARY_ID } from '../../data/demoCartularies.ts';
 import './public-site.css';
+
+const DEMO_SUBMARINER_HREF = `/cartulary-demo?cartularyId=${encodeURIComponent(DEMO_SUBMARINER_CARTULARY_ID)}#cover`;
+const DEMO_REGISTRY_HREF = '/account/sign-in?demo=1';
 
 const HERO_DEMO_TABS = [
   {
@@ -35,8 +39,8 @@ const HERO_DEMO_TABS = [
     badge: 'Secret · Dossier Maître',
     metrics: [
       { label: 'Statut', value: 'Secret' },
-      { label: 'Complétude', value: '100% documenté' },
-      { label: 'Sceau d’intégrité', value: 'Ancré & daté' },
+      { label: 'Exemple', value: 'Données fictives' },
+      { label: 'Sceau d’intégrité', value: 'À vérifier dans le dossier' },
     ],
     highlight: 'Dossier centralisé : identité, boîte, papiers d’origine, facture d’achat et photographies d’expertise réunies au même endroit.',
   },
@@ -48,9 +52,9 @@ const HERO_DEMO_TABS = [
     metrics: [
       { label: 'Vues nettes', value: 'Cadran, fond, calibre' },
       { label: 'Spin interactif', value: '360° progressif' },
-      { label: 'Métadonnées', value: 'Horodatage EXIF vérifié' },
+      { label: 'Métadonnées', value: 'À contrôler à l’import' },
     ],
-    highlight: 'Protocole visuel normé pour figer l’état cosmétique exact sans contestation possible lors d’une cession ou d’un sinistre.',
+    highlight: 'Des vues détaillées pour documenter l’état apparent de l’objet. Les photos ne remplacent pas un examen physique ou une expertise.',
   },
   {
     id: 'technique',
@@ -58,9 +62,9 @@ const HERO_DEMO_TABS = [
     title: 'Spécifications et conformité',
     badge: 'Calibre & Référence',
     metrics: [
-      { label: 'Référence', value: 'IW377701' },
+      { label: 'Référence', value: '124060' },
       { label: 'Numéro de série', value: 'Masqué par défaut' },
-      { label: 'Boîtier / Matière', value: 'Acier · 43 mm' },
+      { label: 'Boîtier / Matière', value: 'Oystersteel · 41 mm' },
     ],
     highlight: 'Description minutieuse du mouvement, des complications et des éléments d’origine vérifiés face aux archives.',
   },
@@ -71,7 +75,7 @@ const HERO_DEMO_TABS = [
     badge: 'Historique tracé',
     metrics: [
       { label: 'Dernière révision', value: 'Horloger agréé' },
-      { label: 'Test étanchéité', value: 'Conforme (6 bar)' },
+      { label: 'Test étanchéité', value: 'Conforme (30 bar)' },
       { label: 'Écart de marche', value: '+2 s / jour' },
     ],
     highlight: 'Historique daté des interventions, polissages, révisions et changements de composants avec factures associées.',
@@ -80,25 +84,25 @@ const HERO_DEMO_TABS = [
     id: 'valeur',
     label: 'Cote & Valeur',
     title: 'Valorisation argumentée',
-    badge: 'Cote de marché active',
+    badge: 'Exemple de suivi de valeur',
     metrics: [
-      { label: 'Cote moyenne', value: 'Transactions vérifiées' },
-      { label: 'Valeur déclarée', value: 'Prête pour assurance' },
+      { label: 'Cote moyenne', value: 'Selon les sources disponibles' },
+      { label: 'Valeur déclarée', value: 'À faire apprécier par un tiers' },
       { label: 'Historique prix', value: 'Sources documentées' },
     ],
-    highlight: 'Séparation rigoureuse entre prix de revient, cote réelle observée et valeur d’assurance pour éviter tout litige.',
+    highlight: 'Distinguez prix de revient, estimation de marché et valeur déclarée. Leur portée dépend des sources et de leur date.',
   },
   {
     id: 'partage',
     label: 'Partage sélectif',
-    title: 'Watch Website révocable',
+    title: 'Mini-site révocable',
     badge: 'Diffusion maîtrisée',
     metrics: [
       { label: 'Audience', value: 'Lien privé ou public' },
       { label: 'Blocs visibles', value: 'Choix granulaire' },
-      { label: 'Identité civile', value: 'Strictement masquée' },
+      { label: 'Identité civile', value: 'Champs personnels exclus' },
     ],
-    highlight: 'Partagez une fiche de vente ou un état descriptif à un tiers sans jamais dévoiler votre identité, facture ni lieu de garde.',
+    highlight: 'Partagez les blocs choisis et vérifiez chaque document avant publication : le texte ou l’image d’une pièce jointe peut lui-même contenir une identité.',
   },
 ] as const;
 
@@ -107,29 +111,29 @@ const DELIVERABLES = [
     icon: FolderLock,
     tag: '01 · Dossier vivant',
     title: 'Le Cartulaire Numérique',
-    text: 'Le dossier maître structuré en cinq volets : Synthèse, Médias HD/360°, Référence technique, État & Révisions, et Cote de marché.',
-    bullets: ['Fiche technique complète et horodatée', 'Protocole photo haute fidélité', 'Carnet d’entretien et révisions'],
+    text: 'Le dossier structuré en six pages : Synthèse, Médias, Référence, État, Valeur et Publication.',
+    bullets: ['Fiche technique structurée', 'Photographies et médias disponibles', 'Carnet d’entretien et révisions'],
   },
   {
     icon: FileCheck,
-    tag: '02 · Document normé',
-    title: 'Le Rapport PDF Opposable',
-    text: 'Un rapport de synthèse téléchargeable en un clic, formaté pour être directement recevable par les compagnies d’assurance, courtiers et notaires.',
-    bullets: ['Conforme aux attentes des experts', 'Pièces justificatives indexées', 'Synthèse claire de l’état et de la valeur'],
+    tag: '02 · Document de synthèse',
+    title: 'Le Rapport de synthèse PDF',
+    text: 'Une synthèse à imprimer ou enregistrer en PDF pour présenter votre dossier. Son acceptation et sa valeur probante relèvent du tiers qui l’examine.',
+    bullets: ['Document à présenter à vos interlocuteurs', 'Pièces justificatives indexées', 'Synthèse de l’état et de la valeur déclarés'],
   },
   {
     icon: Globe2,
     tag: '03 · Partage sécurisé',
-    title: 'Le Watch Website Projeté',
-    text: 'Une page web élégante générée à la demande pour un acheteur ou un tiers, accessible par lien révocable sans exposer vos données privées.',
-    bullets: ['Contrôle bloc par bloc', 'Identité du propriétaire protégée', 'Révocation immédiate en un clic'],
+    title: 'Le Mini-site de l’objet',
+    text: 'Une page web générée à la demande pour un acheteur ou un tiers, accessible par lien révocable et limitée aux blocs que vous avez choisis.',
+    bullets: ['Contrôle bloc par bloc', 'Données personnelles exclues', 'Retrait des nouveaux accès ; copies déjà reçues non effacées'],
   },
   {
     icon: Fingerprint,
     tag: '04 · Preuve technique',
     title: 'Le Sceau d’Intégrité',
-    text: 'Une empreinte cryptographique et un horodatage vérifiables qui prouvent l’antériorité et la non-altération du dossier sans divulguer son contenu.',
-    bullets: ['Horodatage certifié', 'Preuve indépendante de la plateforme', 'Conservation dans la durée'],
+    text: 'Une empreinte permet de vérifier l’intégrité d’une version. Lorsqu’un horodatage externe est confirmé, sa preuve et son fournisseur sont identifiés dans le dossier. Cela ne certifie ni authenticité de l’objet ni propriété.',
+    bullets: ['État de vérification explicite', 'Preuve externe lorsqu’elle est disponible', 'Export des éléments de vérification'],
   },
 ];
 
@@ -137,8 +141,8 @@ const STEPS = [
   {
     num: '01',
     title: 'Créer le dossier',
-    lead: 'En quelques secondes',
-    text: 'Ouvrez un Cartulaire pour chaque pièce importante. Le dossier démarre en mode Secret absolu.',
+    lead: 'Pour commencer',
+    text: 'Ouvrez un Cartulaire pour chaque pièce importante. Le dossier démarre en mode Secret, sans publication automatique.',
   },
   {
     num: '02',
@@ -165,14 +169,14 @@ const ETHICAL_POINTS = {
     'Structure et protège l’ensemble de vos preuves documentaires.',
     'Conserve vos dossiers en mode Secret par défaut.',
     'Distingue rigoureusement faits déclarés, pièces jointes et observations.',
-    'Garantit une indépendance totale vis-à-vis des marchands et acheteurs.',
-    'Permet l’exportation intégrale de vos données et rapports PDF.',
+    'Sépare la documentation de l’objet d’une éventuelle transaction.',
+    'Propose le téléchargement des médias disponibles et une synthèse imprimable en PDF.',
   ],
   doesNot: [
     'N’achète ni ne vend aucune montre ou objet (pas de marketplace).',
     'Ne délivre pas de faux certificat juridique d’authenticité à distance.',
     'Ne prend aucune commission sur les transactions entre collectionneurs.',
-    'Ne transmet jamais vos données personnelles, prix d’achat ou localisation.',
+    'Exclut les champs personnels de la projection publique ; vos pièces jointes restent à vérifier avant partage.',
     'Ne monétise ni ne revend aucune information confidentielle.',
   ],
 };
@@ -180,15 +184,15 @@ const ETHICAL_POINTS = {
 const FAQ_ITEMS = [
   {
     question: 'Puis-je découvrir le service sans créer de compte ?',
-    answer: 'Oui. Le Cartulaire de démonstration est accessible immédiatement depuis l’accueil en un clic. Vous pouvez explorer les cinq volets, le protocole photographique et la projection publique sans inscription préalable.',
+    answer: 'Oui. Le Cartulaire de démonstration permet d’explorer six pages sans inscription. Le Registre démo présente cinq objets fictifs en lecture seule ; il ne permet pas de modifier ou publier vos données réelles.',
   },
   {
     question: 'Comment Cartularia m’aide-t-il auprès de mon assureur ?',
-    answer: 'En cas de sinistre ou de vol, l’assureur exige des preuves d’existence, de possession et d’état antérieures. Cartularia génère un rapport PDF normé, horodaté et documenté avec photos macro, factures et valorisations, réduisant drastiquement les délais et contestations d’indemnisation.',
+    answer: 'Cartularia aide à réunir photographies, factures et observations dans un dossier daté et lisible. Votre assureur détermine les pièces nécessaires et l’indemnisation selon votre contrat ; le service ne garantit ni couverture ni absence de contestation.',
   },
   {
     question: 'Pourquoi existe-t-il deux espaces (Registre et Coffre personnel) ?',
-    answer: 'Pour votre sécurité. Le Registre gère vos dossiers d’objets (fiches techniques, cotes, photos), tandis que le Coffre personnel conserve séparément vos données civiles (identité, adresse réelle, contrat d’assurance, intentions successorales). Ce cloisonnement garantit qu’aucune fuite technique sur un objet ne peut révéler l’identité de son propriétaire.',
+    answer: 'Le Registre gère les dossiers d’objets ; le Coffre conserve les informations personnelles chiffrées dans un projet séparé, avec son propre accès. Cette séparation réduit les rapprochements possibles, sans garantir un risque nul. Vérifiez aussi vos pièces jointes avant de les partager : un document peut lui-même contenir une identité.',
   },
   {
     question: 'Cartularia certifie-t-il l’authenticité d’un objet ?',
@@ -196,7 +200,7 @@ const FAQ_ITEMS = [
   },
   {
     question: 'Quels types d’objets puis-je documenter ?',
-    answer: 'L’horlogerie de collection et d’exception constitue notre verticale de référence, mais Cartularia est conçu pour accueillir tout objet à forte valeur patrimoniale, sentimentale ou de transmission (bijouterie, instruments, pièces de collection).',
+    answer: 'La création propose actuellement les montres et les automobiles, avec une fiche adaptée à chaque type. Les autres catégories ne sont pas encore proposées : choisissez uniquement le type correspondant réellement à votre objet.',
   },
 ];
 
@@ -205,6 +209,7 @@ export function HomePage() {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [copied, setCopied] = useState(false);
   const [contactStatus, setContactStatus] = useState('');
+  const [preparedMessage, setPreparedMessage] = useState('');
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -213,13 +218,24 @@ export function HomePage() {
     document.title = 'Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers';
     if (description) {
       description.content =
-        'Cartularia structure, protège et valorise le dossier numérique de vos montres et objets patrimoniaux. Secret par défaut, opposable pour l’assurance, clair pour la transmission.';
+        'Cartularia structure le dossier numérique de vos objets patrimoniaux. Privé par défaut, documenté pour vos interlocuteurs, clair pour la transmission.';
     }
     return () => {
       document.title = previousTitle;
       if (description && previousDescription !== undefined) description.content = previousDescription;
     };
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && menuOpen) {
+        setMenuOpen(false);
+        document.querySelector<HTMLButtonElement>('.public-menu-trigger')?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
 
   const copyContactEmail = async () => {
     try {
@@ -243,7 +259,8 @@ export function HomePage() {
       '',
       String(form.get('message') || ''),
     ].join('\n');
-    setContactStatus('Votre client de messagerie a été préparé avec votre demande. Vous pouvez également nous écrire directement à contact@cartularia.com.');
+    setPreparedMessage(`À : contact@cartularia.com\nObjet : ${subject}\n\n${body}`);
+    setContactStatus('Une ouverture de votre messagerie a été demandée. Aucun message n’a été envoyé par ce site : vérifiez puis envoyez l’email, ou copiez le texte ci-dessous.');
     window.location.href = `mailto:contact@cartularia.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
@@ -277,8 +294,11 @@ export function HomePage() {
           <a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a>
           {menuOpen && (
             <div className="public-header__mobile-actions">
-              <a className="public-link-button" href="/cartulary#cover" onClick={() => setMenuOpen(false)}>
-                Explorer la démo
+              <a className="public-link-button" href={DEMO_SUBMARINER_HREF} onClick={() => setMenuOpen(false)}>
+                Démo Submariner
+              </a>
+              <a className="public-link-button" href={DEMO_REGISTRY_HREF} onClick={() => setMenuOpen(false)}>
+                Registre démo · 5 montres
               </a>
               <a className="public-link-button" href="/account/sign-in" onClick={() => setMenuOpen(false)}>
                 Se connecter
@@ -291,9 +311,10 @@ export function HomePage() {
         </nav>
 
         <div className="public-header__actions">
-          <a className="public-text-link" href="/cartulary#cover" title="Tester sans inscription">
-            <Eye aria-hidden="true" /> Démo directe
+          <a className="public-text-link" href={DEMO_SUBMARINER_HREF} title="Tester sans inscription">
+            <Eye aria-hidden="true" /> Démo Submariner
           </a>
+          <a className="public-text-link" href={DEMO_REGISTRY_HREF}>Registre démo</a>
           <a className="public-link-button" href="/account/sign-in">Se connecter</a>
           <a className="public-solid-button" href="/account/create">Créer un compte</a>
         </div>
@@ -308,12 +329,12 @@ export function HomePage() {
             </p>
             <h1 id="home-title">L’histoire de vos pièces de valeur mérite mieux qu’un dossier dispersé.</h1>
             <p className="public-hero__lead">
-              Cartularia réunit l’identité, l’état, les révisions, les factures et la cote de vos objets de collection dans un dossier structuré et opposable — sous votre contrôle exclusif, dans la durée.
+              Cartularia réunit la description, l’état, les révisions, les factures et les estimations de vos objets de collection dans un dossier structuré — privé par défaut, avec un partage choisi.
             </p>
 
             <div className="public-hero__actions">
-              <a className="public-solid-button public-solid-button--large" href="/cartulary#cover">
-                Explorer un Cartulaire de démo <ArrowRight aria-hidden="true" />
+              <a className="public-solid-button public-solid-button--large" href={DEMO_SUBMARINER_HREF}>
+                Explorer le Cartulaire Submariner <ArrowRight aria-hidden="true" />
               </a>
               <a className="public-link-button public-link-button--large" href="/account/create">
                 Créer mon dossier <ArrowRight aria-hidden="true" />
@@ -328,7 +349,7 @@ export function HomePage() {
 
             <ul className="public-proof-list" aria-label="Garanties du service">
               <li><Check aria-hidden="true" /> Secret par défaut</li>
-              <li><Check aria-hidden="true" /> Rapport opposable pour l’assureur</li>
+              <li><Check aria-hidden="true" /> Synthèse à présenter à votre assureur</li>
               <li><Check aria-hidden="true" /> Partage sélectif révocable</li>
               <li><Check aria-hidden="true" /> Preuve d’intégrité datée</li>
             </ul>
@@ -341,7 +362,7 @@ export function HomePage() {
                 <span />
                 <span />
                 <span />
-                <small>Cartulaire · IWC Pilot Chrono · Exemplaire 01</small>
+                <small>Cartulaire · Rolex Submariner · Exemplaire fictif</small>
               </header>
 
               <div className="public-product-window__body">
@@ -363,7 +384,7 @@ export function HomePage() {
                 <article>
                   <div className="public-product-preview-header">
                     <span className="public-preview-badge">{currentTabInfo.badge}</span>
-                    <a className="public-preview-direct-link" href="/cartulary#cover">
+                    <a className="public-preview-direct-link" href={DEMO_SUBMARINER_HREF}>
                       Ouvrir en plein écran <ExternalLink aria-hidden="true" />
                     </a>
                   </div>
@@ -381,7 +402,7 @@ export function HomePage() {
                   </dl>
 
                   <div className="public-preview-cta-bar">
-                    <a className="public-preview-action" href="/cartulary#cover">
+                    <a className="public-preview-action" href={DEMO_SUBMARINER_HREF}>
                       Tester ce Cartulaire en direct <ChevronRight aria-hidden="true" />
                     </a>
                   </div>
@@ -402,7 +423,7 @@ export function HomePage() {
         {/* INTRO BAND */}
         <section className="public-intro-band" aria-label="Positionnement fondateur">
           <p>
-            Pour les propriétaires et familles qui veulent <strong>documenter avant l’urgence</strong>, prouver sans litige auprès de leur assureur et transmettre avec une clarté irréprochable.
+            Pour les propriétaires et familles qui veulent <strong>documenter avant l’urgence</strong>, préparer leurs échanges avec leur assureur et organiser une transmission documentée.
           </p>
         </section>
 
@@ -422,7 +443,7 @@ export function HomePage() {
                 <div className="public-door-icon"><ShieldAlert aria-hidden="true" /></div>
                 <span className="public-door-tag">Porte 01 · Protection & Sinistre</span>
               </header>
-              <h3>Être couvert et indemnisé sans contestation</h3>
+              <h3>Préparer son dossier avant un sinistre</h3>
               <p className="public-door-summary">
                 En cas de vol, cambriolage ou dommage, l’expert d’assurance exige des preuves formelles d’existence, de possession et d’état.
               </p>
@@ -433,7 +454,7 @@ export function HomePage() {
                 </div>
                 <div className="public-door-block">
                   <strong>La réponse Cartularia :</strong>
-                  <p>Un dossier horodaté exhaustif avec photos macro d’état, révisions et cote justifiée, exportable en rapport PDF opposable.</p>
+                  <p>Un dossier rassemblant photos d’état, révisions et estimations sourcées, avec une synthèse à enregistrer en PDF. L’assureur reste responsable de son appréciation.</p>
                 </div>
               </div>
               <footer className="public-door-footer">
@@ -459,11 +480,11 @@ export function HomePage() {
                 </div>
                 <div className="public-door-block">
                   <strong>La réponse Cartularia :</strong>
-                  <p>Le Watch Website révocable : partagez un lien élégant présentant l’état et la conformité, sans jamais dévoiler vos données personnelles.</p>
+                  <p>Le mini-site révocable présente les blocs que vous choisissez. Les champs personnels sont exclus ; vérifiez également que vos documents et photographies ne révèlent aucune information privée.</p>
                 </div>
               </div>
               <footer className="public-door-footer">
-                <a className="public-text-link" href="/cartulary#publication">
+                <a className="public-text-link" href={`${DEMO_SUBMARINER_HREF.replace('#cover', '')}#publication`}>
                   Voir la projection de partage <ArrowRight aria-hidden="true" />
                 </a>
               </footer>
@@ -501,7 +522,7 @@ export function HomePage() {
 
           <div className="public-deliverables-cta">
             <p>Tous ces livrables sont générés depuis votre espace sécurisé, modifiables et exportables à tout moment.</p>
-            <a className="public-solid-button" href="/cartulary#cover">
+            <a className="public-solid-button" href={DEMO_SUBMARINER_HREF}>
               Tester les livrables dans la démo <ArrowRight aria-hidden="true" />
             </a>
           </div>
@@ -593,7 +614,7 @@ export function HomePage() {
               <span className="public-space-grid__number">02</span>
               <h3>Le Coffre Personnel</h3>
               <p className="public-space-lead">L’espace chiffré de vos données civiles</p>
-              <p>Conservez vos noms réels, adresses de stockage, contrats d’assurance et intentions de transmission dans un coffre chiffré séparé.</p>
+                <p>Conservez vos noms réels, adresses de stockage et intentions de transmission dans un coffre chiffré séparé. Les pièces jointes et contrats n’y sont pas stockés dans cette version.</p>
               <a href="/account/sign-in?space=vault">
                 Accéder au Coffre <ArrowRight aria-hidden="true" />
               </a>
@@ -650,6 +671,7 @@ export function HomePage() {
           </div>
 
           <form onSubmit={sendContact} aria-label="Formulaire de prise de contact">
+            <p>Ce formulaire prépare un email dans votre logiciel de messagerie ; il ne l’envoie pas. Si aucun logiciel ne s’ouvre, vous pourrez copier le message complet.</p>
             <label>
               Motif de votre demande
               <select name="reason" required defaultValue="">
@@ -698,7 +720,7 @@ export function HomePage() {
 
             <label className="public-contact__consent">
               <input type="checkbox" required />
-              <span>J’accepte d’être recontacté au sujet de cette demande conformément à la politique de confidentialité.</span>
+              <span>J’accepte d’être recontacté au sujet de cette demande conformément à la <a href="/confidentialite">politique de confidentialité</a>.</span>
             </label>
 
             <button className="public-solid-button public-solid-button--large" type="submit">
@@ -706,7 +728,16 @@ export function HomePage() {
             </button>
 
             {contactStatus && <p className="public-form-status" role="status">{contactStatus}</p>}
+            {preparedMessage && <div><label htmlFor="prepared-contact">Message à copier</label><textarea id="prepared-contact" readOnly value={preparedMessage} rows={9} /><button type="button" className="public-link-button" onClick={async () => { try { await navigator.clipboard.writeText(preparedMessage); setContactStatus('Message copié. Collez-le dans votre messagerie pour l’envoyer.'); } catch { setContactStatus('Copie automatique indisponible : sélectionnez et copiez le texte du message.'); } }}>Copier le message complet</button></div>}
           </form>
+        </section>
+
+        <section className="public-section" aria-labelledby="service-status-title">
+          <p className="public-kicker">Disponibilité du service</p>
+          <h2 id="service-status-title">Une version pilote à découvrir avec des données fictives.</h2>
+          <p>La démonstration est accessible sans frais ni inscription. Aucun paiement en ligne n’est proposé dans cette version. Les offres définitives, quotas contractuels et engagements de conservation ou de disponibilité ne sont pas encore annoncés.</p>
+          <p>Conservez une copie indépendante de vos documents importants. Le pilote ne doit pas devenir leur unique lieu de conservation.</p>
+          <a className="public-link-button" href="/service">Voir les fonctions disponibles et les limites</a>
         </section>
 
         {/* FINAL CALL TO ACTION */}
@@ -714,7 +745,7 @@ export function HomePage() {
           <p className="public-kicker">Votre patrimoine, mieux protégé</p>
           <h2>Commencez par un objet. Construisez une continuité dans le temps.</h2>
           <div className="public-final-cta__actions">
-            <a className="public-solid-button public-solid-button--large" href="/cartulary#cover">
+            <a className="public-solid-button public-solid-button--large" href={DEMO_SUBMARINER_HREF}>
               Explorer la démo en direct <ArrowRight aria-hidden="true" />
             </a>
             <a className="public-link-button public-link-button--light" href="/account/create">
@@ -738,12 +769,12 @@ export function HomePage() {
           <a href="#securite">Sécurité</a>
           <a href="#faq">FAQ</a>
           <a href="#contact">Contact</a>
-          <a href="/cartulary#cover">Démonstrateur</a>
+          <a href={DEMO_SUBMARINER_HREF}>Démonstrateur Submariner</a>
           <a href="/account/sign-in">Connexion</a>
         </nav>
         <div className="public-footer__legal">
           <span>© {new Date().getFullYear()} Cartularia · Tous droits réservés</span>
-          <span>Confidentialité · Conditions d’utilisation · Accessibilité WCAG AA</span>
+          <span><a href="/confidentialite">Confidentialité</a> · <a href="/conditions">Conditions d’utilisation</a> · <a href="/accessibilite">Accessibilité</a> · <a href="/service">Disponibilité et limites</a></span>
         </div>
       </footer>
     </div>

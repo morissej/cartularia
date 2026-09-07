@@ -1,0 +1,7 @@
+NOTICE DE DEMONSTRATION CARTULARIA
+
+Ce fichier accompagne les cinq Cartulaires fictifs du compte de demonstration.
+
+- Les exemplaires, numeros de serie, proprietaires, vendeurs, documents, operations, comparables, valeurs et historiques sont fictifs.
+- Les caracteristiques de reference sont rapprochees des fiches publiques des manufactures.
+- Aucun element de ce dossier ne constitue une expertise, une preuve d'authenticite, une offre ou une transaction reelle.

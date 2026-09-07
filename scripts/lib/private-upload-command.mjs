@@ -6,8 +6,9 @@ import { join } from 'node:path';
 import exifr from 'exifr';
 import { FieldValue } from 'firebase-admin/firestore';
 import sharp from 'sharp';
+import { createPdfPresentation, createVideoPresentation } from './media-presentation-runtime.mjs';
 
-export const PRIVATE_UPLOAD_VERIFICATION_VERSION = 'private-upload@1.0.0';
+export const PRIVATE_UPLOAD_VERIFICATION_VERSION = 'private-upload@1.1.0';
 export const PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS = Date.parse('2026-08-18T10:45:00.000Z');
 const PRIVATE_ORIGINAL_PATTERN = /^private-drafts\/([^/]+)\/([^/]+)\/([^/]+)\/([a-f0-9]{64})\/original$/;
 const MIB = 1024 * 1024;
@@ -186,6 +187,7 @@ export const inspectTrustedUpload = async ({
   let height = null;
   let derivative = null;
   let captureDate = null;
+  let presentationFailure = null;
   if (policy.kind === 'image') {
     const pipeline = sharp(path, { failOn: 'warning', limitInputPixels: MAXIMUM_IMAGE_PIXELS }).rotate();
     const metadata = await pipeline.metadata();
@@ -210,6 +212,16 @@ export const inspectTrustedUpload = async ({
   } else if (policy.kind === 'video') {
     await assertIsoMediaStructure(path, fileStat.size);
   }
+  if (policy.kind === 'document' || policy.kind === 'video') {
+    const workingDirectory = await mkdtemp(join(tmpdir(), 'cartularia-presentation-'));
+    try {
+      derivative = await (policy.kind === 'document' ? createPdfPresentation : createVideoPresentation)({ path, workingDirectory });
+    } catch (error) {
+      // Availability of a presentation pipeline never authorizes publishing the
+      // original as a fallback. An otherwise valid original stays private.
+      presentationFailure = error?.code || 'presentation_processing_failed';
+    } finally { await rm(workingDirectory, { recursive: true, force: true }); }
+  }
 
   return {
     accepted: true,
@@ -222,10 +234,11 @@ export const inspectTrustedUpload = async ({
     height,
     captureDate,
     derivative,
-    derivativeStatus: derivative ? 'ready' : policy.kind === 'video' ? 'pending_transcode' : 'not_required',
-    mediaDecodeStatus: policy.kind === 'video' ? 'container_structure_verified' : 'not_applicable',
-    malwareScanStatus: policy.kind === 'document' ? 'not_available_private_only' : 'not_applicable',
+    derivativeStatus: derivative ? 'ready' : policy.kind === 'video' ? 'pending_transcode' : 'private_only',
+    mediaDecodeStatus: policy.kind === 'video' ? derivative ? 'decoded_transcoded_verified' : 'container_structure_verified' : 'not_applicable',
+    malwareScanStatus: policy.kind === 'document' ? derivative ? 'rasterized_copy_only_not_antivirus' : 'not_available_private_only' : 'not_applicable',
     publicationEligible: Boolean(derivative),
+    presentationFailure,
   };
 };
 
@@ -303,27 +316,34 @@ export const processPrivateDraftUpload = async ({ firestore, storage, object }) 
     });
     let presentationDerivative = null;
     if (inspection.derivative) {
-      const derivativePath = `private-derivatives/${uid}/${cartularyId}/${binaryId}/presentation-v1.webp`;
+      const extension = inspection.derivative.mimeType === 'application/pdf' ? 'pdf' : inspection.derivative.mimeType === 'video/mp4' ? 'mp4' : 'webp';
+      const derivativePath = `private-derivatives/${uid}/${cartularyId}/${binaryId}/presentation-v2.${extension}`;
       await bucket.file(derivativePath).save(inspection.derivative.bytes, {
         resumable: false,
         metadata: {
           contentType: inspection.derivative.mimeType,
-          cacheControl: 'private, max-age=31536000, immutable',
+          cacheControl: 'private, no-store, max-age=0',
           metadata: {
             ownerUid: uid,
             cartularyId,
             binaryId,
-            derivativeId: 'presentation-v1',
+            derivativeId: 'presentation-v2',
             sourceSha256: `sha256:${digest}`,
             metadataStripped: 'true',
+            firebaseStorageDownloadTokens: '',
           },
         },
       });
       presentationDerivative = {
         storagePath: derivativePath,
         mimeType: inspection.derivative.mimeType,
-        width: inspection.derivative.width,
-        height: inspection.derivative.height,
+        width: inspection.derivative.width ?? null,
+        height: inspection.derivative.height ?? null,
+        pageCount: inspection.derivative.pageCount ?? null,
+        duration: inspection.derivative.duration ?? null,
+        processingMethod: inspection.derivative.processingMethod || 'image_reencoded_v1',
+        sha256: inspection.derivative.sha256 || `sha256:${createHash('sha256').update(inspection.derivative.bytes).digest('hex')}`,
+        size: inspection.derivative.bytes.length,
         metadataStripped: true,
         sourceSha256: `sha256:${digest}`,
         verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION,
@@ -334,6 +354,7 @@ export const processPrivateDraftUpload = async ({ firestore, storage, object }) 
       verificationStatus: 'accepted',
       verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION,
       verificationReason: null,
+      verificationMessage: inspection.presentationFailure ? `Original privé conservé ; copie de présentation non autorisée (${inspection.presentationFailure}).` : null,
       detectedMimeType: inspection.detectedMimeType,
       detectedFormat: inspection.format,
       verifiedSize: inspection.size,

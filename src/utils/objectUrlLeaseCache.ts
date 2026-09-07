@@ -8,6 +8,7 @@ interface ObjectUrlCacheEntry {
   url?: string;
   leases: number;
   lastAccess: number;
+  byteSize: number;
 }
 
 export class ObjectUrlLeaseCache {
@@ -15,25 +16,32 @@ export class ObjectUrlLeaseCache {
   private readonly keyByUrl = new Map<string, string>();
   private readonly maximumIdleEntries: number;
   private readonly revoke: (url: string) => void;
+  private readonly maximumIdleBytes: number;
   private accessClock = 0;
 
   constructor(
     maximumIdleEntries: number,
     revoke: (url: string) => void,
+    maximumIdleBytes = Number.POSITIVE_INFINITY,
   ) {
     this.maximumIdleEntries = maximumIdleEntries;
     this.revoke = revoke;
+    this.maximumIdleBytes = maximumIdleBytes;
   }
 
-  async acquire(key: string, create: () => Promise<string>): Promise<ObjectUrlLease> {
+  async acquire(key: string, create: () => Promise<string | { url: string; byteSize: number }>): Promise<ObjectUrlLease> {
     let entry = this.entries.get(key);
     if (!entry) {
       const created: ObjectUrlCacheEntry = {
         promise: Promise.resolve(''),
         leases: 0,
         lastAccess: ++this.accessClock,
+        byteSize: 0,
       };
-      created.promise = create().then((url) => {
+      created.promise = create().then((value) => {
+        const url = typeof value === 'string' ? value : value.url;
+        if (this.entries.get(key) !== created) { this.revoke(url); throw new Error('Chargement média annulé.'); }
+        created.byteSize = typeof value === 'string' ? 0 : value.byteSize;
         created.url = url;
         this.keyByUrl.set(url, key);
         this.evictIdleEntries();
@@ -99,7 +107,7 @@ export class ObjectUrlLeaseCache {
   }
 
   private evictIdleEntries() {
-    while (this.entries.size > this.maximumIdleEntries) {
+    while (this.entries.size > this.maximumIdleEntries || [...this.entries.values()].filter((entry) => entry.leases === 0).reduce((total, entry) => total + entry.byteSize, 0) > this.maximumIdleBytes) {
       const candidate = [...this.entries.entries()]
         .filter(([, entry]) => entry.leases === 0 && Boolean(entry.url))
         .sort(([, left], [, right]) => left.lastAccess - right.lastAccess)[0];

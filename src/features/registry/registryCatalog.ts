@@ -9,6 +9,7 @@ export interface RegistryCatalogFilters {
   collectionId: string;
   patrimonialStatus: string;
   lifecycleStatus?: string;
+  possessionStatus?: string;
   sort: RegistryCatalogSort;
 }
 
@@ -41,6 +42,7 @@ export const filterAndSortRegistryItems = (
     if (filters.collectionId !== 'all' && !registryItemCollectionIds(item).includes(filters.collectionId)) return false;
     if (filters.patrimonialStatus !== 'all' && item.patrimonialStatus !== filters.patrimonialStatus) return false;
     if (filters.lifecycleStatus && filters.lifecycleStatus !== 'all' && item.lifecycleStatus !== filters.lifecycleStatus) return false;
+    if (filters.possessionStatus === 'sensitive' && !['lost', 'stolen', 'destroyed'].includes(item.possessionStatus)) return false;
 
     const haystack = normalize([
       item.displayTitle,
@@ -73,6 +75,9 @@ export const filterAndSortRegistryItems = (
 
 export const buildCartularyHref = (cartularyId: string, returnTo: string, assetType?: string) => {
   const params = new URLSearchParams({ cartularyId, returnTo });
+  if (cartularyId.startsWith('cart_demo_')) {
+    return `/cartulary-demo?${params.toString()}`;
+  }
   const usesFullCartulary = assetType === 'watch'
     || cartularyId === IWC_CARTULARY_ID
     || cartularyId === ROLEX_CARTULARY_ID;

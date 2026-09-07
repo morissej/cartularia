@@ -117,7 +117,7 @@ export const createTextPdf = (sourceLines: readonly string[]): Uint8Array => {
 export const downloadTextPdf = (fileName: string, lines: readonly string[]) => {
   if (typeof window !== 'undefined' && typeof window.print === 'function') {
     window.print();
-    return;
+    return 'print-requested' as const;
   }
   const bytes = createTextPdf(lines);
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
@@ -129,4 +129,5 @@ export const downloadTextPdf = (fileName: string, lines: readonly string[]) => {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  return 'text-download-requested' as const;
 };

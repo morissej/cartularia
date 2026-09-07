@@ -22,6 +22,9 @@ const seedFoundations = async () => {
     firestore.doc('registries/reg_collection_privee').set({
       id: 'reg_collection_privee', organizationId: 'org_demo', status: 'active', itemCount: 0,
     }),
+    firestore.doc('registries/reg_collection_privee/collections/col_archive').set({
+      id: 'col_archive', registryId: 'reg_collection_privee', organizationId: 'org_demo', status: 'draft',
+    }),
     firestore.doc('organizations/org_demo/memberships/wave1-owner').set({
       uid: 'wave1-owner', organizationId: 'org_demo', roles: ['account_holder', 'legal_owner'], status: 'active',
       scopes: { registryIds: ['reg_collection_privee'] },
@@ -113,6 +116,15 @@ beforeEach(async () => {
 after(async () => {
   await testEnvironment.cleanup();
   await deleteApp(adminApp);
+});
+
+test('une Collection supprimée bloque une nouvelle affectation sans modifier le Cartulaire', async () => {
+  await writeDraftAndRequest('sync_test_removed_collection_0001');
+  await firestore.doc('registries/reg_collection_privee/collections/col_archive').delete();
+  const before = (await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data();
+  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' }), { code: 'failed-precondition' });
+  const after = (await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data();
+  assert.equal(after.revision, before.revision); assert.equal(after.collectionId, before.collectionId);
 });
 
 test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d’intégrité', async () => {

@@ -3,7 +3,10 @@ import type { RefObject } from 'react';
 import { ArrowLeft, ArrowRight, FileText, Plus, Trash2, Video, X } from 'lucide-react';
 import { aiFieldProps } from '../../../ai/fieldCatalog.ts';
 import { PrivateMediaImage } from '../../../components/PrivateMediaImage.tsx';
-import { presentationDerivativeUrl } from '../../../media/presentationDerivatives.ts';
+import { MediaDownloadLink } from '../../../components/MediaDownloadLink.tsx';
+import { MediaVideo } from '../../../components/MediaVideo.tsx';
+import { MediaTransferStatus } from '../../../components/MediaTransferStatus';
+import { useMediaSource } from '../../../hooks/useMediaSource.ts';
 import type { Asset, MediaTag, Valuation } from '../../../types/index.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
 import { formatDateTime } from '../../../utils/formatting.ts';
@@ -48,6 +51,14 @@ export function SpinViewerModal({
         <Suspense fallback={<div className="media-empty" role="status">{translated(language, 'Chargement de la séquence 360°…', 'Loading 360° sequence…')}</div>}>
           <Spin360 images={assets} posterImageUrl={assets[0].url} language={language} />
         </Suspense>
+        <details className="spin-downloads no-print">
+          <summary>{translated(language, `Télécharger les vues (${assets.length})`, `Download views (${assets.length})`)}</summary>
+          <div>
+            {assets.map((asset, index) => (
+              <div key={asset.id} className="spin-downloads__row"><span>{translated(language, 'Vue', 'View')} {index + 1}/{assets.length}</span><MediaDownloadLink media={asset} language={language} compact showName className="spin-downloads__link" /></div>
+            ))}
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -64,7 +75,9 @@ export function MediaViewerModal({
   onClose,
   onMove,
   onToggleTag,
+  onChangeVisibility,
   onDelete,
+  readOnly = false,
 }: {
   asset: Asset;
   assetCount: number;
@@ -76,9 +89,12 @@ export function MediaViewerModal({
   onClose: () => void;
   onMove: (direction: -1 | 1) => void;
   onToggleTag: (assetId: string, tag: MediaTag) => void;
+  onChangeVisibility?: (assetId: string, visibility: Asset['visibility']) => void;
   onDelete: (assetId: string) => void;
+  readOnly?: boolean;
 }) {
   const tx = (french: string, english: string) => translated(language, french, english);
+  const documentSource = useMediaSource(asset, asset.type === 'document');
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div ref={dialogRef} className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-dialog-title" data-focus-layer="true" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
@@ -93,12 +109,13 @@ export function MediaViewerModal({
               <FileText size={56} />
               <strong>{asset.originalFileName || asset.name}</strong>
               <small>{asset.mimeType || 'Document'} · {asset.fileSize || tx('taille non renseignée', 'size not provided')}</small>
-              {asset.mimeType === 'application/pdf' && <a href={asset.url} target="_blank" rel="noreferrer">{tx('Ouvrir le PDF', 'Open PDF')}</a>}
+              {asset.mimeType === 'application/pdf' && documentSource.url && <a href={documentSource.url} target="_blank" rel="noreferrer">{tx('Ouvrir le PDF', 'Open PDF')}</a>}
+              {documentSource.loading && <MediaTransferStatus progress={documentSource.progress} language={language} onCancel={documentSource.cancel} />}
+              {documentSource.cancelled && <p role="status">{tx('Attente annulée. Le document ne sera pas ouvert ; le transfert demandé peut continuer en arrière-plan.', 'Waiting cancelled. The document will not open; the requested transfer may continue in the background.')} <button type="button" onClick={documentSource.retry}>{tx('Reprendre le chargement', 'Resume loading')}</button></p>}
+              {documentSource.error && <p role="alert">{documentSource.error} <button type="button" onClick={documentSource.retry}>{tx('Réessayer', 'Retry')}</button></p>}
             </div>
           ) : asset.type === 'video' ? (
-            <video src={asset.url} poster={presentationDerivativeUrl(asset.posterUrl || asset.thumbnailUrl, 768)} controls preload="metadata">
-              {tx('Votre navigateur ne peut pas lire cette vidéo.', 'Your browser cannot play this video.')}
-            </video>
+            <MediaVideo asset={asset} language={language} />
           ) : <PrivateMediaImage asset={asset} alt={asset.name} sizes="(max-width: 720px) 100vw, 70vw" eager />}
         </div>
         <div className="media-modal__caption">
@@ -116,7 +133,7 @@ export function MediaViewerModal({
                 {...aiFieldProps('media.assets[].tags', `${asset.id}:${tag.id}`)}
                 className={asset.tags.includes(tag.id) ? 'is-active' : ''}
                 onClick={() => onToggleTag(asset.id, tag.id)}
-                disabled={audience !== 'Secret'}
+                disabled={readOnly || audience !== 'Secret'}
                 aria-pressed={asset.tags.includes(tag.id)}
               >{tag.label}</button>
             ))}
@@ -129,8 +146,10 @@ export function MediaViewerModal({
             <div><dt>{tx('Empreinte', 'Digest')}</dt><dd {...aiFieldProps('media.assets[].hash', asset.id)}>{asset.hash.slice(0, 16)}…</dd></div>
             {asset.type === 'video' && <div><dt>Original</dt><dd>{asset.duration} · {asset.fileSize}</dd></div>}
           </dl>
+          {!readOnly && audience === 'Secret' && onChangeVisibility && <label>{tx('Autorisation de publication du média', 'Media publication permission')}<select value={asset.visibility} onChange={(event) => onChangeVisibility(asset.id, event.target.value as Asset['visibility'])}><option value="Secret">{tx('Secret · rester privé', 'Secret · keep private')}</option><option value="Communauté">{tx('Cercle · accès restreint', 'Circle · restricted access')}</option><option value="Tous">{tx('Tous · autoriser une copie de présentation', 'All · allow a presentation copy')}</option></select><small>{tx('Cette autorisation ne publie rien seule. Confirmez ensuite la sélection dans Publication.', 'This permission alone publishes nothing. Confirm the selection in Publication next.')}</small></label>}
+          <MediaDownloadLink media={asset} language={language} />
           {asset.type === 'video' && <small className="vault-note"><Video size={14} /> {tx('Original haute définition conservé dans le coffre média.', 'High-definition original kept in the media vault.')}</small>}
-          <button type="button" className="button button--quiet no-print" onClick={() => onDelete(asset.id)}><Trash2 size={14} /> {tx('Supprimer ce fichier', 'Delete this file')}</button>
+          {!readOnly && <button type="button" className="button button--quiet no-print" onClick={() => onDelete(asset.id)}><Trash2 size={14} /> {tx('Supprimer ce fichier', 'Delete this file')}</button>}
         </div>
       </div>
     </div>

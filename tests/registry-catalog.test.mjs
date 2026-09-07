@@ -129,6 +129,12 @@ test('le Cartulaire IWC du pilote ouvre l’interface complète existante', () =
   assert.equal(url.searchParams.get('returnTo'), '/registry/reg_demo/gallery');
 });
 
+test('les Cartulaires du compte démo ouvrent le gabarit standard même avec une projection ancienne', () => {
+  const href = buildCartularyHref('cart_demo_rolex_submariner_124060', '/registry/reg_cartularia_demo/items');
+  const url = new URL(href, 'https://cartularia.test');
+  assert.equal(url.pathname, '/cartulary-demo');
+});
+
 test('le Cartulaire Rolex ouvre la même interface complète que l’IWC', () => {
   const href = buildCartularyHref('cart_rolex_gmt_master_mark_i_long_e_1675_642cf3adba60', '/registry/reg_demo/items');
   assert.equal(new URL(href, 'https://cartularia.test').pathname, '/cartulary');

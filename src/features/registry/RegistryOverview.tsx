@@ -24,11 +24,10 @@ import { loadRegistryItems, observeRegistryItems } from '../../services/projecti
 import { buildRegistryAggregates } from './registryAggregates.ts';
 import { ROLE_LABELS } from './registryAdministration.ts';
 import { buildRegistryFollowUpSummary } from './registryFollowUp.ts';
-import { RegistryTodoBoard } from './RegistryTodoBoard.tsx';
+import { useRegistryCollections } from './useRegistryCollections.ts';
 import {
   assetTypeLabel,
   completenessLabel,
-  labelFromIdentifier,
   lifecycleLabel,
 } from './registryPresentation.ts';
 
@@ -61,6 +60,7 @@ export function RegistryOverview({ registry, organization, membership }: {
   organization: OrganizationDocument;
   membership: MembershipDocument;
 }) {
+  const { collectionName } = useRegistryCollections(registry.id);
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [followUps, setFollowUps] = useState<RegistryFollowUpItem[]>([]);
   const [loadState, setLoadState] = useState<OverviewLoadState>('loading');
@@ -186,7 +186,7 @@ export function RegistryOverview({ registry, organization, membership }: {
 
           <section className="registry-dashboard-panel">
             <header><div><span className="registry-step">Collections</span><h2>Répartition</h2></div><Layers3 aria-hidden="true" /></header>
-            <AggregateRows rows={summary.byCollection} total={summary.total} label={labelFromIdentifier} />
+            <AggregateRows rows={summary.byCollection} total={summary.total} label={collectionName} />
           </section>
 
           <section className="registry-dashboard-panel">
@@ -213,8 +213,8 @@ export function RegistryOverview({ registry, organization, membership }: {
               <div className="registry-attention-clear"><CircleCheck aria-hidden="true" /><span>Aucune alerte opérationnelle en cours.</span></div>
             ) : (
               <div className="registry-attention-list">
-                {summary.attention.suspended > 0 && <div><span>Dossiers suspendus</span><strong>{summary.attention.suspended}</strong></div>}
-                {summary.attention.sensitivePossession > 0 && <div><span>Situation de possession sensible</span><strong>{summary.attention.sensitivePossession}</strong></div>}
+                {summary.attention.suspended > 0 && <div><a href={`${registrySectionHref(registry.id, 'items')}?lifecycle=suspended`}>Dossiers suspendus</a><strong>{summary.attention.suspended}</strong></div>}
+                {summary.attention.sensitivePossession > 0 && <div><a href={`${registrySectionHref(registry.id, 'items')}?possession=sensitive`}>Situation de possession sensible</a><strong>{summary.attention.sensitivePossession}</strong></div>}
                 {followUpSummary.overdue > 0 && <div><span>Échéances en retard</span><strong>{followUpSummary.overdue}</strong></div>}
                 {followUpSummary.dueSoon > 0 && <div><span>Échéances dans les 30 jours</span><strong>{followUpSummary.dueSoon}</strong></div>}
               </div>
@@ -228,7 +228,7 @@ export function RegistryOverview({ registry, organization, membership }: {
             <div className="registry-recent-items">
               {summary.recentItems.map((item) => (
                 <a href={`${registrySectionHref(registry.id, 'items')}?q=${encodeURIComponent(item.displayTitle)}`} key={item.cartularyId}>
-                  <span><strong>{item.displayTitle}</strong><small>{assetTypeLabel(item.assetType)} · {labelFromIdentifier(item.collectionId)}</small></span>
+                  <span><strong>{item.displayTitle}</strong><small>{assetTypeLabel(item.assetType)} · {collectionName(item.collectionId)}</small></span>
                   <span>R{item.sourceRevision}</span>
                 </a>
               ))}
@@ -238,12 +238,7 @@ export function RegistryOverview({ registry, organization, membership }: {
       )}
 
       {loadState === 'ready' && canReadCartularies && (
-        <RegistryTodoBoard
-          registryId={registry.id}
-          items={items}
-          todos={followUps}
-          canManage={canCreateCartularies}
-        />
+        <section className="registry-todo-board"><header><div><h2>À faire</h2><p>{followUpSummary.overdue + followUpSummary.dueSoon} échéance(s) à traiter en priorité.</p></div><a href={registrySectionHref(registry.id, 'follow-up')}>Gérer toutes les tâches <ArrowRight aria-hidden="true" /></a></header></section>
       )}
 
       <section className="registry-dashboard-account">

@@ -32,7 +32,9 @@ test('les routes inconnues ne sont pas assimilées au Cartulaire privé', () => 
   assert.equal(applicationRouteFromPathname('/'), 'home');
   assert.equal(applicationRouteFromPathname('/account/create'), 'account-create');
   assert.equal(applicationRouteFromPathname('/account/sign-in'), 'account-sign-in');
+  assert.equal(applicationRouteFromPathname('/administration'), 'administration');
   assert.equal(applicationRouteFromPathname('/cartulary'), 'cartulary');
+  assert.equal(applicationRouteFromPathname('/cartulary-demo'), 'cartulary-demo');
   assert.equal(applicationRouteFromPathname('/watch-website'), 'watch-website');
   assert.equal(applicationRouteFromPathname('/collection-website'), 'collection-website');
   assert.equal(applicationRouteFromPathname('/community/'), 'community');
@@ -50,6 +52,10 @@ test('la route Cartulaire conserve l’identifiant demandé sans contaminer les 
   assert.equal(cartularyIdFromLocation({ pathname: '/', search: rolexSearch }), IWC_CARTULARY_ID);
   assert.equal(cartularyIdFromLocation({ pathname: '/registry/reg_collection_privee/items', search: rolexSearch }), IWC_CARTULARY_ID);
   assert.equal(cartularyIdFromLocation({ pathname: '/cartulary', search: '?cartularyId=../../secret' }), IWC_CARTULARY_ID);
+  assert.equal(
+    cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '?cartularyId=cart_demo_rolex_submariner_124060' }),
+    'cart_demo_rolex_submariner_124060',
+  );
 });
 
 test('les préférences persistées invalides utilisent des valeurs sûres', () => {

@@ -27,7 +27,7 @@ export const POSSESSION_LABELS: Record<string, string> = {
 };
 
 export const COMPLETENESS_LABELS: Record<string, string> = {
-  imported_unreviewed: 'Import à vérifier',
+  imported_unreviewed: 'Données à vérifier',
   partial: 'Partiel',
   complete: 'Complet',
 };

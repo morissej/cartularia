@@ -124,7 +124,6 @@
 
 .registry-signout:hover { border-color: var(--mark); color: var(--mark); }
 .registry-signout svg { width: 15px; }
-.registry-signout--icon { width: 40px; padding: 0; }
 
 .registry-home-link {
   display: inline-flex;
@@ -1519,11 +1518,11 @@
   .registry-brand { width: 145px; }
   .registry-user { display: none; }
   .registry-context-select select { max-width: 210px; }
-  .registry-layout { grid-template-columns: 84px minmax(0, 1fr); }
+  .registry-layout { grid-template-columns: 180px minmax(0, 1fr); }
   .registry-sidebar__context { justify-content: center; padding-inline: var(--s2); }
   .registry-sidebar__context > span { display: none; }
-  .registry-sidebar nav a { grid-template-columns: 1fr; justify-items: center; padding: 0; }
-  .registry-sidebar nav a span { display: none; }
+  .registry-sidebar nav a { grid-template-columns: 20px minmax(0, 1fr); justify-items: start; padding: 8px; }
+  .registry-sidebar nav a span { display: block; font-size: 12px; }
   .registry-sidebar__security { justify-content: center; }
   .registry-sidebar__security span { display: none; }
   .registry-wave-one-panel { grid-template-columns: 1fr; }
@@ -1573,12 +1572,13 @@
   .registry-account-controls { display: contents; }
   .registry-context-select { grid-row: 3; grid-column: 1 / -1; }
   .registry-context-select select { width: 100%; max-width: none; }
-  .registry-signout--icon { grid-row: 1; grid-column: 2; }
+  .registry-signout--account { grid-row: 1; grid-column: 2; }
   .registry-layout { display: block; }
   .registry-sidebar { position: sticky; top: 0; z-index: 90; display: block; border-right: 0; border-bottom: 1px solid var(--rule); }
   .registry-sidebar__context, .registry-sidebar__security { display: none; }
-  .registry-sidebar nav { display: grid; grid-template-columns: repeat(7, minmax(56px, 1fr)); overflow-x: auto; padding: 0; }
-  .registry-sidebar nav a { min-height: 52px; border-bottom: 2px solid transparent; border-left: 0; }
+  .registry-sidebar nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0; }
+  .registry-sidebar nav a { min-height: 66px; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 4px; padding: 6px 4px; text-align: center; border-bottom: 2px solid transparent; border-left: 0; }
+  .registry-sidebar nav a span { font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
   .registry-sidebar nav a[aria-current='page'] { border-bottom-color: var(--mark); border-left: 0; }
   .registry-main { padding: var(--s5) var(--s4); }
   .registry-page-heading { display: grid; gap: var(--s3); }
@@ -1710,6 +1710,7 @@
 .registry-create__privacy { display: inline-flex; flex: 0 0 auto; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border: 1px solid var(--positive); color: var(--positive); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
 .registry-create__privacy svg { width: 15px; }
 .registry-create-form { display: grid; gap: var(--s4); }
+.registry-create-form__fields { display: grid; gap: var(--s4); border: 0; margin: 0; padding: 0; min-width: 0; }
 .registry-create-card { border: 1px solid var(--rule); background: var(--sheet); }
 .registry-create-card > header { display: grid; min-height: 88px; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-bottom: 1px solid var(--rule); }
 .registry-create-card > header > span { color: var(--mark); font-family: var(--font-mono); font-size: 10px; }
@@ -1977,23 +1978,24 @@
 
 .registry-collections { display: grid; gap: var(--s4); }
 .registry-collections__create,
-.registry-collection-form > button,
+.registry-collection-form__fields > button,
 .registry-collections__empty button { display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); min-height: 40px; padding: 0 var(--s3); border: 1px solid var(--ink); background: var(--ink); color: var(--sheet); font-size: 10px; font-weight: 700; }
 .registry-collections__create svg,
-.registry-collection-form > button svg { width: 15px; }
+.registry-collection-form__fields > button svg { width: 15px; }
 .registry-collection-form { display: grid; gap: var(--s3); padding: var(--s4); border: 1px solid var(--rule); background: var(--sheet); }
+.registry-collection-form__fields { display: grid; gap: var(--s3); border: 0; margin: 0; padding: 0; min-width: 0; }
 .registry-collection-form > header { display: flex; align-items: flex-start; justify-content: space-between; }
 .registry-collection-form > header span { color: var(--mark); font-family: var(--font-mono); font-size: 8px; text-transform: uppercase; }
 .registry-collection-form > header h2 { font-size: 24px; }
 .registry-collection-form > header button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--rule); background: transparent; color: var(--ink); }
 .registry-collection-form > header button svg { width: 15px; }
-.registry-collection-form > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); }
+.registry-collection-form__fields > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); }
 .registry-collection-form label { display: grid; gap: 5px; color: var(--muted); font-family: var(--font-mono); font-size: 8px; text-transform: uppercase; }
 .registry-collection-form input,
 .registry-collection-form select,
 .registry-collection-form textarea { width: 100%; min-height: 40px; padding: var(--s2); border: 1px solid var(--rule); background: var(--paper); color: var(--ink); font: 11px var(--font-sans); text-transform: none; }
 .registry-collection-form__description { grid-column: 1 / -1; }
-.registry-collection-form > button { justify-self: start; }
+.registry-collection-form__fields > button { justify-self: start; }
 .registry-collection-publication { display: grid; gap: var(--s3); padding: var(--s4); border: 1px solid var(--ink); background: var(--paper); }
 .registry-collection-publication > header { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); }
 .registry-collection-publication > header > div { display: grid; gap: 3px; }
@@ -2104,7 +2106,7 @@
 }
 
 @media (max-width: 720px) {
-  .registry-collection-form > div,
+  .registry-collection-form__fields > div,
   .registry-collection-grid,
   .registry-collection-publication fieldset,
   .registry-collection-publication__url,

@@ -1,4 +1,9 @@
 {
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
+  },
   "firestore": { "rules": "bridge-firestore.rules" },
   "emulators": {
     "auth": { "host": "127.0.0.1", "port": 19399 },

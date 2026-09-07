@@ -2,6 +2,7 @@ import { Component, Suspense, useEffect, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { BrandLogo } from '../components/BrandLogo.tsx';
 import { RootPage } from '../RootPage.tsx';
+import { applicationRouteLabel } from '../utils/interfaceState.ts';
 import {
   requiresPrivateCartularyHydration,
   runPrivateCartularyBootstrap,
@@ -35,9 +36,9 @@ class ApplicationErrorBoundary extends Component<{ children: ReactNode }, { hasE
         <main className="application-shell" role="alert" aria-live="assertive">
           <BrandLogo variant="color" />
           <div className="application-shell__rule" aria-hidden="true" />
-          <span className="eyebrow">Actualisation requise</span>
-          <h1>Cartularia</h1>
-          <p>Une mise à jour a été appliquée. Veuillez recharger votre page.</p>
+          <span className="eyebrow">Affichage interrompu</span>
+          <h1>Cette page n’a pas pu être affichée</h1>
+          <p>Une erreur est survenue. Les modifications non enregistrées peuvent être perdues si vous rechargez. Réessayez ou revenez à l’accueil.</p>
           <button
             type="button"
             className="button button--primary"
@@ -46,6 +47,7 @@ class ApplicationErrorBoundary extends Component<{ children: ReactNode }, { hasE
           >
             Recharger Cartularia
           </button>
+          <a href="/">Revenir à l’accueil</a>
         </main>
       );
     }
@@ -60,12 +62,12 @@ const startDefaultPrivateBootstrap = () => {
   return defaultPrivateBootstrap;
 };
 
-function ApplicationShell({ label }: { label: string }) {
+function ApplicationShell({ label, context }: { label: string; context: string }) {
   return (
     <main className="application-shell" role="status" aria-live="polite" aria-label={label}>
-      <BrandLogo variant="color" />
+      <BrandLogo variant="color" href="/" />
       <div className="application-shell__rule" aria-hidden="true" />
-      <span className="eyebrow">Cartulaire privé</span>
+      <span className="eyebrow">{context}</span>
       <h1>Cartularia</h1>
       <p>{label}</p>
       <span className="application-shell__progress" aria-hidden="true" />
@@ -79,10 +81,12 @@ export function ApplicationBootstrap({
   PageComponent = RootPage,
 }: ApplicationBootstrapProps) {
   const needsPrivateHydration = requiresPrivateCartularyHydration(location);
+  const context = applicationRouteLabel(location.pathname);
   const [bootState, setBootState] = useState<BootState>(() => (
     needsPrivateHydration ? { status: 'hydrating' } : { status: 'ready' }
   ));
   const [noticeDismissed, setNoticeDismissed] = useState(false);
+  useEffect(() => { document.title = `${context} · Cartularia`; }, [context]);
 
   useEffect(() => {
     if (!needsPrivateHydration) return undefined;
@@ -106,10 +110,12 @@ export function ApplicationBootstrap({
   }, [bootstrap, needsPrivateHydration]);
 
   if (bootState.status === 'hydrating') {
-    return <ApplicationShell label="Restauration sécurisée de votre carnet local…" />;
+    return <ApplicationShell context={context} label="Restauration sécurisée de votre carnet local…" />;
   }
 
   const degraded = bootState.outcome?.status === 'degraded' ? bootState.outcome : null;
+  const signedOut = bootState.outcome?.status === 'ready' && bootState.outcome.reason === 'signed_out';
+  const signInHref = `/account/sign-in?returnTo=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
   return (
     <ApplicationErrorBoundary>
       {degraded && !noticeDismissed && (
@@ -121,7 +127,16 @@ export function ApplicationBootstrap({
           <button type="button" onClick={() => setNoticeDismissed(true)} aria-label="Masquer l’avertissement de démarrage">Fermer</button>
         </aside>
       )}
-      <Suspense fallback={<ApplicationShell label="Ouverture de votre espace Cartularia…" />}>
+      {signedOut && (
+        <aside className="application-bootstrap-notice application-bootstrap-notice--session" role="status" aria-live="polite">
+          <div>
+            <strong>Originaux distants verrouillés</strong>
+            <span>Le Cartulaire local reste consultable. Connectez-vous au Registre pour charger les JPEG, vidéos et documents privés.</span>
+          </div>
+          <a href={signInHref}>Se connecter</a>
+        </aside>
+      )}
+      <Suspense fallback={<ApplicationShell context={context} label={`Ouverture : ${context}…`} />}>
         <PageComponent />
       </Suspense>
     </ApplicationErrorBoundary>

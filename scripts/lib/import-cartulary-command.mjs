@@ -162,6 +162,7 @@ export const importCartularyBundle = async ({
   requestId,
   actorId,
   expectedRevision = 0,
+  requireActiveCollection = false,
   occurredAt = new Date().toISOString(),
 }) => {
   validateRequestId(requestId);
@@ -181,13 +182,14 @@ export const importCartularyBundle = async ({
   const bundleDigest = sha256Digest(bundle);
 
   return firestore.runTransaction(async (transaction) => {
-    const [receipt, root, organization, registry, membership, schemaVersion] = await Promise.all([
+    const [receipt, root, organization, registry, membership, schemaVersion, destinationCollection] = await Promise.all([
       transaction.get(receiptRef),
       transaction.get(rootRef),
       transaction.get(organizationRef),
       transaction.get(registryRef),
       transaction.get(membershipRef),
       transaction.get(schemaVersionRef),
+      requireActiveCollection ? transaction.get(registryRef.collection('collections').doc(bundle.envelope.collectionId)) : null,
     ]);
 
     if (receipt.exists) {
@@ -201,6 +203,11 @@ export const importCartularyBundle = async ({
     }
 
     assertFoundation({ organization, registry, membership, schemaVersion }, bundle, actorId);
+    if (requireActiveCollection && (!destinationCollection?.exists || destinationCollection.data().status === 'archived'
+      || destinationCollection.data().registryId !== bundle.envelope.registryId
+      || destinationCollection.data().organizationId !== bundle.envelope.organizationId)) {
+      throw new CartularyCommandError('collection_not_ready', 'Choisissez une collection existante non archivée dans ce Registre.');
+    }
 
     const schemaDigest = schemaVersion.data().catalogDigest ?? null;
     if (schemaDigest !== null && !/^sha256:[a-f0-9]{64}$/.test(schemaDigest)) {

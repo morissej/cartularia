@@ -7,6 +7,7 @@ import type { RemovedItem } from '../utils/undoableDeletion';
 interface CartularyTodoBoardProps {
   followUp: CartularyFollowUpController;
   language: 'FR' | 'EN';
+  readOnly?: boolean;
 }
 
 const categoryOptions: Array<{ value: FollowUpCategory; fr: string; en: string }> = [
@@ -16,7 +17,7 @@ const categoryOptions: Array<{ value: FollowUpCategory; fr: string; en: string }
   { value: 'maintenance', fr: 'Entretien', en: 'Maintenance' },
 ];
 
-export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp, language }) => {
+export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp, language, readOnly = false }) => {
   const { todos, syncError, addTodo, updateTodo, removeTodo, restoreTodo } = followUp;
   const [newText, setNewText] = useState('');
   const [newDueAt, setNewDueAt] = useState(() => new Date().toISOString().slice(0, 10));
@@ -67,7 +68,7 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
         <span className="cover-todo-board__count">{todos.length} {isFrench ? 'élément(s)' : 'item(s)'}</span>
       </header>
 
-      <form className="cover-todo-board__add" onSubmit={submitNewTodo}>
+      {!readOnly && <form className="cover-todo-board__add" onSubmit={submitNewTodo}>
         <label>
           <span>{isFrench ? 'Nouvelle tâche ou rappel' : 'New task or reminder'}</span>
           <input
@@ -88,7 +89,9 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
           </select>
         </label>
         <button type="submit" disabled={!newText.trim()}><Plus size={16} />{isFrench ? 'Ajouter' : 'Add'}</button>
-      </form>
+      </form>}
+
+      {readOnly && <p className="demo-read-only-hint">{isFrench ? 'Démonstration en lecture seule' : 'Read-only demonstration'}</p>}
 
       {syncError && <p className="todo-sync-error" role="status">{syncError}</p>}
 
@@ -99,6 +102,7 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
               <button
                 type="button"
                 className="cover-todo-board__status"
+                disabled={readOnly}
                 onClick={() => updateTodo(todo.id, { status: todo.status === 'completed' ? 'planned' : 'completed' })}
                 aria-label={todo.status === 'completed' ? (isFrench ? `Rouvrir : ${todo.text}` : `Reopen: ${todo.text}`) : (isFrench ? `Terminer : ${todo.text}` : `Complete: ${todo.text}`)}
               >
@@ -118,20 +122,22 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
               <input
                 type="date"
                 value={todo.dueAt}
+                disabled={readOnly}
                 onChange={(event) => updateTodo(todo.id, { dueAt: event.target.value })}
                 aria-label={isFrench ? `Échéance de ${todo.text}` : `Due date for ${todo.text}`}
               />
               <select
                 value={todo.category}
+                disabled={readOnly}
                 onChange={(event) => updateTodo(todo.id, { category: event.target.value as FollowUpCategory })}
                 aria-label={isFrench ? `Nature de ${todo.text}` : `Category for ${todo.text}`}
               >
                 {categoryOptions.map((option) => <option key={option.value} value={option.value}>{isFrench ? option.fr : option.en}</option>)}
               </select>
-              <div className="cover-todo-board__actions">
+              {!readOnly && <div className="cover-todo-board__actions">
                 <button type="button" onClick={() => { setEditingId(todo.id); setEditingText(todo.text); }} aria-label={`${isFrench ? 'Modifier' : 'Edit'} : ${todo.text}`}><Pencil size={15} /></button>
                 <button type="button" onClick={() => deleteTodo(todo)} aria-label={`${isFrench ? 'Supprimer' : 'Delete'} : ${todo.text}`}><Trash2 size={15} /></button>
-              </div>
+              </div>}
             </li>
           ))}
         </ul>
@@ -139,7 +145,7 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
         <p className="cover-todo-board__empty">{isFrench ? 'Aucune tâche ni aucun rappel pour le moment.' : 'No task or reminder for now.'}</p>
       )}
 
-      {deletedTodo && (
+      {!readOnly && deletedTodo && (
         <div className="cover-todo-board__undo" role="status">
           <span>{isFrench ? `« ${deletedTodo.item.text} » a été supprimée.` : `“${deletedTodo.item.text}” was deleted.`}</span>
           <button type="button" onClick={() => { restoreTodo(deletedTodo); setDeletedTodo(null); }}><Undo2 size={15} />{isFrench ? 'Annuler' : 'Undo'}</button>

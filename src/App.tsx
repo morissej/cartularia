@@ -23,15 +23,23 @@ import {
 import {
   activeCartulary as mockCartulary,
   activeCreationProfile,
+  activeDemoContent,
+  isDemoCartulary,
   isIwcCartulary,
   isRolexCartulary,
 } from './data/activeCartulary';
-import { ACTIVE_CARTULARY_ID, IWC_CARTULARY_ID, ROLEX_CARTULARY_ID } from './domain/cartularyIds';
+import { ACTIVE_CARTULARY_ID } from './domain/cartularyIds';
 import type { Asset, ComparableTransaction, MediaTag, Valuation } from './types';
 import { BarreDossier } from './components/BarreDossier';
 import { CartularyTodoBoard } from './components/CartularyTodoBoard';
 import { BrandLogo } from './components/BrandLogo';
 import { MediaCarousel } from './components/MediaCarousel';
+import { MediaDownloadLink } from './components/MediaDownloadLink';
+import { MediaVideo } from './components/MediaVideo';
+import { PublicWebsitePublicationPanel } from './components/PublicWebsitePublicationPanel';
+import { buildWebsiteDraft, websiteDraftPreview, websiteDraftRequest } from './domain/websiteDraft';
+import { WebsiteDraftWarnings } from './components/WebsiteDraftWarnings';
+import { ReportMediaItem } from './components/ReportMediaItem';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
 import { computeHash, IntegrityJournal, isRfc3161Receipt } from './utils/integrityJournal';
 import { downloadTextPdf } from './utils/pdfExport';
@@ -59,7 +67,8 @@ import {
   destinationLabel,
   destinationMarker,
   evaluatePublicationEligibility,
-  filterRequestedWebsiteBlocks,
+  filterPublicationBlockIds,
+  publicationBlockIdsFor,
   getPublicationPolicy,
   isSelectionValidated,
   publicationActionFor,
@@ -81,6 +90,7 @@ import {
 import { useDialogFocus } from './hooks/useDialogFocus';
 import { removeItemById, restoreItemAtIndex } from './utils/undoableDeletion';
 import { horizontalNavigationDirection, targetConsumesHorizontalNavigation } from './utils/horizontalNavigation';
+import { mediaDownloadFileName } from './utils/mediaDownload';
 import {
   formatDate,
   formatDateTime,
@@ -143,11 +153,16 @@ import { isRegistryReturnPath } from './features/registry/registryCatalog';
 import { parseRegistryRoute } from './features/registry/registryRouting';
 import type { RegistryCollectionDocument } from './domain/collections';
 import { loadCartularyCollectionContext, saveRegistryCollection } from './services/collections';
+import { DEMO_ACCOUNT } from './data/demoCartularies';
 import {
   normalizeStorageCodeReferences,
   normalizeTransmissionCodeReferences,
 } from './domain/personalDataBoundary';
-import { observeCodeBridgeOptions, type CodeBridgeSelectorOption } from './personalVault/codeBridgeRepository';
+import { useVaultCodeHandoff } from './personalVault/useVaultCodeHandoff';
+import { VaultCodeHandoffControl } from './personalVault/VaultCodeHandoffControl';
+import { observeCartulariaSession } from './services/foundations';
+import type { User } from 'firebase/auth';
+import { useReportPreparation, inspectReportMedia } from './hooks/useReportPreparation';
 import {
   normalizeOwnershipHistory,
   ownershipHistorySummary,
@@ -245,8 +260,9 @@ const creationModel = activeCreationProfile?.model || mockCartulary.watchInstanc
 const creationReference = activeCreationProfile?.reference || mockCartulary.watchInstance.reference.reference || 'Référence à documenter';
 const creationYear = activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : 'À documenter';
 const creationCaliber = activeCreationProfile?.caliber || 'Calibre à documenter';
+const hasDocumentedReferenceProfile = isIwcCartulary || isRolexCartulary || isDemoCartulary;
 
-const DEFAULT_CHECKS: IdentificationCheck[] = isIwcCartulary ? [
+const DEFAULT_CHECKS: IdentificationCheck[] = isDemoCartulary && activeDemoContent ? activeDemoContent.checks : isIwcCartulary ? [
   {
     id: 'dial-tzc',
     title: 'Cadran noir IW3251-001',
@@ -262,25 +278,25 @@ const DEFAULT_CHECKS: IdentificationCheck[] = isIwcCartulary ? [
   {
     id: 'case-geometry',
     title: 'Boîtier acier de 39 mm',
-    note: 'Diamètre 39 mm, épaisseur 12,2 mm, brossage longitudinal et conservation des fins chanfreins polis des cornes.',
-    checked: true,
+    note: 'Diamètre 39 mm et épaisseur de référence 13,5 mm. Les vues documentent les finitions ; l’absence de sur-polissage reste à confirmer.',
+    checked: false,
   },
   {
     id: 'fish-crown',
     title: 'Couronne « poisson »',
-    note: 'Gravure poisson attendue sur un exemplaire de 2002 ; une couronne Probus Scafusia signalerait un remplacement ultérieur.',
-    checked: true,
+    note: 'Gravure poisson attendue sur un exemplaire de 2002 selon le rapport interne, mais non lisible sur les vues versées.',
+    checked: false,
   },
   {
     id: 'caliber-tzc',
     title: 'Calibre IWC 37526 et module TZC',
-    note: 'Architecture, rotor, numéro de mouvement et fonctionnement du correcteur de fuseau conformes à la génération concernée.',
-    checked: false,
+    note: 'Mouvement automatique IWC photographié ouvert, rotor signé et mention 21 rubis visibles. Fonctionnement du correcteur à tester.',
+    checked: true,
   },
   {
     id: 'serial-paperwork',
     title: 'Série et facture du 08.03.2002',
-    note: 'Numéro 2715537 cohérent avec la référence IW3251-001, la facture d’origine et la carte de garantie.',
+    note: 'Numéro 2715537 porté par la facture et lisible sur les vues extérieure et intérieure du fond. Carte de garantie distincte non retrouvée.',
     checked: true,
   },
 ] : isRolexCartulary ? [
@@ -371,10 +387,10 @@ const DEFAULT_CONDITION_ENTRIES: ConditionEntry[] = mockCartulary.conditionRepor
       : [],
 }));
 
-const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isIwcCartulary ? [
+const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isDemoCartulary && activeDemoContent ? activeDemoContent.documentation : isIwcCartulary ? [
   { id: 'doc-invoice', category: 'Facture', description: 'Facture originale nominative du 08.03.2002, boutique Aldebert à Paris.', state: 'Présent' },
-  { id: 'doc-warranty', category: 'Garantie', description: 'Carte de garantie IWC portant la référence et le numéro de série de l’exemplaire.', state: 'Présent' },
-  { id: 'doc-box', category: 'Boîte', description: 'Boîte extérieure et écrin IWC associés à la montre.', state: 'Complet' },
+  { id: 'doc-warranty', category: 'Garantie', description: 'Aucune carte de garantie distincte dans les fichiers versés ; à rechercher physiquement.', state: 'À vérifier' },
+  { id: 'doc-box', category: 'Boîte', description: 'Boîte et coussin IWC photographiés le 28.08.2026 ; revêtement extérieur fortement dégradé.', state: 'Présent' },
   { id: 'doc-manual', category: 'Manuel', description: 'Livret utilisateur et documentation de la fonction UTC.', state: 'À vérifier' },
 ] : isRolexCartulary ? [
   { id: 'doc-purchase', category: 'Facture', description: `Acquisition du ${activeCreationProfile?.purchaseDate || '23.07.2026'} auprès de ${activeCreationProfile?.seller || 'L’Atelier du Temps'}. Pièce à identifier dans les documents importés.`, state: 'À vérifier' },
@@ -397,7 +413,7 @@ const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isIwcCartulary ? [
 
 const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de l’objet, de la complétude de son dossier et du canal de cession.';
 
-const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isIwcCartulary ? [
+const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isDemoCartulary && activeDemoContent ? activeDemoContent.popularityResources : isIwcCartulary ? [
   { id: 'pop-iwc-forum', name: 'IWC Collectors Forum', type: 'Forum officiel', url: 'https://forum.iwc.com/' },
   { id: 'pop-iwc-3251-thread', name: 'IWC Die Fliegeruhr UTC Ref. 3251', type: 'Discussion dédiée', url: 'https://forum.iwc.com/t/iwc-die-fliegeruhr-utc-ref3251/30513/' },
   { id: 'pop-watchbase', name: 'WatchBase · IW3251-01', type: 'Base de données', url: 'https://watchbase.com/iwc/pilot/iw3251-01' },
@@ -405,12 +421,9 @@ const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isIwcCartulary ? [
   { id: 'pop-timezone', name: 'TimeZone · IWC 3251 Review', type: 'Revue', url: 'https://forums.timezone.com/index.php?goto=594&rid=0&t=tree' },
 ] : [];
 
-const DEFAULT_EXPENSES: PurchaseExpense[] = isIwcCartulary ? [
-  { id: 'revision-2008', kind: 'Révision', date: '2008-05-16', label: 'Révision complète IWC', amount: 620 },
-  { id: 'insurance-2026', kind: 'Assurance', date: '2026-08-01', label: 'Prime collection 2026–2027', amount: 180 },
-] : [];
+const DEFAULT_EXPENSES: PurchaseExpense[] = isDemoCartulary && activeDemoContent ? activeDemoContent.expenses : [];
 
-const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isIwcCartulary ? [
+const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isDemoCartulary && activeDemoContent ? activeDemoContent.comparableAnalysis : isIwcCartulary ? [
   { id: 'analysis-listings', angle: 'Prix affichés', finding: '4 150 €', reading: 'Deux annonces observées ; ce niveau reste un prix demandé et non un prix encaissé.' },
   { id: 'analysis-transactions', angle: 'Prix réalisés', finding: '3 450 €', reading: 'Une transaction observée ; ce point dispose d’une valeur probante supérieure mais l’échantillon reste limité.' },
   { id: 'analysis-gap', angle: 'Écart annonce / transaction', finding: '20,3 %', reading: 'L’écart mesure la prime d’affichage observée. Il doit couvrir la négociation, le délai et les frais de cession.' },
@@ -423,7 +436,7 @@ const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isIwcCartulary ? 
   { id: 'analysis-premium', angle: 'Facteurs de prime', finding: 'Long E · fuchsia · patine', reading: 'Ces caractéristiques ne justifient une prime qu’après confirmation de leur authenticité et de leur cohérence.' },
 ] : [];
 
-const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
+const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   {
     id: 'basic', title: 'Données de base', items: [
       ['ad-code', 'Code annonce', `Non applicable · dossier ${mockCartulary.publicCode}`],
@@ -431,12 +444,12 @@ const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
       ['collection', 'Collection', isRolexCartulary ? 'GMT-Master' : isIwcCartulary ? 'Pilot’s Watches' : 'Collection à documenter'],
       ['model', 'Modèle', mockCartulary.watchInstance.reference.model],
       ['reference', 'Numéro de référence', mockCartulary.watchInstance.reference.reference],
-      ['movement', 'Mouvement', isIwcCartulary || isRolexCartulary ? 'Remontage automatique' : 'Type de mouvement à documenter'],
+      ['movement', 'Mouvement', hasDocumentedReferenceProfile ? 'Remontage automatique' : 'Type de mouvement à documenter'],
       ['case', 'Boîtier', mockCartulary.watchInstance.reference.material],
       ['bracelet', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
       ['year', 'Année de fabrication', activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : isIwcCartulary ? '2002' : 'À documenter'],
       ['condition', 'État', 'Voir 03 · L’objet'],
-      ['delivered', 'Contenu livré', isRolexCartulary ? 'Montre et bracelet Jubilee · accessoires à documenter' : isIwcCartulary ? 'Montre, boîte, écrin, facture et carte de garantie' : 'Montre et accessoires à inventorier'],
+      ['delivered', 'Contenu livré', isRolexCartulary ? 'Montre et bracelet Jubilee · accessoires à documenter' : isIwcCartulary ? 'Montre, boîte, écrin et facture · garantie et manuel à vérifier' : 'Montre et accessoires à inventorier'],
       ['gender', 'Sexe', 'Montre homme / Unisexe'],
       ['location', 'Emplacement', 'Accès restreint'],
       ['price', 'Prix', 'Voir 04 · Valorisation'],
@@ -445,29 +458,29 @@ const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   },
   {
     id: 'caliber', title: 'Calibre', items: [
-      ['cal-movement', 'Mouvement', isIwcCartulary || isRolexCartulary ? 'Remontage automatique' : 'À documenter'],
+      ['cal-movement', 'Mouvement', hasDocumentedReferenceProfile ? 'Remontage automatique' : 'À documenter'],
       ['caliber', 'Calibre', mockCartulary.watchInstance.reference.caliber],
-      ['base-caliber', 'Calibre de base', isRolexCartulary ? 'Rolex 1570 · pont pouvant être marqué 1570' : 'À documenter'],
+      ['base-caliber', 'Calibre de base', isRolexCartulary ? 'Rolex 1570 · pont pouvant être marqué 1570' : isIwcCartulary ? 'ETA 2893-2 selon les sources les mieux recoupées · divergence interne avec ETA 2892-A2' : 'À documenter'],
       ['power-reserve', 'Réserve de marche', mockCartulary.watchInstance.reference.powerReserve],
-      ['jewels', 'Nombre de pierres', isRolexCartulary ? '26' : 'À documenter'],
+      ['jewels', 'Nombre de pierres', isRolexCartulary ? '26' : isIwcCartulary ? '21 · visible sur le rotor' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'case', title: 'Boîtier', items: [
       ['case-material', 'Boîtier', mockCartulary.watchInstance.reference.material],
-      ['diameter', 'Diamètre', isIwcCartulary || isRolexCartulary ? `${mockCartulary.watchInstance.reference.diameter.toFixed(1)} mm` : 'À documenter'],
-      ['height', 'Hauteur', isIwcCartulary || isRolexCartulary ? `${mockCartulary.watchInstance.reference.thickness.toFixed(1)} mm` : 'À documenter'],
-      ['water', 'Étanche', isIwcCartulary || isRolexCartulary ? mockCartulary.watchInstance.reference.waterResistance : 'À documenter'],
+      ['diameter', 'Diamètre', hasDocumentedReferenceProfile ? `${mockCartulary.watchInstance.reference.diameter.toFixed(1)} mm` : 'À documenter'],
+      ['height', 'Hauteur', hasDocumentedReferenceProfile ? `${mockCartulary.watchInstance.reference.thickness.toFixed(1)} mm` : 'À documenter'],
+      ['water', 'Étanche', hasDocumentedReferenceProfile ? mockCartulary.watchInstance.reference.waterResistance : 'À documenter'],
       ['bezel', 'Matériau de la lunette', isRolexCartulary ? 'Insert aluminium Pepsi fuchsia déclaré' : isIwcCartulary ? 'Acier' : 'À documenter'],
       ['crystal', 'Verre', isRolexCartulary ? 'Plexiglas' : isIwcCartulary ? 'Saphir' : 'À documenter'],
-      ['dial', 'Cadran', isIwcCartulary || isRolexCartulary ? 'Noir' : 'Couleur et finition à documenter'],
+      ['dial', 'Cadran', hasDocumentedReferenceProfile ? 'Voir la fiche de référence' : 'Couleur et finition à documenter'],
       ['numerals', 'Chiffres du cadran', isRolexCartulary ? 'Index appliqués au tritium' : isIwcCartulary ? 'Arabes' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'bracelet', title: 'Bracelet', items: [
       ['strap-material', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
-      ['strap-color', 'Couleur du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Noir' : 'À documenter'],
+      ['strap-color', 'Couleur du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Marron foncé patiné' : 'À documenter'],
       ['clasp', 'Boucle', isRolexCartulary ? 'Boucle déployante Rolex · référence à documenter' : isIwcCartulary ? 'Ardillon IWC' : 'À documenter'],
       ['clasp-material', 'Matière de la boucle', 'Acier'],
     ].map(([id, label, value]) => ({ id, label, value })),
@@ -481,15 +494,25 @@ const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   },
   {
     id: 'other', title: 'Autres', items: [
-      ['seconds', 'Seconde', isIwcCartulary || isRolexCartulary ? 'Seconde centrale' : 'À documenter'],
-      ['crown', 'Couronne', isRolexCartulary ? 'Couronne Rolex déclarée d’origine' : isIwcCartulary ? 'Couronne « poisson »' : 'À documenter'],
-      ['caseback', 'Fond', isIwcCartulary || isRolexCartulary ? 'Fond plein vissé' : 'À documenter'],
+      ['seconds', 'Seconde', hasDocumentedReferenceProfile ? 'Selon la configuration de référence' : 'À documenter'],
+      ['crown', 'Couronne', isRolexCartulary ? 'Couronne Rolex déclarée d’origine' : isIwcCartulary ? 'Gravure à confirmer · couronne poisson attendue mais non établie' : 'À documenter'],
+      ['caseback', 'Fond', hasDocumentedReferenceProfile ? 'Selon la configuration de référence' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
 ];
 
-const DEFAULT_EDITABLE_COPY: EditableCopyData = isIwcCartulary ? {
-  heroSummary: 'Flieger UTC en acier de 39 mm, acquise neuve en 2002. L’exemplaire conserve son cadran TZC, sa couronne poisson et son ensemble documentaire d’origine.',
+const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = BASE_DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
+  ...group,
+  items: group.items.map((item) => ({
+    ...item,
+    value: isDemoCartulary && activeDemoContent
+      ? activeDemoContent.specificationValues[item.id] ?? item.value
+      : item.value,
+  })),
+}));
+
+const DEFAULT_EDITABLE_COPY: EditableCopyData = isDemoCartulary && activeDemoContent ? activeDemoContent.editableCopy : isIwcCartulary ? {
+  heroSummary: 'Flieger UTC en acier de 39 mm, acquise neuve en 2002. Le dossier réunit la facture d’origine, la boîte IWC, des vues de 2022 et 2026, le mouvement ouvert et une vidéo.',
   originParagraphs: [
     'La Flieger UTC associe la lisibilité des montres d’aviateur IWC à un disque 24 heures qui conserve l’heure du domicile pendant les déplacements. La génération IW3251 a été introduite en 1998 et sa production s’est poursuivie jusqu’en 2005 environ.',
     'La famille comprend plusieurs variantes documentées : les références 3251-001 et 3251-002 à cadran noir, les versions Spitfire 3251-005 et 3251-007, la rare 3251-009 en platine et la 3251-010 à cadran clair. Le présent exemplaire correspond à la 3251-001, livrée sur cuir et identifiable par la mention « TZC » au-dessus de 6 heures.',
@@ -498,16 +521,16 @@ const DEFAULT_EDITABLE_COPY: EditableCopyData = isIwcCartulary ? {
   originKnowledge: 'Sur un exemplaire de 2002, la couronne « poisson » est cohérente avec la période. Une couronne « Probus Scafusia » indique généralement un remplacement en service.',
   watchDescription: [
     'Cette IWC Flieger UTC IW3251-001 est une montre d’aviateur automatique en acier de 39 mm, produite en 2002. Son cadran noir à chiffres arabes associe un guichet de date à 3 heures à un disque UTC 24 heures disposé à 12 heures.',
-    'L’exemplaire est présenté sur bracelet cuir noir avec boucle ardillon IWC. Sa couronne « poisson », son cadran portant la mention « TZC » et sa configuration générale correspondent à la génération documentée.',
+    'L’exemplaire est présenté sur bracelet cuir marron fortement patiné. Le cadran TZC, le disque UTC, le fond numéroté et le mouvement IWC 21 rubis sont documentés ; la gravure de couronne reste à confirmer.',
   ],
   conditionSummary: [
-    'L’exemplaire est cohérent avec une IWC Flieger UTC IW3251-001 de 2002 et présente un bon niveau de conservation. Le boîtier conserve ses finitions et ses fins chanfreins, sans signe de sur-polissage observé. Le cadran TZC, le disque UTC, le guichet de date et la couronne poisson sont compatibles avec la période.',
-    'Les fonctions accessibles ont été contrôlées et sont opérationnelles. Des micro-rayures d’usage sont visibles sur la boucle. La confirmation complète du calibre, du numéro de mouvement et de l’historique de service reste subordonnée à l’examen du mouvement et aux pièces d’atelier disponibles.',
+    'L’exemplaire est cohérent avec une IWC Flieger UTC IW3251-001 de 2002. Les vues documentent le cadran, les affichages, le boîtier, le fond numéroté et le mouvement, avec des marques d’usage et un bracelet très patiné.',
+    'La boîte est présente mais son revêtement extérieur est fortement dégradé. Le fonctionnement du module UTC, la marche, l’étanchéité, la gravure de couronne, le lume et le niveau de polissage restent à contrôler.',
   ],
   conditionFacts: {
     lastCondition: '08/08/2026',
-    conclusion: 'Bon état cohérent',
-    openPoint: 'Mouvement et service',
+    conclusion: 'Configuration cohérente · contrôles fonctionnels à compléter',
+    openPoint: 'TZC, marche, étanchéité, couronne, lume et service',
   },
 } : isRolexCartulary ? {
   heroSummary: activeCreationProfile?.description || 'GMT-Master 1675 de 1969, cadran mat Mark I « Long E », insert Pepsi fuchsia et bracelet Jubilee.',
@@ -573,7 +596,7 @@ const publishedBlocksFromUrl = (): PublishedBlockId[] | null => {
   const params = new URLSearchParams(window.location.search);
   if (!params.has('blocks')) return null;
   const requested = params.get('blocks')?.split(',').filter(Boolean) || [];
-  return requested.filter((block): block is PublishedBlockId => PUBLISHED_BLOCK_IDS.includes(block as PublishedBlockId));
+  return filterPublicationBlockIds('website', requested);
 };
 
 const publicCodeFromUrl = (): string | null => {
@@ -598,13 +621,13 @@ const loadMarketDepth = (): MarketDepthState => ({
   lowValue: mockCartulary.marketSnapshot.lowValue,
   midValue: mockCartulary.marketSnapshot.midValue,
   highValue: mockCartulary.marketSnapshot.highValue,
-  ...readStored<Partial<MarketDepthState>>('cartularia-market-depth', {}),
+  ...(isDemoCartulary ? {} : readStored<Partial<MarketDepthState>>('cartularia-market-depth', {})),
 });
 
-const loadConditionEntries = (): ConditionEntry[] => readStored(
+const loadConditionEntries = (): ConditionEntry[] => (isDemoCartulary ? DEFAULT_CONDITION_ENTRIES : readStored(
   'cartularia-condition-entries',
   DEFAULT_CONDITION_ENTRIES,
-).map((entry) => ({
+)).map((entry) => ({
   ...entry,
   title: entry.title === 'Revue visuelle antérieure' ? 'Revues antérieures' : entry.title,
   attachments: entry.attachments.map((attachment) => ({
@@ -614,6 +637,7 @@ const loadConditionEntries = (): ConditionEntry[] => readStored(
 }));
 
 const loadPublishedBlocks = (): PublishedBlockId[] => {
+  if (isDemoCartulary) return [...PUBLISHED_BLOCK_IDS];
   const stored = readStored<string[]>(
     'cartularia-published-blocks',
     ['media-hero', 'media-slideshow', 'reference-history', 'reference-specs'],
@@ -628,6 +652,7 @@ const loadPublishedBlocks = (): PublishedBlockId[] => {
 };
 
 const loadReportBlocks = (): PublishedBlockId[] => {
+  if (isDemoCartulary) return [...PUBLISHED_BLOCK_IDS];
   const stored = readStored<string[]>('cartularia-report-blocks', []);
   return [...new Set(stored.flatMap((blockId) => blockId === 'value-comparables'
     ? ['value-comparables-listings', 'value-comparables-transactions', 'value-comparables-analysis']
@@ -636,6 +661,7 @@ const loadReportBlocks = (): PublishedBlockId[] => {
 };
 
 const loadCommunityBlocks = (): PublishedBlockId[] => {
+  if (isDemoCartulary) return [...PUBLISHED_BLOCK_IDS];
   const stored = readStored<string[]>('cartularia-community-blocks', []);
   return [...new Set(stored.flatMap((blockId) => {
     if (blockId === 'condition-reports') return ['condition-reference-report', 'condition-prior-reviews'];
@@ -646,6 +672,7 @@ const loadCommunityBlocks = (): PublishedBlockId[] => {
 };
 
 const loadCollectionBlocks = (): PublishedBlockId[] => {
+  if (isDemoCartulary) return [...PUBLISHED_BLOCK_IDS];
   const stored = readStored<string[]>('cartularia-collection-blocks', []);
   return [...new Set(stored.filter((blockId): blockId is PublishedBlockId =>
     PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)))];
@@ -676,6 +703,7 @@ const loadPublicationSourceBinding = (): PublicationSourceBinding => {
 };
 
 const loadSpecificationGroups = (): SpecificationGroupData[] => {
+  if (isDemoCartulary) return DEFAULT_SPECIFICATION_GROUPS;
   const stored = readStored<SpecificationGroupData[] | null>('cartularia-specification-groups', null);
   if (stored?.length) {
     if (!isIwcCartulary) {
@@ -706,6 +734,7 @@ const loadSpecificationGroups = (): SpecificationGroupData[] => {
 };
 
 const loadEditableCopy = (): EditableCopyData => {
+  if (isDemoCartulary) return DEFAULT_EDITABLE_COPY;
   const stored = readStored<Partial<EditableCopyData> | null>('cartularia-editable-copy', null);
   if (!stored) return DEFAULT_EDITABLE_COPY;
 
@@ -742,6 +771,7 @@ const normalizeMediaTags = (tags: unknown): MediaTag[] => {
 };
 
 const loadMediaAssets = (): Asset[] => {
+  if (isDemoCartulary) return mockCartulary.assets;
   const current = readStored<Asset[] | null>('cartularia-media-assets-v3', null);
   if (current) return current.map((asset) => ({
     ...asset,
@@ -783,21 +813,13 @@ const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toStr
 function App() {
   const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
   const routeParameters = new URLSearchParams(window.location.search);
-  const hasPublicCodeParameter = routeParameters.has('publicCode');
   const requestedRegistryReturn = routeParameters.get('returnTo');
   const registryReturnHref = isRegistryReturnPath(requestedRegistryReturn) ? requestedRegistryReturn : '/registry';
   const requestedRegistryId = parseRegistryRoute(registryReturnHref).registryId;
   const requestedPublicCode = publicCodeFromUrl();
-  const requestedCartularyId = routeParameters.get('cartularyId');
-  const isKnownCartulary = requestedCartularyId === IWC_CARTULARY_ID
-    || requestedCartularyId === ROLEX_CARTULARY_ID
-    || requestedPublicCode === mockCartulary.publicCode
-    || requestedPublicCode === 'OP-4892-XZ9'
-    || requestedPublicCode === 'ROL-487D9CAD'
-    || requestedPublicCode === 'ROLEX-1675-01';
   const localPublicationPreviewAllowed = isWatchWebsite
-    && (routeParameters.get('preview') === 'local' || isKnownCartulary);
-  const invalidPublicCode = hasPublicCodeParameter && !requestedPublicCode;
+    && routeParameters.get('preview') === 'local';
+  const invalidPublicCode = isWatchWebsite && !requestedPublicCode;
   useEffect(() => {
     if (!isWatchWebsite) {
       const reference = mockCartulary.watchInstance.reference;
@@ -807,8 +829,9 @@ function App() {
   const [language, setLanguage] = useState<InterfaceLanguage>(() => normalizeInterfaceLanguage(
     readStored<unknown>(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR'),
   ));
-  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language });
-  const canEdit = true;
+  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary });
+  const canEdit = !isDemoCartulary;
+  const showCompleteContent = canEdit || isDemoCartulary;
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
   const [eventTrigger, setEventTrigger] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -827,23 +850,23 @@ function App() {
   const [mediaUploadTags, setMediaUploadTags] = useState<MediaTag[]>([]);
   const [isEditingChecks, setIsEditingChecks] = useState(false);
   const conditionState = useCartularyConditionState({
-    loadChecks: () => readStored('cartularia-identification-checks', DEFAULT_CHECKS),
+    loadChecks: () => isDemoCartulary ? DEFAULT_CHECKS : readStored('cartularia-identification-checks', DEFAULT_CHECKS),
     loadEntries: loadConditionEntries,
-    loadDocumentation: () => readStored('cartularia-documentation-items', DEFAULT_DOCUMENTATION_ITEMS),
+    loadDocumentation: () => isDemoCartulary ? DEFAULT_DOCUMENTATION_ITEMS : readStored('cartularia-documentation-items', DEFAULT_DOCUMENTATION_ITEMS),
   });
   const { identificationChecks, conditionEntries, documentationItems, reloadConditionState, commands: conditionCommands } = conditionState;
   const setIdentificationChecks = conditionCommands.replaceChecks;
   const setConditionEntries = conditionCommands.replaceEntries;
   const setDocumentationItems = conditionCommands.replaceDocumentation;
   const ownerState = useCartularyOwnerState({
-    loadHistory: () => normalizeOwnershipHistory(readStored<unknown>('cartularia-ownership-history', [])),
+    loadHistory: () => normalizeOwnershipHistory(isDemoCartulary ? activeDemoContent?.ownershipHistory ?? [] : readStored<unknown>('cartularia-ownership-history', [])),
     loadAssetKind: () => readStored<AssetKind>('cartularia-asset-kind', 'Montre'),
     loadWatchStatus: () => readStored<WatchPatrimonialStatus>('cartularia-watch-status', 'Patrimonial'),
-    loadCollectionId: () => readStored<string>('cartularia-collection-id', activeCreationProfile?.collectionId || 'col_pilots'),
-    loadUserAlias: () => readStored<string>('cartularia-user-alias', ''),
+    loadCollectionId: () => isDemoCartulary ? DEMO_ACCOUNT.collectionId : readStored<string>('cartularia-collection-id', activeCreationProfile?.collectionId || 'col_pilots'),
+    loadUserAlias: () => isDemoCartulary ? 'COLLECTIONNEUR-DEMO' : readStored<string>('cartularia-user-alias', ''),
     loadObjectCode: () => readStored<string>('cartularia-object-code', mockCartulary.publicCode),
-    loadStorageCodes: () => normalizeStorageCodeReferences(readStored<unknown>('cartularia-storage-code-names', [])),
-    loadTransmissionCodes: () => normalizeTransmissionCodeReferences(readStored<unknown>('cartularia-transmission-code-references', [])),
+    loadStorageCodes: () => normalizeStorageCodeReferences(isDemoCartulary ? activeDemoContent?.storageCodes ?? [] : readStored<unknown>('cartularia-storage-code-names', [])),
+    loadTransmissionCodes: () => normalizeTransmissionCodeReferences(isDemoCartulary ? activeDemoContent?.transmissionCodes ?? [] : readStored<unknown>('cartularia-transmission-code-references', [])),
   });
   const {
     ownershipHistory, assetKind, watchStatus, collectionId, userAlias, objectCode, storageCodes, transmissionCodes,
@@ -855,11 +878,12 @@ function App() {
   const setCollectionId = ownerCommands.setCollectionId;
   const setStorageCodes = ownerCommands.replaceStorageCodes;
   const setTransmissionCodes = ownerCommands.replaceTransmissionCodes;
-  const [storageLocationOptions, setStorageLocationOptions] = useState<CodeBridgeSelectorOption[]>([]);
-  const [transmissionPersonOptions, setTransmissionPersonOptions] = useState<CodeBridgeSelectorOption[]>([]);
-  useEffect(() => observeCodeBridgeOptions('locations', setStorageLocationOptions, () => setStorageLocationOptions([])), []);
-  useEffect(() => observeCodeBridgeOptions('people', setTransmissionPersonOptions, () => setTransmissionPersonOptions([])), []);
-  const [availableCollections, setAvailableCollections] = useState<RegistryCollectionDocument[]>([]);
+  const [registryUser, setRegistryUser] = useState<User | null>(null);
+  useEffect(() => isDemoCartulary || isWatchWebsite ? undefined : observeCartulariaSession(setRegistryUser), [isWatchWebsite]);
+  const vaultCodeHandoff = useVaultCodeHandoff(registryUser);
+  const storageLocationOptions = vaultCodeHandoff.locations;
+  const transmissionPersonOptions = vaultCodeHandoff.people;
+  const [availableCollections, setAvailableCollections] = useState<RegistryCollectionDocument[]>(() => isDemoCartulary ? [{ id: DEMO_ACCOUNT.collectionId, registryId: DEMO_ACCOUNT.registryId, organizationId: DEMO_ACCOUNT.organizationId, name: DEMO_ACCOUNT.collectionName, description: DEMO_ACCOUNT.collectionDescription, websiteTitle: DEMO_ACCOUNT.collectionName, websiteSlug: '', status: 'draft', visibility: 'secret', publicationConsent: false, publishedCartularyIds: [] }] : []);
   const [collectionContext, setCollectionContext] = useState<{ registryId: string; organizationId: string } | null>(null);
   const [isCreatingPublicationCollection, setIsCreatingPublicationCollection] = useState(false);
   const [newPublicationCollectionName, setNewPublicationCollectionName] = useState('');
@@ -869,6 +893,7 @@ function App() {
   const [collectionUrlCopied, setCollectionUrlCopied] = useState(false);
   const [communityUrlCopied, setCommunityUrlCopied] = useState(false);
   useEffect(() => {
+    if (isDemoCartulary || isWatchWebsite) return;
     let active = true;
     void loadCartularyCollectionContext(mockCartulary.id, requestedRegistryId)
       .then((context) => {
@@ -893,30 +918,42 @@ function App() {
           : 'Collections unavailable. Check your Registry connection.');
       });
     return () => { active = false; };
-  }, [collectionId, language, requestedRegistryId, setCollectionId]);
+  }, [collectionId, language, requestedRegistryId, setCollectionId, isWatchWebsite]);
   const valuationState = useCartularyValuationState({
-    loadMarketHistory: () => readStored('cartularia-market-history', mockCartulary.watchInstance.valuations),
+    loadMarketHistory: () => isDemoCartulary ? mockCartulary.watchInstance.valuations : readStored('cartularia-market-history', mockCartulary.watchInstance.valuations),
     loadMarketDepth,
-    loadComparables: () => readStored('cartularia-comparables', mockCartulary.comparables),
-    loadComparableAnalysis: () => readStored('cartularia-comparable-analysis', DEFAULT_COMPARABLE_ANALYSIS),
-    loadSensitivityPrices: () => readStored('cartularia-sensitivity-prices', DEFAULT_SENSITIVITY_PRICES),
-    loadSensitivityCosts: () => readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
-    loadRetainedValuation: () => readStored('cartularia-retained-valuation', {
+    loadComparables: () => isDemoCartulary ? mockCartulary.comparables : readStored('cartularia-comparables', mockCartulary.comparables),
+    loadComparableAnalysis: () => isDemoCartulary ? DEFAULT_COMPARABLE_ANALYSIS : readStored('cartularia-comparable-analysis', DEFAULT_COMPARABLE_ANALYSIS),
+    loadSensitivityPrices: () => isDemoCartulary ? DEFAULT_SENSITIVITY_PRICES : readStored('cartularia-sensitivity-prices', DEFAULT_SENSITIVITY_PRICES),
+    loadSensitivityCosts: () => isDemoCartulary ? DEFAULT_SENSITIVITY_COSTS : readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
+    loadRetainedValuation: () => (isDemoCartulary ? {
       amount: mockCartulary.marketSnapshot.midValue,
       saleCostAmount: Math.round(mockCartulary.marketSnapshot.midValue * 0.1),
       taxAmount: 0,
       explanation: DEFAULT_RETAINED_VALUE_EXPLANATION,
-    }),
-    loadPurchase: () => readStored('cartularia-purchase', {
+    } : readStored('cartularia-retained-valuation', {
+      amount: mockCartulary.marketSnapshot.midValue,
+      saleCostAmount: Math.round(mockCartulary.marketSnapshot.midValue * 0.1),
+      taxAmount: 0,
+      explanation: DEFAULT_RETAINED_VALUE_EXPLANATION,
+    })),
+    loadPurchase: () => (isDemoCartulary ? {
       date: mockCartulary.watchInstance.acquisitionDate,
       purchasePrice: mockCartulary.watchInstance.acquisitionPrice ?? 0,
-    }),
-    loadPurchaseExpenses: () => readStored('cartularia-purchase-expenses', DEFAULT_EXPENSES),
-    loadExitAssumptions: () => readStored('cartularia-exit-assumptions', {
+    } : readStored('cartularia-purchase', {
+      date: mockCartulary.watchInstance.acquisitionDate,
+      purchasePrice: mockCartulary.watchInstance.acquisitionPrice ?? 0,
+    })),
+    loadPurchaseExpenses: () => isDemoCartulary ? DEFAULT_EXPENSES : readStored('cartularia-purchase-expenses', DEFAULT_EXPENSES),
+    loadExitAssumptions: () => (isDemoCartulary ? {
       saleDate: todayIsoDate(),
       salePrice: mockCartulary.marketSnapshot.midValue,
       disposalCostPct: 10,
-    }),
+    } : readStored('cartularia-exit-assumptions', {
+      saleDate: todayIsoDate(),
+      salePrice: mockCartulary.marketSnapshot.midValue,
+      disposalCostPct: 10,
+    })),
   });
   const {
     marketHistory, marketDepth, comparables, comparableAnalysis, sensitivityPrices,
@@ -934,7 +971,7 @@ function App() {
   const setPurchaseExpenses = valuationCommands.replacePurchaseExpenses;
   const setExitAssumptions = valuationCommands.setExitAssumptions;
   const [popularityResources, setPopularityResources] = useState<PopularityResource[]>(() =>
-    readStored('cartularia-popularity-resources', DEFAULT_POPULARITY_RESOURCES),
+    isDemoCartulary ? DEFAULT_POPULARITY_RESOURCES : readStored('cartularia-popularity-resources', DEFAULT_POPULARITY_RESOURCES),
   );
   const publicationState = useCartularyPublicationState({
     loadWebsiteBlocks: loadPublishedBlocks,
@@ -979,7 +1016,7 @@ function App() {
     isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed,
   ));
   const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
-  const persistence = useHybridPersistence(mockCartulary.id, !isIwcCartulary);
+  const persistence = useHybridPersistence(mockCartulary.id, !isDemoCartulary && !isWatchWebsite);
   const drawerRef = useRef<HTMLElement>(null);
   const publicationDialogRef = useRef<HTMLDivElement>(null);
   const deletionDialogRef = useRef<HTMLDivElement>(null);
@@ -1147,7 +1184,7 @@ function App() {
   }, [language]);
 
   useEffect(() => {
-    if (!isWatchWebsite || !requestedPublicCode) {
+    if (!isWatchWebsite || !requestedPublicCode || localPublicationPreviewAllowed) {
       if (localPublicationPreviewAllowed) {
         setPublicProjection(null);
         setPublicProjectionError(null);
@@ -1267,14 +1304,17 @@ function App() {
   }, [mediaAssets]);
 
   useEffect(() => {
+    if (isDemoCartulary) return;
     persistJson('cartularia-popularity-resources', popularityResources);
   }, [popularityResources]);
 
   useEffect(() => {
+    if (isDemoCartulary) return;
     persistJson('cartularia-specification-groups', specificationGroups);
   }, [specificationGroups]);
 
   useEffect(() => {
+    if (isDemoCartulary) return;
     persistJson('cartularia-editable-copy', editableCopy);
   }, [editableCopy]);
 
@@ -1346,21 +1386,27 @@ function App() {
     sourceDigest: effectivePublicationSourceDigest,
     sourceRevision: effectivePublicationSourceRevision,
   });
-  const approvedWebsiteBlocks = externalPublicationEnabled ? publishedBlocks : [];
-  const approvedReportBlocks = reportBlocks;
+  const approvedWebsiteBlocks = filterPublicationBlockIds('website', publishedBlocks);
+  const approvedReportBlocks = filterPublicationBlockIds('report', reportBlocks);
   const requestedPublishedBlocks = publishedBlocksFromUrl();
   const firestorePublishedBlocks = publicProjection?.blocks
     .map((block) => block.blockId)
     .filter((blockId): blockId is PublishedBlockId => PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)) ?? [];
   const watchWebsiteBlocks = isWatchWebsite
-    ? (requestedPublicCode
-        ? localPublicationPreviewAllowed
-          ? requestedPublishedBlocks ?? approvedWebsiteBlocks
-          : firestorePublishedBlocks
-        : requestedPublishedBlocks
-          ? filterRequestedWebsiteBlocks(requestedPublishedBlocks, approvedWebsiteBlocks)
-          : approvedWebsiteBlocks)
+    ? localPublicationPreviewAllowed
+      ? requestedPublishedBlocks ?? approvedWebsiteBlocks
+      : filterPublicationBlockIds('website', firestorePublishedBlocks)
     : approvedWebsiteBlocks;
+  const websiteContent = {
+    brand: specificationValue('Marque', watch.reference.brand), model: specificationValue('Modèle', watch.reference.model),
+    reference: specificationValue('Numéro de référence', watch.reference.reference), assets: mediaAssets,
+    heroSummary: editableCopy.heroSummary, history: editableCopy.originParagraphs, specifications: specificationGroups,
+    description: editableCopy.watchDescription, conditionSummary: editableCopy.conditionSummary,
+    reports: conditionEntries, resources: popularityResources,
+    checks: identificationChecks.map((item) => ({ label: item.title, result: item.checked ? 'Contrôlé' : 'À contrôler', note: item.note })),
+  };
+  const websiteDraft = buildWebsiteDraft(websiteContent, approvedWebsiteBlocks);
+  const localPreviewBlocks = websiteDraftPreview(buildWebsiteDraft(websiteContent, watchWebsiteBlocks));
   const publicShareUrl = `${window.location.origin}/watch-website?publicCode=${encodeURIComponent(mockCartulary.publicCode)}`;
   const localPublicationPreviewParameters = new URLSearchParams({
     publicCode: mockCartulary.publicCode,
@@ -1629,6 +1675,7 @@ function App() {
   };
   const togglePublicationBlock = (destination: PublicationDestination, blockId: PublishedBlockId) => {
     if (!canEdit) return;
+    if (!getPublicationPolicy(destination, blockId).allowed) return;
     replacePublicationBlocks(destination, (current) => current.includes(blockId)
       ? current.filter((id) => id !== blockId)
       : [...current, blockId]);
@@ -1636,19 +1683,23 @@ function App() {
   const renderPublicationBlockSelector = (
     destination: PublicationDestination,
     selected: readonly PublishedBlockId[],
-  ) => (
+  ) => {
+    const allowedSelection = filterPublicationBlockIds(destination, selected);
+    const count = allowedSelection.length;
+    return (
     <div className="publication-block-selector">
       <div className="publication-block-selector__toolbar">
-        <span>{tx(`${selected.length} contenu${selected.length > 1 ? 's' : ''} sélectionné${selected.length > 1 ? 's' : ''}`, `${selected.length} selected item${selected.length === 1 ? '' : 's'}`)}</span>
+        <span>{tx(`${count} contenu${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''}`, `${count} selected item${count === 1 ? '' : 's'}`)}</span>
         <button
           type="button"
           className="button button--quiet"
-          onClick={() => replacePublicationBlocks(destination, () => selected.length === PUBLISHED_BLOCK_IDS.length ? [] : [...PUBLISHED_BLOCK_IDS])}
+          onClick={() => replacePublicationBlocks(destination, () => count === publicationBlockIdsFor(destination).length ? [] : publicationBlockIdsFor(destination))}
           disabled={!canEdit}
-        >{selected.length === PUBLISHED_BLOCK_IDS.length ? tx('Tout décocher', 'Clear all') : tx('Tout sélectionner', 'Select all')}</button>
+        >{count === publicationBlockIdsFor(destination).length ? tx('Tout décocher', 'Clear all') : tx('Tout sélectionner parmi les contenus autorisés', 'Select all allowed content')}</button>
       </div>
       {(['00', '01', '02', '03', '04'] as const).map((pageNumber) => {
-        const definitions = PUBLICATION_BLOCK_CATALOG.filter((definition) => definition.pageNumber === pageNumber);
+        const definitions = PUBLICATION_BLOCK_CATALOG.filter((definition) => definition.pageNumber === pageNumber && getPublicationPolicy(destination, definition.id).allowed);
+        if (!definitions.length) return null;
         return (
           <details key={pageNumber} open={pageNumber === '00'}>
             <summary><span>{pageNumber}</span><strong>{definitions[0]?.pageLabel}</strong><small>{definitions.filter((definition) => selected.includes(definition.id)).length}/{definitions.length}</small></summary>
@@ -1677,6 +1728,7 @@ function App() {
       })}
     </div>
   );
+  };
   const ownershipSummary = ownershipHistorySummary(ownershipHistory, language);
   const ownershipAssessment = ownershipValuationAssessment(ownershipHistory, language);
   const interfaceLocale = language === 'FR' ? 'fr-FR' : 'en-GB';
@@ -1800,12 +1852,19 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const reportPreparation = useReportPreparation(JSON.stringify([orderedReportBlocks, reportProofState.contentDigest]));
   const handleReportPrint = () => {
     if (orderedReportBlocks.length === 0) {
       setReportExportMessage(tx(
         'Sélectionnez au moins une boîte du rapport avant de l’imprimer ou de l’enregistrer en PDF.',
         'Select at least one report block before printing or saving it as a PDF.',
       ));
+      return;
+    }
+
+    if (reportPreparation.phase !== 'ready' || inspectReportMedia(document.querySelector('.report-print-view')) !== 'ready') {
+      reportPreparation.prepare();
+      setReportExportMessage(null);
       return;
     }
 
@@ -1821,7 +1880,7 @@ function App() {
         return definition ? `${definition.pageNumber} · ${definition.pageLabel} — ${definition.title}` : blockId;
       });
       const date = new Date().toISOString().slice(0, 10);
-      downloadTextPdf(`cartularia-${mockCartulary.publicCode}-${date}.pdf`, [
+      const exportMode = downloadTextPdf(`cartularia-${mockCartulary.publicCode}-${date}.pdf`, [
         `RAPPORT CARTULARIA · ${mockCartulary.publicCode}`,
         `${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`,
         `${tx('Référence', 'Reference')} · ${specificationValue('Numéro de référence', watch.reference.reference)}`,
@@ -1832,10 +1891,10 @@ function App() {
         '',
         ...reportLines,
       ]);
-      setReportExportMessage(tx(
-        'La boîte de dialogue d’impression s’est ouverte. Choisissez « Enregistrer au format PDF » pour enregistrer le rapport complet avec mise en page et photos.',
-        'The print dialog has opened. Choose "Save as PDF" to save the full report with layout and photos.',
-      ));
+      setReportExportMessage(exportMode === 'print-requested' ? tx(
+        'Demande d’impression envoyée au navigateur. Choisissez « Enregistrer au format PDF » dans sa boîte de dialogue. Cartularia ne peut pas confirmer l’enregistrement du fichier.',
+        'Print request sent to the browser. Choose "Save as PDF" in its dialog. Cartularia cannot confirm that the file was saved.',
+      ) : tx('Téléchargement d’une version texte du rapport demandé. Vérifiez le fichier dans vos téléchargements.', 'A text-only report download was requested. Check the file in your downloads.'));
     } catch {
       setReportExportMessage(tx(
         'Le rapport PDF n’a pas pu être généré. Réessayez après avoir rechargé la page.',
@@ -1846,7 +1905,7 @@ function App() {
 
     const scope = `rapport personnalisé · ${orderedReportBlocks.length} blocs`;
     void journal
-      .logEvent('EXPORT_PDF', 'Propriétaire', `Téléchargement ${scope}`)
+      .logEvent('EXPORT_PDF', 'Propriétaire', `Ouverture de la boîte d’impression : ${scope}`)
       .then(() => setEventTrigger((previous) => previous + 1))
       .catch((error: unknown) => console.error("Échec de la journalisation de l'impression", error));
   };
@@ -2246,9 +2305,13 @@ function App() {
       : group));
   };
 
-  const renderWatchWebsiteBlock = (blockId: PublishedBlockId) => {
+  const renderWatchWebsiteBlock = (blockId: PublishedBlockId, forPrint = false) => {
+    if (isWatchWebsite && localPublicationPreviewAllowed) {
+      const preview = localPreviewBlocks.find((block) => block.blockId === blockId);
+      return preview ? <ProjectedPublicBlock block={preview} language={language} preview /> : null;
+    }
     const projectedBlock = publicProjection?.blocks.find((block) => block.blockId === blockId);
-    if (projectedBlock) return <ProjectedPublicBlock block={projectedBlock} />;
+    if (projectedBlock) return <ProjectedPublicBlock block={projectedBlock} language={language} />;
     switch (blockId) {
       case 'cover-watch':
         return (
@@ -2347,6 +2410,7 @@ function App() {
                 <div><dt>{tx('Référence', 'Reference')}</dt><dd>{watch.reference.reference}</dd></div>
                 <div><dt>{tx('Dossier', 'Record')}</dt><dd>{mockCartulary.publicCode}</dd></div>
               </dl>
+              {mainPhoto && <MediaDownloadLink media={mainPhoto} language={language} />}
             </div>
           </section>
         );
@@ -2354,15 +2418,11 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Vidéo principale', 'Main video')} title={tx("L’objet en mouvement", 'The object in motion')} />
-            {mainVideo ? (
-              <div className="video-poster watch-website__media-link">
-                {mainVideo.posterUrl || mainVideo.thumbnailUrl
-                  ? <PrivateMediaImage asset={mainVideo} alt={tx("L’objet en mouvement", 'The object in motion')} sizes="(max-width: 720px) 100vw, 1200px" eager />
-                  : (mainPhoto
-                    ? <PrivateMediaImage asset={mainPhoto} alt={tx("L’objet en mouvement", 'The object in motion')} sizes="(max-width: 720px) 100vw, 1200px" eager />
-                    : <span className="video-poster__placeholder"><Video size={38} /><small>{mainVideo.name}</small></span>)}
-                <span className="video-poster__play" aria-hidden="true"><Play size={24} fill="currentColor" /></span>
-              </div>
+            {forPrint ? <p>{mainVideo ? tx(`Vidéo jointe : ${mainVideo.name}. Les séquences vidéo ne sont pas reproduites dans le rapport imprimé.`, `Attached video: ${mainVideo.name}. Video sequences are not reproduced in the printed report.`) : tx('Vidéo non disponible.', 'Video unavailable.')}</p> : mainVideo ? (
+              <>
+                <MediaVideo asset={mainVideo} language={language} />
+                <MediaDownloadLink media={mainVideo} language={language} />
+              </>
             ) : <p className="watch-website__empty">{tx('Vidéo non disponible.', 'Video unavailable.')}</p>}
           </section>
         );
@@ -2370,8 +2430,8 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Séquence 3D', '3D sequence')} title={tx('Revue à 360°', '360° review')} />
-            {spinAssets.length > 0
-              ? <Suspense fallback={<div className="media-empty" role="status">{tx('Chargement de la séquence 360°…', 'Loading 360° sequence…')}</div>}><Spin360 images={spinAssets} posterImageUrl={spinAssets[0].url} language={language} /></Suspense>
+            {forPrint ? <div className="report-slideshow-gallery__grid">{spinAssets.map((asset) => <figure key={asset.id}><PrivateMediaImage asset={asset} alt={asset.name} eager /><figcaption>{asset.name}</figcaption></figure>)}{spinAssets.length === 0 && <p>{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}</div> : spinAssets.length > 0
+              ? <><Suspense fallback={<div className="media-empty" role="status">{tx('Chargement de la séquence 360°…', 'Loading 360° sequence…')}</div>}><Spin360 images={spinAssets} posterImageUrl={spinAssets[0].url} language={language} /></Suspense><details className="spin-downloads no-print"><summary>{tx(`Télécharger les vues (${spinAssets.length})`, `Download views (${spinAssets.length})`)}</summary><div>{spinAssets.map((asset, index) => <div key={asset.id}>{tx(`Vue ${index + 1}`, `View ${index + 1}`)} · <MediaDownloadLink media={asset} language={language} compact showName className="spin-downloads__link" /></div>)}</div></details></>
               : <p className="watch-website__empty">{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}
           </section>
         );
@@ -2381,17 +2441,12 @@ function App() {
             <SectionTitle eyebrow={tx('Présentation', 'Presentation')} title={tx('Diaporama', 'Slideshow')} />
             <div className="report-slideshow-gallery">
               <div className="report-slideshow-gallery__grid">
-                {presentationAssets.map((asset) => (
-                  <div className="report-slideshow-gallery__item" key={asset.id}>
-                    <PrivateMediaImage asset={asset} alt={asset.name} sizes="(max-width: 720px) 100vw, 450px" eager />
-                    <span className="report-slideshow-gallery__label">{asset.name}</span>
-                  </div>
-                ))}
+                {presentationAssets.map((asset) => <ReportMediaItem key={asset.id} asset={asset} language={language} />)}
               </div>
             </div>
-            <div className="media-carousel-wrapper">
+            {!forPrint && <div className="media-carousel-wrapper">
               <MediaCarousel assets={presentationAssets} language={language} onOpen={(asset) => window.open(asset.url, '_blank', 'noopener,noreferrer')} />
-            </div>
+            </div>}
           </section>
         );
       case 'media-library':
@@ -2400,16 +2455,17 @@ function App() {
             <SectionTitle eyebrow={tx('Fichiers publiés', 'Published files')} title={tx('Bibliothèque média', 'Media library')} />
             <div className="media-library watch-website__library">
               {renderedAssets.map((asset) => (
-                <a key={asset.id} href={asset.url} target="_blank" rel="noreferrer">
+                <a key={asset.id} href={asset.url} download={mediaDownloadFileName(asset)}>
                   <span className="media-library__preview">
                     {asset.type === 'document'
                       ? <FileText size={28} />
                       : asset.type === 'video'
                         ? <><Video size={28} /><small>VIDEO</small></>
-                        : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" />}
+                        : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" eager={forPrint} />}
                   </span>
                   <strong>{asset.name}</strong>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
+                  <span className="media-library__download no-print"><Download size={13} aria-hidden="true" />{tx('Télécharger', 'Download')}</span>
                 </a>
               ))}
             </div>
@@ -2487,14 +2543,15 @@ function App() {
             </div>
             <div className="documentation-media__grid watch-website__document-media">
               {documentationAssets.map((asset) => (
-                <a key={asset.id} href={asset.url} target="_blank" rel="noreferrer">
+                <a key={asset.id} href={asset.url} download={mediaDownloadFileName(asset)}>
                   <span className="documentation-media__preview">{asset.type === 'document'
                     ? <FileText size={28} />
                     : asset.type === 'video'
                       ? <Video size={28} />
-                      : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" />}</span>
+                      : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" eager={forPrint} />}</span>
                   <strong>{asset.name}</strong><small>{asset.tags.includes('documentation') ? 'Documentation' : tx('Accessoires', 'Accessories')}</small>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
+                  <span className="documentation-media__download no-print"><Download size={13} aria-hidden="true" />{tx('Télécharger', 'Download')}</span>
                 </a>
               ))}
             </div>
@@ -2523,7 +2580,7 @@ function App() {
           <section>
             <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} />
             <div className="market-grid">
-              <article className="market-chart-card"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><div className="market-bars">{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>{tx('Source : évaluations datées du dossier', 'Source: dated valuations from the record')}</small></article>
+              <article className="market-chart-card"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><div className="market-bars">{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>{isDemoCartulary ? tx('Source : historique fictif de démonstration · aucune transaction réelle', 'Source: fictional demonstration history · no real transaction') : tx('Source : évaluations datées du dossier', 'Source: dated valuations from the record')}</small></article>
               <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">{tx('Profondeur de marché', 'Market depth')}</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? tx(`Analyse du ${formatDate(marketDepth.analysisDate)}`, `Analysis dated ${formatDate(marketDepth.analysisDate)}`) : tx('Date non renseignée', 'Date not provided')}</time></div><div className="metric-grid"><div><strong>{marketDepth.activeListings}</strong><span>{tx('Annonces actives', 'Active listings')}</span></div><div><strong>{marketDepth.transactions12m}</strong><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div><div><strong>{marketDepth.medianDaysOnMarket} {tx('j', 'd')}</strong><span>{tx('Délai médian estimé', 'Estimated median time')}</span></div></div><div className="valuation-range"><span>{tx('Fourchette actuelle', 'Current range')}</span><strong>{formatMoney(marketDepth.lowValue)} — {formatMoney(marketDepth.highValue)}</strong><small>{tx('VALEUR MÉDIANE', 'MEDIAN VALUE')} {formatMoney(marketDepth.midValue)}</small></div></article>
               <article className="retained-value-card retained-value-card--published">
                 <div><span className="eyebrow">{tx('Décision du propriétaire', 'Owner decision')}</span><h3>{tx('Valeur retenue', 'Retained value')}</h3></div>
@@ -2584,13 +2641,14 @@ function App() {
     return (
       <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
         <header className="watch-website__masthead">
-          <div className="container"><BrandLogo className="watch-website__wordmark" href={registryReturnHref || '/registry/reg_collection_privee/items'} /></div>
+          <div className="container"><BrandLogo className="watch-website__wordmark" href="/" /></div>
         </header>
         <main className="container watch-website__main">
           <div className="watch-website__empty-state">
             {publicProjectionLoading ? <RotateCw className="is-spinning" size={26} /> : <Lock size={26} />}
-            <h1>{publicProjectionLoading ? tx('Chargement de la publication', 'Loading publication') : tx('Aucun contenu publié', 'No published content')}</h1>
-            <p>{publicProjectionLoading ? tx('Lecture de la projection Firestore…', 'Reading the Firestore projection…') : publicProjectionError}</p>
+            <h1>{publicProjectionLoading ? tx('Chargement de la publication', 'Loading publication') : tx('Publication indisponible', 'Publication unavailable')}</h1>
+            <p>{publicProjectionLoading ? tx('Lecture des contenus publiés…', 'Loading published content…') : publicProjectionError}</p>
+            {!publicProjectionLoading && <button type="button" className="button button--quiet" onClick={() => window.location.reload()}>{tx('Réessayer', 'Retry')}</button>}
           </div>
         </main>
       </div>
@@ -2601,7 +2659,7 @@ function App() {
     return (
       <div className="watch-website" data-ai-schema-version={AI_SCHEMA_VERSION}>
         <header className="watch-website__masthead">
-          <div className="container"><BrandLogo className="watch-website__wordmark" href={registryReturnHref || '/registry/reg_collection_privee/items'} /></div>
+          <div className="container"><BrandLogo className="watch-website__wordmark" href="/" /></div>
         </header>
         <main className="container watch-website__main">
           <div className="watch-website__empty-state">
@@ -2645,7 +2703,7 @@ function App() {
         <a className="skip-link" href="#published-cartulary-content">{tx('Aller au contenu', 'Skip to content')}</a>
         <header className="watch-website__masthead">
           <div className="container">
-            <BrandLogo className="watch-website__wordmark" href={registryReturnHref || '/registry/reg_collection_privee/items'} />
+            <BrandLogo className="watch-website__wordmark" href="/" />
             <div><span className="eyebrow">{publicProjection ? tx('Mini-site publié', 'Published mini-site') : tx('Aperçu local du mini-site', 'Local mini-site preview')} · {websiteCode}</span><strong>{websiteBrand} · {websiteModel}</strong></div>
           </div>
         </header>
@@ -2696,7 +2754,16 @@ function App() {
         language={language}
         setLanguage={setLanguage}
         followUp={followUp}
+        readOnly={isDemoCartulary}
       />
+
+      {isDemoCartulary && (
+        <aside className="cartulary-demo-notice no-print" role="note">
+          <ShieldCheck size={16} aria-hidden="true" />
+          <strong>Démonstration en lecture seule</strong>
+          <span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>
+        </aside>
+      )}
 
       <a className="cartulary-registry-return no-print" href={registryReturnHref}>
         <ArrowLeft size={14} aria-hidden="true" />
@@ -2756,7 +2823,7 @@ function App() {
                   </label>
                   <label className="asset-kind-control">{tx('Collection', 'Collection')}
                     <select value={collectionId} onChange={(event) => setCollectionId(event.target.value)} disabled={!canEdit}>
-                      {availableCollections.length === 0 && <option value={collectionId}>{collectionId.replace(/^col_/, '').replace(/[_-]+/g, ' ')}</option>}
+                      {!availableCollections.some((entry) => entry.id === collectionId) && <option value={collectionId}>{publicationCollectionError ? tx('Collection indisponible', 'Collection unavailable') : collectionContext ? tx('Collection non renseignée', 'Collection not specified') : tx('Chargement de la Collection…', 'Loading Collection…')}</option>}
                       {availableCollections.map((collection) => <option value={collection.id} key={collection.id}>{collection.name}</option>)}
                     </select>
                   </label>
@@ -2775,7 +2842,7 @@ function App() {
               </button>
             </section>
 
-            <CartularyTodoBoard followUp={followUp} language={language} />
+            <CartularyTodoBoard followUp={followUp} language={language} readOnly={isDemoCartulary} />
 
             <span hidden {...aiFieldProps('cover.privacy.userAlias')}>{userAlias}</span>
             <span hidden {...aiFieldProps('cover.privacy.objectCode')}>{objectCode}</span>
@@ -3074,8 +3141,9 @@ function App() {
 
         <ConditionPage active={activePage === 'condition'}>
             <PageIntroduction number="03" title={tx("L’objet", 'The object')} />
+            <fieldset className="cartulary-readonly-scope" disabled={!canEdit}>
 
-            {canEdit && (
+            {showCompleteContent && (
               <>
                 <section>
                   <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history')} />
@@ -3118,6 +3186,7 @@ function App() {
                 <section>
                   <SectionTitle eyebrow={tx('Conservation pseudonymisée', 'Pseudonymous safekeeping')} title={tx('Stockage', 'Storage')} publish={publishProps('cover-storage')} />
                   <article className="storage-card storage-code-card">
+                    <VaultCodeHandoffControl handoff={vaultCodeHandoff} disabled={isDemoCartulary} />
                     <header className="storage-card__heading">
                       <div><span className="eyebrow">{tx('Lieux du Coffre personnel', 'Personal Vault locations')}</span></div>
                       <span>{storageCodes.length} {language === 'FR' ? `lieu${storageCodes.length > 1 ? 'x' : ''}` : `location${storageCodes.length === 1 ? '' : 's'}`}</span>
@@ -3127,7 +3196,7 @@ function App() {
                         <span>{String(index + 1).padStart(2, '0')}</span>
                         <select
                           {...aiFieldProps('condition.storage.codeNames[]', storageCode.id)}
-                          value={storageCode.correspondenceCode || (storageCode.codeName ? `legacy:${storageCode.id}` : '')}
+                          value={isDemoCartulary && storageCode.codeName ? `demo:${storageCode.id}` : storageCode.correspondenceCode || (storageCode.codeName ? `legacy:${storageCode.id}` : '')}
                           onChange={(event) => {
                             const option = storageLocationOptions.find((entry) => entry.code === event.target.value);
                             ownerCommands.updateStorageCode(storageCode.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
@@ -3135,8 +3204,10 @@ function App() {
                           aria-label={tx(`Lieu de stockage ${index + 1}`, `Storage location ${index + 1}`)}
                         >
                           <option value="">{tx('Choisir un lieu', 'Select a location')}</option>
+                          {isDemoCartulary && storageCode.codeName && <option value={`demo:${storageCode.id}`}>{storageCode.codeName}</option>}
                           {!storageCode.correspondenceCode && storageCode.codeName && <option value={`legacy:${storageCode.id}`}>{storageCode.codeName}</option>}
-                          {storageLocationOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel}</option>)}
+                          {storageCode.correspondenceCode && !storageLocationOptions.some((option) => option.code === storageCode.correspondenceCode) && <option value={storageCode.correspondenceCode}>{storageCode.codeName || storageCode.correspondenceCode} · {tx('référence conservée, codes à actualiser', 'saved reference, refresh codes')}</option>}
+                          {storageLocationOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel} · {option.code}</option>)}
                         </select>
                         <AutoResizeTextarea value={storageCode.note} rows={2} onChange={(event) => ownerCommands.updateStorageCode(storageCode.id, { note: event.target.value.slice(0, 500) })} placeholder={tx('Note sur l’emplacement (facultatif)', 'Location note (optional)')} aria-label={tx(`Note sur le lieu ${index + 1}`, `Location ${index + 1} note`)} />
                         <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: storageCodes, setItems: setStorageCodes, id: storageCode.id, targetLabel: storageCode.codeName || tx(`le lieu ${index + 1}`, `location ${index + 1}`) })} aria-label={tx('Supprimer ce lieu', 'Delete this location')}><Trash2 size={15} /></button>
@@ -3148,7 +3219,7 @@ function App() {
               </>
             )}
 
-            {canEdit ? (
+            {showCompleteContent ? (
               <>
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx("Description de l’objet", 'Object description')} publish={publishProps('condition-description', true)} />
@@ -3290,10 +3361,11 @@ function App() {
               <AccessRestricted title={tx("Rapports et notes de l’objet", 'Object reports and notes')} language={language} />
             )}
 
-            {canEdit && (
+            {showCompleteContent && (
               <section>
                 <SectionTitle eyebrow={tx('Correspondance pseudonymisée', 'Pseudonymous correspondence')} title={tx('Transmission', 'Transmission')} publish={publishProps('cover-transmission')} />
                 <article className="storage-card storage-code-card">
+                  <VaultCodeHandoffControl handoff={vaultCodeHandoff} disabled={isDemoCartulary} />
                   <header className="storage-card__heading">
                     <div><span className="eyebrow">{tx('Personnes du Coffre personnel', 'Personal Vault people')}</span></div>
                     <span>{transmissionCodes.length} {language === 'FR' ? `personne${transmissionCodes.length > 1 ? 's' : ''}` : `person${transmissionCodes.length === 1 ? '' : 's'}`}</span>
@@ -3302,7 +3374,7 @@ function App() {
                     <div key={reference.id}>
                       <span>{String(index + 1).padStart(2, '0')}</span>
                       <select
-                        value={reference.correspondenceCode || (reference.codeName ? `legacy:${reference.id}` : '')}
+                        value={isDemoCartulary && reference.codeName ? `demo:${reference.id}` : reference.correspondenceCode || (reference.codeName ? `legacy:${reference.id}` : '')}
                         onChange={(event) => {
                           const option = transmissionPersonOptions.find((entry) => entry.code === event.target.value);
                           ownerCommands.updateTransmissionCode(reference.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
@@ -3310,8 +3382,10 @@ function App() {
                         aria-label={tx(`Personne chargée de la transmission ${index + 1}`, `Transmission person ${index + 1}`)}
                       >
                         <option value="">{tx('Choisir une personne', 'Select a person')}</option>
+                        {isDemoCartulary && reference.codeName && <option value={`demo:${reference.id}`}>{reference.codeName}</option>}
                         {!reference.correspondenceCode && reference.codeName && <option value={`legacy:${reference.id}`}>{reference.codeName}</option>}
-                        {transmissionPersonOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel}</option>)}
+                        {reference.correspondenceCode && !transmissionPersonOptions.some((option) => option.code === reference.correspondenceCode) && <option value={reference.correspondenceCode}>{reference.codeName || reference.correspondenceCode} · {tx('référence conservée, codes à actualiser', 'saved reference, refresh codes')}</option>}
+                        {transmissionPersonOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel} · {option.code}</option>)}
                       </select>
                       <AutoResizeTextarea value={reference.note} rows={2} onChange={(event) => ownerCommands.updateTransmissionCode(reference.id, { note: event.target.value.slice(0, 500) })} placeholder={tx('Note de transmission (facultatif)', 'Transmission note (optional)')} aria-label={tx(`Note de transmission ${index + 1}`, `Transmission note ${index + 1}`)} />
                       <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: transmissionCodes, setItems: setTransmissionCodes, id: reference.id, targetLabel: reference.codeName || tx(`la personne ${index + 1}`, `person ${index + 1}`) })} aria-label={tx('Supprimer cette personne', 'Delete this person')}><Trash2 size={15} /></button>
@@ -3321,12 +3395,14 @@ function App() {
                 </article>
               </section>
             )}
+            </fieldset>
         </ConditionPage>
 
         <ValuePage active={activePage === 'value'}>
             <PageIntroduction number="04" title={tx('Valorisation', 'Valuation')} />
+            <fieldset className="cartulary-readonly-scope" disabled={!canEdit}>
 
-            {canEdit ? (
+            {showCompleteContent ? (
               <section>
                 <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} publish={publishProps('value-market')} />
                 <div className="market-grid">
@@ -3341,7 +3417,7 @@ function App() {
                         </div>
                       ))}
                     </div>
-                    <small>{tx('Source : évaluations datées du dossier · échantillon interne', 'Source: dated valuations from the record · internal sample')}</small>
+                    <small>{isDemoCartulary ? tx('Source : historique fictif de démonstration · aucune transaction réelle', 'Source: fictional demonstration history · no real transaction') : tx('Source : évaluations datées du dossier · échantillon interne', 'Source: dated valuations from the record · internal sample')}</small>
                   </article>
 
                   <article className="market-depth-card">
@@ -3396,12 +3472,12 @@ function App() {
               <AccessRestricted title={tx('Analyse de marché', 'Market analysis')} language={language} />
             )}
 
-            {canEdit && (
+            {showCompleteContent && (
               <section>
                 <SectionTitle eyebrow={tx('Analyse de marché', 'Market analysis')} title={tx('Comparables', 'Comparable items')} />
                 <div className="comparable-groups">
-                  <ComparableTable title={tx('Annonces en cours', 'Current listings')} items={listingComparables} selection={publishProps('value-comparables-listings')} onUpdate={updateComparable} onDelete={(id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); }} onAdd={() => addComparable('Annonce')} language={language} />
-                  <ComparableTable title={tx('Transactions réalisées', 'Completed transactions')} items={transactionComparables} selection={publishProps('value-comparables-transactions')} onUpdate={updateComparable} onDelete={(id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); }} onAdd={() => addComparable('Transaction')} language={language} />
+                  <ComparableTable title={tx('Annonces en cours', 'Current listings')} items={listingComparables} selection={publishProps('value-comparables-listings')} onUpdate={canEdit ? updateComparable : undefined} onDelete={canEdit ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={canEdit ? () => addComparable('Annonce') : undefined} language={language} />
+                  <ComparableTable title={tx('Transactions réalisées', 'Completed transactions')} items={transactionComparables} selection={publishProps('value-comparables-transactions')} onUpdate={canEdit ? updateComparable : undefined} onDelete={canEdit ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={canEdit ? () => addComparable('Transaction') : undefined} language={language} />
                 </div>
 
                 <div className="comparables-analysis">
@@ -3425,7 +3501,7 @@ function App() {
               </section>
             )}
 
-            {canEdit && (
+            {showCompleteContent && (
               <section>
                 <SectionTitle eyebrow={tx('Acquisition', 'Acquisition')} title={tx('Prix de revient', 'Cost basis')} publish={publishProps('value-cost-basis')} />
                 <div className="cost-basis-card">
@@ -3461,7 +3537,7 @@ function App() {
               </section>
             )}
 
-            {canEdit && (
+            {showCompleteContent && (
               <section>
                 <SectionTitle eyebrow={tx('Performance de détention', 'Holding performance')} title={tx('Plus-value, moins-value et TRI', 'Capital gain, loss and IRR')} publish={publishProps('value-performance')} />
                 <div className="performance-card">
@@ -3489,7 +3565,7 @@ function App() {
               </section>
             )}
 
-            {canEdit && (
+            {showCompleteContent && (
               <section>
                 <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} publish={publishProps('value-sensitivity')} />
                 <div {...aiFieldProps('value.computed.sensitivity')} className="sensitivity-stack">
@@ -3530,6 +3606,7 @@ function App() {
                 </div>
               </section>
             )}
+            </fieldset>
         </ValuePage>
 
         <PublicationPage active={activePage === 'publication'}>
@@ -3537,10 +3614,10 @@ function App() {
           <div className="publication-center">
             <article className="publication-scope publication-scope--cartulary">
               <header>
-                <div><span className="eyebrow">01</span><h2>{tx('Publiez un mini -site de votre Cartulaire', 'Publish a mini-site for your Cartulary')}</h2></div>
-                <label className="publication-toggle"><input type="checkbox" checked={externalPublicationEnabled} onChange={(event) => setExternalPublicationEnabled(event.target.checked)} disabled={!canEdit} /><span>{externalPublicationEnabled ? tx('Publication active', 'Publication active') : tx("Publication du mini-site de l'objet", 'Publish the object mini-site')}</span></label>
+                <div><span className="eyebrow">01</span><h2>{tx('Mini-site de votre objet', 'Your object website')}</h2></div>
+                <label className="publication-toggle"><input type="checkbox" checked={externalPublicationEnabled} onChange={(event) => setExternalPublicationEnabled(event.target.checked)} disabled={!canEdit} /><span>{tx('Afficher l’aperçu des contenus choisis', 'Show selected content preview')}</span></label>
               </header>
-              {externalPublicationEnabled && (
+              {(externalPublicationEnabled || isDemoCartulary) && (
                 <div className="publication-url-panel">
                   <label><span>{tx('Adresse dédiée (aperçu local)', 'Dedicated address (local preview)')}</span><input value={localPublicationPreviewUrl} readOnly /></label>
                   <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localPublicationPreviewUrl, setPublicationUrlCopied)}>{publicationUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
@@ -3548,6 +3625,8 @@ function App() {
                 </div>
               )}
               {renderPublicationBlockSelector('website', publishedBlocks)}
+              <WebsiteDraftWarnings blocks={websiteDraft} language={language} />
+              <PublicWebsitePublicationPanel cartularyId={mockCartulary.id} blocks={websiteDraftRequest(websiteDraft)} beforePublish={persistence.syncNow} readOnly={isDemoCartulary} language={language} />
             </article>
 
             <article className="publication-scope publication-scope--collection">
@@ -3612,9 +3691,10 @@ function App() {
             <article className="publication-scope publication-scope--report">
               <header>
                 <div><span className="eyebrow">04</span><h2>{tx('Rapport PDF', 'PDF report')}</h2></div>
-                <button type="button" className="button button--primary" onClick={handleReportPrint}><Download size={15} />{tx('Télécharger le rapport PDF', 'Download PDF report')}</button>
+                <button type="button" className="button button--primary" onClick={handleReportPrint} disabled={reportPreparation.phase === 'loading'}><Download size={15} />{reportPreparation.phase === 'loading' ? tx('Préparation des images…', 'Preparing images…') : reportPreparation.phase === 'ready' ? tx('Imprimer / Enregistrer en PDF', 'Print / Save as PDF') : tx('Préparer le rapport PDF', 'Prepare PDF report')}</button>
               </header>
               {reportExportMessage && <p className="publication-report-message" role="status">{reportExportMessage}</p>}
+              <p className="publication-report-message" role="status">{reportPreparation.phase === 'error' ? tx('Une image reste indisponible. Réessayez la préparation ou retirez le bloc concerné de la sélection ; aucune impression incomplète n’a été lancée.', 'An image is unavailable. Retry preparation or deselect its block; no incomplete print was started.') : reportPreparation.phase === 'ready' ? tx('Images chargées. Vous pouvez maintenant imprimer le rapport.', 'Images loaded. You can now print the report.') : tx('La préparation charge les images sélectionnées avant d’ouvrir l’impression.', 'Preparation loads selected images before opening print.')}</p>
               {renderPublicationBlockSelector('report', reportBlocks)}
             </article>
           </div>
@@ -3644,8 +3724,8 @@ function App() {
         <div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Cartulaire {mockCartulary.publicCode}</span></span><span>Prototype v2.1 · 2026</span></div>
       </footer>
 
-      {orderedReportBlocks.length > 0 && (
-        <div className="report-print-view">
+      {orderedReportBlocks.length > 0 && reportPreparation.active && (
+        <div className="report-print-view" key={reportPreparation.attempt}>
           <header className="report-print-view__header">
             <BrandLogo className="report-print-view__logo" variant="monochrome" />
             <span className="eyebrow">{tx('Rapport Cartularia', 'Cartularia report')} · {mockCartulary.publicCode}</span>
@@ -3683,7 +3763,7 @@ function App() {
                 <div className="report-print-view__page-content">
                   {reportPage.blockIds.map((blockId) => (
                     <div className="report-print-view__block" id={`report-${blockId}`} key={blockId}>
-                      {renderWatchWebsiteBlock(blockId)}
+                      {renderWatchWebsiteBlock(blockId, reportPreparation.active)}
                     </div>
                   ))}
                 </div>
@@ -3745,7 +3825,7 @@ function App() {
           >
             <div className="modal-header">
               <div>
-                <span className="eyebrow">{tx('Acte de publication', 'Publication act')} · {destinationMarker(publicationIntent.destination)}</span>
+                <span className="eyebrow">{tx('Préparation de la sélection', 'Selection preparation')} · {destinationMarker(publicationIntent.destination)}</span>
                 <strong id="publication-dialog-title">
                   {publicationIntent.action === 'revoke'
                     ? tx('Révoquer la sélection', 'Revoke selection')
@@ -3869,7 +3949,9 @@ function App() {
         onClose={() => setSelectedAsset(null)}
         onMove={moveSelectedAsset}
         onToggleTag={toggleMediaTag}
+        onChangeVisibility={(id, visibility) => { if (!canEdit) return; setMediaAssets((current) => current.map((asset) => asset.id === id ? { ...asset, visibility } : asset)); }}
         onDelete={deleteMediaAsset}
+        readOnly={isDemoCartulary}
       />}
 
       {pendingDeletion && <DeletionDialog

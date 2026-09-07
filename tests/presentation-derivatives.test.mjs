@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import sharp from 'sharp';
+import { presentationDerivativeUrl, presentationImageSetFor } from '../src/media/presentationDerivatives.ts';
 
 const sourceDirectory = path.resolve('public/assets/IWC');
 const derivativeDirectory = path.join(sourceDirectory, 'derivatives');
@@ -80,7 +81,24 @@ test('les polices ne dépendent plus d’un import CSS tardif', async () => {
   assert.match(html, /rel="stylesheet" href="https:\/\/fonts\.googleapis\.com\/css2\?/);
 });
 
-test('la Galerie, le 360 et l’impression gardent des dérivés et replis explicites', async () => {
+test('les URL de présentation correspondent aux vrais dérivés et conservent les autres sources', () => {
+  for (const image of manifest.images) {
+    const source = `/assets/IWC/${encodeURIComponent(image.source)}`;
+    const derivative = image.derivatives.find((entry) => entry.width === 768 && entry.format === 'webp');
+    assert.ok(derivative, image.source);
+    assert.equal(presentationDerivativeUrl(source, 768), `/assets/IWC/derivatives/${encodeURIComponent(derivative.file)}`);
+    const picture = presentationImageSetFor(source);
+    assert.equal(picture.source, source, 'le JPEG original reste le repli');
+    assert.equal(picture.width, image.sourceWidth);
+    assert.ok(picture.webpSrcSet.includes(`${presentationDerivativeUrl(source, 768)} 768w`));
+  }
+  for (const source of ['/assets/autre.jpg', '/assets/IWC/inconnu.jpg', '/assets/IWC/%broken.jpg', 'blob:protected-media', 'https://example.test/media.webp']) {
+    assert.equal(presentationDerivativeUrl(source, 768), source);
+    assert.equal(presentationImageSetFor(source), null);
+  }
+});
+
+test('la Galerie, le 360 et l’impression utilisent les résolveurs et replis explicites', async () => {
   const [galleryService, spinSource, stylesheet] = await Promise.all([
     readFile('src/services/registryGallery.ts', 'utf8'),
     readFile('src/components/Spin360.tsx', 'utf8'),
@@ -88,7 +106,7 @@ test('la Galerie, le 360 et l’impression gardent des dérivés et replis expli
   ]);
   assert.match(galleryService, /prototypePresentationUrl\(asset\.url, 1200\)/);
   assert.match(galleryService, /prototypePresentationUrl\(asset\.thumbnailUrl \|\| asset\.url, 480\)/);
-  assert.match(spinSource, /\.768\.webp/);
+  assert.match(spinSource, /presentationDerivativeUrl\(source, 768\) \|\| source/);
   assert.match(stylesheet, /\.presentation-picture \{ display: contents; \}/);
   assert.match(stylesheet, /@media print/);
 });

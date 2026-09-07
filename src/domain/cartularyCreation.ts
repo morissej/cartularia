@@ -1,10 +1,16 @@
 export const CARTULARY_CREATION_PROFILE_VERSION = '1.0.0';
 
-export interface WatchCartularyCreationProfile {
+export const SUPPORTED_CREATION_PROFILES = {
+  watch: { label: 'Montre', schemaId: 'watch', schemaVersion: '1.6.0', makerLabel: 'Marque', referenceLabel: 'Référence', serialLabel: 'Numéro de série', technicalLabel: 'Calibre', minYear: 1500 },
+  car: { label: 'Automobile', schemaId: 'car', schemaVersion: '1.2.0', makerLabel: 'Constructeur', referenceLabel: 'Version', serialLabel: 'VIN / numéro de châssis', technicalLabel: 'Motorisation', minYear: 1886 },
+} as const;
+export type SupportedCreationAssetType = keyof typeof SUPPORTED_CREATION_PROFILES;
+
+export interface CartularyCreationProfile {
   profileVersion: typeof CARTULARY_CREATION_PROFILE_VERSION;
-  assetType: 'watch';
-  schemaId: 'watch';
-  schemaVersion: '1.5.0' | '1.6.0';
+  assetType: SupportedCreationAssetType;
+  schemaId: SupportedCreationAssetType;
+  schemaVersion: '1.5.0' | '1.6.0' | '1.2.0';
   collectionId: string;
   brand: string;
   model: string;
@@ -25,6 +31,8 @@ export interface WatchCartularyCreationProfile {
   sourceLabel: string;
   assertedAt: string;
 }
+
+export type WatchCartularyCreationProfile = CartularyCreationProfile & { assetType: 'watch'; schemaId: 'watch'; schemaVersion: '1.5.0' | '1.6.0' };
 
 export interface CartularyCreationMediaAsset {
   id: string;

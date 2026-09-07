@@ -133,8 +133,9 @@ const FIELD_DEFINITIONS: Array<{
 
 export const buildRegistryComparisonRows = (
   items: RegistryItemProjection[],
+  collectionName: (id: string) => string = labelFromIdentifier,
 ): RegistryComparisonRow[] => FIELD_DEFINITIONS.map((field) => {
-  const values = items.map(field.value);
+  const values = items.map((item) => field.id === 'collectionId' ? collectionName(item.collectionId) : field.value(item));
   return {
     id: field.id,
     label: field.label,

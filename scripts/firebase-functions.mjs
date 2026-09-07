@@ -1,6 +1,6 @@
-import { getApps, initializeApp } from 'firebase-admin/app';
+import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
@@ -33,6 +33,16 @@ import {
   revokeRegistryInvitation,
 } from './lib/invitation-command.mjs';
 import { activateRegistryAccount as activateRegistryAccountCommand } from './lib/account-command.mjs';
+import { deleteEmptyRegistryCollection, saveRegistryCollectionCommand } from './lib/collection-command.mjs';
+import { createPersonalRecoveryCommands } from './lib/personal-recovery-command.mjs';
+import { createRegistryRecoveryCommands } from './lib/registry-recovery-command.mjs';
+import { getWebsitePublicationState, publishWebsite, revokeWebsite } from './lib/website-publication-command.mjs';
+import {
+  loadAdministrationOverview as loadAdministrationOverviewCommand,
+  loadAdministrationUserDashboard,
+  requireAdministrator,
+  setAdministrationUserDisabled,
+} from './lib/administration-command.mjs';
 
 const REGION = 'us-central1';
 const app = getApps()[0] || initializeApp();
@@ -70,11 +80,175 @@ export const activateRegistryAccount = onCall(invitationCallableOptions, async (
 const callableError = (error) => {
   const supported = new Set([
     'invalid_argument', 'unauthenticated', 'permission_denied', 'not_found',
-    'failed_precondition', 'deadline_exceeded', 'already_exists',
+    'failed_precondition', 'deadline_exceeded', 'already_exists', 'resource_exhausted', 'aborted',
   ]);
-  const code = supported.has(error?.code) ? error.code.replaceAll('_', '-') : 'internal';
-  return new HttpsError(code, code === 'internal' ? "L’opération d’invitation a échoué." : error.message);
+  const normalized = String(error?.code || '').replaceAll('-', '_');
+  const code = supported.has(normalized) ? normalized.replaceAll('_', '-') : 'internal';
+  return new HttpsError(code, code === 'internal' ? "L’opération n’a pas pu être confirmée. Réessayez." : error.message);
 };
+
+export const deleteRegistryCollection = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  try {
+    return await deleteEmptyRegistryCollection({ firestore, uid: request.auth.uid,
+      registryId: request.data?.registryId, collectionId: request.data?.collectionId,
+      expectedVersion: request.data?.expectedVersion,
+      confirmed: request.data?.confirmed });
+  } catch (error) { throw callableError(error); }
+});
+
+export const saveRegistryCollection = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  try {
+    return await saveRegistryCollectionCommand({
+      firestore, uid: request.auth.uid, registryId: request.data?.registryId,
+      collectionId: request.data?.collectionId, mode: request.data?.mode,
+      expectedVersion: request.data?.expectedVersion, input: request.data?.input,
+      confirmedPublication: request.data?.confirmedPublication,
+    });
+  } catch (error) { throw callableError(error); }
+});
+
+const configuredProjectServices = (name, projectId, registryProjectId) => {
+  const normalizedProjectId = String(projectId || '').trim();
+  if (!normalizedProjectId || normalizedProjectId === registryProjectId) return null;
+  const existingApp = getApps().find((candidate) => candidate.name === name);
+  const projectApp = existingApp || initializeApp({
+    credential: applicationDefault(),
+    projectId: normalizedProjectId,
+    serviceAccountId: `cartularia-recovery-signer@${normalizedProjectId}.iam.gserviceaccount.com`,
+  }, name);
+  return { auth: getAuth(projectApp), firestore: getFirestore(projectApp) };
+};
+
+const administrationSources = () => {
+  const registryProjectId = String(app.options.projectId || process.env.GCLOUD_PROJECT || '').trim();
+  const personal = configuredProjectServices(
+    'cartularia-administration-personal',
+    process.env.ADMIN_PERSONAL_FIREBASE_PROJECT_ID,
+    registryProjectId,
+  );
+  const bridge = configuredProjectServices(
+    'cartularia-administration-bridge',
+    process.env.ADMIN_CODE_BRIDGE_FIREBASE_PROJECT_ID,
+    registryProjectId,
+  );
+  return [
+    { id: 'registry', label: 'Registre', auth, firestore },
+    { id: 'personal', label: 'Coffre personnel', auth: personal?.auth || null, firestore: personal?.firestore || null },
+    { id: 'bridge', label: 'Base de correspondance', auth: bridge?.auth || null, firestore: bridge?.firestore || null },
+  ];
+};
+
+// Recovery is callable without a Registry session (including from the isolated
+// Vault origin). Enrollment checks recent, revoked-aware target-project tokens;
+// recovery checks one-use signed challenges and per-credential server limits.
+// Existing administration/publication callables retain App Check enforcement.
+const recoveryCallableOptions = {
+  ...invitationCallableOptions, enforceAppCheck: false,
+  serviceAccount: process.env.FUNCTIONS_EMULATOR === 'true' ? undefined : process.env.RECOVERY_RUNTIME_SERVICE_ACCOUNT,
+};
+const runRecovery = (operation) => onCall(recoveryCallableOptions, async (request) => {
+  try {
+    // Never silently fall back to the default privileged runtime account.
+    if (process.env.FUNCTIONS_EMULATOR !== 'true' && !process.env.RECOVERY_RUNTIME_SERVICE_ACCOUNT) {
+      throw new HttpsError('failed-precondition', 'Le service de secours n’est pas encore disponible.');
+    }
+    return await operation(request);
+  }
+  catch (error) { logger.warn('Récupération refusée ou indisponible.', { code: error?.code || 'internal' }); throw callableError(error); }
+});
+const registryRecovery = () => createRegistryRecoveryCommands({ db: firestore, auth });
+const personalRecovery = () => {
+  const sources = administrationSources();
+  const personal = sources.find((source) => source.id === 'personal');
+  const bridge = sources.find((source) => source.id === 'bridge');
+  if (!personal?.firestore || !personal.auth || !bridge?.auth
+    || personal.firestore.projectId === bridge.firestore?.projectId) throw new HttpsError('failed-precondition', 'Les espaces de secours ne sont pas raccordés séparément.');
+  return createPersonalRecoveryCommands({ personalDb: personal.firestore, personalAuth: personal.auth, bridgeAuth: bridge.auth });
+};
+export const enrollRegistryRecovery = runRecovery((request) => registryRecovery().enroll(request.auth, request.data));
+export const getRegistryRecoveryStatus = runRecovery((request) => registryRecovery().status(request.auth));
+export const revokeRegistryRecovery = runRecovery((request) => registryRecovery().revoke(request.auth));
+export const beginRegistryRecovery = runRecovery((request) => registryRecovery().begin(request.data || {}));
+export const completeRegistryRecovery = runRecovery((request) => registryRecovery().complete(request.data || {}));
+export const enrollPersonalVaultRecovery = runRecovery((request) => personalRecovery().enroll(request.data || {}));
+export const getPersonalVaultRecoveryStatus = runRecovery((request) => personalRecovery().status(request.data || {}));
+export const revokePersonalVaultRecovery = runRecovery((request) => personalRecovery().revoke(request.data || {}));
+export const beginPersonalVaultRecovery = runRecovery((request) => personalRecovery().begin(request.data || {}));
+export const completePersonalVaultRecovery = runRecovery((request) => personalRecovery().complete(request.data || {}));
+export const commitPersonalVaultPasswordRotation = runRecovery((request) => personalRecovery().commitPasswordRotation(request.data || {}));
+
+const websiteCallableOptions = {
+  ...invitationCallableOptions,
+  memory: '512MiB',
+  timeoutSeconds: 180,
+  // Each publication copies verified derivatives sequentially; do not multiply
+  // their peak buffer allocation by the platform's default request concurrency.
+  concurrency: 1,
+};
+const runWebsiteCommand = (operation) => onCall(websiteCallableOptions, async (request) => {
+  try { return await operation(request); }
+  catch (error) { logger.warn('Publication non confirmée.', { code: error?.code || 'internal' }); throw callableError(error); }
+});
+export const getCartularyWebsiteState = runWebsiteCommand((request) => getWebsitePublicationState({ firestore, requestAuth: request.auth, cartularyId: request.data?.cartularyId }));
+export const publishCartularyWebsite = runWebsiteCommand((request) => publishWebsite({ firestore, bucket: storage.bucket(), requestAuth: request.auth, input: request.data || {} }));
+export const revokeCartularyWebsite = runWebsiteCommand((request) => revokeWebsite({ firestore, bucket: storage.bucket(), requestAuth: request.auth, input: request.data || {} }));
+
+export const getAdministrationOverview = onCall(invitationCallableOptions, async (request) => {
+  try {
+    requireAdministrator(request.auth);
+    return await loadAdministrationOverviewCommand({
+      sources: administrationSources(),
+      pageSize: request.data?.pageSize,
+    });
+  } catch (error) {
+    logger.warn('Échec de lecture de la console d’administration.', { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
+
+export const getAdministrationUserDashboard = onCall(invitationCallableOptions, async (request) => {
+  try {
+    requireAdministrator(request.auth);
+    return await loadAdministrationUserDashboard({
+      sources: administrationSources(),
+      databaseId: request.data?.database,
+      targetUid: request.data?.uid,
+    });
+  } catch (error) {
+    logger.warn('Échec de lecture du dashboard utilisateur.', { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
+
+export const setAdministrationUserState = onCall(invitationCallableOptions, async (request) => {
+  try {
+    const actorUid = requireAdministrator(request.auth);
+    const sources = administrationSources();
+    const source = sources.find((candidate) => candidate.id === request.data?.database);
+    if (!source) throw Object.assign(new Error('Base d’administration invalide.'), { code: 'invalid_argument' });
+    const result = await setAdministrationUserDisabled({
+      actorUid,
+      source,
+      targetUid: request.data?.uid,
+      disabled: request.data?.disabled === true,
+      reason: request.data?.reason,
+      auditFirestore: firestore,
+      timestamp: FieldValue.serverTimestamp(),
+    });
+    logger.info('État utilisateur modifié depuis la console.', {
+      actorUid,
+      targetUid: result.uid,
+      database: result.database,
+      disabled: result.disabled,
+    });
+    return result;
+  } catch (error) {
+    logger.warn('Échec de modification depuis la console d’administration.', { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
 
 export const createRegistryInvitation = onCall(invitationCallableOptions, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');

@@ -4,16 +4,17 @@ import { CheckCircle2, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo.tsx';
 import { auth } from '../../firebase.ts';
 import { acceptRegistryAccess } from '../../services/access.ts';
+import { loadScopedRegistryItems } from '../../services/projections.ts';
+import { buildCartularyHref } from './registryCatalog.ts';
 import './registry.css';
 
 const invitationParameters = (href: string) => {
-  const url = new URL(href);
-  const nested = url.searchParams.get('continueUrl');
-  const source = nested ? new URL(nested) : url;
-  return {
-    invitationId: source.searchParams.get('invitationId') || '',
-    token: source.searchParams.get('token') || '',
-  };
+  try {
+    const url = new URL(href);
+    const nested = url.searchParams.get('continueUrl');
+    const source = nested ? new URL(nested) : url;
+    return { invitationId: source.searchParams.get('invitationId') || '', token: source.searchParams.get('token') || '' };
+  } catch { return { invitationId: '', token: '' }; }
 };
 
 export function RegistryInvitationPage() {
@@ -39,9 +40,14 @@ export function RegistryInvitationPage() {
     try {
       await signInWithEmailLink(auth, email.trim(), window.location.href);
       const result = await acceptRegistryAccess(parameters.invitationId, parameters.token);
+      const registryHref = `/registry/${encodeURIComponent(result.registryId)}/items`;
+      const invitedItems = result.scopeType === 'cartulary'
+        ? await loadScopedRegistryItems(result.registryId, { registry: false, collectionIds: [], cartularyIds: [result.scopeId] }).catch(() => [])
+        : [];
+      const invitedItem = invitedItems.find((item) => item.cartularyId === result.scopeId);
       const next = result.scopeType === 'cartulary'
-        ? `/?cartularyId=${encodeURIComponent(result.scopeId)}&returnTo=${encodeURIComponent(`/registry/${result.registryId}/items`)}`
-        : `/registry/${encodeURIComponent(result.registryId)}/items`;
+        ? buildCartularyHref(result.scopeId, registryHref, invitedItem?.assetType)
+        : registryHref;
       setDestination(next);
       setStatus('accepted');
       setMessage('Votre adresse a été vérifiée et l’accès a été activé uniquement pour le périmètre invité.');

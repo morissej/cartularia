@@ -1,5 +1,6 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { CANONICALIZATION_VERSION, canonicalize, sha256Digest } from './canonical-json.mjs';
+import { findPrivatePublicKeyToken, findPrivatePublicTextToken } from './public-text-policy.mjs';
 
 const ZERO_HASH = `sha256:${'0'.repeat(64)}`;
 
@@ -32,31 +33,6 @@ export const REPORT_BLOCK_ALLOWLIST = Object.freeze([
   'value-performance',
   'value-sensitivity',
 ]);
-
-const PUBLIC_FORBIDDEN_TOKENS = [
-  'owner',
-  'propriétaire',
-  'transmission',
-  'beneficiary',
-  'bénéficiaire',
-  'storage',
-  'stockage',
-  'serial',
-  'série',
-  'address',
-  'adresse',
-  'email',
-  'phone',
-  'téléphone',
-  'acquisition',
-  'purchaseprice',
-  'costbasis',
-  'original',
-  '/private/',
-  'media-vault',
-  'documenturl',
-  'downloadurl',
-];
 
 export class ProjectionCommandError extends Error {
   constructor(code, message) {
@@ -143,8 +119,7 @@ const findForbiddenPublicToken = (value, path = 'payload') => {
   }
   if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value)) {
-      const keyText = key.toLocaleLowerCase('fr-FR').replaceAll(/[^a-z0-9à-ÿ/]/g, '');
-      const keyToken = PUBLIC_FORBIDDEN_TOKENS.find((token) => keyText.includes(token));
+      const keyToken = findPrivatePublicKeyToken(key);
       if (keyToken) return { path: `${path}.${key}`, token: keyToken };
       const match = findForbiddenPublicToken(child, `${path}.${key}`);
       if (match) return match;
@@ -152,8 +127,7 @@ const findForbiddenPublicToken = (value, path = 'payload') => {
     return null;
   }
   if (typeof value === 'string') {
-    const text = value.toLocaleLowerCase('fr-FR').replaceAll(' ', '');
-    const token = PUBLIC_FORBIDDEN_TOKENS.find((candidate) => text.includes(candidate.replaceAll(' ', '')));
+    const token = findPrivatePublicTextToken(value);
     return token ? { path, token } : null;
   }
   return null;
@@ -164,8 +138,8 @@ const validateApprovalBlocks = (audience, blocks) => {
   if (!['public', 'report'].includes(audience)) {
     throw new ProjectionCommandError('invalid_audience', 'Audience de projection inconnue.');
   }
-  if (audience === 'public' && blocks.length !== 4) {
-    throw new ProjectionCommandError('public_block_count', 'Le premier incrément public exige exactement quatre blocs W.');
+  if (blocks.length > allowlist.length) {
+    throw new ProjectionCommandError('public_block_count', 'La sélection dépasse le nombre de contenus autorisés.');
   }
   for (const block of blocks) {
     if (!allowlist.includes(block.id)) {
@@ -181,6 +155,12 @@ const validateApprovalBlocks = (audience, blocks) => {
       }
     }
   }
+};
+
+export const validatePublicProjectionBlocks = (blocks) => {
+  const normalized = normalizeBlocks(blocks);
+  validateApprovalBlocks('public', normalized);
+  return normalized;
 };
 
 const createAuditEvent = ({ rootData, requestId, actorId, occurredAt, action, resource, afterDigest }) => {
@@ -318,11 +298,11 @@ export const projectRegistryItem = async ({
       userAlias: rootData.userAlias || null,
       objectCode: rootData.objectCode || rootData.publicCode || null,
       possessionStatus: rootData.possessionStatus,
-      purchasePrice: rootData.purchasePrice || null,
-      costBasis: rootData.costBasis || null,
-      grossValuation: rootData.grossValuation || null,
-      netValuation: rootData.netValuation || null,
-      netAfterTaxValuation: rootData.netAfterTaxValuation || null,
+      purchasePrice: rootData.purchasePrice ?? null,
+      costBasis: rootData.costBasis ?? null,
+      grossValuation: rootData.grossValuation ?? null,
+      netValuation: rootData.netValuation ?? null,
+      netAfterTaxValuation: rootData.netAfterTaxValuation ?? null,
       valuationCurrency: rootData.valuationCurrency || rootData.currency || null,
       completenessLevel: rootData.completenessLevel,
       primaryAssetId: rootData.primaryAssetId,
@@ -546,9 +526,8 @@ export const publishPublicBlocks = async ({
     if (approval.data().approvedBy !== actorId || approval.data().sourceRevision !== rootData.revision) {
       throw new ProjectionCommandError('stale_approval', 'L’approbation ne correspond plus à la révision courante.');
     }
-    if (publication.exists && publication.data().status !== 'revoked') {
-      throw new ProjectionCommandError('publication_exists', 'Une publication active existe déjà pour ce code.');
-    }
+    const previousBlocks = await transaction.get(publicationRef.collection('blocks'));
+    const previousMediaAccess = await transaction.get(publicationRef.collection('mediaAccess'));
     const blocks = normalizeBlocks(approval.data().blocks);
     validateApprovalBlocks('public', blocks);
 
@@ -625,6 +604,13 @@ export const publishPublicBlocks = async ({
         generatedAt: FieldValue.serverTimestamp(),
       });
     }
+    for (const previous of previousBlocks.docs) {
+      if (!projectedBlocks.some((block) => block.blockId === previous.id)) transaction.delete(previous.ref);
+    }
+    const mediaAccess = new Map();
+    for (const asset of uniqueAssetRefs) mediaAccess.set(asset.assetId, [...(mediaAccess.get(asset.assetId) || []), asset.derivativeId]);
+    for (const [assetId, derivativeIds] of mediaAccess) transaction.set(publicationRef.collection('mediaAccess').doc(assetId), { derivativeIds });
+    for (const previous of previousMediaAccess.docs) if (!mediaAccess.has(previous.id)) transaction.delete(previous.ref);
     const sealData = {
       publicCode: rootData.publicCode,
       cartularyId,
@@ -783,6 +769,7 @@ export const revokePublicPublication = async ({
   if (!rootSnapshot.exists) throw new ProjectionCommandError('cartulary_not_found', 'Cartulaire introuvable.');
   const publicationRef = firestore.doc(`publications/${rootSnapshot.data().publicCode}`);
   const existingBlocks = await publicationRef.collection('blocks').get();
+  const existingMediaAccess = await publicationRef.collection('mediaAccess').get();
   const inputDigest = sha256Digest({ command: 'revokePublicPublication', cartularyId, expectedRevision });
   const rootRef = rootSnapshot.ref;
   const receiptRef = rootRef.collection('commandReceipts').doc(requestId);
@@ -828,6 +815,7 @@ export const revokePublicPublication = async ({
       rootPatch: { publicationStatus: 'revoked' },
     });
     for (const block of existingBlocks.docs) transaction.delete(block.ref);
+    for (const media of existingMediaAccess.docs) transaction.delete(media.ref);
     transaction.update(publicationRef, {
       status: 'revoked',
       publicationStatus: 'revoked',

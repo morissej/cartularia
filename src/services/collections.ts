@@ -1,36 +1,28 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
   onSnapshot,
-  serverTimestamp,
-  writeBatch,
 } from 'firebase/firestore';
 import {
-  collectionWebsiteItemProjection,
-  collectionWebsiteIsPublished,
-  collectionWebsitePublicationId,
   collectionLabelFromIdentifier,
   normalizeCollectionSlug,
   registryCollectionId,
+  registryCollectionVersion,
   type CollectionWebsiteItemProjection,
   type CollectionWebsitePublication,
   type RegistryCollectionDocument,
   type RegistryCollectionInput,
 } from '../domain/collections.ts';
 import { registryItemCollectionIds } from '../domain/projections.ts';
-import { db } from '../firebase.ts';
+import { db, functions } from '../firebase.ts';
+import { httpsCallable } from 'firebase/functions';
 import { loadRegistryItems } from './projections.ts';
 
 export { normalizeCollectionSlug, registryCollectionId } from '../domain/collections.ts';
 
 const SAFE_DOCUMENT_ID = /^[A-Za-z0-9_-]{1,160}$/;
-
-const normalizePublishedCartularyIds = (values: string[]) => (
-  [...new Set(values.filter((value) => SAFE_DOCUMENT_ID.test(value)))].slice(0, 200)
-);
 
 const normalizeSnapshot = (registryId: string, id: string, data: Partial<RegistryCollectionDocument>) => ({
   ...data,
@@ -57,89 +49,38 @@ export const observeRegistryCollections = (
 
 export const saveRegistryCollection = async ({
   id,
+  createId,
   organizationId,
   registryId,
   input,
+  expectedVersion,
+  confirmedPublication = false,
 }: {
   id?: string;
+  createId?: string;
   organizationId: string;
   registryId: string;
   input: RegistryCollectionInput;
+  expectedVersion?: string;
+  confirmedPublication?: boolean;
 }) => {
-  const collectionId = id || registryCollectionId(input.name);
-  const reference = doc(db, 'registries', registryId, 'collections', collectionId);
-  const existing = await getDoc(reference);
-  const explicitlyPublished = input.publicationConsent && input.status !== 'archived';
-  const publishedCartularyIds = explicitlyPublished
-    ? normalizePublishedCartularyIds(input.publishedCartularyIds)
-    : [];
-  const normalizedStatus = input.status === 'archived'
-    ? 'archived'
-    : explicitlyPublished ? 'published' : 'draft';
-  const normalizedVisibility = explicitlyPublished ? 'public' : 'secret';
-  const publicationId = collectionWebsitePublicationId(registryId, collectionId);
-  const publicationReference = doc(db, 'collectionPublications', publicationId);
-  const hasExistingPublication = existing.exists()
-    && collectionWebsiteIsPublished(existing.data() as RegistryCollectionDocument);
-  const [registryItems, currentPublicationItems, existingPublication] = await Promise.all([
-    explicitlyPublished ? loadRegistryItems(registryId) : Promise.resolve([]),
-    hasExistingPublication ? getDocs(collection(publicationReference, 'items')) : Promise.resolve(null),
-    hasExistingPublication ? getDoc(publicationReference) : Promise.resolve(null),
-  ]);
-  const selectedItems = registryItems.filter((item) => (
-    item.projectionStatus === 'active'
-    && publishedCartularyIds.includes(item.cartularyId)
-    && registryItemCollectionIds(item).includes(collectionId)
-  ));
-  const selectedIds = new Set(selectedItems.map((item) => item.cartularyId));
-  const batch = writeBatch(db);
-  batch.set(reference, {
-    id: collectionId,
-    organizationId,
-    registryId,
-    ...input,
-    websiteSlug: normalizeCollectionSlug(input.websiteSlug || input.name),
-    status: normalizedStatus,
-    visibility: normalizedVisibility,
-    publicationConsent: explicitlyPublished,
-    publishedCartularyIds: [...selectedIds],
-    publishedAt: explicitlyPublished
-      ? existing.data()?.publishedAt || serverTimestamp()
-      : null,
-    ...(existing.exists() ? {} : { createdAt: serverTimestamp() }),
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-
-  batch.set(publicationReference, {
-    publicationId,
-    organizationId,
-    registryId,
-    collectionId,
-    websiteTitle: input.websiteTitle.trim() || input.name.trim(),
-    websiteSlug: normalizeCollectionSlug(input.websiteSlug || input.name),
-    description: input.description.trim(),
-    status: explicitlyPublished ? 'published' : 'revoked',
-    itemCount: selectedItems.length,
-    publishedAt: explicitlyPublished
-      ? existingPublication?.data()?.publishedAt || serverTimestamp()
-      : existingPublication?.data()?.publishedAt || null,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-
-  selectedItems.forEach((item) => {
-    batch.set(doc(publicationReference, 'items', item.cartularyId), collectionWebsiteItemProjection(item, collectionId));
+  const collectionId = id || createId || registryCollectionId(input.name);
+  if (id && !expectedVersion) throw new Error('Rechargez la Collection avant de modifier sa dernière version.');
+  const result = await httpsCallable<Record<string, unknown>, { collectionId: string }>(functions, 'saveRegistryCollection')({
+    registryId, organizationId, collectionId, mode: id ? 'update' : 'create', ...(id ? { expectedVersion } : {}), input, confirmedPublication,
   });
-  (currentPublicationItems?.docs || [])
-    .filter((item) => !selectedIds.has(item.id))
-    .forEach((item) => batch.delete(item.ref));
-
-  await batch.commit();
-  return collectionId;
+  return result.data.collectionId;
 };
 
-export const deleteRegistryCollection = (registryId: string, collectionId: string) => (
-  deleteDoc(doc(db, 'registries', registryId, 'collections', collectionId))
-);
+export const deleteRegistryCollection = async (registryId: string, collectionId: string, expectedVersion?: string) => {
+  let version = expectedVersion;
+  if (!version) {
+    const existing = await getDoc(doc(db, 'registries', registryId, 'collections', collectionId));
+    if (!existing.exists()) return;
+    version = registryCollectionVersion(existing.data());
+  }
+  await httpsCallable(functions, 'deleteRegistryCollection')({ registryId, collectionId, expectedVersion: version, confirmed: true });
+};
 
 export const loadCollectionWebsitePublication = async (publicationId: string): Promise<{
   publication: CollectionWebsitePublication;

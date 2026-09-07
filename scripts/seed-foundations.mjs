@@ -70,7 +70,13 @@ const ensureUser = async ({ uid, email, displayName }, password) => {
 };
 
 if (!schemasOnly) {
-  if (await ensureUser(fixtures.owner, generatedAdminPassword)) {
+  const ownerWasCreated = await ensureUser(fixtures.owner, generatedAdminPassword);
+  const ownerRecord = await auth.getUser(fixtures.owner.uid);
+  await auth.setCustomUserClaims(fixtures.owner.uid, {
+    ...(ownerRecord.customClaims || {}),
+    cartulariaAdmin: true,
+  });
+  if (ownerWasCreated) {
     createdAdminCredentials = {
       uid: fixtures.owner.uid,
       email: fixtures.owner.email,

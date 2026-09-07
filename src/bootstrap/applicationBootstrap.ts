@@ -3,6 +3,24 @@ import type { CartulariaLocalVault, LocalStateRestoreResult } from '../persisten
 
 const AUTH_STATE_TIMEOUT_MS = 3_000;
 const CLOUD_PRIME_TIMEOUT_MS = 5_000;
+const IWC_AUTHORITATIVE_HYDRATION_ID = 'iwc-source-dossier-2026-08-29-v1';
+const IWC_AUTHORITATIVE_STATE_KEYS = [
+  'cartularia-specification-groups',
+  'cartularia-identification-checks',
+  'cartularia-condition-entries',
+  'cartularia-documentation-items',
+  'cartularia-owner-documents',
+  'cartularia-editable-copy',
+  'cartularia-media-assets-v3',
+  'cartularia-market-depth',
+  'cartularia-market-history',
+  'cartularia-comparables',
+  'cartularia-comparable-analysis',
+  'cartularia-retained-valuation',
+  'cartularia-purchase',
+  'cartularia-purchase-expenses',
+  'cartularia-exit-assumptions',
+] as const;
 
 export type PrivateBootstrapOutcome =
   | { status: 'ready'; reason: 'local_ready' | 'signed_out' | 'cloud_ready' }
@@ -28,6 +46,10 @@ export interface PrivateBootstrapDependencies {
     cartularyId: string;
     vault: CartulariaLocalVault;
     readTimeoutMs: number;
+    authoritativeHydration?: {
+      id: string;
+      stateKeys: readonly string[];
+    };
   }) => Promise<number>;
 }
 
@@ -91,10 +113,13 @@ const defaultDependencies: PrivateBootstrapDependencies = {
 
 export const requiresPrivateCartularyHydration = (
   location: Pick<Location, 'pathname' | 'search'>,
-) => (
-  location.pathname.replace(/\/$/, '') === '/cartulary'
-  && new URLSearchParams(location.search).get('data-deleted') !== '1'
-);
+) => {
+  const parameters = new URLSearchParams(location.search);
+  const requestedCartularyId = parameters.get('cartularyId');
+  return location.pathname.replace(/\/$/, '') === '/cartulary'
+    && parameters.get('data-deleted') !== '1'
+    && !requestedCartularyId?.startsWith('cart_demo_');
+};
 
 export const runPrivateCartularyBootstrap = async (
   dependencies: PrivateBootstrapDependencies = defaultDependencies,
@@ -109,7 +134,7 @@ export const runPrivateCartularyBootstrap = async (
   }
 
   const context = await dependencies.loadCartularyContext();
-  if (context.activeCartularyId === context.iwcCartularyId || !local.vault) {
+  if (!local.vault) {
     return { status: 'ready', reason: 'local_ready' };
   }
 
@@ -134,6 +159,9 @@ export const runPrivateCartularyBootstrap = async (
       cartularyId: context.activeCartularyId,
       vault: local.vault,
       readTimeoutMs: CLOUD_PRIME_TIMEOUT_MS,
+      authoritativeHydration: context.activeCartularyId === context.iwcCartularyId
+        ? { id: IWC_AUTHORITATIVE_HYDRATION_ID, stateKeys: IWC_AUTHORITATIVE_STATE_KEYS }
+        : undefined,
     });
     return { status: 'ready', reason: 'cloud_ready' };
   } catch {

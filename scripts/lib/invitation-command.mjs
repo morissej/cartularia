@@ -53,7 +53,7 @@ const assertScope = async ({ firestore, registryId, organizationId, scopeType, s
     : firestore.doc(`registries/${registryId}/items/${scopeId}`);
   const snapshot = await ref.get();
   const data = snapshot.exists ? snapshot.data() : null;
-  if (!data || data.registryId !== registryId || data.organizationId !== organizationId) {
+  if (!data || data.registryId !== registryId || data.organizationId !== organizationId || (scopeType === 'collection' && data.status === 'archived')) {
     throw new InvitationCommandError('scope_not_found', 'Le périmètre invité est introuvable dans ce Registre.');
   }
 };

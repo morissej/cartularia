@@ -35,6 +35,6 @@ export const cartularyPageForSchemaSection = (sectionId: string): CartularyPage 
   if (namespace === 'reference' || namespace === 'technical') return 'reference';
   if (namespace === 'condition' || namespace === 'history' || namespace === 'usage' || namespace === 'identity') return 'condition';
   if (namespace === 'value') return 'value';
-  if (namespace === 'publication') return 'publication';
+  if (namespace === 'publication' || namespace === 'publishing') return 'publication';
   return 'cover';
 };

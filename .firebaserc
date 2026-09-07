@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "studio-2614005370-a3e51"
+    "default": "studio-2614005370-a3e51",
+    "personal": "cartularia-vault-a3e51",
+    "bridge": "cartularia-bridge-a3e51"
   }
 }

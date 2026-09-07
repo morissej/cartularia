@@ -18,10 +18,9 @@ import {
   Watch,
   Wine,
 } from 'lucide-react';
-import { ROLEX_CARTULARY_ID } from '../../domain/cartularyIds.ts';
 import type { RegistryDocument } from '../../domain/foundations.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
-import { loadScopedRegistryItems, observeRegistryItems } from '../../services/projections.ts';
+import { loadPublicPublicationStatuses, loadScopedRegistryItems, observeRegistryItems } from '../../services/projections.ts';
 import {
   buildRegistryComparisonHref,
   REGISTRY_COMPARISON_MAX,
@@ -42,6 +41,7 @@ import {
   POSSESSION_LABELS,
 } from './registryPresentation.ts';
 import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
+import { useRegistryCollections } from './useRegistryCollections.ts';
 
 type CatalogView = 'grid' | 'list';
 type CatalogLoadState = 'loading' | 'ready' | 'error';
@@ -66,18 +66,30 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
   canCreateCartularies?: boolean;
   invitationGrant?: { registry: boolean; collectionIds: string[]; cartularyIds: string[] };
 }) {
+  const { collectionName } = useRegistryCollections(registry.id);
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [loadState, setLoadState] = useState<CatalogLoadState>('loading');
   const [query, setQuery] = useState(() => readInitialParameter('q', ''));
   const [assetType, setAssetType] = useState(() => readInitialParameter('type', 'all'));
   const [collectionId, setCollectionId] = useState(() => readInitialParameter('collection', 'all'));
   const [patrimonialStatus, setPatrimonialStatus] = useState(() => readInitialParameter('status', 'all'));
+  const [lifecycleStatus, setLifecycleStatus] = useState(() => readInitialParameter('lifecycle', 'all'));
+  const [possessionStatus, setPossessionStatus] = useState(() => readInitialParameter('possession', 'all'));
   const [sort, setSort] = useState<RegistryCatalogSort>(() => {
     const candidate = readInitialParameter('sort', DEFAULT_REGISTRY_CATALOG_FILTERS.sort);
     return candidate === 'title-asc' || candidate === 'year-desc' ? candidate : 'updated-desc';
   });
   const [view, setView] = useState<CatalogView>(() => readInitialParameter('view', 'grid') === 'list' ? 'list' : 'grid');
   const [comparisonIds, setComparisonIds] = useState<string[]>(() => sanitizeComparisonIds(readInitialParameter('compare', '')));
+  const [publishedCodes, setPublishedCodes] = useState<Record<string, boolean>>({});
+  const [publicationUnknown, setPublicationUnknown] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setPublishedCodes({}); setPublicationUnknown(false);
+    void loadPublicPublicationStatuses(items.flatMap((item) => item.objectCode ? [item.objectCode] : []))
+      .then((states) => active && setPublishedCodes(states)).catch(() => active && setPublicationUnknown(true));
+    return () => { active = false; };
+  }, [items]);
 
   const reload = useCallback(async () => {
     setLoadState('loading');
@@ -111,11 +123,13 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     if (assetType !== 'all') params.set('type', assetType);
     if (collectionId !== 'all') params.set('collection', collectionId);
     if (patrimonialStatus !== 'all') params.set('status', patrimonialStatus);
+    if (lifecycleStatus !== 'all') params.set('lifecycle', lifecycleStatus);
+    if (possessionStatus !== 'all') params.set('possession', possessionStatus);
     if (sort !== 'updated-desc') params.set('sort', sort);
     if (view !== 'grid') params.set('view', view);
     if (comparisonIds.length > 0) params.set('compare', comparisonIds.join(','));
     return params.toString();
-  }, [assetType, collectionId, comparisonIds, patrimonialStatus, query, sort, view]);
+  }, [assetType, collectionId, comparisonIds, patrimonialStatus, lifecycleStatus, possessionStatus, query, sort, view]);
 
   useEffect(() => {
     const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
@@ -127,11 +141,12 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     assetType,
     collectionId,
     patrimonialStatus,
+    lifecycleStatus, possessionStatus,
     sort,
-  }), [assetType, collectionId, items, patrimonialStatus, query, sort]);
+  }), [assetType, collectionId, items, patrimonialStatus, lifecycleStatus, possessionStatus, query, sort]);
   const assetTypes = useMemo(() => optionValues(items, 'assetType'), [items]);
   const collections = useMemo(() => [...new Set(items.flatMap(registryItemCollectionIds))].sort((left, right) => left.localeCompare(right, 'fr')), [items]);
-  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', patrimonialStatus !== 'all']
+  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', patrimonialStatus !== 'all', lifecycleStatus !== 'all', possessionStatus !== 'all']
     .filter(Boolean).length;
   const returnTo = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
   const comparisonHref = buildRegistryComparisonHref(registry.id, comparisonIds, returnTo);
@@ -141,6 +156,8 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     setAssetType('all');
     setCollectionId('all');
     setPatrimonialStatus('all');
+    setLifecycleStatus('all');
+    setPossessionStatus('all');
     setSort('updated-desc');
   };
 
@@ -189,7 +206,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
           <span>Collection</span>
           <select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
             <option value="all">Toutes les collections</option>
-            {collections.map((value) => <option value={value} key={value}>{labelFromIdentifier(value)}</option>)}
+            {collections.map((value) => <option value={value} key={value}>{collectionName(value)}</option>)}
           </select>
         </label>
         <label>
@@ -213,6 +230,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
       </RegistryFilterPanel>
 
       <div className="registry-results-heading">
+        {(lifecycleStatus !== 'all' || possessionStatus !== 'all') && <p>Filtre d’alerte : {lifecycleStatus !== 'all' ? (LIFECYCLE_LABELS[lifecycleStatus] || lifecycleStatus) : 'Perte, vol ou destruction'} <button type="button" onClick={() => { setLifecycleStatus('all'); setPossessionStatus('all'); }}>Retirer ce filtre</button></p>}
         <p aria-live="polite">
           <strong>{filteredItems.length}</strong> Cartulaire{filteredItems.length > 1 ? 's' : ''}
           {filteredItems.length !== items.length && <span> sur {items.length}</span>}
@@ -272,7 +290,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
               </div>
               <div className="registry-item__body">
                 <div className="registry-item__context">
-                  <span><Building2 aria-hidden="true" />{labelFromIdentifier(item.collectionId)}</span>
+                  <span><Building2 aria-hidden="true" />{collectionName(item.collectionId)}</span>
                   <span>Révision {item.sourceRevision}</span>
                 </div>
                 <h2>{item.displayTitle}</h2>
@@ -302,15 +320,16 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
                   >
                     <Scale aria-hidden="true" />{comparisonIds.includes(item.cartularyId) ? 'Sélectionné' : 'Ajouter à la comparaison'}
                   </button>
-                  {item.assetType === 'watch' && (
+                  {item.objectCode && publishedCodes[item.objectCode] && (
                     <a
-                      href={`/watch-website?publicCode=${encodeURIComponent(item.objectCode || (item.cartularyId === ROLEX_CARTULARY_ID ? 'ROL-487D9CAD' : 'OP-4892-XZ9'))}&cartularyId=${encodeURIComponent(item.cartularyId)}&returnTo=${encodeURIComponent(returnTo)}`}
+                      href={`/watch-website?publicCode=${encodeURIComponent(item.objectCode)}&returnTo=${encodeURIComponent(returnTo)}`}
                       target="_blank"
                       rel="noreferrer"
                     >
                       Voir le mini-site <Globe2 aria-hidden="true" />
                     </a>
                   )}
+                  {publicationUnknown && <span>État du mini-site indisponible</span>}
                   <a href={buildCartularyHref(item.cartularyId, returnTo, item.assetType)}>
                     Ouvrir le Cartulaire <ExternalLink aria-hidden="true" />
                   </a>

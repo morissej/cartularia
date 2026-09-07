@@ -8,7 +8,7 @@ import {
   query,
   where,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import type {
   CommunityBlock,
   CommunityComment,
@@ -20,6 +20,13 @@ import type {
 } from '../domain/community.ts';
 
 export const loadCommunityCatalog = async (): Promise<LoadedCommunityPublication[]> => {
+  await auth.authStateReady();
+  if (!auth.currentUser) throw Object.assign(new Error('Connectez-vous pour accéder au Cercle.'), { code: 'community/signed-out' });
+  const membership = await getDoc(doc(db, 'communityMemberships', auth.currentUser.uid));
+  const rights = membership.data();
+  if (!membership.exists() || rights?.uid !== auth.currentUser.uid || rights.status !== 'active' || !rights.permissions?.includes('community.read')) {
+    throw Object.assign(new Error('Votre compte ne possède pas d’admission active au Cercle.'), { code: 'community/admission-required' });
+  }
   const publicationSnapshots = await getDocs(query(
     collection(db, 'communityPublications'),
     where('status', '==', 'published'),

@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../src/features/registry/RegistryOverview.tsx', import.meta.url), 'utf8');
 const todoBoardSource = readFileSync(new URL('../src/features/registry/RegistryTodoBoard.tsx', import.meta.url), 'utf8');
+const followUpSource = readFileSync(new URL('../src/features/registry/RegistryFollowUp.tsx', import.meta.url), 'utf8');
 
 test('la synthèse distingue statut, niveau documentaire et alertes actionnables', () => {
   assert.match(source, /État des Cartulaires/);
@@ -14,9 +15,12 @@ test('la synthèse distingue statut, niveau documentaire et alertes actionnables
   assert.doesNotMatch(source, /<h2>Points d’attention<\/h2>/);
 });
 
-test('le tableau de bord agrège les tâches et les modifie dans leur Cartulaire source', () => {
-  assert.match(source, /<RegistryTodoBoard/);
-  assert.match(todoBoardSource, /Toutes les tâches des Cartulaires/);
+test('le tableau de bord résume les tâches et conduit au centre de suivi qui modifie leur Cartulaire source', () => {
+  assert.match(source, /buildRegistryFollowUpSummary\(followUps\)/);
+  assert.match(source, /href=\{registrySectionHref\(registry.id, 'follow-up'\)\}>Gérer toutes les tâches/);
+  assert.match(followUpSource, /<RegistryTodoBoard/);
+  assert.match(todoBoardSource, /<h2 id="registry-todo-board-title">À faire<\/h2>/);
+  assert.match(todoBoardSource, /dans ce Registre/);
   assert.match(todoBoardSource, /createCartularyFollowUpTodo/);
   assert.match(todoBoardSource, /updateCartularyFollowUpTodo/);
   assert.match(todoBoardSource, /deleteCartularyFollowUpTodo/);

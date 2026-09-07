@@ -1,5 +1,6 @@
 import { lazy } from 'react';
 import { BrandLogo } from './components/BrandLogo';
+import { cartularyIdFromLocation } from './domain/cartularyIds';
 import { applicationRouteFromPathname } from './utils/interfaceState';
 
 const CartularyApp = lazy(() => import('./App.tsx'));
@@ -10,10 +11,15 @@ const RegistryApp = lazy(() => import('./features/registry/RegistryApp.tsx').the
 const RegistryInvitationPage = lazy(() => import('./features/registry/RegistryInvitationPage.tsx'));
 const HomePage = lazy(() => import('./features/public/HomePage.tsx').then((module) => ({ default: module.HomePage })));
 const AccountAccessPage = lazy(() => import('./features/public/AccountAccessPage.tsx').then((module) => ({ default: module.AccountAccessPage })));
+const ServiceInformationPage = lazy(() => import('./features/public/ServiceInformationPage.tsx').then((module) => ({ default: module.ServiceInformationPage })));
+const RegistryRecoveryPage = lazy(() => import('./features/public/RegistryRecoveryPage.tsx').then((module) => ({ default: module.RegistryRecoveryPage })));
+const AdministrationApp = lazy(() => import('./features/administration/AdministrationApp.tsx').then((module) => ({ default: module.AdministrationApp })));
 const PersonalVaultApp = lazy(() => import('./personalVault/PersonalVaultApp.tsx').then((module) => ({ default: module.PersonalVaultApp })));
+const CodeHandoffReturnPage = lazy(() => import('./personalVault/CodeHandoffReturnPage.tsx').then((module) => ({ default: module.CodeHandoffReturnPage })));
 
 export function RootPage() {
   const route = applicationRouteFromPathname(window.location.pathname);
+  const isDemoCartularyRoute = cartularyIdFromLocation(window.location).startsWith('cart_demo_');
   if (new URLSearchParams(window.location.search).get('data-deleted') === '1') {
     return (
       <main style={{ minHeight: '100vh', display: 'grid', placeContent: 'center', padding: '32px', background: 'var(--paper)' }}>
@@ -30,10 +36,20 @@ export function RootPage() {
   }
   const Page = route === 'home'
     ? HomePage
+    : route === 'code-handoff-return'
+      ? CodeHandoffReturnPage
+    : route === 'service-information'
+      ? ServiceInformationPage
+    : route === 'account-recovery'
+      ? RegistryRecoveryPage
     : route === 'account-create' || route === 'account-sign-in'
       ? AccountAccessPage
+    : route === 'administration'
+      ? AdministrationApp
     : route === 'cartulary-view'
-    ? GenericCartularyPage
+    ? (isDemoCartularyRoute ? CartularyApp : GenericCartularyPage)
+    : route === 'cartulary-demo'
+      ? CartularyApp
     : route === 'collection-website'
       ? CollectionWebsitePage
     : route === 'community'

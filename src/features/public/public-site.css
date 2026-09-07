@@ -8,6 +8,19 @@
 }
 
 .public-site a { color: inherit; }
+.service-information-page main { max-width: 900px; margin-inline: auto; padding: 32px 24px 64px; }
+.service-information-page h1 { font-family: var(--font-display); font-weight: 500; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.12; }
+.service-information-page h2 { font-size: 1.4rem; margin-block: 24px 10px; }
+.service-information-page p { font-size: 1rem; line-height: 1.75; }
+.service-information-page nav { display: flex; flex-wrap: wrap; gap: 16px; margin-block: 24px; }
+.service-information-page main a { color: var(--ink); text-underline-offset: 4px; }
+.service-information-page nav a[aria-current="page"] { color: var(--mark); text-decoration-thickness: 2px; }
+.service-information-page .account-access-header > a { font-size: 12px; }
+.account-progress { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 16px 0; list-style: none; }
+.account-progress [aria-current="step"] { font-weight: 700; color: var(--mark); }
+.recovery-panel { display: grid; gap: 16px; border: 1px solid var(--rule); padding: 24px; margin-block: 24px; }
+.recovery-panel form, .recovery-panel > div { display: grid; gap: 14px; }
+.recovery-panel input:not([type="checkbox"]) { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--rule); }
 
 /* HEADER */
 .public-header {
@@ -24,7 +37,7 @@
   backdrop-filter: blur(18px);
 }
 
-.public-header .brand-logo { width: 196px; }
+.public-header .brand-logo { width: 196px; height: auto; }
 .public-header nav { display: flex; align-items: center; gap: 24px; }
 .public-header nav a {
   color: var(--muted);
@@ -346,7 +359,7 @@
 /* RESPONSIVE & MOBILE */
 @media (max-width: 1100px) {
   .public-header { grid-template-columns: 1fr auto; }
-  .public-header nav { position: absolute; top: 84px; right: 0; left: 0; display: none; padding: 24px; border-bottom: 1px solid var(--rule); background: var(--public-cream); gap: 16px; flex-direction: column; align-items: flex-start; }
+  .public-header nav { position: absolute; top: 100%; right: 0; left: 0; display: none; max-height: calc(100dvh - 84px); overflow-y: auto; padding: 24px; border-bottom: 1px solid var(--rule); background: var(--public-cream); gap: 16px; flex-direction: column; align-items: flex-start; }
   .public-header nav.is-open { display: flex; }
   .public-header__mobile-actions { display: flex; flex-direction: column; width: 100%; gap: 10px; padding-top: 16px; border-top: 1px solid var(--rule); margin-top: 8px; }
   .public-header__mobile-actions .public-link-button,
@@ -370,7 +383,7 @@
 @media (max-width: 720px) {
   .public-header { min-height: 70px; padding-inline: 18px; }
   .public-header .brand-logo { width: 158px; }
-  .public-header nav { top: 70px; }
+  .public-header nav { top: 100%; max-height: calc(100dvh - 70px); }
   .public-hero { min-height: auto; padding-block: 48px; }
   .public-hero::before { inset-inline: 20%; }
   .public-hero h1 { font-size: clamp(38px, 11vw, 54px); }
@@ -409,7 +422,7 @@
   padding: 0 clamp(22px, 6vw, 92px);
   border-bottom: 1px solid var(--rule);
 }
-.account-access-header .brand-logo { width: 190px; }
+.account-access-header .brand-logo { width: 190px; height: auto; }
 .account-access-header > a { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: none; }
 .account-access-header > a:hover { color: var(--mark); }
 .account-access-header > a svg { width: 16px; }
@@ -421,6 +434,15 @@
 .account-identity-rule > svg { width: 22px; color: var(--mark); }
 .account-identity-rule span { display: grid; gap: 2px; }
 .account-identity-rule small { color: var(--muted); font-size: 12px; }
+.account-demo-access { display: flex; align-items: center; justify-content: space-between; gap: 28px; margin-top: 34px; padding: 24px clamp(24px, 3vw, 38px); border: 1px solid var(--rule); background: var(--sheet); }
+.account-demo-access.is-requested { border-color: var(--mark); box-shadow: inset 4px 0 0 var(--mark); }
+.account-demo-access > div { display: grid; gap: 6px; }
+.account-demo-access h2 { font-family: var(--font-display); font-size: clamp(24px, 3vw, 34px); font-weight: 500; }
+.account-demo-access p { max-width: 760px; color: var(--muted); font-size: 13px; }
+.account-demo-access small { color: var(--positive); font-size: 11px; font-weight: 700; }
+.account-demo-access > button { display: inline-flex; min-height: 50px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 9px; padding: 0 22px; border: 1px solid var(--ink); background: var(--ink); color: var(--sheet); font-family: var(--font-mono); font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+.account-demo-access > button:disabled { cursor: wait; opacity: .6; }
+.account-demo-access > button svg { width: 17px; }
 .account-space-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 54px; }
 .account-space-grid > article { position: relative; display: flex; min-height: 610px; flex-direction: column; padding: clamp(26px, 3.5vw, 48px); border: 1px solid var(--rule); background: color-mix(in srgb, var(--sheet) 58%, transparent); }
 .account-space-grid > article.is-primary { border-top: 3px solid var(--mark); background: var(--sheet); }
@@ -460,6 +482,8 @@
   .account-access-header .brand-logo { width: 155px; }
   .account-access-header > a { font-size: 0; }
   .account-access-page main { width: min(100% - 32px, 660px); }
+  .account-demo-access { align-items: stretch; flex-direction: column; }
+  .account-demo-access > button { width: 100%; }
   .account-space-grid { grid-template-columns: 1fr; }
   .account-space-grid > article { min-height: auto; }
   .account-vault-action { margin-top: 42px; }

@@ -25,6 +25,7 @@ import {
 } from './registryComparison.ts';
 import { buildCartularyHref, isRegistryReturnPath } from './registryCatalog.ts';
 import { assetTypeLabel } from './registryPresentation.ts';
+import { useRegistryCollections } from './useRegistryCollections.ts';
 
 type ComparisonLoadState = 'loading' | 'ready' | 'error';
 
@@ -37,6 +38,7 @@ const AssetIcon = ({ assetType }: { assetType: string }) => {
 const requestedIds = () => sanitizeComparisonIds(new URLSearchParams(window.location.search).get('items'));
 
 export function RegistryComparison({ registry }: { registry: RegistryDocument }) {
+  const { collectionName } = useRegistryCollections(registry.id);
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>(requestedIds);
   const [candidateId, setCandidateId] = useState('');
@@ -71,7 +73,7 @@ export function RegistryComparison({ registry }: { registry: RegistryDocument })
 
   const activeItems = useMemo(() => items.filter((item) => item.projectionStatus === 'active'), [items]);
   const selectedItems = useMemo(() => selectRegistryComparisonItems(activeItems, selectedIds), [activeItems, selectedIds]);
-  const rows = useMemo(() => buildRegistryComparisonRows(selectedItems), [selectedItems]);
+  const rows = useMemo(() => buildRegistryComparisonRows(selectedItems, collectionName), [selectedItems, collectionName]);
   const availableItems = useMemo(() => activeItems
     .filter((item) => !selectedIds.includes(item.cartularyId))
     .sort((left, right) => left.displayTitle.localeCompare(right.displayTitle, 'fr', { sensitivity: 'base' })), [activeItems, selectedIds]);

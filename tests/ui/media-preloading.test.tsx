@@ -19,6 +19,17 @@ const asset = (id: string, type: Asset['type'], overrides: Partial<Asset> = {}):
 });
 
 describe('préchargement média PF1', () => {
+  it('conserve la sélection par identité après réordonnancement et borne immédiatement une liste réduite', () => {
+    const images = [asset('first', 'image'), asset('second', 'image'), asset('third', 'image')];
+    const { rerender } = render(<MediaCarousel assets={images} language="FR" onOpen={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: '3. third' }));
+    rerender(<MediaCarousel assets={[images[2], images[0]]} language="FR" onOpen={() => undefined} />);
+    expect(screen.getByRole('button', { name: 'Ouvrir third' })).toBeTruthy();
+    rerender(<MediaCarousel assets={[images[0]]} language="FR" onOpen={() => undefined} />);
+    expect(screen.getByRole('button', { name: 'Ouvrir first' })).toBeTruthy();
+    rerender(<MediaCarousel assets={[]} language="FR" onOpen={() => undefined} />);
+    expect(screen.queryByRole('region', { name: 'Diaporama média' })).toBeNull();
+  });
   it('utilise les posters dans les miniatures sans instancier de vidéo', () => {
     render(<MediaCarousel
       assets={[
@@ -40,6 +51,9 @@ describe('préchargement média PF1', () => {
     fireEvent.click(posterThumbnail);
     expect(document.querySelectorAll('video')).toHaveLength(1);
     expect(document.querySelector('video')?.getAttribute('preload')).toBe('metadata');
+    const download = screen.getByRole('link', { name: 'Télécharger le média : video-poster' });
+    expect(download.getAttribute('href')).toBe('/video-poster.mov');
+    expect(download.getAttribute('download')).toBe('video-poster.mov');
   });
 
   it('borne la file générique à deux tâches concurrentes', async () => {
@@ -122,11 +136,11 @@ describe('lecteur 360° PF1', () => {
     />);
 
     const viewer = screen.getByLabelText('Visualiseur 3D de l’objet');
-    expect(screen.getByAltText('Rendu 3D de l’objet sous un angle de 0°')).toBeTruthy();
+    expect(screen.getByAltText('Vue 1/6 · angle-0')).toBeTruthy();
     fireEvent.keyDown(viewer, { key: 'ArrowRight' });
-    expect(screen.getByAltText('Rendu 3D de l’objet sous un angle de 60°')).toBeTruthy();
+    expect(screen.getByAltText('Vue 2/6 · angle-1')).toBeTruthy();
     fireEvent.keyDown(viewer, { key: 'ArrowLeft' });
-    expect(screen.getByAltText('Rendu 3D de l’objet sous un angle de 0°')).toBeTruthy();
+    expect(screen.getByAltText('Vue 1/6 · angle-0')).toBeTruthy();
   });
 
   it('retire la rotation automatique lorsque le mouvement réduit est demandé', () => {

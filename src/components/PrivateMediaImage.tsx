@@ -3,11 +3,13 @@ import type { ImgHTMLAttributes } from 'react';
 import type { Asset } from '../types';
 import type { ObjectUrlLease } from '../utils/objectUrlLeaseCache.ts';
 import { presentationImageSetFor } from '../media/presentationDerivatives.ts';
+import { mediaFailureKind, mediaFailureMessage, type MediaFailureKind } from '../utils/mediaFailure';
 
 interface PrivateMediaImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   asset: Asset;
   eager?: boolean;
   sourceOverride?: string;
+  language?: 'FR' | 'EN';
 }
 
 const usableSource = (value: string | undefined) => (
@@ -18,6 +20,7 @@ export function PrivateMediaImage({
   asset,
   eager = false,
   sourceOverride,
+  language = 'FR',
   loading,
   onError,
   sizes,
@@ -32,6 +35,11 @@ export function PrivateMediaImage({
   const [failedDirectSource, setFailedDirectSource] = useState<string | undefined>();
   const effectiveDirectSource = directSource === failedDirectSource ? undefined : directSource;
   const [source, setSource] = useState<string | undefined>(effectiveDirectSource);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [failureKind, setFailureKind] = useState<MediaFailureKind>('network');
+  const [attempt, setAttempt] = useState(0);
+  const [insideAction, setInsideAction] = useState(false);
+  const [decodedSource, setDecodedSource] = useState<string | undefined>();
   const imageRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
@@ -40,12 +48,13 @@ export function PrivateMediaImage({
 
   useEffect(() => {
     setSource(effectiveDirectSource);
+    setLoadFailed(false);
   }, [effectiveDirectSource]);
 
   useEffect(() => {
-    if (effectiveDirectSource || asset.type !== 'image' || !asset.binaryId) return undefined;
+    if (effectiveDirectSource || asset.type !== 'image' || (!asset.binaryId && !asset.publicStoragePath)) return undefined;
     let active = true;
-    let shouldRetain = eager;
+    let shouldRetain = eager || typeof IntersectionObserver === 'undefined';
     let loadingLease = false;
     let lease: ObjectUrlLease | null = null;
     let observer: IntersectionObserver | null = null;
@@ -59,8 +68,11 @@ export function PrivateMediaImage({
     const resolve = () => {
       if (lease || loadingLease) return;
       loadingLease = true;
-      void import('../services/privateMedia.ts')
-        .then(({ acquirePrivateMediaObjectUrl }) => acquirePrivateMediaObjectUrl(asset.binaryId!))
+      setLoadFailed(false);
+      const request = asset.publicStoragePath
+        ? import('../services/publicMedia').then(({ acquirePublicMediaObjectUrl }) => acquirePublicMediaObjectUrl(asset.publicStoragePath!, asset.publicContentHash))
+        : import('../services/privateMedia.ts').then(({ acquirePrivateMediaObjectUrl }) => acquirePrivateMediaObjectUrl(asset.binaryId!, asset.cartularyId));
+      void request
         .then((acquiredLease) => {
           loadingLease = false;
           if (!active || !shouldRetain) {
@@ -70,8 +82,12 @@ export function PrivateMediaImage({
           lease = acquiredLease;
           setSource(acquiredLease.url);
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           loadingLease = false;
+          if (!active) return;
+          setFailureKind(mediaFailureKind(error));
+          setInsideAction(Boolean(imageRef.current?.closest('button,a')));
+          setLoadFailed(true);
         });
     };
 
@@ -89,7 +105,7 @@ export function PrivateMediaImage({
       observer?.disconnect();
       release();
     };
-  }, [asset.binaryId, asset.type, eager, effectiveDirectSource]);
+  }, [asset.binaryId, asset.cartularyId, asset.publicStoragePath, asset.publicContentHash, asset.type, eager, effectiveDirectSource, attempt]);
 
   const responsive = presentationImageSetFor(source);
   const image = (
@@ -103,14 +119,18 @@ export function PrivateMediaImage({
       style={responsive ? { aspectRatio: responsive.aspectRatio, ...style } : style}
       loading={loading ?? (eager ? 'eager' : 'lazy')}
       decoding="async"
-      data-media-state={source ? 'ready' : 'loading'}
+      data-media-state={source && decodedSource === source ? 'ready' : 'loading'}
+      onLoad={(event) => { setDecodedSource(source); imageProps.onLoad?.(event); }}
+      title={loadFailed ? 'Média privé momentanément indisponible' : imageProps.title}
       onError={(event) => {
         onError?.(event);
-        if (source === directSource && asset.binaryId) setFailedDirectSource(directSource);
+        if (source === directSource && (asset.binaryId || asset.publicStoragePath)) setFailedDirectSource(directSource);
+        else { setFailureKind('network'); setInsideAction(Boolean(imageRef.current?.closest('button,a'))); setLoadFailed(true); }
       }}
     />
   );
 
+  if (loadFailed) return <span role="status" data-media-state="error" data-media-name={imageProps.alt} className="media-empty media-load-error">{mediaFailureMessage(failureKind, language)}{insideAction ? <small>{language === 'FR' ? 'Ouvrez le média pour réessayer.' : 'Open this media to retry.'}</small> : <button type="button" onClick={() => { setLoadFailed(false); setDecodedSource(undefined); setSource(effectiveDirectSource); setAttempt((value) => value + 1); }}>{language === 'FR' ? 'Réessayer le média' : 'Retry media'}</button>}</span>;
   return responsive ? (
     <picture className="presentation-picture">
       <source type="image/avif" srcSet={responsive.avifSrcSet} sizes={sizes} />

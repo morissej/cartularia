@@ -3,6 +3,9 @@ import { CANONICALIZATION_VERSION, sha256Digest } from './canonical-json.mjs';
 import { verifyAuditChain, ZERO_AUDIT_HASH } from './audit-verifier.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
 import { privateBinaryIsVerified } from './private-upload-command.mjs';
+import { loadGenericSectionPatches } from './generic-sections-command.mjs';
+import { assertNewCollectionAssignments } from './collection-command.mjs';
+import { applyGenericMediaChanges } from './generic-media-command.mjs';
 
 const SYNC_RATE_LIMIT_PER_HOUR = 120;
 const ONE_HOUR_MS = 60 * 60 * 1_000;
@@ -212,6 +215,8 @@ export const processCartularySyncRequest = async ({
   ]);
   if (!root.exists) throw new LiveSyncCommandError('cartulary_not_found', `Cartulaire ${cartularyId} introuvable.`);
   const rootData = root.data();
+  const previousProjection = await firestore.doc(`registries/${rootData.registryId}/items/${cartularyId}`).get();
+  const moneyBaseline = { ...previousProjection.data(), ...rootData };
   const chain = verifyAuditChain({
     events: auditSnapshot.docs.map((document) => document.data()),
     integrityHead: rootData.integrityHead,
@@ -219,42 +224,69 @@ export const processCartularySyncRequest = async ({
   });
   if (!chain.valid) throw new LiveSyncCommandError('audit_chain_invalid', 'La chaîne d’intégrité doit être valide avant synchronisation.');
 
+  const operationMarker = stateValue(draft.states, 'cartularia-generic-operation');
+  const genericOperation = typeof operationMarker === 'string' ? operationMarker : operationMarker?.kind;
+  const genericOperationToken = typeof operationMarker === 'object' && operationMarker ? operationMarker.token : operationMarker ? sha256Digest(operationMarker) : null;
+  if ((genericOperation != null && !['media', 'sections'].includes(genericOperation)) || (operationMarker && typeof operationMarker === 'object' && (Object.keys(operationMarker).some((key) => !['kind', 'token'].includes(key)) || !/^[A-Za-z0-9_-]{8,160}$/.test(genericOperationToken || '')))) throw new LiveSyncCommandError('invalid_generic_operation', 'La demande de modification générique est invalide.');
+  const pendingGenericOperation = Boolean(genericOperationToken && genericOperationToken !== rootData.lastGenericOperationToken);
+  const genericDraft = operationMarker ? pendingGenericOperation && genericOperation === 'sections' ? stateValue(draft.states, 'cartularia-generic-sections') : null : stateValue(draft.states, 'cartularia-generic-sections');
+  const genericEditDigest = genericDraft ? sha256Digest(genericDraft) : null;
+  const sectionPatches = genericEditDigest && genericEditDigest !== rootData.genericEditDigest
+    ? await loadGenericSectionPatches({ firestore, rootRef, draft: genericDraft, root: rootData, ownerUid, occurredAt }) : [];
+  const genericValues = new Map(sectionPatches.flatMap((section) => Object.entries(section.fields).map(([key, field]) => [key, field.value])));
+
   const specifications = stateValue(draft.states, 'cartularia-specification-groups');
-  const media = stateValue(draft.states, 'cartularia-media-assets-v3');
-  const collectionId = asText(stateValue(draft.states, 'cartularia-collection-id'), rootData.collectionId);
-  const publicationCollectionIdsState = stateValue(draft.states, 'cartularia-publication-collection-ids');
+  const storedGenericMediaDraft = stateValue(draft.states, 'cartularia-generic-media');
+  const genericMediaDraft = operationMarker ? pendingGenericOperation && genericOperation === 'media' ? storedGenericMediaDraft : null : storedGenericMediaDraft;
+  const genericMediaDigest = genericMediaDraft ? sha256Digest(genericMediaDraft) : null;
+  const applyGenericMedia = Boolean(genericMediaDigest && genericMediaDigest !== rootData.genericMediaDigest);
+  const genericContext = Boolean(pendingGenericOperation || sectionPatches.length || applyGenericMedia);
+  const legacyMedia = stateValue(draft.states, 'cartularia-media-assets-v3');
+  const legacyMediaDigest = Array.isArray(legacyMedia) ? sha256Digest(legacyMedia) : null;
+  const media = applyGenericMedia ? applyGenericMediaChanges({ draft: genericMediaDraft, root: { ...rootData, id: cartularyId },
+    existingAssets: new Map(existingAssetsSnapshot.docs.map((document) => [document.id, document.data()])), binaries: draft.binaries }) : !genericContext && legacyMediaDigest !== rootData.legacyMediaDigest ? legacyMedia : null;
+  const legacyCollectionId = stateValue(draft.states, 'cartularia-collection-id');
+  const legacyCollectionIds = stateValue(draft.states, 'cartularia-publication-collection-ids');
+  const legacyCollectionDigest = sha256Digest({ primary: legacyCollectionId, secondary: legacyCollectionIds });
+  const preserveCollectionBindings = genericContext || legacyCollectionDigest === rootData.legacyCollectionDigest;
+  const collectionId = preserveCollectionBindings ? rootData.collectionId : asText(legacyCollectionId, rootData.collectionId);
+  const publicationCollectionIdsState = preserveCollectionBindings ? rootData.collectionIds : legacyCollectionIds;
   const collectionIds = [...new Set([
     ...(Array.isArray(publicationCollectionIdsState) ? publicationCollectionIdsState : rootData.collectionIds || []),
     collectionId,
   ].filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim()))];
   const patrimonialStatus = asText(stateValue(draft.states, 'cartularia-watch-status'), rootData.patrimonialStatus || 'Patrimonial');
   const userAlias = asText(stateValue(draft.states, 'cartularia-user-alias'), rootData.userAlias || null);
-  const objectCode = asText(stateValue(draft.states, 'cartularia-object-code'), rootData.objectCode || null);
+  const objectCode = rootData.objectCode || rootData.publicCode || null;
   const storageCodeState = stateValue(draft.states, 'cartularia-storage-code-names');
   const storageCodeNames = Array.isArray(storageCodeState)
     ? storageCodeState.flatMap((item) => typeof item?.codeName === 'string' && item.codeName.trim() ? [item.codeName.trim().slice(0, 80)] : [])
     : Array.isArray(rootData.storageCodeNames) ? rootData.storageCodeNames : [];
-  const purchase = stateValue(draft.states, 'cartularia-purchase') || {};
+  const purchaseState = stateValue(draft.states, 'cartularia-purchase');
+  const purchase = purchaseState || {};
   const purchaseExpenses = stateValue(draft.states, 'cartularia-purchase-expenses');
-  const retainedValuation = stateValue(draft.states, 'cartularia-retained-valuation') || {};
+  const retainedValuationState = stateValue(draft.states, 'cartularia-retained-valuation');
+  const retainedValuation = retainedValuationState || {};
   const creationProfile = stateValue(draft.states, 'cartularia-creation-profile') || {};
-  const purchasePrice = asNonNegativeNumber(purchase.purchasePrice);
-  const costBasis = purchasePrice === null ? null : purchasePrice + (Array.isArray(purchaseExpenses)
+  const purchasePrice = asNonNegativeNumber(purchase.purchasePrice, moneyBaseline.purchasePrice ?? creationProfile.purchasePrice ?? null);
+  const costBasis = !purchaseState && !Array.isArray(purchaseExpenses) ? (moneyBaseline.costBasis ?? purchasePrice) : purchasePrice === null ? null : purchasePrice + (Array.isArray(purchaseExpenses)
     ? purchaseExpenses.reduce((sum, expense) => sum + (asNonNegativeNumber(expense?.amount, 0) || 0), 0)
     : 0);
-  const grossValuation = asNonNegativeNumber(retainedValuation.amount);
+  const editedValue = genericValues.get('value.retained.amount');
+  const grossValuation = asNonNegativeNumber(editedValue?.amount, asNonNegativeNumber(retainedValuation.amount, moneyBaseline.grossValuation ?? creationProfile.valuationMid ?? null));
   const saleCostAmount = asNonNegativeNumber(retainedValuation.saleCostAmount, 0) || 0;
   const taxAmount = asNonNegativeNumber(retainedValuation.taxAmount, 0) || 0;
-  const netValuation = grossValuation === null ? null : Math.max(0, grossValuation - saleCostAmount);
-  const netAfterTaxValuation = netValuation === null ? null : Math.max(0, netValuation - taxAmount);
-  const valuationCurrency = asText(creationProfile.currency, rootData.valuationCurrency || rootData.currency || 'EUR');
-  const makerName = asText(specificationValue(specifications, 'brand', 'Marque'), rootData.makerName);
-  const modelName = asText(specificationValue(specifications, 'model', 'Modèle'), rootData.modelName);
-  const referenceCode = asText(specificationValue(specifications, 'reference', 'Numéro de référence'), rootData.referenceCode);
-  const manufactureYear = asYear(specificationValue(specifications, 'year', 'Année de fabrication'), rootData.manufactureYear);
+  const netValuation = editedValue ? null : !retainedValuationState ? (moneyBaseline.netValuation ?? null) : grossValuation === null ? null : Math.max(0, grossValuation - saleCostAmount);
+  const netAfterTaxValuation = editedValue ? null : !retainedValuationState ? (moneyBaseline.netAfterTaxValuation ?? null) : netValuation === null ? null : Math.max(0, netValuation - taxAmount);
+  const valuationCurrency = asText(editedValue?.currency, asText(creationProfile.currency, rootData.valuationCurrency || rootData.currency || 'EUR'));
+  const legacySpecifications = rootData.assetType === 'watch' ? specifications : null;
+  const makerName = asText(genericValues.get('cover.car.maker') ?? genericValues.get('cover.watch.brand'), asText(specificationValue(legacySpecifications, 'brand', 'Marque'), rootData.makerName));
+  const modelName = asText(genericValues.get('cover.car.model') ?? genericValues.get('cover.watch.model'), asText(specificationValue(legacySpecifications, 'model', 'Modèle'), rootData.modelName));
+  const referenceCode = asText(genericValues.get('cover.car.version') ?? genericValues.get('cover.watch.reference'), asText(specificationValue(legacySpecifications, 'reference', 'Numéro de référence'), rootData.referenceCode));
+  const manufactureYear = genericValues.get('cover.car.year') ?? asYear(specificationValue(legacySpecifications, 'year', 'Année de fabrication'), rootData.manufactureYear);
   const mediaAssets = Array.isArray(media) ? media.filter((asset) => asset && typeof asset.id === 'string') : [];
   const primaryAssetId = mediaAssets.find((asset) => Array.isArray(asset.tags) && asset.tags.includes('main-photo'))?.id
-    || rootData.primaryAssetId
+    || (Array.isArray(media) ? null : rootData.primaryAssetId)
     || null;
   const existingAssets = new Map(existingAssetsSnapshot.docs.map((document) => [document.id, document.data()]));
   const existingReminders = new Map(existingRemindersSnapshot.docs.map((document) => [document.id, document.data()]));
@@ -308,6 +340,9 @@ export const processCartularySyncRequest = async ({
       throw new LiveSyncCommandError('registry_not_ready', 'Registre absent ou hors tenant.');
     }
     assertOwnerEditor(membership, currentRootData, ownerUid);
+    if (applyGenericMedia && genericMediaDraft.changes.some((change) => change.visibility === 'Tous') && !membership.data().permissions?.includes('publication.manage')) throw new LiveSyncCommandError('permission_denied', 'Le droit de publication est requis pour autoriser des médias publics.');
+    await assertNewCollectionAssignments({ transaction, firestore, registryId: currentRootData.registryId,
+      organizationId: currentRootData.organizationId, previous: currentRootData, next: { collectionId, collectionIds } });
 
     if (currentRootData.liveStateDigest === draft.digest) {
       transaction.update(requestRef, {
@@ -370,6 +405,12 @@ export const processCartularySyncRequest = async ({
       objectCode,
       storageCodeNames,
       primaryAssetId,
+      purchasePrice, costBasis, grossValuation, netValuation, netAfterTaxValuation, valuationCurrency,
+      ...(genericEditDigest ? { genericEditDigest } : {}),
+      ...(genericMediaDigest ? { genericMediaDigest } : {}),
+      ...(pendingGenericOperation ? { lastGenericOperationToken: genericOperationToken } : {}),
+      ...(legacyMediaDigest ? { legacyMediaDigest } : {}),
+      legacyCollectionDigest,
       revision: nextRevision,
       liveStateDigest: draft.digest,
       liveStateUpdatedAt: FieldValue.serverTimestamp(),
@@ -381,6 +422,11 @@ export const processCartularySyncRequest = async ({
       ...auditEvent,
       occurredAt: Timestamp.fromDate(new Date(occurredAt)),
       occurredAtIso: occurredAt,
+    });
+    for (const patch of sectionPatches) transaction.set(rootRef.collection('sections').doc(patch.id), { ...patch, updatedAt: FieldValue.serverTimestamp() });
+    if (sectionPatches.length) transaction.set(rootRef.collection('sources').doc('source_owner_generic_edit'), {
+      id: 'source_owner_generic_edit', kind: 'user_declaration', label: 'Déclaration du propriétaire dans le Cartulaire',
+      visibility: 'secret', assertedBy: ownerUid, observedAt: occurredAt, updatedAt: FieldValue.serverTimestamp(),
     });
     for (const record of draft.states.values()) {
       transaction.set(rootRef.collection('liveState').doc(record.key), {
@@ -396,7 +442,7 @@ export const processCartularySyncRequest = async ({
     for (const patch of assetPatches) transaction.set(rootRef.collection('assets').doc(patch.id), patch, { merge: true });
     const activeAssetIds = new Set(assetPatches.map((asset) => asset.id));
     for (const [assetId, existing] of existingAssets) {
-      if (existing.liveSyncManaged === true && !activeAssetIds.has(assetId)) {
+      if (Array.isArray(media) && (existing.liveSyncManaged === true || (applyGenericMedia && genericMediaDraft.removeIds.includes(assetId))) && !activeAssetIds.has(assetId)) {
         transaction.set(rootRef.collection('assets').doc(assetId), {
           projectionStatus: 'withdrawn',
           liveStateDigest: draft.digest,
@@ -407,7 +453,7 @@ export const processCartularySyncRequest = async ({
     for (const patch of reminderPatches) transaction.set(rootRef.collection('reminders').doc(patch.id), patch, { merge: true });
     const activeReminderIds = new Set(reminderPatches.map((reminder) => reminder.id));
     for (const [reminderId, existing] of existingReminders) {
-      if (existing.liveSyncManaged === true && !activeReminderIds.has(reminderId)) transaction.delete(rootRef.collection('reminders').doc(reminderId));
+      if (Array.isArray(followUps) && existing.liveSyncManaged === true && !activeReminderIds.has(reminderId)) transaction.delete(rootRef.collection('reminders').doc(reminderId));
     }
     transaction.set(registryItemRef, {
       ...projection,

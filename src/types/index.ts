@@ -67,12 +67,16 @@ export type MediaRole = MediaTag;
 export type MediaSubject = 'cadran' | 'boite' | 'mouvement' | 'bracelet' | 'defaut' | 'ensemble' | 'accessoire' | 'documentation';
 
 export interface Asset {
+  /** A Rules-protected public presentation derivative, never a private original. */
+  publicStoragePath?: string;
+  publicContentHash?: string;
   id: string;
+  cartularyId?: string;
   name: string;
   url: string;
   thumbnailUrl?: string;
   type: 'image' | 'video' | 'document';
-  ratio?: '3:4' | '4:5' | '16:9';
+  ratio?: '1:1' | '3:4' | '4:5' | '16:9';
   hash: string;
   status: 'Initiated' | 'Uploading' | 'Quarantine' | 'Processing' | 'Archived' | 'Failed' | 'Deleted';
   visibility: VisibilityLevel;

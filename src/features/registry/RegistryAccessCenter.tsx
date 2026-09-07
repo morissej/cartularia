@@ -31,6 +31,7 @@ import {
 } from './registryAccess.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
 import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
+import { useRegistryCollections } from './useRegistryCollections.ts';
 
 type AccessLoadState = 'loading' | 'ready' | 'error';
 
@@ -84,6 +85,7 @@ export function RegistryAccessCenter({ registry, canReadAccesses, canManageAcces
   canReadAccesses: boolean;
   canManageAccesses?: boolean;
 }) {
+  const { collections: registryCollections, state: collectionsState, retry: retryCollections } = useRegistryCollections(registry.id);
   const [accesses, setAccesses] = useState<RegistryAccessProjection[]>([]);
   const [loadState, setLoadState] = useState<AccessLoadState>('loading');
   const [registryItems, setRegistryItems] = useState<RegistryItemProjection[]>([]);
@@ -95,6 +97,10 @@ export function RegistryAccessCenter({ registry, canReadAccesses, canManageAcces
   const [creating, setCreating] = useState(false);
   const [creationNotice, setCreationNotice] = useState('');
   const [emulatorInvitationLink, setEmulatorInvitationLink] = useState('');
+  const [pendingRevocation, setPendingRevocation] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revocationNotice, setRevocationNotice] = useState('');
+  const [revocationError, setRevocationError] = useState('');
   const [query, setQuery] = useState(() => readInitialParameter('q', ''));
   const [status, setStatus] = useState<'all' | RegistryAccessStatus>(() => {
     const candidate = readInitialParameter('status', 'all');
@@ -157,12 +163,26 @@ export function RegistryAccessCenter({ registry, canReadAccesses, canManageAcces
   const activeFilterCount = [query.trim(), status !== 'all', accessKind !== 'all', consultation !== 'all']
     .filter(Boolean).length;
   const returnTo = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
-  const collections = useMemo(() => [...new Set(registryItems.map((item) => item.collectionId))].sort(), [registryItems]);
   const scopeOptions = useMemo(() => scopeType === 'registry'
     ? [{ id: registry.id, label: registry.name }]
     : scopeType === 'collection'
-      ? collections.map((id) => ({ id, label: id.replace(/^col_/, '').replace(/[_-]+/g, ' ') }))
-      : registryItems.map((item) => ({ id: item.cartularyId, label: item.displayTitle })), [collections, registry.id, registry.name, registryItems, scopeType]);
+      ? collectionsState === 'ready' ? registryCollections.filter((entry) => entry.status !== 'archived').map((entry) => ({ id: entry.id, label: entry.name })) : []
+      : registryItems.map((item) => ({ id: item.cartularyId, label: item.displayTitle })), [registryCollections, collectionsState, registry.id, registry.name, registryItems, scopeType]);
+
+  const confirmRevocation = async (accessId: string) => {
+    if (!canManageAccesses || revokingId) return;
+    setRevokingId(accessId);
+    setRevocationError('');
+    setRevocationNotice('');
+    try {
+      await revokeRegistryAccess(registry.id, accessId);
+      setPendingRevocation(null);
+      setRevocationNotice('Accès révoqué. Le destinataire ne peut plus utiliser cette invitation.');
+      await reload();
+    } catch {
+      setRevocationError('La révocation n’a pas été confirmée. Vérifiez votre connexion et vos droits puis réessayez.');
+    } finally { setRevokingId(null); }
+  };
 
   useEffect(() => {
     if (!scopeOptions.some((option) => option.id === scopeId)) setScopeId(scopeOptions[0]?.id || '');
@@ -216,7 +236,7 @@ export function RegistryAccessCenter({ registry, canReadAccesses, canManageAcces
     return (
       <section className="registry-access registry-access--denied" aria-labelledby="registry-access-title">
         <KeyRound aria-hidden="true" />
-        <p className="registry-kicker">Centre des accès · R6</p>
+        <p className="registry-kicker">Centre des accès</p>
         <h1 id="registry-access-title">Accès limité</h1>
         <p>Votre qualité permet d’ouvrir le Registre, mais pas la projection des invitations et consultations.</p>
         <a href={`/registry/${encodeURIComponent(registry.id)}`}>Revenir à la vue d’ensemble</a>
@@ -228,7 +248,7 @@ export function RegistryAccessCenter({ registry, canReadAccesses, canManageAcces
     <section className="registry-access" aria-labelledby="registry-access-title">
       <header className="registry-page-heading registry-access__heading">
         <div>
-          <p className="registry-kicker">Centre des accès · R6</p>
+          <p className="registry-kicker">Centre des accès</p>
           <h1 id="registry-access-title">Invitations et consultations</h1>
           <p>Le pilotage des accès partagés, sans recopier les contenus, preuves, archives ou médias des Cartulaires.</p>
         </div>
@@ -241,11 +261,14 @@ export function RegistryAccessCenter({ registry, canReadAccesses, canManageAcces
           <label>Adresse du destinataire<input type="email" value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="nom@exemple.com" required /></label>
           <label>Portée<select value={scopeType} onChange={(event) => setScopeType(event.target.value as typeof scopeType)}><option value="cartulary">Un Cartulaire</option><option value="collection">Une Collection</option><option value="registry">Tout le Registre</option></select></label>
           <label>Élément<select value={scopeId} onChange={(event) => setScopeId(event.target.value)} required>{scopeOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}</select></label>
+          {scopeType === 'collection' && collectionsState !== 'ready' && <div role={collectionsState === 'error' ? 'alert' : 'status'}><p>{collectionsState === 'error' ? 'Les Collections n’ont pas pu être actualisées. L’invitation est suspendue.' : 'Chargement des Collections…'}</p>{collectionsState === 'error' && <button type="button" onClick={retryCollections}>Réessayer les Collections</button>}</div>}
           <label>Expiration<input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></label>
           <button type="submit" disabled={creating || !recipient.trim() || !scopeId}>{creating ? 'Émission…' : "Envoyer l’invitation"}</button>
         </form>
       )}
       {creationNotice && <p className="registry-access-creation-notice" role="status">{creationNotice}</p>}
+      {revocationNotice && <p className="registry-access-creation-notice" role="status">{revocationNotice}</p>}
+      {revocationError && <p className="registry-form-error" role="alert">{revocationError}</p>}
       {emulatorInvitationLink && <p className="registry-access-creation-notice" role="status"><a href={emulatorInvitationLink}>Ouvrir le lien dans l’émulateur local</a></p>}
 
       <div className="registry-access-facts" aria-label="Synthèse des accès">
@@ -294,8 +317,12 @@ export function RegistryAccessCenter({ registry, canReadAccesses, canManageAcces
                 <div className="registry-access-item__body"><h2>{access.displayTitle}</h2><p>{maskRecipientReference(access.recipientLabel)}</p><small>{access.scopeType === 'registry' ? 'Registre' : access.scopeType === 'collection' ? 'Collection' : 'Cartulaire'} · Révision {access.sourceRevision}</small></div>
                 <div className="registry-access-item__expiry"><Clock3 aria-hidden="true" /><span>{effectiveStatus === 'revoked' ? 'Accès révoqué' : 'Échéance'}</span><time dateTime={expiresAt?.toISOString()}>{effectiveStatus === 'revoked' ? formatDate(access.revokedAt) : formatDate(access.expiresAt)}</time></div>
                 <div className="registry-access-item__consultation"><Eye aria-hidden="true" /><strong>{Math.max(0, access.consultationCount || 0)}</strong><span>consultation{access.consultationCount > 1 ? 's' : ''}</span><small>{formatConsultation(access)}</small></div>
-                {access.cartularyId ? <a href={buildCartularyHref(access.cartularyId, returnTo)}>Gérer dans le Cartulaire <ExternalLink aria-hidden="true" /><ChevronRight aria-hidden="true" /></a> : <span className="registry-access-item__scope">{access.scopeType === 'collection' ? 'Accès Collection' : 'Accès Registre'}</span>}
-                {effectiveStatus !== 'revoked' && <button type="button" className="registry-access-item__revoke" onClick={() => void revokeRegistryAccess(registry.id, access.id).then(reload)}><Ban aria-hidden="true" />Révoquer</button>}
+                {access.cartularyId ? registryItems.some((item) => item.cartularyId === access.cartularyId) ? <a href={buildCartularyHref(access.cartularyId, returnTo, registryItems.find((item) => item.cartularyId === access.cartularyId)!.assetType)}>Gérer dans le Cartulaire <ExternalLink aria-hidden="true" /><ChevronRight aria-hidden="true" /></a> : <span className="registry-access-item__scope">Objet indisponible dans ce Registre. Actualisez les accès pour réessayer.</span> : <span className="registry-access-item__scope">{access.scopeType === 'collection' ? 'Accès Collection' : 'Accès Registre'}</span>}
+                {canManageAccesses && effectiveStatus !== 'revoked' && (pendingRevocation === access.id ? <div className="registry-access-revocation" role="group" aria-label={`Confirmer le retrait de l’accès à ${access.displayTitle}`}>
+                  <p>Retirer l’accès de {maskRecipientReference(access.recipientLabel)} à {access.displayTitle} ?</p>
+                  <button type="button" disabled={Boolean(revokingId)} onClick={() => setPendingRevocation(null)}>Conserver l’accès</button>
+                  <button type="button" disabled={Boolean(revokingId)} onClick={() => void confirmRevocation(access.id)}>{revokingId === access.id ? 'Révocation…' : 'Confirmer la révocation'}</button>
+                </div> : <button type="button" className="registry-access-item__revoke" disabled={Boolean(revokingId)} onClick={() => { setPendingRevocation(access.id); setRevocationError(''); }}><Ban aria-hidden="true" />Révoquer</button>)}
               </article>
             );
           })}

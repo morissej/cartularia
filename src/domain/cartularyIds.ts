@@ -9,7 +9,11 @@ export const cartularyIdFromLocation = (location: Pick<Location, 'pathname' | 's
   const parameters = new URLSearchParams(location.search);
   const isWatchWebsite = normalizedPath === '/watch-website';
   const isLocalPublicationPreview = isWatchWebsite && parameters.get('preview') === 'local';
-  const supportsCartularySelection = normalizedPath === '/cartulary' || normalizedPath === '/cartulary-view' || isWatchWebsite || isLocalPublicationPreview;
+  const supportsCartularySelection = normalizedPath === '/cartulary'
+    || normalizedPath === '/cartulary-view'
+    || normalizedPath === '/cartulary-demo'
+    || isWatchWebsite
+    || isLocalPublicationPreview;
   if (!supportsCartularySelection) return IWC_CARTULARY_ID;
   const requested = parameters.get('cartularyId');
   if (requested && SAFE_CARTULARY_ID.test(requested)) return requested;

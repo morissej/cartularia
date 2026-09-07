@@ -26,13 +26,26 @@ export const activateRegistryAccount = async ({ firestore, uid, email, userName,
   const organizationRef = firestore.doc(`organizations/${organizationId}`);
   const membershipRef = firestore.doc(`organizations/${organizationId}/memberships/${uid}`);
   const registryRef = firestore.doc(`registries/${registryId}`);
-  const [userSnapshot, organizationSnapshot, membershipSnapshot, registrySnapshot] = await firestore.getAll(
+  return firestore.runTransaction(async (transaction) => {
+  const [userSnapshot, organizationSnapshot, membershipSnapshot, registrySnapshot] = await transaction.getAll(
     userRef,
     organizationRef,
     membershipRef,
     registryRef,
   );
-  const batch = firestore.batch();
+  const snapshots = [userSnapshot, organizationSnapshot, membershipSnapshot, registrySnapshot];
+  if (snapshots.some((snapshot) => snapshot.exists && snapshot.data().status !== 'active')) {
+    throw new AccountCommandError('permission_denied', 'Cet accès est suspendu ou retiré. La création ne peut pas rétablir ses droits.');
+  }
+  // The four documents are created atomically. An existing user with a missing
+  // membership is not an interrupted activation: never recreate removed rights.
+  if (userSnapshot.exists && snapshots.some((snapshot) => !snapshot.exists)) {
+    throw new AccountCommandError('failed_precondition', 'Cet espace existant nécessite une vérification de ses droits.');
+  }
+  if (snapshots.every((snapshot) => snapshot.exists)) return { organizationId, registryId };
+  if (snapshots.some((snapshot) => snapshot.exists)) {
+    throw new AccountCommandError('failed_precondition', 'La configuration de cet espace nécessite une vérification.');
+  }
   const userDocument = {
     uid,
     email: String(email || ''),
@@ -45,9 +58,8 @@ export const activateRegistryAccount = async ({ firestore, uid, email, userName,
     purgeAfter: null,
     updatedAt: timestamp,
   };
-  if (userSnapshot.exists) batch.update(userRef, { displayName: normalizedUserName, lastActiveAt: timestamp, updatedAt: timestamp });
-  else batch.create(userRef, userDocument);
-  if (!organizationSnapshot.exists) batch.create(organizationRef, {
+  transaction.create(userRef, userDocument);
+  transaction.create(organizationRef, {
     id: organizationId,
     name: `Espace de ${normalizedUserName}`,
     status: 'active',
@@ -55,7 +67,7 @@ export const activateRegistryAccount = async ({ firestore, uid, email, userName,
     createdAt: timestamp,
     updatedAt: timestamp,
   });
-  if (!membershipSnapshot.exists) batch.create(membershipRef, {
+  transaction.create(membershipRef, {
     uid,
     organizationId,
     roles: ['account_holder', 'legal_owner'],
@@ -76,7 +88,7 @@ export const activateRegistryAccount = async ({ firestore, uid, email, userName,
     createdAt: timestamp,
     revokedAt: null,
   });
-  if (!registrySnapshot.exists) batch.create(registryRef, {
+  transaction.create(registryRef, {
     id: registryId,
     organizationId,
     name: 'Mon Registre',
@@ -88,6 +100,6 @@ export const activateRegistryAccount = async ({ firestore, uid, email, userName,
     createdAt: timestamp,
     updatedAt: timestamp,
   });
-  await batch.commit();
   return { organizationId, registryId };
+  });
 };

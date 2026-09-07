@@ -143,7 +143,7 @@ const normalizedMediaObject = identifiedObject({
   url: stringValue,
   thumbnailUrl: optionalString,
   type: enumValue(['image', 'video', 'document']),
-  ratio: optionalEnumValue(['3:4', '4:5', '16:9']),
+  ratio: optionalEnumValue(['1:1', '3:4', '4:5', '16:9']),
   hash: stringValue,
   status: enumValue(['Archived', 'Initiated', 'Uploading', 'Quarantine', 'Processing', 'Failed', 'Deleted']),
   visibility: enumValue(['Secret', 'Communauté', 'Tous']),

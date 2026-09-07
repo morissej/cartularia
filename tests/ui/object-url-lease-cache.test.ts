@@ -48,4 +48,27 @@ describe('cache borné des Object URLs', () => {
     expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:other');
     visible.release();
   });
+
+  it('évince une vidéo inactive qui dépasse le budget mémoire sans révoquer une image active', async () => {
+    const revoke = vi.fn();
+    const cache = new ObjectUrlLeaseCache(8, revoke, 20);
+    const visible = await cache.acquire('visible', async () => ({ url: 'blob:visible', byteSize: 10 }));
+    const large = await cache.acquire('large', async () => ({ url: 'blob:large', byteSize: 30 }));
+    expect(revoke).not.toHaveBeenCalled();
+    large.release();
+    expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:large');
+    expect(cache.snapshot().activeLeases).toBe(1);
+    visible.release();
+  });
+
+  it('révoque aussi une réponse arrivée après destruction du cache', async () => {
+    const revoke = vi.fn();
+    let complete!: (url: string) => void;
+    const cache = new ObjectUrlLeaseCache(8, revoke);
+    const request = cache.acquire('late', () => new Promise<string>((resolve) => { complete = resolve; }));
+    cache.clear(); complete('blob:late');
+    await expect(request).rejects.toThrow('annulé');
+    expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:late');
+    expect(cache.snapshot().entries).toBe(0);
+  });
 });

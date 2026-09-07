@@ -10,6 +10,11 @@ service firebase.storage {
         ).data.status == 'published';
     }
 
+    function publicationIncludesMedia(publicCode, assetId, derivativeId) {
+      return firestore.exists(/databases/(default)/documents/publications/$(publicCode)/mediaAccess/$(assetId))
+        && derivativeId in firestore.get(/databases/(default)/documents/publications/$(publicCode)/mediaAccess/$(assetId)).data.derivativeIds;
+    }
+
     function isAdmittedCommunityMember() {
       return request.auth != null
         && firestore.exists(
@@ -106,6 +111,7 @@ service firebase.storage {
     // L'original, les dérivés privés et toutes les écritures client restent fermés.
     match /public/{publicCode}/{assetId}/{derivativeId} {
       allow read: if publicationIsActive(publicCode)
+        && publicationIncludesMedia(publicCode, assetId, derivativeId)
         && resource != null
         && resource.metadata.publicCode == publicCode
         && resource.metadata.assetId == assetId

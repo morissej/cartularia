@@ -5,7 +5,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 
 const projectId = 'cartularia-wave1-storage-test';
 const bucketUrl = `gs://${projectId}.appspot.com`;
@@ -59,6 +59,7 @@ beforeEach(async () => {
         status: 'published',
         publicationStatus: 'published',
       }),
+      setDoc(doc(context.firestore(), 'publications', publicCode, 'mediaAccess', 'asset-a'), { derivativeIds: ['web-v1'] }),
       setDoc(doc(context.firestore(), 'communityMemberships', 'member-a'), {
         uid: 'member-a',
         status: 'active',
@@ -277,6 +278,19 @@ test('le passage du compte à inactif coupe immédiatement la lecture et les nou
       sha256: `sha256:${newDigest}`, kind: 'media',
     },
   }));
+});
+
+test('un média désélectionné ou sa version retirée devient illisible même si la publication reste active', async () => {
+  const storage = testEnvironment.unauthenticatedContext().storage(bucketUrl);
+  await assertSucceeds(storage.ref(publicPath).getDownloadURL());
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'publications', publicCode, 'mediaAccess', 'asset-a'), { derivativeIds: ['web-v2'] });
+  });
+  await assertFails(storage.ref(publicPath).getDownloadURL());
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await deleteDoc(doc(context.firestore(), 'publications', publicCode, 'mediaAccess', 'asset-a'));
+  });
+  await assertFails(storage.ref(publicPath).getDownloadURL());
 });
 
 test('un visiteur anonyme lit uniquement le dérivé d’une publication active', async () => {

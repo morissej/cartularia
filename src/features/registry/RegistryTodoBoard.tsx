@@ -126,14 +126,14 @@ export function RegistryTodoBoard({
     }
   };
 
-  const returnTo = `/registry/${encodeURIComponent(registryId)}/overview`;
+  const returnTo = `/registry/${encodeURIComponent(registryId)}/follow-up${window.location.search}`;
 
   return (
     <section className="registry-todo-board" aria-labelledby="registry-todo-board-title">
       <header>
         <div>
           <span className="registry-step">Suivi coordonné</span>
-          <h2 id="registry-todo-board-title">Toutes les tâches des Cartulaires</h2>
+          <h2 id="registry-todo-board-title">À faire</h2>
           <p>{sortedTodos.length} tâche{sortedTodos.length === 1 ? '' : 's'} réunie{sortedTodos.length === 1 ? '' : 's'} dans ce Registre.</p>
         </div>
         <ListTodo aria-hidden="true" />

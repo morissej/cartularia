@@ -1,0 +1,7 @@
+.media-transfer-status { display: grid; gap: .45rem; padding: .65rem; border: 1px solid var(--rule); font-size: .85rem; }
+.media-transfer-status small { color: var(--muted); max-width: 65ch; }
+.media-transfer-status button { justify-self: start; min-height: 44px; padding: .45rem .75rem; }
+.media-download-action { display: inline-grid; gap: .35rem; max-width: 100%; }
+.media-download-action .media-download-link span { overflow-wrap: anywhere; }
+.spin-downloads__row { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem; }
+@media print { .media-transfer-status, .media-download-action { display: none !important; } }

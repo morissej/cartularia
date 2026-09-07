@@ -92,7 +92,7 @@ export function EditableParagraphs({
 export function VideoPoster({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset) => void }) {
   const hasPoster = Boolean(asset.posterUrl || asset.thumbnailUrl);
   return (
-    <button type="button" className="video-poster" onClick={() => onOpen(asset)}>
+    <button type="button" className="video-poster" onClick={() => onOpen(asset)} aria-label={`Lire la vidéo : ${asset.name}`}>
       {hasPoster
         ? <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 100vw, 1200px" />
         : <span className="video-poster__placeholder"><Video size={38} /><small>{asset.name}</small></span>}

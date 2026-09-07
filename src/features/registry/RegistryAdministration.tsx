@@ -121,7 +121,7 @@ export function RegistryAdministration({
     <section className="registry-administration" aria-labelledby="registry-administration-title">
       <header className="registry-page-heading registry-administration__heading">
         <div>
-          <p className="registry-kicker">Administration · R5</p>
+          <p className="registry-kicker">Votre organisation</p>
           <h1 id="registry-administration-title">Organisation et droits</h1>
           <p>Comprendre qui intervient, dans quel Registre et avec quelles permissions — sans ouvrir le contenu des Cartulaires.</p>
         </div>
@@ -195,13 +195,14 @@ export function RegistryAdministration({
         </section>
 
         <section className="registry-administration-panel registry-administration-panel--continuity">
-          <header><div><span className="registry-step">Continuité</span><h2>Sort du coffre</h2></div><FileLock2 aria-hidden="true" /></header>
+          <header><div><span className="registry-step">Continuité</span><h2>Accès et conservation</h2></div><FileLock2 aria-hidden="true" /></header>
           <div className="registry-administration-continuity">
             <div><CircleCheck aria-hidden="true" /><span><strong>La preuve n’est jamais supprimée pour un motif commercial</strong><small>Un défaut de paiement peut dégrader l’accès, pas effacer l’historique.</small></span></div>
             <div><CircleCheck aria-hidden="true" /><span><strong>L’export du propriétaire reste disponible</strong><small>Il ne peut être conditionné au règlement d’un impayé.</small></span></div>
             <div><CircleCheck aria-hidden="true" /><span><strong>Les accès partagés restent révocables</strong><small>Y compris lorsque le compte passe en lecture seule.</small></span></div>
           </div>
-          <div className="registry-administration-commercial"><CircleDollarSign aria-hidden="true" /><div><strong>Abonnement et facturation</strong><p>{canReadBilling ? 'Aucune projection commerciale versionnée n’est encore disponible pour ce compte. Aucun plan, quota ou montant n’est donc inventé.' : 'Votre attribution ne porte pas le droit de lecture de la facturation.'}</p></div></div>
+          <div className="registry-administration-commercial"><CircleDollarSign aria-hidden="true" /><div><strong>Abonnement et facturation</strong><p>{canReadBilling ? 'La gestion des abonnements et la facturation ne sont pas disponibles dans cette version.' : 'Votre rôle ne permet pas de consulter la facturation.'}</p><a href="/#contact">Contacter Cartularia pour une demande de gestion</a></div></div>
+          <p>Pour donner ou retirer un accès à un objet ou une Collection, utilisez <a href={`/registry/${encodeURIComponent(registry.id)}/access`}>Invitations et consultations</a>. La modification des rôles de l’organisation nécessite une demande à son responsable.</p>
         </section>
       </div>
 

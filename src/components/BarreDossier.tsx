@@ -8,6 +8,7 @@ import { BrandLogo } from './BrandLogo';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import type { RemovedItem } from '../utils/undoableDeletion';
 import type { CartularyFollowUpController } from '../features/cartulary/state/useCartularyFollowUp';
+import { isRegistryReturnPath } from '../features/registry/registryCatalog';
 
 type TodoItem = CartularyFollowUpTodo;
 
@@ -18,6 +19,7 @@ interface BarreDossierProps {
   language: 'FR' | 'EN';
   setLanguage: (lang: 'FR' | 'EN') => void;
   followUp: CartularyFollowUpController;
+  readOnly?: boolean;
 }
 
 export const BarreDossier: React.FC<BarreDossierProps> = ({
@@ -27,6 +29,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
   language,
   setLanguage,
   followUp,
+  readOnly = false,
 }) => {
   const { todos, syncError: todoSyncError, addTodo: addFollowUpTodo, updateTodo, removeTodo, restoreTodo } = followUp;
   const [isTodoOpen, setIsTodoOpen] = useState(false);
@@ -144,7 +147,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
       }}>
         {/* Logo / Nom du Service */}
         <div className="dossier-bar__logo">
-          <BrandLogo href={typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('returnTo') || '/registry/reg_collection_privee/items') : '/registry/reg_collection_privee/items'} />
+          <BrandLogo href={(() => { const candidate = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('returnTo') : null; return isRegistryReturnPath(candidate) ? candidate : '/registry'; })()} />
         </div>
 
         {/* Identité de l’objet (centrée) */}
@@ -177,6 +180,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
               onClick={() => setIsTodoOpen((current) => !current)}
               aria-expanded={isTodoOpen}
               aria-controls="cartularia-todo-panel"
+              aria-label={`${isFrench ? 'A Faire' : 'To do'}${todos.length ? ` · ${todos.length} ${isFrench ? 'tâche(s)' : 'task(s)'}` : ''}`}
             >
               <ListTodo size={16} />
               <span>{isFrench ? 'A Faire' : 'To do'}</span>
@@ -203,7 +207,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                   </button>
                 </div>
 
-                <form className="todo-add-form" onSubmit={addTodo}>
+                {!readOnly && <form className="todo-add-form" onSubmit={addTodo}>
                   <input
                     ref={newTodoInputRef}
                     type="text"
@@ -222,7 +226,9 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                     <option value="visual_evidence">{isFrench ? 'Preuves visuelles' : 'Visual evidence'}</option>
                     <option value="maintenance">{isFrench ? 'Entretien' : 'Maintenance'}</option>
                   </select>
-                </form>
+                </form>}
+
+                {readOnly && <p className="demo-read-only-hint">{isFrench ? 'Démonstration en lecture seule' : 'Read-only demonstration'}</p>}
 
                 {todoSyncError && <p className="todo-sync-error" role="status">{todoSyncError}</p>}
 
@@ -244,19 +250,19 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                           </form>
                         ) : (
                           <>
-                            <button type="button" className="todo-list__status" onClick={() => {
+                            <button type="button" className="todo-list__status" disabled={readOnly} onClick={() => {
                               const status = todo.status === 'completed' ? 'planned' : 'completed';
                               updateTodo(todo.id, { status });
                             }} aria-label={todo.status === 'completed' ? (isFrench ? 'Rouvrir le suivi' : 'Reopen follow-up') : (isFrench ? 'Marquer comme terminé' : 'Mark complete')}>{todo.status === 'completed' ? <Check size={14} /> : <Circle size={14} />}</button>
                             <span className={todo.status === 'completed' ? 'is-completed' : undefined}>{todo.text}<small>{todo.dueAt || (isFrench ? 'Sans échéance' : 'No due date')}</small></span>
-                            <div className="todo-list__actions">
+                            {!readOnly && <div className="todo-list__actions">
                               <input type="date" value={todo.dueAt} onChange={(event) => {
                                 const dueAt = event.target.value;
                                 updateTodo(todo.id, { dueAt });
                               }} aria-label={isFrench ? `Échéance de ${todo.text}` : `Due date for ${todo.text}`} />
                               <button type="button" onClick={() => startEditing(todo)} aria-label={`${isFrench ? 'Modifier' : 'Edit'} : ${todo.text}`}><Pencil size={14} /></button>
                               <button type="button" onClick={() => setPendingTodoDeletion(todo)} aria-label={`${isFrench ? 'Supprimer' : 'Delete'} : ${todo.text}`}><Trash2 size={14} /></button>
-                            </div>
+                            </div>}
                           </>
                         )}
                       </li>
@@ -266,7 +272,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                   <p className="todo-empty">{isFrench ? 'Aucune chose à faire pour le moment.' : 'Nothing to do for now.'}</p>
                 )}
 
-                {pendingTodoDeletion && (
+                {!readOnly && pendingTodoDeletion && (
                   <div ref={todoDeletionDialogRef} className="todo-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="todo-delete-title" data-focus-layer="true" tabIndex={-1}>
                     <span className="eyebrow">{isFrench ? 'Action destructive' : 'Destructive action'}</span>
                     <h3 id="todo-delete-title">{isFrench ? 'Supprimer cette tâche ?' : 'Delete this task?'}</h3>
@@ -298,7 +304,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
           </div>
         </div>
       </div>
-      {deletedTodo && (
+      {!readOnly && deletedTodo && (
         <div className="undo-toast no-print" role="status" aria-live="assertive" aria-atomic="true">
           <p>{isFrench ? `« ${deletedTodo.item.text} » a été supprimée.` : `“${deletedTodo.item.text}” was deleted.`}</p>
           <button type="button" onClick={undoTodoDeletion}>{isFrench ? 'Annuler la suppression' : 'Undo deletion'}</button>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Turntable Video Recorder</title>
+<style>
+  body { margin: 0; background: #121212; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: sans-serif; color: #fff; }
+  canvas { display: block; max-width: 90vw; max-height: 90vh; }
+  #status { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 8px 12px; border-radius: 4px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="status">Chargement...</div>
+<canvas id="c" width="1080" height="1080"></canvas>
+<script>
+window.RECORD_RESULT = null;
+
+const frameUrls = [
+  '/assets/demo-watches/rolex-submariner/spin-00.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-01.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-02.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-03.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-04.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-05.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-06.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-07.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-08.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-09.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-10.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-11.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-12.jpg',
+  '/assets/demo-watches/rolex-submariner/spin-13.jpg'
+];
+
+async function startRecording() {
+  const statusEl = document.getElementById('status');
+  statusEl.innerText = 'Chargement des images du plateau tournant...';
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  const images = await Promise.all(frameUrls.map(url => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  })));
+
+  statusEl.innerText = 'Enregistrement de la rotation 360°...';
+
+  const fps = 30;
+  // 14 frames per rotation. Let's do 2 complete rotations (28 steps).
+  // Each angle is shown for 4 frames at 30fps (~133ms per angle).
+  // Total duration = 28 * 4 / 30 = ~3.73 seconds (or 6 frames per angle = 5.6 seconds).
+  const framesPerAngle = 5; // ~166ms per angle, very readable and smooth
+  const rotations = 2;
+  const totalSteps = images.length * rotations;
+  const totalVideoFrames = totalSteps * framesPerAngle;
+
+  const stream = canvas.captureStream(fps);
+  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
+  const chunks = [];
+
+  recorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  const recordingPromise = new Promise((resolve) => {
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result.split(',')[1];
+        statusEl.innerText = 'Enregistrement terminé avec succès (' + Math.round(blob.size / 1024) + ' Ko)';
+        window.RECORD_RESULT = { size: blob.size, mimeType: mime, base64 };
+        resolve(window.RECORD_RESULT);
+      };
+      reader.readAsDataURL(blob);
+    };
+  });
+
+  recorder.start();
+
+  for (let step = 0; step < totalSteps; step++) {
+    const imgIdx = step % images.length;
+    const currentImg = images[imgIdx];
+
+    for (let f = 0; f < framesPerAngle; f++) {
+      ctx.fillStyle = '#121212';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw crisp image
+      ctx.drawImage(currentImg, 0, 0, canvas.width, canvas.height);
+
+      await new Promise(r => setTimeout(r, 1000 / fps));
+    }
+  }
+
+  recorder.stop();
+  return recordingPromise;
+}
+
+window.runRecord = startRecording;
+</script>
+</body>
+</html>

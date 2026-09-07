@@ -45,6 +45,9 @@ describe('visionneuse média extraite', () => {
 
     expect(screen.getByRole('dialog', { name: 'Facture d’achat' })).toBeTruthy();
     expect(screen.getByText('1 / 2')).toBeTruthy();
+    const download = screen.getByRole('link', { name: 'Télécharger le média : Facture d’achat' });
+    expect(download.getAttribute('href')).toBe('/facture.pdf');
+    expect(download.getAttribute('download')).toBe('facture.pdf');
     await user.click(screen.getByRole('button', { name: 'Média suivant' }));
     await user.click(screen.getByRole('button', { name: 'Documentation' }));
     await user.click(screen.getByRole('button', { name: 'Supprimer ce fichier' }));

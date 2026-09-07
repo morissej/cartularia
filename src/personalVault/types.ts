@@ -57,6 +57,8 @@ export interface PersonalVaultPayload {
   storage: PersonalStorageLocation[];
   managers: PersonalManager[];
   updatedAt: string;
+  /** Encrypted with the payload: survives refresh and another device without a plaintext queue. */
+  codeSyncPending?: boolean;
 }
 
 export const createEmptyOwnerProfile = (id: string, linkedToUserName = false): PersonalOwnerProfile => ({
@@ -162,5 +164,6 @@ export const migratePersonalVaultPayload = (value: LegacyPayload, userName: stri
       managerCode: manager.managerCode || generateCorrespondenceCode('manager'),
     })),
     updatedAt: value.updatedAt || new Date().toISOString(),
+    codeSyncPending: value.codeSyncPending === true,
   };
 };

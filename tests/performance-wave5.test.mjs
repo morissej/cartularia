@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import ts from 'typescript';
 
 const [app, modals, registry, carousel, privateImage, privateMedia] = await Promise.all([
   readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
@@ -12,12 +13,25 @@ const [app, modals, registry, carousel, privateImage, privateMedia] = await Prom
 ]);
 
 test('les surfaces lourdes restent des frontières dynamiques ciblées', () => {
-  assert.match(app, /lazy\(\(\) => import\('\.\/components\/AuditPanel\.tsx'\)/);
-  assert.match(app, /lazy\(\(\) => import\('\.\/components\/Spin360\.tsx'\)/);
-  assert.match(modals, /lazy\(\(\) => import\('\.\.\/\.\.\/\.\.\/components\/Spin360\.tsx'\)/);
-  for (const component of ['RegistryItems', 'RegistryComparison', 'RegistryAdministration', 'RegistryAccessCenter', 'RegistryFollowUp', 'RegistryGallery', 'RegistryIntegrity', 'NewCartularyPage']) {
-    assert.match(registry, new RegExp(`lazy\\(\\(\\) => import\\('\\.\\/${component}\\.tsx'\\)`));
-  }
+  const assertLazyBoundary = (source, modules) => {
+    const parsed = ts.createSourceFile('surface.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const lazyImports = new Set();
+    const staticImports = new Set();
+    const visit = (node, insideLazy = false) => {
+      if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) staticImports.add(node.moduleSpecifier.text);
+      const lazy = insideLazy || (ts.isCallExpression(node) && node.expression.getText(parsed) === 'lazy');
+      if (lazy && ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteral(node.arguments[0])) lazyImports.add(node.arguments[0].text);
+      ts.forEachChild(node, (child) => visit(child, lazy));
+    };
+    visit(parsed);
+    for (const module of modules) {
+      assert.ok(lazyImports.has(module), `${module} doit être chargé dans React.lazy`);
+      assert.ok(!staticImports.has(module), `${module} ne doit pas être aussi importé statiquement`);
+    }
+  };
+  assertLazyBoundary(app, ['./components/AuditPanel.tsx', './components/Spin360.tsx']);
+  assertLazyBoundary(modals, ['../../../components/Spin360.tsx']);
+  assertLazyBoundary(registry, ['RegistryItems', 'RegistryCollections', 'RegistryComparison', 'RegistryAdministration', 'RegistryAccessCenter', 'RegistryFollowUp', 'RegistryGallery', 'RegistryIntegrity', 'NewCartularyPage'].map((component) => `./${component}.tsx`));
 });
 
 test('le carrousel ne recrée plus les actifs uniquement pour changer leur source', () => {

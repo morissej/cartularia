@@ -9,8 +9,8 @@ describe('HomePage Public Site UX & Content', () => {
     const h1 = screen.getByRole('heading', { level: 1 });
     expect(h1.textContent).toContain('L’histoire de vos pièces de valeur mérite mieux');
 
-    const demoLinks = screen.getAllByRole('link', { name: /Explorer un Cartulaire de démo/i });
-    expect(demoLinks[0].getAttribute('href')).toBe('/cartulary#cover');
+    const demoLinks = screen.getAllByRole('link', { name: /Explorer le Cartulaire Submariner/i });
+    expect(demoLinks[0].getAttribute('href')).toBe('/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover');
 
     const createLinks = screen.getAllByRole('link', { name: /Créer mon dossier/i });
     expect(createLinks[0].getAttribute('href')).toBe('/account/create');
@@ -24,14 +24,14 @@ describe('HomePage Public Site UX & Content', () => {
 
     expect(screen.getByText(/Photographies macro & spin 360°/i)).toBeTruthy();
     expect(screen.getByText(/18 photographies HD/i)).toBeTruthy();
-    expect(screen.getByText(/Horodatage EXIF vérifié/i)).toBeTruthy();
+    expect(screen.getByText(/À contrôler à l’import/i)).toBeTruthy();
   });
 
   it('présente les deux portes d’entrée fondamentales (Assurance et Transmission)', () => {
     render(<HomePage />);
 
     expect(screen.getByText(/Porte 01 · Protection & Sinistre/i)).toBeTruthy();
-    expect(screen.getByText(/Être couvert et indemnisé sans contestation/i)).toBeTruthy();
+    expect(screen.getByText(/Préparer son dossier avant un sinistre/i)).toBeTruthy();
 
     expect(screen.getByText(/Porte 02 · Transmission & Cession/i)).toBeTruthy();
     expect(screen.getByText(/Transmettre ou céder en toute sérénité/i)).toBeTruthy();
@@ -41,8 +41,8 @@ describe('HomePage Public Site UX & Content', () => {
     render(<HomePage />);
 
     expect(screen.getByText(/Le Cartulaire Numérique/i)).toBeTruthy();
-    expect(screen.getByText(/Le Rapport PDF Opposable/i)).toBeTruthy();
-    expect(screen.getByText(/Le Watch Website Projeté/i)).toBeTruthy();
+    expect(screen.getByText(/Le Rapport de synthèse PDF/i)).toBeTruthy();
+    expect(screen.getByText(/Le Mini-site de l’objet/i)).toBeTruthy();
     expect(screen.getByText(/Le Sceau d’Intégrité/i)).toBeTruthy();
   });
 
@@ -62,5 +62,15 @@ describe('HomePage Public Site UX & Content', () => {
 
     fireEvent.click(menuButton);
     expect(screen.getByRole('button', { name: /Fermer le menu/i })).toBeTruthy();
+  });
+
+  it('annonce les limites réelles et propose les textes avant inscription', () => {
+    render(<HomePage />);
+    expect(screen.getAllByRole('link', { name: /confidentialité/i }).some((link) => link.getAttribute('href') === '/confidentialite')).toBe(true);
+    expect(screen.getByRole('link', { name: /conditions d’utilisation/i }).getAttribute('href')).toBe('/conditions');
+    expect(screen.getByText(/Aucun paiement en ligne n’est proposé/i)).toBeTruthy();
+    expect(screen.getByText(/Ce formulaire prépare un email dans votre logiciel/i)).toBeTruthy();
+    expect(screen.getByText(/La création propose actuellement les montres et les automobiles/i)).toBeTruthy();
+    expect(screen.queryByText(/Secret absolu|Ne transmet jamais vos données|Garantit une indépendance totale/i)).toBeNull();
   });
 });

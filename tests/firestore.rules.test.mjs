@@ -17,7 +17,6 @@ import {
   setDoc,
   updateDoc,
   where,
-  writeBatch,
 } from 'firebase/firestore';
 
 const projectId = 'cartularia-wave1-test';
@@ -274,116 +273,73 @@ test('le Centre des accès exige la permission dédiée dans le Registre autoris
   await assertFails(setDoc(doc(readerFirestore, ...accessPath), { sourceStatus: 'revoked' }, { merge: true }));
 });
 
-test('les collections sont gérées par un éditeur du Registre sans ouvrir les fondations', async () => {
-  const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
-  const readerFirestore = testEnvironment.authenticatedContext(registryReaderUid).firestore();
-  const collectionPath = ['registries', ownerRegistryId, 'collections', 'col_art'];
-  await assertSucceeds(setDoc(doc(ownerFirestore, ...collectionPath), {
-    id: 'col_art',
-    organizationId: ownerOrganizationId,
-    registryId: ownerRegistryId,
-    name: 'Art',
-    description: '',
-    websiteTitle: 'Collection Art',
-    websiteSlug: 'art',
-    status: 'draft',
-    visibility: 'secret',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  }));
-  await assertSucceeds(getDoc(doc(readerFirestore, ...collectionPath)));
-  await assertFails(setDoc(doc(readerFirestore, ...collectionPath), { name: 'Altéré' }, { merge: true }));
+test('N-R01 : aucune écriture directe de Collection ne contourne la commande versionnée', async () => {
+  const owner = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const reader = testEnvironment.authenticatedContext(registryReaderUid).firestore();
+  const path = ['registries', ownerRegistryId, 'collections', 'col_art'];
+  const value = { id: 'col_art', organizationId: ownerOrganizationId, registryId: ownerRegistryId, name: 'Art', description: '', websiteTitle: 'Art', websiteSlug: 'art', status: 'draft', visibility: 'secret', publicationConsent: false, publishedCartularyIds: [], versionToken: 'version-1' };
+  await assertFails(setDoc(doc(owner, ...path), value));
+  await testEnvironment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), ...path), value));
+  await assertSucceeds(getDoc(doc(reader, ...path)));
+  await assertFails(updateDoc(doc(owner, ...path), { name: 'Ancienne saisie', versionToken: 'version-1' }));
+  await assertFails(updateDoc(doc(reader, ...path), { name: 'Altéré' }));
+  await assertFails(deleteDoc(doc(owner, ...path)));
 });
 
-test('un mini-site de Collection publie uniquement sa projection dédiée', async () => {
-  const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
-  const outsiderFirestore = testEnvironment.authenticatedContext(outsiderUid).firestore();
-  const anonymousFirestore = testEnvironment.unauthenticatedContext().firestore();
-  const privateCollectionPath = ['registries', ownerRegistryId, 'collections', 'col-a'];
+test('N-R01 : seule une projection serveur est publique, les clients ne peuvent ni publier ni ressusciter', async () => {
+  const owner = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const anonymous = testEnvironment.unauthenticatedContext().firestore();
   const publicationPath = ['collectionPublications', 'reg-a--col-a'];
   const itemPath = [...publicationPath, 'items', 'cart-a'];
-
-  await assertFails(setDoc(doc(ownerFirestore, ...publicationPath), {
-    publicationId: 'reg-a--col-a',
-    organizationId: ownerOrganizationId,
-    registryId: ownerRegistryId,
-    collectionId: 'col-a',
-    websiteTitle: 'Collection A',
-    websiteSlug: 'collection-a',
-    description: 'Sélection publiée',
-    status: 'published',
-    itemCount: 1,
-    publishedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  }));
-
-  const publishBatch = writeBatch(ownerFirestore);
-  publishBatch.set(doc(ownerFirestore, ...privateCollectionPath), {
-    id: 'col-a',
-    organizationId: ownerOrganizationId,
-    registryId: ownerRegistryId,
-    name: 'Collection A',
-    description: 'Sélection publiée',
-    websiteTitle: 'Collection A',
-    websiteSlug: 'collection-a',
-    status: 'published',
-    visibility: 'public',
-    publicationConsent: true,
-    publishedCartularyIds: ['cart-a'],
-    publishedAt: serverTimestamp(),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  const publication = { publicationId: 'reg-a--col-a', organizationId: ownerOrganizationId, registryId: ownerRegistryId, collectionId: 'col-a', websiteTitle: 'Collection A', websiteSlug: 'collection-a', description: 'Sélection', status: 'published', itemCount: 1 };
+  const item = { cartularyId: 'cart-a', collectionId: 'col-a', assetType: 'watch', displayTitle: 'Montre', makerName: 'Maison', modelName: 'Modèle', referenceCode: 'REF-1', manufactureYear: 1969, publicCode: 'PUB-1' };
+  await assertFails(setDoc(doc(owner, ...publicationPath), publication));
+  await assertFails(setDoc(doc(owner, ...itemPath), item));
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), ...publicationPath), publication);
+    await setDoc(doc(context.firestore(), ...itemPath), item);
   });
-  publishBatch.set(doc(ownerFirestore, ...publicationPath), {
-    publicationId: 'reg-a--col-a',
-    organizationId: ownerOrganizationId,
-    registryId: ownerRegistryId,
-    collectionId: 'col-a',
-    websiteTitle: 'Collection A',
-    websiteSlug: 'collection-a',
-    description: 'Sélection publiée',
-    status: 'published',
-    itemCount: 1,
-    publishedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  await assertSucceeds(getDoc(doc(anonymous, ...publicationPath)));
+  await assertSucceeds(getDocs(collection(anonymous, ...publicationPath, 'items')));
+  await assertFails(getDoc(doc(anonymous, 'registries', ownerRegistryId, 'items', 'cart-a')));
+  await assertFails(updateDoc(doc(owner, ...publicationPath), { status: 'revoked' }));
+  await assertFails(updateDoc(doc(owner, ...itemPath), { displayTitle: 'Altéré' }));
+  await assertFails(deleteDoc(doc(owner, ...publicationPath)));
+  await assertFails(deleteDoc(doc(owner, ...itemPath)));
+  await testEnvironment.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), ...publicationPath), { status: 'revoked' }));
+  await assertFails(getDoc(doc(anonymous, ...publicationPath)));
+  await assertFails(getDoc(doc(anonymous, ...itemPath)));
+  await assertFails(setDoc(doc(owner, ...publicationPath), publication));
+});
+
+test('N-R05 : une invitation Collection secondaire ouvre uniquement ses objets et ferme au retrait', async () => {
+  const guest = testEnvironment.authenticatedContext(invitedUid).firestore();
+  const memberPath = ['organizations', ownerOrganizationId, 'memberships', invitedUid];
+  const rootPath = ['cartularies', 'cart-a'];
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await updateDoc(doc(admin, ...memberPath), { invitationGrants: { [ownerRegistryId]: { registry: false, collectionIds: ['col-secondary'], cartularyIds: [] } } });
+    await updateDoc(doc(admin, ...rootPath), { collectionId: 'col-a', collectionIds: ['col-a', 'col-secondary'] });
+    await updateDoc(doc(admin, 'registries', ownerRegistryId, 'items', 'cart-a'), { collectionIds: ['col-a', 'col-secondary'] });
+    await setDoc(doc(admin, ...rootPath, 'sections', 'identity'), { title: 'Déclaration privée' });
   });
-  await assertSucceeds(publishBatch.commit());
-  await assertSucceeds(setDoc(doc(ownerFirestore, ...itemPath), {
-    cartularyId: 'cart-a',
-    collectionId: 'col-a',
-    assetType: 'watch',
-    displayTitle: 'Montre publiée',
-    makerName: 'Maison',
-    modelName: 'Modèle',
-    referenceCode: 'REF-1',
-    manufactureYear: 1969,
-    publicCode: 'PUB-1',
-  }));
-
-  await assertSucceeds(getDoc(doc(anonymousFirestore, ...publicationPath)));
-  await assertSucceeds(getDoc(doc(anonymousFirestore, ...itemPath)));
-  await assertSucceeds(getDocs(collection(anonymousFirestore, ...publicationPath, 'items')));
-  await assertFails(getDoc(doc(anonymousFirestore, 'registries', ownerRegistryId, 'items', 'cart-a')));
-  await assertFails(setDoc(doc(outsiderFirestore, ...publicationPath), { websiteTitle: 'Altéré' }, { merge: true }));
-  await assertFails(setDoc(doc(ownerFirestore, ...itemPath), { userAlias: 'Champ privé' }, { merge: true }));
-
-  const revokeBatch = writeBatch(ownerFirestore);
-  revokeBatch.set(doc(ownerFirestore, ...privateCollectionPath), {
-    status: 'draft',
-    visibility: 'secret',
-    publicationConsent: false,
-    publishedCartularyIds: [],
-    publishedAt: null,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-  revokeBatch.set(doc(ownerFirestore, ...publicationPath), {
-    status: 'revoked',
-    itemCount: 0,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-  await assertSucceeds(revokeBatch.commit());
-  await assertFails(getDoc(doc(anonymousFirestore, ...publicationPath)));
-  await assertFails(getDoc(doc(anonymousFirestore, ...itemPath)));
+  await assertSucceeds(getDoc(doc(guest, ...rootPath)));
+  await assertSucceeds(getDocs(collection(guest, ...rootPath, 'sections')));
+  await assertSucceeds(getDocs(collection(guest, ...rootPath, 'reminders')));
+  await assertSucceeds(getDoc(doc(guest, 'registries', ownerRegistryId, 'items', 'cart-a')));
+  await assertFails(getDoc(doc(guest, 'cartularies', 'cart-b')));
+  await assertFails(updateDoc(doc(guest, ...rootPath), { displayTitle: 'Interdit' }));
+  await testEnvironment.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), ...rootPath), { collectionIds: ['col-a'] }));
+  await assertFails(getDoc(doc(guest, ...rootPath)));
+  await assertFails(getDocs(collection(guest, ...rootPath, 'sections')));
+  await testEnvironment.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), 'registries', ownerRegistryId, 'items', 'cart-a'), { collectionIds: ['col-a'] }));
+  await assertFails(getDoc(doc(guest, 'registries', ownerRegistryId, 'items', 'cart-a')));
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), ...rootPath), { collectionIds: ['col-a', 'col-secondary'] });
+    await updateDoc(doc(context.firestore(), ...memberPath), { status: 'revoked' });
+  });
+  await assertFails(getDoc(doc(guest, ...rootPath)));
+  await assertFails(getDocs(collection(guest, ...rootPath, 'reminders')));
 });
 
 test('la liste des memberships reste bornée à l’organisation et au droit dédié', async () => {

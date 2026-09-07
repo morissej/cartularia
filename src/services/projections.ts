@@ -1,6 +1,5 @@
 import { collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { getBlob, ref } from 'firebase/storage';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import type {
   LoadedPublicProjection,
   PublicBlockProjection,
@@ -56,18 +55,10 @@ export const loadPublicProjection = async (publicCode: string): Promise<LoadedPu
     getDocs(collection(publicationRef, 'blocks')),
     getDoc(doc(db, 'seals', publicCode)),
   ]);
-  const blocks = await Promise.all(blockSnapshots.docs.map(async (blockSnapshot) => {
-    const block = blockSnapshot.data() as PublicBlockProjection;
-    const assets = await Promise.all((block.assets || []).map(async (asset) => {
-      try {
-        const blob = await getBlob(ref(storage, asset.storagePath));
-        return { ...asset, downloadUrl: URL.createObjectURL(blob) };
-      } catch {
-        return { ...asset, downloadUrl: null };
-      }
-    }));
-    return { ...block, assets };
-  }));
+  const rawBlocks = blockSnapshots.docs.map((snapshot) => snapshot.data() as PublicBlockProjection);
+  // Text and navigation must not wait for images, videos, or files on other pages.
+  // Media resolve on visibility/user action through Storage Rules, never bearer URLs.
+  const blocks: PublicBlockProjection[] = rawBlocks.map((block) => ({ ...block, assets: (block.assets || []).map((asset) => ({ ...asset, downloadUrl: null })) }));
 
   const orderedBlocks = publication.blockIds
     .map((blockId) => blocks.find((block) => block.blockId === blockId))
@@ -77,6 +68,18 @@ export const loadPublicProjection = async (publicCode: string): Promise<LoadedPu
     blocks: orderedBlocks,
     seal: sealSnapshot.exists() ? (sealSnapshot.data() as PublicSealProjection) : null,
   };
+};
+
+/** Lightweight link eligibility; inaccessible publications are never advertised. */
+export const loadPublicPublicationStatuses = async (codes: string[]): Promise<Record<string, boolean>> => {
+  const entries = await Promise.all([...new Set(codes.filter(Boolean))].map(async (code) => {
+    try { const snapshot = await getDoc(doc(db, 'publications', code)); return [code, snapshot.exists() && snapshot.data().status === 'published'] as const; }
+    catch (error) {
+      if ((error as { code?: string }).code === 'permission-denied') return [code, false] as const;
+      throw error;
+    }
+  }));
+  return Object.fromEntries(entries);
 };
 
 export const loadReportProjection = async (

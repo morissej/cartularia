@@ -13,18 +13,19 @@ import {
   Package,
 } from 'lucide-react';
 import type { OrganizationDocument, RegistryDocument } from '../../domain/foundations.ts';
-import type { RegistryCollectionDocument } from '../../domain/collections.ts';
-import { resumeOrCreateCartulary, type CartularyCreationResult } from '../../domain/cartularyCreation.ts';
+import { activeRegistryCollections, defaultActiveCollectionId } from '../../domain/collections.ts';
+import { SUPPORTED_CREATION_PROFILES, resumeOrCreateCartulary, type SupportedCreationAssetType, type CartularyCreationResult } from '../../domain/cartularyCreation.ts';
 import { validateFileForUpload } from '../../security/fileValidation.ts';
 import {
   CartularyCreationFailedError,
-  createWatchCartulary,
+  createCartulary,
   waitForCartularyCreation,
   type CartularyCreationProgress,
 } from '../../services/cartularyCreation.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
 import { registryHref } from './registryRouting.ts';
-import { loadRegistryCollections } from '../../services/collections.ts';
+import { useRegistryCollections } from './useRegistryCollections.ts';
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 
 const fileSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} o`;
@@ -54,7 +55,11 @@ export function NewCartularyPage({ user, organization, registry }: {
   const [error, setError] = useState<string | null>(null);
   const [createdCartularyId, setCreatedCartularyId] = useState<string | null>(null);
   const [pendingCreation, setPendingCreation] = useState<CartularyCreationResult | null>(null);
-  const [collections, setCollections] = useState<RegistryCollectionDocument[]>([]);
+  const [submittedIdentity, setSubmittedIdentity] = useState<{ title: string; assetType: SupportedCreationAssetType } | null>(null);
+  const { collections: allCollections, state: collectionsState, retry: retryCollections } = useRegistryCollections(registry.id);
+  const collections = useMemo(() => activeRegistryCollections(allCollections), [allCollections]);
+  const [assetType, setAssetType] = useState<SupportedCreationAssetType>('watch');
+  const creationDefinition = SUPPORTED_CREATION_PROFILES[assetType];
   const [form, setForm] = useState({
     brand: '',
     model: '',
@@ -62,7 +67,7 @@ export function NewCartularyPage({ user, organization, registry }: {
     manufactureYear: '',
     serialNumber: '',
     caliber: '',
-    collectionId: 'col_pilots',
+    collectionId: '',
     description: '',
     conditionSummary: '',
     purchaseDate: '',
@@ -75,15 +80,12 @@ export function NewCartularyPage({ user, organization, registry }: {
     valuationHigh: '',
     sourceLabel: 'Dossier transmis par le propriétaire',
   });
+  const dirty = !createdCartularyId && (submitting || Boolean(coverFile || files.length || pendingCreation) || assetType !== 'watch'
+    || Object.entries(form).some(([key, value]) => key !== 'collectionId' && value !== (key === 'currency' ? 'EUR' : key === 'sourceLabel' ? 'Dossier transmis par le propriétaire' : '')));
+  useUnsavedChangesGuard(dirty, { busy: submitting, message: pendingCreation ? 'Une création a déjà été demandée. Quitter abandonne cet écran de reprise ; vérifiez ensuite le Catalogue avant de créer à nouveau. Continuer ?' : undefined });
   useEffect(() => {
-    let active = true;
-    void loadRegistryCollections(registry.id).then((items) => {
-      if (!active) return;
-      setCollections(items.filter((item) => item.status !== 'archived'));
-      if (items.length > 0) setForm((current) => ({ ...current, collectionId: items.some((item) => item.id === current.collectionId) ? current.collectionId : items[0].id }));
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [registry.id]);
+    if (collectionsState === 'ready' && !submitting && !pendingCreation) setForm((current) => ({ ...current, collectionId: defaultActiveCollectionId(allCollections, current.collectionId) }));
+  }, [allCollections, collectionsState, submitting, pendingCreation]);
   const allFileCount = useMemo(() => {
     const identities = new Set([coverFile, ...files].filter(Boolean).map((file) => `${file!.name}\u0000${file!.size}\u0000${file!.lastModified}`));
     return identities.size;
@@ -131,16 +133,18 @@ export function NewCartularyPage({ user, organization, registry }: {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!coverFile || !form.brand.trim() || !form.model.trim() || !form.reference.trim()) return;
+    if (submitting || (!pendingCreation && (!coverFile || !form.brand.trim() || !form.model.trim() || !form.reference.trim() || !form.collectionId || collectionsState !== 'ready'))) return;
+    if (!pendingCreation) setSubmittedIdentity({ title: `${form.brand.trim()} ${form.model.trim()}`, assetType });
     setSubmitting(true);
     setError(null);
     setCreatedCartularyId(null);
     try {
-      const result = await resumeOrCreateCartulary(pendingCreation, () => createWatchCartulary({
+      const result = await resumeOrCreateCartulary(pendingCreation, () => createCartulary({
+        assetType,
         user,
         organizationId: organization.id,
         registryId: registry.id,
-        coverFile,
+        coverFile: coverFile!,
         files,
         onProgress: setProgress,
         profile: {
@@ -180,10 +184,10 @@ export function NewCartularyPage({ user, organization, registry }: {
       <section className="registry-create-success" aria-labelledby="registry-create-success-title">
         <CircleCheck aria-hidden="true" />
         <p className="registry-kicker">Cartulaire créé</p>
-        <h1 id="registry-create-success-title">{form.brand} {form.model}</h1>
+        <h1 id="registry-create-success-title">{submittedIdentity?.title}</h1>
         <p>Le Cartulaire privé a été créé et sa projection minimale a été ajoutée à {registry.name}. Les fichiers restent secrets.</p>
         <div className="registry-create-success__actions">
-          <a href={buildCartularyHref(createdCartularyId, registryHref(registry.id, 'items'), 'watch')}>Ouvrir le Cartulaire</a>
+          <a href={buildCartularyHref(createdCartularyId, registryHref(registry.id, 'items'), submittedIdentity?.assetType || assetType)}>Ouvrir le Cartulaire</a>
           <a href={registryHref(registry.id, 'items')}>Voir le catalogue</a>
         </div>
       </section>
@@ -197,22 +201,29 @@ export function NewCartularyPage({ user, organization, registry }: {
           <a className="registry-create__back" href={registryHref(registry.id, 'items')}><ArrowLeft aria-hidden="true" /> Catalogue</a>
           <p className="registry-kicker">Nouveau cartulaire</p>
           <h1 id="registry-create-title">Ajouter un objet</h1>
-          <p>Créez un dossier privé distinct. Les informations et fichiers sont secrets par défaut et devront être revus après import.</p>
+          <p>Créez un dossier privé distinct. Les informations et fichiers sont secrets par défaut ; vos déclarations restent à vérifier.</p>
         </div>
         <div className="registry-create__privacy"><ShieldCheck aria-hidden="true" /><span>Secret par défaut</span></div>
       </header>
 
       <form className="registry-create-form" onSubmit={handleSubmit}>
+        {pendingCreation && <p role="status">La demande a déjà été envoyée. Ses informations sont figées : vérifiez son résultat ci-dessous sans créer un second objet.</p>}
+        <fieldset className="registry-create-form__fields" disabled={submitting || Boolean(pendingCreation)}>
+        <label className="registry-create-wide"><span>Type d’objet</span><select value={assetType} disabled={submitting || Boolean(pendingCreation)} onChange={(event) => setAssetType(event.target.value as SupportedCreationAssetType)}>{Object.entries(SUPPORTED_CREATION_PROFILES).map(([id, definition]) => <option key={id} value={id}>{definition.label}</option>)}</select></label>
+        <p>Types actuellement pris en charge : montres et automobiles. Les informations propres à chaque type suivent son modèle de dossier.</p>
+        {assetType === 'car' && <p>Après création, vous pourrez compléter les caractéristiques, entretiens et incidents, ajouter ou remplacer des médias, choisir leurs rôles et préparer une publication. Les champs calculés et l’historique personnel des propriétaires restent en lecture seule ici ; le Coffre reste un espace séparé. Les téléchargements privés et les copies publiques dépendent de la vérification serveur des fichiers.</p>}
+        {collectionsState !== 'ready' && <div role={collectionsState === 'error' ? 'alert' : 'status'}><p>{collectionsState === 'error' ? 'Les Collections n’ont pas pu être chargées.' : 'Chargement des Collections…'}</p>{collectionsState === 'error' && <button type="button" onClick={retryCollections}>Réessayer</button>}</div>}
+        {collectionsState === 'ready' && collections.length === 0 && <p role="status">Créez d’abord une Collection active pour y ranger l’objet. <a href={registryHref(registry.id, 'collections')}>Créer une Collection</a></p>}
         <section className="registry-create-card">
-          <header><span>01</span><div><h2>Identifier l’objet</h2><p>Ces trois informations permettent de distinguer le nouveau Cartulaire.</p></div><Package aria-hidden="true" /></header>
+          <header><span>01</span><div><h2>Identifier l’objet</h2><p>Les champs marqués d’un astérisque sont requis pour ce type d’objet.</p></div><Package aria-hidden="true" /></header>
           <div className="registry-create-grid registry-create-grid--three">
-            <label><span>Marque *</span><input name="brand" value={form.brand} onChange={(event) => update('brand', event.target.value)} required /></label>
+            <label><span>{creationDefinition.makerLabel} *</span><input name="brand" value={form.brand} onChange={(event) => update('brand', event.target.value)} required /></label>
             <label><span>Modèle *</span><input name="model" value={form.model} onChange={(event) => update('model', event.target.value)} required /></label>
-            <label><span>Référence *</span><input name="reference" value={form.reference} onChange={(event) => update('reference', event.target.value)} required /></label>
-            <label><span>Année</span><input name="manufactureYear" type="number" min="1500" max="2200" value={form.manufactureYear} onChange={(event) => update('manufactureYear', event.target.value)} /></label>
-            <label><span>Numéro de série</span><input name="serialNumber" value={form.serialNumber} onChange={(event) => update('serialNumber', event.target.value)} /></label>
-            <label><span>Calibre</span><input name="caliber" value={form.caliber} onChange={(event) => update('caliber', event.target.value)} /></label>
-            <label><span>Collection</span><select name="collectionId" value={form.collectionId} onChange={(event) => update('collectionId', event.target.value)} required><option value={form.collectionId}>{collections.find((item) => item.id === form.collectionId)?.name || form.collectionId.replace(/^col_/, '').replace(/[_-]+/g, ' ')}</option>{collections.filter((item) => item.id !== form.collectionId).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+            <label><span>{creationDefinition.referenceLabel} *</span><input name="reference" value={form.reference} onChange={(event) => update('reference', event.target.value)} required /></label>
+            <label><span>Année{assetType === 'car' ? ' *' : ''}</span><input name="manufactureYear" type="number" min={creationDefinition.minYear} max={new Date().getFullYear() + 1} required={assetType === 'car'} value={form.manufactureYear} onChange={(event) => update('manufactureYear', event.target.value)} /></label>
+            <label><span>{creationDefinition.serialLabel}{assetType === 'car' ? ' *' : ''}</span><input name="serialNumber" value={form.serialNumber} required={assetType === 'car'} onChange={(event) => update('serialNumber', event.target.value)} /></label>
+            <label><span>{creationDefinition.technicalLabel}</span><input name="caliber" value={form.caliber} onChange={(event) => update('caliber', event.target.value)} /></label>
+            <label><span>Collection</span><select name="collectionId" value={form.collectionId} disabled={collectionsState !== 'ready' || collections.length === 0} onChange={(event) => update('collectionId', event.target.value)} required><option value="">Choisir une Collection</option>{collections.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
           </div>
           <label className="registry-create-wide"><span>Description</span><textarea name="description" rows={4} value={form.description} onChange={(event) => update('description', event.target.value)} /></label>
           <label className="registry-create-wide"><span>État déclaré</span><textarea name="conditionSummary" rows={3} value={form.conditionSummary} onChange={(event) => update('conditionSummary', event.target.value)} /></label>
@@ -238,7 +249,7 @@ export function NewCartularyPage({ user, organization, registry }: {
         </section>
 
         <section className="registry-create-card">
-          <header><span>03</span><div><h2>Documenter l’acquisition et la valeur</h2><p>Facultatif. Ces données ne figurent jamais dans la projection du Registre.</p></div><LockKeyhole aria-hidden="true" /></header>
+          <header><span>03</span><div><h2>Documenter l’acquisition et la valeur</h2><p>Facultatif. Les montants alimentent vos vues privées du Registre ; ils ne sont pas publiés sur les mini-sites.</p></div><LockKeyhole aria-hidden="true" /></header>
           <div className="registry-create-grid registry-create-grid--three">
             <label><span>Date d’achat</span><input name="purchaseDate" type="date" value={form.purchaseDate} onChange={(event) => update('purchaseDate', event.target.value)} /></label>
             <label><span>Prix d’achat</span><input name="purchasePrice" type="number" min="0" step="0.01" value={form.purchasePrice} onChange={(event) => update('purchasePrice', event.target.value)} /></label>
@@ -252,6 +263,7 @@ export function NewCartularyPage({ user, organization, registry }: {
           </div>
         </section>
 
+        </fieldset>
         {progress && submitting && (
           <section className="registry-create-progress" aria-live="polite">
             <div><LoaderCircle className="registry-spinner" aria-hidden="true" /><span>{progressLabel(progress)}</span><strong>{progressPercent}%</strong></div>
@@ -262,10 +274,10 @@ export function NewCartularyPage({ user, organization, registry }: {
         {error && <p className="registry-create-error" role="alert">{error}</p>}
 
         <footer className="registry-create-actions">
-          <div><ShieldCheck aria-hidden="true" /><span>Le Registre ne recevra qu’une projection minimale sans numéro de série, valeur ni chemin de fichier.</span></div>
-          <button type="submit" disabled={submitting || !coverFile || !form.brand.trim() || !form.model.trim() || !form.reference.trim()}>
+          <div><ShieldCheck aria-hidden="true" /><span>Le Registre reçoit une projection minimale, sans numéro de série ni chemin de fichier. Les montants restent dans vos vues privées du Registre.</span></div>
+          <button type="submit" disabled={submitting || (!pendingCreation && (collectionsState !== 'ready' || !form.collectionId || !coverFile || !form.brand.trim() || !form.model.trim() || !form.reference.trim()))}>
             {submitting ? <LoaderCircle className="registry-spinner" aria-hidden="true" /> : <Plus aria-hidden="true" />}
-            {submitting ? 'Création en cours…' : 'Créer le Cartulaire'}
+            {submitting ? 'Création en cours…' : pendingCreation ? 'Vérifier la création en cours' : 'Créer le Cartulaire'}
           </button>
         </footer>
       </form>

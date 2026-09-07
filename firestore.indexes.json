@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "cartularies", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "registryId", "order": "ASCENDING" }, { "fieldPath": "collectionId", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "cartularies", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "registryId", "order": "ASCENDING" }, { "fieldPath": "collectionIds", "arrayConfig": "CONTAINS" }]
+    },
+    {
       "collectionGroup": "memberships",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

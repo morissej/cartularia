@@ -74,17 +74,19 @@ export interface CartularyFollowUpController {
 export const useCartularyFollowUp = ({
   cartularyId,
   language,
+  readOnlyPreview = false,
 }: {
   cartularyId: string;
   language: 'FR' | 'EN';
+  readOnlyPreview?: boolean;
 }): CartularyFollowUpController => {
-  const [todos, setTodos] = useState<CartularyFollowUpTodo[]>(readStoredTodos);
+  const [todos, setTodos] = useState<CartularyFollowUpTodo[]>(() => readOnlyPreview ? [] : readStoredTodos());
   const [remoteHydrationComplete, setRemoteHydrationComplete] = useState(false);
   const [syncError, setSyncError] = useState('');
   const pendingUpsertsRef = useRef(new Map<string, CartularyFollowUpTodo>());
   const pendingDeletesRef = useRef(new Set<string>());
   const pendingLoadedRef = useRef(false);
-  if (!pendingLoadedRef.current) {
+  if (!readOnlyPreview && !pendingLoadedRef.current) {
     const pending = readStoredPendingTodos();
     pending.upserts.forEach((todo) => pendingUpsertsRef.current.set(todo.id, todo));
     pending.deletes.forEach((id) => pendingDeletesRef.current.add(id));
@@ -93,13 +95,20 @@ export const useCartularyFollowUp = ({
   const isFrench = language === 'FR';
 
   const persistPendingTodos = useCallback(() => {
+    if (readOnlyPreview) return;
     void persistCartulariaJson(TODO_PENDING_STORAGE_KEY, {
       upserts: Array.from(pendingUpsertsRef.current.values()),
       deletes: Array.from(pendingDeletesRef.current.values()),
     }).catch((error: unknown) => console.error('Persistance des suivis en attente impossible', error));
-  }, []);
+  }, [readOnlyPreview]);
 
   useEffect(() => {
+    if (readOnlyPreview) {
+      setTodos([]);
+      setSyncError('');
+      setRemoteHydrationComplete(false);
+      return;
+    }
     let active = true;
     let firstSnapshot = true;
     const localTodosAtStart = readStoredTodos();
@@ -150,14 +159,15 @@ export const useCartularyFollowUp = ({
       active = false;
       unsubscribe();
     };
-  }, [cartularyId, isFrench, persistPendingTodos]);
+  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
 
   useEffect(() => {
-    if (!remoteHydrationComplete) return;
+    if (readOnlyPreview || !remoteHydrationComplete) return;
     void persistCartulariaJson(TODO_STORAGE_KEY, todos).catch((error: unknown) => console.error('Persistance des suivis impossible', error));
-  }, [remoteHydrationComplete, todos]);
+  }, [remoteHydrationComplete, todos, readOnlyPreview]);
 
   const addTodo = useCallback((input: Pick<CartularyFollowUpTodo, 'text' | 'dueAt' | 'category'>) => {
+    if (readOnlyPreview) return;
     const todo: CartularyFollowUpTodo = { id: createTodoId(), ...input, text: input.text.trim(), status: 'planned' };
     if (!todo.text) return;
     pendingDeletesRef.current.delete(todo.id);
@@ -167,9 +177,10 @@ export const useCartularyFollowUp = ({
     setSyncError('');
     void createCartularyFollowUpTodo(cartularyId, { ...todo, source: 'cartulary' })
       .catch(() => setSyncError(isFrench ? 'La tâche est conservée localement, mais pas encore synchronisée.' : 'The task is saved locally but not synced yet.'));
-  }, [cartularyId, isFrench, persistPendingTodos]);
+  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
 
   const updateTodo = useCallback((id: string, patch: Partial<Pick<CartularyFollowUpTodo, 'text' | 'dueAt' | 'category' | 'status'>>) => {
+    if (readOnlyPreview) return;
     const normalizedPatch = patch.text === undefined ? patch : { ...patch, text: patch.text.trim() };
     if (normalizedPatch.text === '') return;
     setTodos((current) => current.map((todo) => {
@@ -182,9 +193,10 @@ export const useCartularyFollowUp = ({
     setSyncError('');
     void updateCartularyFollowUpTodo(cartularyId, id, normalizedPatch)
       .catch(() => setSyncError(isFrench ? 'La modification reste à synchroniser.' : 'The change still needs syncing.'));
-  }, [cartularyId, isFrench, persistPendingTodos]);
+  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
 
   const removeTodo = useCallback((id: string) => {
+    if (readOnlyPreview) return null;
     const removed = removeItemById(todos, id);
     if (!removed) return null;
     pendingUpsertsRef.current.delete(id);
@@ -200,9 +212,10 @@ export const useCartularyFollowUp = ({
       setSyncError(isFrench ? 'Suppression impossible : la tâche a été restaurée.' : 'Unable to delete: the task was restored.');
     });
     return removed;
-  }, [cartularyId, isFrench, persistPendingTodos, todos]);
+  }, [cartularyId, isFrench, persistPendingTodos, todos, readOnlyPreview]);
 
   const restoreTodo = useCallback((removed: RemovedItem<CartularyFollowUpTodo>) => {
+    if (readOnlyPreview) return;
     pendingDeletesRef.current.delete(removed.item.id);
     pendingUpsertsRef.current.set(removed.item.id, removed.item);
     persistPendingTodos();
@@ -210,7 +223,7 @@ export const useCartularyFollowUp = ({
     setSyncError('');
     void createCartularyFollowUpTodo(cartularyId, { ...removed.item, source: 'cartulary' })
       .catch(() => setSyncError(isFrench ? 'La restauration reste à synchroniser.' : 'The restored task still needs syncing.'));
-  }, [cartularyId, isFrench, persistPendingTodos]);
+  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
 
   return { todos, syncError, addTodo, updateTodo, removeTodo, restoreTodo };
 };

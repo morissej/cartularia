@@ -1,0 +1,43 @@
+# Repassage — corrections Registre et Cartulaire générique
+
+Date : 6 septembre 2026. Constats confiés : C03, C04, C06, C07 et C13 du rapport de repassage. État : corrections locales testées, sans commit, déploiement, seed ni modification distante. Le lot ne modifie ni `App.tsx`, ni les services du Coffre, ni `privateMedia`, ni les callables Firebase.
+
+## Corrections et preuves
+
+| Constat | Correction | Verrouillage |
+|---|---|---|
+| C03 — Média coché absent | La visibilité affichée est l’autorisation persistée `requestedVisibility`. Cocher un média Secret demande une confirmation, enregistre l’autorisation par la commande serveur, relit les médias, puis seulement sélectionne le média. La sélection ajoute la bibliothèque au choix des blocs. Un refus laisse le média non sélectionné. Le filtre `Tous` de la construction publique reste intact et l’original reste privé. | Test UI échec puis succès et contenu exact de la demande ; tests purs confirmation manquante, média sans binaire vérifié et absence d’URL source ; test émulateur `requestedVisibility=public` mais `visibility=secret` et absence de mise en ligne automatique. |
+| C04 — Perte de saisie | Garde partagée pour liens, logo, retour, annulation, rechargement, historique et navigation interne. Les formulaires Collection, Nouvel objet, champs génériques et média déclarent leur état modifié. Une opération en cours bloque une sortie interne ; une fermeture navigateur sollicite son avertissement natif. Le lot intégration raccorde les changements de Registre et la déconnexion à la même garde. | Tests UI d’une saisie conservée après refus du départ : retour, logo, annulation, `beforeunload`, historique, fermeture Collection et Nouvel objet. Aucun brouillon privé supplémentaire n’est copié dans localStorage. |
+| C06 — Route d’accès différente | Le Centre des accès résout le type depuis la projection autorisée déjà chargée et l’envoie au constructeur commun. Un objet absent n’ouvre pas une route devinée : message d’indisponibilité et action d’actualisation existante. | Tests UI d’une nouvelle montre avec identifiant non spécial vers `/cartulary`, contexte de retour conservé, objet absent sans lien trompeur. |
+| C07 — Faux suivi vide | Chargement de la projection et abonnement des tâches ont des états distincts : attente, prêt, erreur, raccordement absent. Les erreurs ne produisent plus un tableau vide. Les tâches connues restent affichées, les modifications sont suspendues et Réessayer relance projection puis abonnement. Les résultats tardifs sont ignorés après arrêt de l’abonnement. | Deux tests de page avec services simulés : projection refusée puis reprise ; abonnement interrompu conservant une tâche connue mais désactivant son édition. Test de vue : aucune affirmation de suivi vide en erreur. |
+| C13 — Enrichissement automobile | Ajout, remplacement, retrait actif, nom, rôles média et autorisation de diffusion sont disponibles. L’upload réutilise exactement le pipeline privé de la création : contrôle du format, empreinte, manifeste, transfert privé, attente du verdict serveur. Les listes d’entretien et d’incidents utilisent les champs répétables du schéma, avec ajout/retrait de lignes et sauvegarde groupée. Les champs système, calculés et personnels restent protégés ; ces limites sont annoncées avant création. | Test UI de reprise après erreur sans téléverser deux fois le fichier déjà vérifié ; test UI d’une ligne d’entretien transmise avec ses quatre champs alignés ; validation serveur des groupes, valeurs, limites de 100 lignes, refus des listes personnelles ; scénario émulateur ajout → autorisation → retrait → rejeu. |
+
+## Contrat de persistance
+
+Les modifications média sont des deltas explicites sous `cartularia-generic-media`, pas une nouvelle liste partielle qui pourrait effacer des imports omis. La commande `generic-media-command.mjs` vérifie la révision de départ, les identifiants, les clés autorisées, les rôles et la provenance du binaire. Les nouveaux fichiers doivent avoir un verdict serveur accepté dans le brouillon privé du propriétaire et de l’objet concernés. Le droit `publication.manage` est exigé pour autoriser `Tous`.
+
+Le retrait et le remplacement demandent une confirmation de cible. Ils retirent le document média actif sans supprimer l’original privé. Tant que le mini-site est publié, le serveur exige d’abord son retrait : aucune révocation Storage improvisée ne contourne le contrat de publication. Le changement d’autorisation ne publie pas de copie ; la sélection puis la confirmation du panneau Publication restent nécessaires.
+
+Les listes répétées sont enregistrées comme un groupe de champs alignés. Le serveur refuse un groupe incomplet, des longueurs différentes, une ligne entièrement vide ou des valeurs invalides ; il conserve le schéma exact et la provenance déclarative privée. L’historique personnel des propriétaires et les codes de lieux du Coffre ne sont pas ouverts à cet éditeur.
+
+`cartularia-generic-operation` désigne la famille de l’opération et porte un jeton. Le client n’annonce le succès que si la racine autoritaire porte le reçu de ce même jeton ; un traitement concurrent différent produit une erreur explicite, pas une fausse confirmation. Un ancien essai refusé de l’autre famille n’est pas rejoué.
+
+La revue croisée a détecté puis corrigé un effet persistant du marqueur : il n’est actif que tant que son jeton n’a pas de reçu. Des empreintes de contenu permettent de reconnaître les anciens états médias/Collections inchangés et de ne pas les rejouer. Une nouvelle modification du parcours normal reste prise en compte, sans branche par type, marque ou identifiant. Le test émulateur vérifie générique → synchronisation sans résurrection → nouvelle Collection et nouveau nom média via le parcours normal.
+
+Après publication ou retrait, le callback optionnel `onStateChanged` du panneau partagé permet au lecteur générique de relire sa révision et ses médias. Une relecture impossible est annoncée séparément du succès de publication, avec reprise ; elle ne transforme pas un succès serveur en échec fictif. Les relectures après changement de compte ne réinjectent pas les données de l’ancienne session.
+
+## Tests exécutés
+
+- Dernière suite UI complète : 178 tests réussis dans 46 fichiers, y compris le callback de publication.
+- 21 tests Node ciblés réussis : édition générique, commande média, création, validation et données démo. Les neuf tests de politiques média/listes ont également été rejoués après durcissement.
+- Dernière exécution émulateur isolé : 9 tests réussis — 5 création/enrichissement et 4 synchronisation, y compris la garde de Collection du lot intégration. Le reçu d’opération et le retour au parcours normal sont couverts. Arrêt propre de l’émulateur.
+- Dernière passe TypeScript, lint et `git diff --check` réussie, sans avertissement lint après correction de l’autre lot.
+
+## Intégration et limites de recette
+
+- Le bundle serveur doit inclure le nouveau module `scripts/lib/generic-media-command.mjs` et les modifications de `live-sync-command.mjs`. Aucun nouveau callable ni nouvelle permission Rules n’est nécessaire : le circuit existant du brouillon et de la synchronisation est conservé. Les contrôles serveur de rattachement Collection du lot C05 ont été préservés.
+- Le pipeline d’upload a été factorisé dans `uploadVerifiedCartularyMedia` puis réutilisé par création et enrichissement ; les originaux, empreintes et métadonnées de vérification ne sont pas réécrits par une fausse abstraction cliente. Les tests émulateur utilisent des manifestes vérifiés fictifs ; ils ne prouvent pas un transfert Storage distant.
+- À recetter après alignement client/serveur : nouvel objet automobile, upload image/PDF/vidéo réel, publication de la copie vérifiée, retrait puis remplacement, rechargement et consultation sur un autre appareil. Les contraintes des dérivés PDF/vidéo restent celles du lot médias.
+- La garde navigateur ne peut pas garantir la conservation après arrêt forcé du processus ou du téléphone. La recette réelle du bouton Retour, du clavier, du tactile et du dialogue natif reste requise ; les tests DOM ne remplacent pas Safari/Chrome réels.
+- Un conflit de révision conserve la saisie à l’écran et refuse l’écrasement ; l’utilisateur doit relire le Cartulaire avant de réessayer. Un upload vérifié est réutilisé pendant la même tentative d’édition ; aucun effacement automatique d’un original déjà transféré n’a été ajouté.
+- Le build final, le gel des fichiers et la recette distante sont consolidés par le responsable d’intégration. Ce rapport ne prétend pas clôturer les écarts de livraison E01–E03 ni les autres constats C01–C14.

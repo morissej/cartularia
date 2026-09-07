@@ -32,7 +32,7 @@ const text = (value, label, required = false) => {
   return normalized;
 };
 
-const amount = (value) => Number.isFinite(value) && value > 0 ? Number(value) : null;
+const amount = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 
 const year = (value) => Number.isInteger(value) && value >= 1500 && value <= 2200 ? value : null;
 
@@ -46,12 +46,17 @@ const provenance = ({ value, sourceId, observedAt, actorId }) => ({
   visibility: 'secret',
 });
 
-const buildCreationBundle = ({ requestData, profile, media }) => {
+export const buildCreationBundle = ({ requestData, profile, media }) => {
+  const definitions = {
+    watch: { schemaId: 'watch', versions: ['1.5.0', '1.6.0'], label: 'Montre' },
+    car: { schemaId: 'car', versions: ['1.2.0'], label: 'Voiture' },
+  };
+  const definition = definitions[profile?.assetType];
   if (
     profile?.profileVersion !== '1.0.0'
-    || profile?.assetType !== 'watch'
-    || profile?.schemaId !== 'watch'
-    || profile?.schemaVersion !== '1.6.0'
+    || !definition
+    || profile.schemaId !== definition.schemaId
+    || !definition.versions.includes(profile.schemaVersion)
   ) {
     throw new CreateCartularyCommandError('unsupported_profile', 'Le profil de création demandé n’est pas pris en charge.');
   }
@@ -94,6 +99,9 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
   }
   const primaryAssetId = mediaAssets.find((asset) => Array.isArray(asset.tags) && asset.tags.includes('main-photo'))?.id || null;
   const manufactureYear = year(profile.manufactureYear);
+  if (profile.assetType === 'car' && (!serialNumber || !manufactureYear || manufactureYear < 1886 || manufactureYear > new Date().getFullYear() + 1)) {
+    throw new CreateCartularyCommandError('invalid_profile', 'Le numéro de châssis et une année automobile valide sont requis.');
+  }
   const sections = [
     {
       id: 'identity.summary',
@@ -177,7 +185,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
       },
       revision: 1,
     }] : []),
-    ...(purchaseDate || purchasePrice ? [{
+    ...(purchaseDate || purchasePrice !== null ? [{
       id: 'value.purchase',
       schemaSectionId: 'value.cost_basis',
       schemaVersion: 'watch@1.6.0',
@@ -186,12 +194,12 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
       status: 'imported_unreviewed',
       fields: {
         ...(purchaseDate ? { 'value.purchase.date': value(purchaseDate) } : {}),
-        ...(purchasePrice ? { 'value.purchase.price': value({ amount: purchasePrice, currency }) } : {}),
+        ...(purchasePrice !== null ? { 'value.purchase.price': value({ amount: purchasePrice, currency }) } : {}),
       },
       extensions: { ...(seller ? { 'value.purchase.seller': value(seller) } : {}) },
       revision: 1,
     }] : []),
-    ...(valuationMid ? [{
+    ...(valuationMid !== null ? [{
       id: 'value.market-depth',
       schemaSectionId: 'value.market_depth',
       schemaVersion: 'watch@1.6.0',
@@ -200,9 +208,9 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
       status: 'imported_unreviewed',
       fields: {
         ...(valuationDate ? { 'value.market.analysisDate': value(valuationDate) } : {}),
-        ...(valuationLow ? { 'value.market.lowValue': value({ amount: valuationLow, currency }) } : {}),
+        ...(valuationLow !== null ? { 'value.market.lowValue': value({ amount: valuationLow, currency }) } : {}),
         'value.market.midValue': value({ amount: valuationMid, currency }),
-        ...(valuationHigh ? { 'value.market.highValue': value({ amount: valuationHigh, currency }) } : {}),
+        ...(valuationHigh !== null ? { 'value.market.highValue': value({ amount: valuationHigh, currency }) } : {}),
       },
       revision: 1,
     }, {
@@ -220,15 +228,59 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     }] : []),
   ];
 
+  // The common creation flow preserves each published vertical's field IDs.
+  const schemaVersion = `${profile.schemaId}@${profile.schemaVersion}`;
+  const adaptedSections = sections.map((section) => ({ ...section, schemaVersion }));
+  if (profile.assetType === 'car') {
+    const identity = adaptedSections.find((section) => section.id === 'identity.summary');
+    identity.schemaSectionId = 'cover.car';
+    identity.fields = {
+      'cover.car.maker': value(brand),
+      'cover.car.model': value(model), 'cover.car.version': value(reference), 'cover.car.year': value(manufactureYear),
+    };
+    adaptedSections.unshift({ id: 'cover.asset', schemaSectionId: 'cover.asset', schemaVersion, title: 'Type de bien', visibility: 'secret', status: 'imported_unreviewed', fields: { 'cover.asset.type': value(definition.label) }, revision: 1 });
+    const technical = adaptedSections.find((section) => section.id === 'watch.reference');
+    technical.id = 'technical.powertrain';
+    technical.schemaSectionId = 'technical.powertrain';
+    technical.fields = caliber ? { 'technical.engine.architecture': value(caliber) } : {};
+    const confidential = adaptedSections.find((section) => section.id === 'watch.instance.private');
+    confidential.id = 'identity.private';
+    confidential.schemaSectionId = 'identity.private';
+    confidential.fields = { 'identity.car.vin': value(serialNumber) };
+    confidential.extensions = {};
+    const condition = adaptedSections.find((section) => section.id === 'condition.summary');
+    if (condition) { condition.schemaSectionId = 'condition.current'; condition.fields = { 'condition.overall.conclusion': value(conditionSummary) }; }
+    const retained = adaptedSections.find((section) => section.id === 'value.retained');
+    if (retained) retained.schemaSectionId = 'value.retained';
+    const market = adaptedSections.find((section) => section.id === 'value.market-depth');
+    if (market) {
+      market.schemaSectionId = 'value.market';
+      market.extensions = Object.fromEntries(Object.entries(market.fields).filter(([key]) => key !== 'value.market.analysisDate'));
+      market.fields = valuationDate ? { 'value.market.analysisDate': value(valuationDate) } : {};
+    }
+    const descriptionSection = adaptedSections.find((section) => section.id === 'condition.description');
+    if (descriptionSection) {
+      descriptionSection.schemaSectionId = 'condition.current';
+      descriptionSection.fields = {};
+      descriptionSection.extensions = { 'creation.description': value(description) };
+      if (condition) {
+        condition.extensions = { ...condition.extensions, ...descriptionSection.extensions };
+        adaptedSections.splice(adaptedSections.indexOf(descriptionSection), 1);
+      }
+    }
+    const purchaseSection = adaptedSections.find((section) => section.id === 'value.purchase');
+    if (purchaseSection) { purchaseSection.extensions = { ...purchaseSection.extensions, ...purchaseSection.fields }; purchaseSection.fields = {}; }
+  }
+
   return {
     envelope: {
       id: requestData.cartularyId,
       organizationId: requestData.organizationId,
       registryId: requestData.registryId,
       collectionId,
-      assetType: 'watch',
-      schemaId: 'watch',
-      schemaVersion: '1.6.0',
+      assetType: profile.assetType,
+      schemaId: profile.schemaId,
+      schemaVersion: profile.schemaVersion,
       publicCode: requestData.publicCode,
       displayTitle: `${brand} ${model}`.trim(),
       makerName: brand,
@@ -246,8 +298,8 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
       purchasePrice,
       costBasis: purchasePrice,
       grossValuation: valuationMid,
-      netValuation: valuationMid,
-      netAfterTaxValuation: valuationMid,
+      netValuation: null,
+      netAfterTaxValuation: null,
       valuationCurrency: currency,
       defaultVisibility: 'secret',
       publicationStatus: 'none',
@@ -260,7 +312,7 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
       modelVersion: '1.0.0',
       deletedAt: null,
     },
-    sections,
+    sections: adaptedSections,
     sources: [{
       id: sourceId,
       kind: 'project_document',
@@ -295,13 +347,13 @@ const buildCreationBundle = ({ requestData, profile, media }) => {
     })),
     spinSets: [],
     observations: [],
-    valuations: valuationMid ? [{
+    valuations: valuationMid !== null ? [{
       id: 'valuation_initial',
       cartularyId: requestData.cartularyId,
       observedAt: valuationDate ? `${valuationDate}T00:00:00.000Z` : observedAt,
-      lowValue: valuationLow || valuationMid,
+      lowValue: valuationLow ?? valuationMid,
       midValue: valuationMid,
-      highValue: valuationHigh || valuationMid,
+      highValue: valuationHigh ?? valuationMid,
       currency,
       sourceLabel,
       sourceRefs: [sourceId],
@@ -418,6 +470,7 @@ export const processCartularyCreateRequest = async ({
     requestId: requestData.requestId,
     actorId: requestData.ownerUid,
     expectedRevision: 0,
+    requireActiveCollection: true,
     occurredAt,
   });
   const projected = await projectRegistryItem({

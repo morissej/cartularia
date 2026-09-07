@@ -51,18 +51,54 @@ export const registryAuthenticationEmail = async (identifier: string) => {
 
 export const signInToCartularia = async (identifier: string, password: string): Promise<User> => {
   const credential = await signInWithEmailAndPassword(auth, await registryAuthenticationEmail(identifier), password);
+  await ensureRegistryAccountActivation(credential.user, identifier);
   return credential.user;
+};
+
+export class RegistryActivationError extends Error {
+  readonly code = 'account/activation-incomplete';
+  constructor() {
+    super('Votre identité est créée. Terminez maintenant l’activation du Registre.');
+    this.name = 'RegistryActivationError';
+  }
+}
+
+export const ensureRegistryAccountActivation = async (user: User, identifier = ''): Promise<void> => {
+  try {
+    const snapshot = await getDoc(doc(db, 'users', user.uid));
+    if (snapshot.exists()) return; // Existing or suspended accounts never gain replacement rights here.
+    const userName = normalizeUserAlias(user.displayName || identifier);
+    if (userName.length < 3 || userName.includes('@')) throw new RegistryActivationError();
+    const activate = httpsCallable<{ userName: string }, { registryId: string }>(functions, 'activateRegistryAccount');
+    await activate({ userName });
+  } catch (error) {
+    if (error instanceof RegistryActivationError) throw error;
+    throw new RegistryActivationError();
+  }
+};
+
+export const resumeRegistryAccountActivation = async (identifier = ''): Promise<User> => {
+  if (!auth.currentUser) throw new Error('account/sign-in-required');
+  await ensureRegistryAccountActivation(auth.currentUser, identifier);
+  return auth.currentUser;
 };
 
 export const createCartulariaAccount = async (userName: string, password: string): Promise<User> => {
   const normalized = normalizeUserAlias(userName);
   if (normalized.length < 3) throw new Error('invalid_user_name');
   if (password.length < 12) throw new Error('weak_password');
-  const credential = await createUserWithEmailAndPassword(auth, await registryAuthenticationEmail(normalized), password);
-  await updateProfile(credential.user, { displayName: normalized });
-  const activate = httpsCallable<{ userName: string }, { registryId: string }>(functions, 'activateRegistryAccount');
-  await activate({ userName: normalized });
-  return credential.user;
+  const email = await registryAuthenticationEmail(normalized);
+  // Retry after Auth succeeded but activation failed: preserve the identity.
+  const user = auth.currentUser?.email === email
+    ? auth.currentUser
+    : (await createUserWithEmailAndPassword(auth, email, password)).user;
+  try {
+    if (!user.displayName) await updateProfile(user, { displayName: normalized });
+    await ensureRegistryAccountActivation(user, normalized);
+  } catch {
+    throw new RegistryActivationError();
+  }
+  return user;
 };
 
 export const signOutOfCartularia = () => signOut(auth);

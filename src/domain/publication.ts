@@ -238,6 +238,11 @@ export const getPublicationPolicy = (
     : { allowed: true, reason: 'Bloc admissible pour une projection Cercle filtrée côté serveur.' };
 };
 
+export const publicationBlockIdsFor = (destination: PublicationDestination) => PUBLISHED_BLOCK_IDS.filter((id) => getPublicationPolicy(destination, id).allowed);
+export const filterPublicationBlockIds = (destination: PublicationDestination, ids: readonly string[]) => (
+  publicationBlockIdsFor(destination).filter((id) => ids.includes(id))
+);
+
 const latestDecision = (
   decisions: readonly PublicationDecision[],
   destination: PublicationDestination,

@@ -5,20 +5,36 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // The bridge orders code-only snapshots. It does not authenticate a Coffre
+    // identity or inspect any personal ciphertext across projects.
+    function revisionAdvances(uid) {
+      let path = /databases/$(database)/documents/codeAccounts/$(uid)/account/profile;
+      return getAfter(path).data.codeRevision is timestamp
+        && (!exists(path) || !('codeRevision' in get(path).data)
+          || getAfter(path).data.codeRevision > get(path).data.codeRevision);
+    }
+
+    function belongsToPublication(uid) {
+      let path = /databases/$(database)/documents/codeAccounts/$(uid)/account/profile;
+      return revisionAdvances(uid)
+        && request.resource.data.sourceRevision == getAfter(path).data.codeRevision;
+    }
+
     function baseIsValid(uid, code) {
       return request.resource.data.ownerUid == uid
         && request.resource.data.code == code
-        && request.resource.data.schemaVersion == 'code-correspondence@1.0.0';
+        && request.resource.data.schemaVersion == 'code-correspondence@1.0.0'
+        && belongsToPublication(uid);
     }
 
     function simpleCodeIsValid(uid, code) {
-      return request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'updatedAt'])
+      return request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'sourceRevision', 'updatedAt'])
         && baseIsValid(uid, code)
         && code.matches('^(TRN|LIE|GES)-[A-F0-9]{8}$');
     }
 
     function labeledCodeIsValid(uid, code, codePattern, labelPattern) {
-      return request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'genericLabel', 'updatedAt'])
+      return request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'genericLabel', 'sourceRevision', 'updatedAt'])
         && baseIsValid(uid, code)
         && code.matches(codePattern)
         && request.resource.data.genericLabel is string
@@ -32,23 +48,24 @@ service cloud.firestore {
         allow read: if documentId == 'profile' && ownsAccount(uid);
         allow create, update: if documentId == 'profile'
           && ownsAccount(uid)
-          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'primaryClientNumber', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'primaryClientNumber', 'codeRevision', 'updatedAt'])
           && request.resource.data.schemaVersion == 'code-account-link@1.0.0'
           && request.resource.data.ownerUid == uid
-          && request.resource.data.primaryClientNumber.matches('^CLI-[A-F0-9]{8}$');
-        allow delete: if documentId == 'profile' && ownsAccount(uid) && resource.data.ownerUid == uid;
+          && request.resource.data.primaryClientNumber.matches('^CLI-[A-F0-9]{8}$')
+          && revisionAdvances(uid);
+        allow delete: if false;
       }
 
       match /clients/{clientNumber} {
         allow read: if ownsAccount(uid);
         allow create: if ownsAccount(uid)
-          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'sourceRevision', 'updatedAt'])
           && baseIsValid(uid, clientNumber)
           && clientNumber.matches('^CLI-[A-F0-9]{8}$')
           && request.resource.data.objectCodes is list
           && request.resource.data.objectCodes.size() == 0;
         allow update: if ownsAccount(uid)
-          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'sourceRevision', 'updatedAt'])
           && baseIsValid(uid, clientNumber)
           && request.resource.data.objectCodes == resource.data.objectCodes;
         allow delete: if false;
@@ -57,26 +74,26 @@ service cloud.firestore {
       match /transmissions/{code} {
         allow read: if ownsAccount(uid);
         allow create, update: if ownsAccount(uid) && simpleCodeIsValid(uid, code) && code.matches('^TRN-[A-F0-9]{8}$');
-        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid;
+        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid && revisionAdvances(uid);
       }
 
       match /locations/{code} {
         allow read: if ownsAccount(uid);
         allow create, update: if ownsAccount(uid) && labeledCodeIsValid(uid, code, '^LIE-[A-F0-9]{8}$', '^Lieu [1-9][0-9]*$');
-        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid;
+        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid && revisionAdvances(uid);
       }
 
       match /managers/{code} {
         allow read: if ownsAccount(uid);
         allow create, update: if ownsAccount(uid) && simpleCodeIsValid(uid, code) && code.matches('^GES-[A-F0-9]{8}$');
-        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid;
+        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid && revisionAdvances(uid);
       }
 
 
       match /people/{code} {
         allow read: if ownsAccount(uid);
         allow create, update: if ownsAccount(uid) && labeledCodeIsValid(uid, code, '^(CLI|PER|GES)-[A-F0-9]{8}$', '^Personne [1-9][0-9]*$');
-        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid;
+        allow delete: if ownsAccount(uid) && resource.data.ownerUid == uid && revisionAdvances(uid);
       }
     }
 
