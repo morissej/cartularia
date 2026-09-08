@@ -64,6 +64,22 @@ export const loadCatalogSchemaVersion = async ({ firestore, schemaId, version })
 };
 
 /**
+ * Projection JSON simple d'une valeur lue dans Firestore : les horodatages (`Timestamp`, `Date`)
+ * deviennent des chaînes ISO 8601, les tableaux et objets sont parcourus. Sans cela, la
+ * canonicalisation JCS refuse les instances de classe que porte toute section lue en production
+ * (constat du 2026-09-08 : `Seuls les objets JSON simples sont acceptés par JCS`).
+ */
+export const plainJson = (value) => {
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value.toDate === 'function') return value.toDate().toISOString();
+  if (Array.isArray(value)) return value.map(plainJson);
+  const output = {};
+  for (const [key, entry] of Object.entries(value)) output[key] = plainJson(entry);
+  return output;
+};
+
+/**
  * Plan de remontée, pur et testable : pour chaque section du Cartulaire, la version cible et le
  * déplacement des champs inconnus. Aucune valeur n'est supprimée.
  */
@@ -112,7 +128,7 @@ export const planSchemaUpgrade = ({ root, sections, target, source = null }) => 
     patches,
     orphanedSections,
     relocatedFields,
-    digest: sha256Digest({ schemaId: target.schemaId, schemaVersion: target.version, schemaDigest: target.catalogDigest, sections: patches }),
+    digest: sha256Digest(plainJson({ schemaId: target.schemaId, schemaVersion: target.version, schemaDigest: target.catalogDigest, sections: patches })),
   };
 };
 

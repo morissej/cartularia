@@ -48,7 +48,7 @@ Constat d’usage à consigner pour V5 : le verrou de session coupe la session a
 
 Deux enseignements. Le contenu éditorial Rolex est déjà dans le brouillon privé de production : il y a été poussé le 16 août par le lecteur du propriétaire à partir des anciens défauts codés ; le script n’ajouterait que le code public. Les deux racines n’ont jamais reçu de montants : la première synchronisation après ces écritures fera apparaître les valeurs dans le Registre, avec un événement d’audit attribué au propriétaire (seule la `reason` de la demande trace l’opération, d’où `--request-sync` côté IWC).
 
-**Exécution : en attente d’un accord explicite.** Commandes prêtes, à lancer depuis le dépôt avec la session Firebase CLI :
+**Exécution (accord de Jérôme : « Les deux scripts », 8 septembre, 18 h 09).** Commandes lancées depuis le dépôt avec la session Firebase CLI :
 
 ```bash
 GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/import-rolex-cartulary.mjs --allow-remote
@@ -58,7 +58,19 @@ GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mj
 GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/update-iwc-profile-keys.mjs --apply --request-sync --allow-remote
 ```
 
-Contrôle après exécution : rejouer les deux simulations (attendu : Rolex 6 `unchanged`, 4 `kept`, 4 `kept_projection`, synchronisation sautée ; IWC `noop` × 3 et `keep_origin_title`, demande `processed`), puis ouvrir les deux Cartulaires et le catalogue du Registre dans Chrome.
+Résultats :
+
+| | Rolex | IWC |
+|---|---|---|
+| Écritures | `cartularia-public-code` créée (révision 1) ; 5 inchangées, 4 conservées, 4 clés de projection conservées, aucune course | 3 écritures : profil de création et code public créés, `originTitle` fusionné (révision 2 → 3) ; `cartularia-sensitivity-prices` déjà en place |
+| Synchronisation | traitée par le script (`sync_seed_rolex_…`, `reason rolex_dossier_seed_adr029`), racine révision 13 → 14, événement d’audit `evt_87989ff0…` ; racine et item Registre portent désormais les montants du propriétaire (devise EUR) | demande `iwc_profile_keys_20260908_…` (`reason iwc_profile_keys_adr029`) traitée par la Cloud Function déployée en 3 s, `updated`, racine révision 6 → 7 |
+| Contrôle par rejeu de la simulation | 6 `unchanged`, 4 `kept`, 4 `kept_projection`, synchronisation sautée (`no_state_change`), brouillon en phase avec la racine, code 0 | `noop` × 3 et `keep_origin_title`, 0 écriture, demande `processed`, code 0 |
+
+**Écart constaté : la fonction `syncCartularyToRegistry` déployée est en retard sur le dossier de travail.** La synchronisation Rolex, traitée en processus par le code du dépôt, a calculé les montants de la racine ; la synchronisation IWC, traitée par la fonction déployée, a incrémenté la révision mais laissé la racine sans montant ni devise et sans `legacyMediaDigest` (les trois avertissements correspondants persistent au contrôle). Les 15 fonctions existantes n’ont pas été redéployées le 8 septembre (décision « les cinq fonctions manquantes seulement ») ; leur mise à jour relève d’une décision séparée, à porter dans une vague ultérieure. Effet visible : le Registre affiche les montants du Rolex mais pas ceux de l’IWC tant que la fonction n’est pas redéployée ou qu’une synchronisation n’est pas traitée par `sync:worker`.
+
+**Remontée de schéma (V1, point 3).** `schema:upgrade --cartulary cart_iwc_flieger_utc_2002 --dry-run --allow-remote` a d’abord échoué en lecture seule sur « Seuls les objets JSON simples sont acceptés par JCS » : les sections lues en production portent des horodatages Firestore (`Timestamp`), que la canonicalisation refusait ; les tests en mémoire ne le voyaient pas (objets simples). Correctif : `plainJson` dans `scripts/lib/schema-upgrade-command.mjs` (horodatages projetés en ISO 8601 pour l’empreinte, sections écrites inchangées), test ajouté. Nouvelle simulation : remontée 1.3.0 → 1.6.0 planifiée, une section retirée (`storage.current`, marquée `imported_unmapped` et `retiredFromSchema`), cinq champs déplacés en extensions (`cover.asset.type`, trois champs `cover.storage.locations[]`, `value.market.analysisDate`). Aucune écriture ; la remontée réelle reste à décider (ADR-031).
+
+Vérification dans Chrome : la session propriétaire s’était de nouveau verrouillée (15 minutes d’onglet masqué) ; hors connexion, les deux Cartulaires affichent leur identité de repli. Contrôle côté propriétaire à refaire après reconnexion (catalogue du Registre avec montants Rolex, page Publication IWC avec le code `OP-4892-XZ9`, titre d’origine IWC).
 
 ## 5. Vérification côté propriétaire et écart de fonctions
 
@@ -101,7 +113,8 @@ Après reconnexion de Jérôme dans Chrome (session verrouillée entre-temps) :
 | Pages légales (V-A1) | Closes |
 | Lecteur unique en production (ADR-028, ADR-029) | Vérifié visiteur et propriétaire ; régression hors connexion corrigée |
 | Publication serveur du mini-site (P-A1) | Cinq fonctions créées en production ; publication, contrôle anonyme et retrait vérifiés ; collection de test créée |
-| Scripts distants (`import:rolex`, clés IWC) | Rendus sûrs, testés, simulés contre la production ; **exécution en attente de l’accord de Jérôme** |
-| `schema:upgrade --dry-run` sur le pilote IWC | Non lancé : à faire après les écritures ci-dessus, sur accord |
+| Scripts distants (`import:rolex`, clés IWC) | Rendus sûrs, testés, simulés puis **exécutés en production sur accord** ; contrôles au vert |
+| `schema:upgrade --dry-run` sur le pilote IWC | Fait après correction d’un défaut de canonicalisation ; plan 1.3.0 → 1.6.0 lisible, aucune écriture |
+| Fonction `syncCartularyToRegistry` déployée | **En retard sur le dépôt** (montants IWC non calculés) : décision de redéploiement à prendre |
 
-Constats nouveaux transmis aux vagues suivantes : page publique après retrait (V4), verrou de session sans message (V5), objets de test à supprimer (Cartulaire `AUD-A3DA4019`, collection « Audit V1 · collection de test 2026-09-08 »).
+V1 est close, à la vérification propriétaire près (reconnexion). Constats nouveaux transmis aux vagues suivantes : redéploiement des fonctions existantes (à décider), page publique après retrait (V4), verrou de session sans message (V5), objets de test à supprimer (Cartulaire `AUD-A3DA4019`, collection « Audit V1 · collection de test 2026-09-08 »).

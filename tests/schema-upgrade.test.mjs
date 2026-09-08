@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import { Timestamp } from 'firebase-admin/firestore';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildIwcImportBundle } from '../src/migrations/iwcImport.ts';
-import { planSchemaUpgrade, upgradeCartularySchema, listCartulariesToUpgrade } from '../scripts/lib/schema-upgrade-command.mjs';
+import { planSchemaUpgrade, upgradeCartularySchema, listCartulariesToUpgrade, plainJson } from '../scripts/lib/schema-upgrade-command.mjs';
 import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { importCartularyBundle } from '../scripts/lib/import-cartulary-command.mjs';
 import { createMemoryFirestore } from './helpers/memory-firestore.mjs';
@@ -34,6 +35,22 @@ test('la remontée IWC 1.3.0 → 1.6.0 ne perd aucune valeur : champs inconnus e
   assert.deepEqual(after, before, 'toutes les valeurs sont conservées, en champs ou en extensions');
   const cover = plan.patches.find((section) => section.schemaSectionId === 'cover.watch');
   assert.ok(Object.keys(cover.fields).length > 0, 'les champs toujours connus restent des champs');
+});
+
+test('les horodatages Firestore des sections (Timestamp, Date) n’empêchent pas le plan : empreinte calculée sur une projection JSON simple, identique pour une section sans horodatage', () => {
+  const target = { schemaId: 'watch', version: '1.6.0', sectionIds: ['identity'], fieldSections: new Map([['brand', 'identity']]), catalogDigest: 'sha256:catalogue' };
+  const root = { id: 'cart_horodate', schemaId: 'watch', schemaVersion: '1.3.0' };
+  const plain = [{ id: 'identity', schemaSectionId: 'identity', status: 'imported_unreviewed', fields: { brand: 'IWC' } }];
+  const stamped = [{ ...plain[0], createdAt: Timestamp.fromDate(new Date('2026-08-29T10:00:00.000Z')), syncedAt: new Date('2026-09-05T11:20:02.588Z'), updatedAt: Timestamp.fromDate(new Date('2026-09-05T11:20:02.588Z')) }];
+  const stampedPlan = planSchemaUpgrade({ root, sections: stamped, target });
+  assert.match(stampedPlan.digest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(stampedPlan.patches[0].createdAt.toDate().toISOString(), '2026-08-29T10:00:00.000Z', 'la section écrite garde son horodatage d’origine');
+  assert.equal('updatedAt' in stampedPlan.patches[0], false, 'updatedAt est reposé par le serveur');
+  // L’empreinte ne dépend pas de la forme des horodatages, seulement de leur valeur ISO.
+  const isoPlan = planSchemaUpgrade({ root, sections: [{ ...plain[0], createdAt: '2026-08-29T10:00:00.000Z', syncedAt: '2026-09-05T11:20:02.588Z' }], target });
+  assert.equal(stampedPlan.digest, isoPlan.digest);
+  assert.notEqual(stampedPlan.digest, planSchemaUpgrade({ root, sections: plain, target }).digest, 'un horodatage présent change l’empreinte');
+  assert.deepEqual(plainJson({ a: [Timestamp.fromDate(new Date(0)), { b: new Date(0), c: 1, d: null }], e: 'x' }), { a: ['1970-01-01T00:00:00.000Z', { b: '1970-01-01T00:00:00.000Z', c: 1, d: null }], e: 'x' });
 });
 
 test('la remontée refuse une rétrogradation et un changement de verticale', () => {
