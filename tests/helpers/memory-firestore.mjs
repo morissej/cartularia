@@ -1,7 +1,8 @@
 /**
  * Firestore minimal en mémoire pour tester les commandes serveur sans émulateur :
- * documents, sous-collections, `get/set/update/create/delete`, requêtes `where ==`, transactions
- * sérialisées. Les sentinelles (`FieldValue`) sont conservées telles quelles.
+ * documents, sous-collections, `get/set/update/create/delete`, requêtes `where ==`, `orderBy`
+ * (tri simple sur un champ), `limit`, transactions sérialisées. Les sentinelles (`FieldValue`)
+ * sont conservées telles quelles.
  */
 export const createMemoryFirestore = (initial = {}) => {
   const documents = new Map(Object.entries(initial).map(([path, data]) => [path, structuredClone(data)]));
@@ -12,15 +13,20 @@ export const createMemoryFirestore = (initial = {}) => {
     const next = merge || update ? { ...(documents.get(path) ?? {}), ...structuredClone(data) } : structuredClone(data);
     documents.set(path, next);
   };
+  const compare = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
   const collectionRef = (path) => {
-    const query = (filters = []) => ({
-      where: (field, operator, value) => query([...filters, { field, operator, value }]),
+    const query = (filters = [], order = null, maximum = null) => ({
+      where: (field, operator, value) => query([...filters, { field, operator, value }], order, maximum),
+      orderBy: (field, direction = 'asc') => query(filters, { field, direction }, maximum),
+      limit: (count) => query(filters, order, count),
       get: async () => {
         const depth = path.split('/').length + 1;
-        const docs = [...documents.keys()]
+        let docs = [...documents.keys()]
           .filter((candidate) => candidate.startsWith(`${path}/`) && candidate.split('/').length === depth)
           .map(snapshot)
           .filter((entry) => filters.every(({ field, operator, value }) => operator === '==' ? entry.data()?.[field] === value : operator === '!=' ? entry.data()?.[field] !== value : true));
+        if (order) docs.sort((left, right) => (order.direction === 'desc' ? -1 : 1) * compare(left.data()?.[order.field], right.data()?.[order.field]));
+        if (maximum !== null) docs = docs.slice(0, maximum);
         return { docs, size: docs.length, empty: docs.length === 0 };
       },
       doc: (id) => docRef(`${path}/${id}`),

@@ -298,8 +298,11 @@ Aucune écriture n’a été faite dans un projet Firebase, ni local ni distant.
 `import:rolex`, `update:iwc-dossier` (clés ajoutées) et `schema:upgrade` n’ont **jamais été
 exécutés**. Si quelqu’un les exécute ensuite :
 
-- `import:rolex` crée `cartularies/cart_rolex_gmt_master_mark_i_long_e_1675_642cf3adba60`, son
-  item de Registre et le brouillon privé de `CARTULARIA_OWNER_UID` (défaut `wave1-owner`) ;
+- `import:rolex` sous émulateur (racine absente) crée la racine Rolex, son item de Registre et le
+  brouillon privé de l'acteur de la fixture (`wave1-owner`) ; `CARTULARIA_OWNER_UID` n'est plus
+  requis (autre valeur → `owner_mismatch`, code 1). Si la racine existe, seul le brouillon de son
+  `accountHolderId` est complété ; hors émulateur, `GCLOUD_PROJECT` ou `FIREBASE_PROJECT_ID` est
+  obligatoire même en `--dry-run` (`project_required`) ;
 - `schema:upgrade` est tracé dans `auditEvents` du Cartulaire (`cartulary.schema.upgraded`) avec
   `previousSchemaVersion` sur la racine : la version précédente est donc retrouvable, mais la
   chaîne d’intégrité interdit une inversion silencieuse ; revenir en arrière suppose une nouvelle
@@ -331,13 +334,41 @@ git diff --check
   L’interface n’a pas été ouverte dans un navigateur.
 - **`.env` sans drapeau émulateurs** : ne pas lancer `npm run dev` sans l’avoir vérifié, sous
   peine d’écrire en production.
-- **Production** : le Cartulaire Rolex de production n’a son contenu éditorial qu’après
-  `npm run import:rolex -- --allow-remote` avec `CARTULARIA_OWNER_UID` du propriétaire réel ;
-  les trois clés IWC ajoutées n’existent qu’après `update:iwc-dossier` rejoué en distant ; le
-  pilote IWC reste en `watch@1.3.0` tant que `schema:upgrade` n’a pas été lancé. Toute action
-  distante exige une autorisation explicite de Jérôme.
+- **Production** : le Cartulaire Rolex de production n'a son contenu éditorial qu'après
+  `GCLOUD_PROJECT=<projet> npm run import:rolex:dry-run` (avec `run-with-firebase-cli-adc.mjs`,
+  contrôle du rapport, donnée Secret, code 0 ; `first_authoritative_sync` et
+  `generic_operation_pending` à lire s'ils apparaissent, `generic_operation_stale` bloque) puis `npm
+  run import:rolex -- --allow-remote` ; propriétaire déduit de `accountHolderId` ; clés de
+  projection et montants du propriétaire intacts sans `--projection-keys` (`--projection-keys --key
+  <clé>` pour une seule clé de projection) ; `cartularia-public-code` attendue en
+  `conflict_with_root` ; au délai de la Cloud Function la demande passe `failed` et `npm run
+  import:rolex:resync` la rejoue ; la synchronisation consomme le quota du propriétaire et l'audit
+  lui est attribué (seule `reason` trace le seed) ; les trois clés IWC ajoutées et `originTitle` se
+  complètent avec `update:iwc-profile-keys` (`--dry-run --allow-remote` puis `--apply --request-sync
+  --allow-remote`, sans Storage ni réécriture des médias ; propriétaire déduit de `accountHolderId`
+  et relu dans la transaction ; cible par défaut `cart_iwc_flieger_utc_2002`, garde
+  `not_iwc_cartulary`, `--cartulary <id>` obligatoire et unique pour toute autre cible ; code 1 =
+  rien n'a été écrit ; `--allow-partial` seulement sur décision explicite, puis contrôle par
+  `--dry-run --allow-partial` (0) et non `--dry-run` seul (1) ; vérifier `ownerMembership.ok` ;
+  vérifier l'absence de `creation_profile_drives_valuation` (sinon faire valider par le propriétaire
+  les montants du profil qui alimenteraient le Registre) ; rapport classé Secret (`root.valuation`)
+  ; prévenir le propriétaire du risque de « conflict » client ; demande pending jamais traitée :
+  `npm run sync:worker -- --allow-remote` via `run-with-firebase-cli-adc.mjs` ; tests : `npm run
+  test:iwc-profile-keys`) ; le pilote IWC reste en `watch@1.3.0` tant que `schema:upgrade` n’a pas
+  été lancé. Toute action distante exige une autorisation explicite de Jérôme.
 - **Décisions ouvertes** : activer une version automobile dans le manifeste (aujourd’hui
   `car@1.2.0` est `baseline`, la règle « dernière publiée » s’applique) ; sortir de
   `cartularyIds.ts` la correspondance des codes publics du pilote ; supprimer ou archiver les
   174 fichiers « `* 2.*` » (ignorés par git, 50 divergents) ; commiter les travaux sur une
   branche dédiée.
+
+## 11. Mise à jour du 8 septembre 2026 (soir)
+
+Les §9 et §10 décrivent l’état au commit `302b1b0`. Depuis : branche
+`feat/lecteur-unique-adr-028-031` poussée ; vague V0 close (Java 21 persistant dans
+`~/.cartularia/jre21`, `.env` avec `VITE_USE_FIREBASE_EMULATORS=true`, onze suites émulateur au
+vert, App Check requalifié) ; vague V1 en cours (deux déploiements Hosting, cinq fonctions
+appelables créées en production, publication et retrait d’un mini-site vérifiés de bout en bout,
+scripts `import:rolex` et `update:iwc-profile-keys` rendus sûrs pour une racine existante avec
+trois tours de relecture contradictoire). Journaux : `docs/audits/2026-09-08-execution-v0.md` et
+`docs/audits/2026-09-08-execution-v1.md`, qui font foi sur l’état courant.

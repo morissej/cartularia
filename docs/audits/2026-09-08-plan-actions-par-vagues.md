@@ -40,7 +40,7 @@ Objectif : livrer ce qui existe déjà dans le dossier de travail et qui corrige
 
 1. Build de production sans le drapeau émulateurs, déploiement Hosting uniquement, après autorisation explicite.
 2. Vérifier en production : pages `/conditions`, `/confidentialite`, `/service`, `/accessibilite` (V-A1) ; panneau de publication serveur du mini-site présent sur la page Publication (P-A1) ; lecteur unique et sections génériques (ADR-028) ; absence de branche par marque (ADR-029).
-3. Rejouer en distant, sur autorisation, `update:iwc-dossier` (trois clés ajoutées) et `import:rolex` (contenu éditorial Rolex), puis `schema:upgrade --dry-run` sur le pilote IWC avant toute remontée réelle.
+3. Rejouer en distant, sur autorisation, `update:iwc-profile-keys` (trois clés et `originTitle`, sans médias) et `import:rolex` (racine existante : seul le brouillon privé du propriétaire est complété, sans toucher aux montants), chacun précédé de sa simulation `--dry-run`, puis `schema:upgrade --dry-run` sur le pilote IWC avant toute remontée réelle.
 
 Vérification : parcours visiteur rejoué sur les liens du pied de page ; parcours propriétaire rejoué jusqu’à la publication serveur d’un mini-site de test.
 
@@ -72,7 +72,7 @@ Vérification : ouverture de la Galerie avec trois objets sous 500 ko et trois v
 Objectif : le propriétaire voit exactement ce que verra le public, et « publié » signifie publié.
 
 1. Aperçu strictement identique à la projection publique, blocs personnels exclus (P-A2) ; retrait des blocs Propriétaire, Transmission et Stockage des cibles publiables ou renommage explicite (V-C4).
-2. « Publication active » uniquement après confirmation serveur ; états distincts « aperçu local », « publication demandée », « publiée », « révoquée » ; QR code affiché seulement lorsque la page publique existe.
+2. « Publication active » uniquement après confirmation serveur ; états distincts « aperçu local », « publication demandée », « publiée », « révoquée » ; QR code affiché seulement lorsque la page publique existe. Après retrait, la page publique doit dire « Publication absente ou révoquée » et non « Publication indisponible » avec un bouton Réessayer : `loadPublicProjection` (`src/services/projections.ts`) doit traiter `permission-denied` comme « non publié », comme le fait déjà `loadPublicPublicationStatuses` (constat V1, journal §6).
 3. Mini-site de Collection : ne lier un objet que si son mini-site est publié (P-C6).
 4. Page Publication : une seule liste de contenus avec destinations en colonnes ; cases nommées (P-D4).
 

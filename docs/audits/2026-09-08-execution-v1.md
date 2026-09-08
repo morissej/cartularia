@@ -1,0 +1,107 @@
+# Cartularia — Journal d’exécution de la vague V1
+
+Date : 8 septembre 2026. Plan de référence : [plan d’action par vagues](2026-09-08-plan-actions-par-vagues.md), vague V1 « Déploiement des correctifs déjà réalisés ». Autorisation : « ok, lance V1 » (déploiement Hosting) ; les écritures distantes de données font l’objet d’un accord distinct (§4).
+
+## 1. Build et déploiement
+
+- Bundle construit depuis la branche `feat/lecteur-unique-adr-028-031` (`a35233b`) avec `VITE_USE_FIREBASE_EMULATORS=false` ; `.env.production` fournit la clé App Check et force elle aussi le drapeau à `false`. Vérifications avant déploiement : clé reCAPTCHA présente dans `firebase-*.js` et dans l’application du Coffre ; aucun drapeau émulateurs à `true` ; morceau `ServiceInformationPage` présent ; chaînes `confidentialite`, `accessibilite`, `cartulary-view` présentes.
+- Déploiement **Hosting uniquement** (`firebase deploy --only hosting`) : 444 fichiers, 90 nouveaux, version publiée. Ni fonctions, ni règles, ni index : la fonction de création en production reste sur l’ancienne table de sections, compatible avec le client déployé (les versions de schéma résolues par le client sont acceptées ; la section d’acquisition automobile corrigée ne concerne que les créations passées par la nouvelle fonction).
+- Second déploiement dans la foulée (`9d60495`, bundle `index-C454sD18.js`) pour la correction décrite au §3.
+
+## 2. Vérification côté visiteur (navigateur intégré, sans compte)
+
+| Point | Résultat |
+|---|---|
+| `/confidentialite`, `/conditions`, `/service`, `/accessibilite` (V-A1) | Rendues avec leur contenu : « Confidentialité et données » (265 mots), « Conditions d’utilisation du pilote » (258), « Disponibilité et limites » (249), « Accessibilité » (136). **V-A1 close.** |
+| `/cartulary-view?cartularyId=cart_demo_…` (ADR-028) | Rend le lecteur unique, contrat `cartulary-presentation@1.4.0`, six pages, panneau Preuves. |
+| Console | Aucune erreur ni avertissement sur ces pages. |
+| Retour d’un Cartulaire démo (V-A4) | Toujours `/registry` sans `returnTo` : reste pour V2. |
+
+## 3. Régression trouvée et corrigée pendant la vérification
+
+La session Chrome du propriétaire s’était verrouillée entre-temps (règle de sécurité : 15 min d’onglet masqué ou 30 min d’inactivité, `src/security/sessionSecurity.ts`), ce qui a exposé un cas non couvert par l’ADR-029 : **hors connexion, un Cartulaire sans profil de création dans son brouillon privé (le pilote IWC) affichait « Montre · Dossier à compléter »**, faute d’enveloppe autoritaire et de mock codé. Correction `9d60495` : l’identité (marque, modèle, référence, année, calibre) se relit dans la fiche de spécifications enregistrée (`creationProfileFromSpecificationGroups`, domaine, testée) ; aucune donnée confidentielle n’est déduite ; connecté, l’enveloppe garde la priorité. Vérifié en production hors connexion : en-tête « IWC Schaffhausen Flieger UTC (Die Fliegeruhr) », titre d’origine « Histoire de la référence IW3251-001 · 3251-001 ». Le code public reste `WCH-UTC_2002` hors connexion tant que la clé `cartularia-public-code` n’est pas dans le brouillon IWC (§4).
+
+Constat d’usage à consigner pour V5 : le verrou de session coupe la session après 15 minutes d’onglet masqué, sans message au retour autre que l’écran de connexion.
+
+## 4. Écritures distantes de données
+
+**Constat de départ.** Tel quel, `scripts/import-rolex-cartulary.mjs` s’arrêtait en production sur `cartulary_exists` sans rien écrire (racine créée depuis le Registre, révision 13, aucun reçu d’import) ; une « correction » naïve aurait créé un brouillon fantôme sous l’acteur de fixture ou réécrit les clés saisies par le propriétaire. `scripts/update-iwc-dossier.mjs` exige le dossier source des médias et Storage, réécrit vingt clés et lance la synchronisation en processus : inadapté pour compléter quatre clés.
+
+**Travail réalisé** (trois tours d’orchestration, 27 agents, chaque tour relu par un relecteur « sûreté en production » et un relecteur « preuve par mutations » ; plus aucun point bloquant au troisième tour) :
+
+- `scripts/lib/rolex-dossier-command.mjs` et CLI mince `scripts/import-rolex-cartulary.mjs` : plan en lecture seule puis application ; mode `create` (seed local) ou `existing` (production : propriétaire tiré de `accountHolderId`, ni import ni projection) ; règle de non-écrasement (`kept`, `--force --key <clé>` seulement) ; clés qui pilotent la projection Registre protégées (`kept_projection`, `--projection-keys [--key]`) ; bloc `projection` comparant la racine actuelle et la racine après synchronisation ; gardes `sync_required`/`--resync`, `request_in_flight`/`--replace-stale-request`, `generic_operation_stale`, `first_authoritative_sync`, `project_required`, `create_not_allowed_remote`/`--allow-create` ; demande de synchronisation marquée `failed` au délai ; rapport classé Secret sans valeur d’état (empreintes salées, tailles, champs différents). 52 tests en mémoire, CLI compris.
+- `scripts/lib/iwc-profile-keys-command.mjs`, CLI `scripts/update-iwc-profile-keys.mjs` (`npm run update:iwc-profile-keys`) et `scripts/lib/iwc-dossier-values.mjs` partagé avec `update:iwc-dossier` : trois clés créées si absentes, `originTitle` fusionné, jamais d’écrasement (`skip_existing` → `--apply` refusé sans écriture, `--allow-partial` explicite) ; garde de cible `not_iwc_cartulary` ; propriétaire et cible relus dans la transaction ; `--request-sync` opt-in ; avertissements `creation_profile_drives_valuation`, `owner_membership_missing`, `owner_local_copy_conflict`. 19 tests en mémoire.
+- `tests/helpers/memory-firestore.mjs` : `orderBy` et `limit`, ce qui rend la synchronisation serveur rejouable en mémoire.
+- Points levés au fil des relectures : écrasement des montants du propriétaire par les clés de projection de la fixture, absence de garde de cible IWC, câblage CLI non testé (un `--dry-run` qui écrivait aurait passé les tests), synchronisation en échec jamais rejouée, opération générique du lecteur non simulée, demande laissée `pending` au délai, projet distant ciblé par défaut sans variable, aperçus de valeurs Secret dans le terminal. Points mineurs laissés ouverts (journalisés dans les résultats des workflows) : sections génériques sans marqueur non simulées, sur-blocage sur marqueur orphelin, message de `creation_profile_drives_valuation` quand le profil existe déjà, `--cartulary` répété.
+- Vérification : `npm run lint`, `git diff --check`, 213 tests node (dix fichiers et `test:reference-dossiers`), puis 71 tests des deux fichiers concernés après les deux derniers correctifs (sémantique de `--force --key … --projection-keys`, identifiants via `run-with-firebase-cli-adc.mjs` dans l’aide IWC) ; chaîne de seed émulateur `npm run test:import` rejouée deux fois au vert (`import:rolex` : création 14 clés, puis second passage 14 `unchanged`, synchronisation sautée).
+
+**Simulation en lecture seule contre la production** (8 septembre, 17 h 30, `run-with-firebase-cli-adc.mjs`, aucune écriture ; rapports conservés hors dépôt) :
+
+| | Rolex (`import:rolex --dry-run`) | IWC (`update:iwc-profile-keys --dry-run --allow-remote`) |
+|---|---|---|
+| Cible | racine présente, révision 13, `watch@1.4.0`, code public identique à la fixture (aucun conflit), chaîne d’audit valide (13 événements) | `cart_iwc_flieger_utc_2002` reconnue par son code public, révision 6, `watch@1.3.0` |
+| Propriétaire | déduit de la racine ; membership `legal_owner` active, registre dans ses scopes | idem, même compte |
+| Brouillon privé | actif, en phase avec la racine (empreinte égale), aucune opération générique en attente ; **13 clés sur 14 déjà présentes** | actif ; `cartularia-sensitivity-prices` déjà en place |
+| Plan | 1 création (`cartularia-public-code`), 5 inchangées, 4 conservées (textes, documentation, profondeur et historique de marché saisis différemment), 4 clés de projection conservées (profil, spécifications, achat, valeur retenue du propriétaire) | 3 écritures : profil de création et code public créés, `originTitle` fusionné (révision 2 → 3) ; aucune clé contestée |
+| Effet à la synchronisation | la racine ne porte aujourd’hui **aucun montant** ; la synchronisation déclenchée par l’écriture calculera prix d’achat, prix de revient et valeur nette depuis les clés déjà saisies par le propriétaire (pas depuis la fixture) et les rendra visibles dans le Registre ; devise EUR | même chose (racine sans montant, clés monétaires du brouillon présentes) ; devise EUR posée par le profil ; les actifs seront re-patchés à valeurs identiques (`legacyMediaDigest` absent) ; révision + 1 |
+| Code de sortie | 0 | 0 |
+
+Deux enseignements. Le contenu éditorial Rolex est déjà dans le brouillon privé de production : il y a été poussé le 16 août par le lecteur du propriétaire à partir des anciens défauts codés ; le script n’ajouterait que le code public. Les deux racines n’ont jamais reçu de montants : la première synchronisation après ces écritures fera apparaître les valeurs dans le Registre, avec un événement d’audit attribué au propriétaire (seule la `reason` de la demande trace l’opération, d’où `--request-sync` côté IWC).
+
+**Exécution : en attente d’un accord explicite.** Commandes prêtes, à lancer depuis le dépôt avec la session Firebase CLI :
+
+```bash
+GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/import-rolex-cartulary.mjs --allow-remote
+```
+
+```bash
+GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/update-iwc-profile-keys.mjs --apply --request-sync --allow-remote
+```
+
+Contrôle après exécution : rejouer les deux simulations (attendu : Rolex 6 `unchanged`, 4 `kept`, 4 `kept_projection`, synchronisation sautée ; IWC `noop` × 3 et `keep_origin_title`, demande `processed`), puis ouvrir les deux Cartulaires et le catalogue du Registre dans Chrome.
+
+## 5. Vérification côté propriétaire et écart de fonctions
+
+Après reconnexion de Jérôme dans Chrome (session verrouillée entre-temps) :
+
+- Catalogue : les trois cartes ouvrent `/cartulary` (lecteur unique), aucune erreur console.
+- Page Publication de l’objet de test : le panneau serveur est présent (« Publier le mini-site »), mais désactivé avec « État de publication indisponible. Connectez-vous avec le compte propriétaire puis réessayez. » Aucun appel réseau vers une fonction : le message vient de l’échec de `getCartularyWebsiteState`.
+
+**Écart constaté.** `firebase functions:list` montre 15 fonctions en production ; le client déployé en appelle cinq qui n’existent pas : `getCartularyWebsiteState`, `publishCartularyWebsite`, `revokeCartularyWebsite`, `saveRegistryCollection`, `deleteRegistryCollection`. Le dossier de travail en définit 32 (12 fonctions de secours Registre et Coffre manquent aussi, sans appel depuis les surfaces vérifiées). Cet écart est antérieur à la journée : le bundle de production du 6 septembre appelait déjà ces fonctions (introduites entre le 21 août et le 7 septembre, commit `fe3aa90`). La publication du mini-site et la gestion des Collections étaient donc déjà inopérantes en production, ce que l’audit propriétaire du matin n’avait pas vu faute de panneau serveur dans l’ancien client.
+
+**Décision de Jérôme :** déployer uniquement les cinq fonctions manquantes (`firebase deploy --only functions:…`), sans toucher aux 15 existantes ni aux 12 fonctions de secours, qui exigent un compte de service dédié (`RECOVERY_RUNTIME_SERVICE_ACCOUNT`, présent dans `.env.studio-2614005370-a3e51`). Résultat : voir §6.
+
+## 6. Déploiement des cinq fonctions et vérification de bout en bout
+
+**Déploiement.** `firebase deploy --only functions:cartularia-sync:getCartularyWebsiteState,functions:cartularia-sync:publishCartularyWebsite,functions:cartularia-sync:revokeCartularyWebsite,functions:cartularia-sync:saveRegistryCollection,functions:cartularia-sync:deleteRegistryCollection --project studio-2614005370-a3e51 --non-interactive` : les cinq fonctions sont créées dans `us-central1`, « Deploy complete ». Aucune des 15 fonctions existantes n’a été touchée. Piège de syntaxe : `--only functions:<nom>` répond « No function matches given --only filters » parce que le code base est nommé (`cartularia-sync`) ; le filtre doit être `functions:<codebase>:<nom>`.
+
+**Vérification propriétaire** (Chrome, compte « Propriétaire pilote », objet de test `AUD-A3DA4019`) et **visiteur** (navigateur intégré, sans compte) :
+
+| Étape | Résultat |
+|---|---|
+| Chargement du panneau Publication | `getCartularyWebsiteState` répond 200 ; état « Brouillon · aucun mini-site publié » ; « Publier le mini-site » s’active une fois la case de confirmation cochée. |
+| Publier | « Publication en cours… » puis « Mini-site publié · Publication confirmée. Le lien public est consultable sur un autre appareil. » entre 10 et 20 s ; lien « Ouvrir le mini-site public » vers `/watch-website?publicCode=AUD-A3DA4019`. |
+| Visiteur anonyme pendant la publication | « Mini-site publié · AUD-A3DA4019 », deux pages (Médias, La référence), deux images chargées, spécifications publiées ; aucune mention Propriétaire, Provenance privée, Transmission, prix d’achat ou de revient. **A1 de l’audit propriétaire est clos** (C6 en découle : un objet lié depuis une Collection publique a désormais un mini-site réel dès qu’il est publié). |
+| Retirer | « Retrait en cours… » puis « Mini-site retiré · Publication retirée. Les nouveaux accès à ses médias sont bloqués… » entre 8 et 23 s. |
+| Visiteur anonyme après retrait | « Publication indisponible. Réessayer » : le contenu n’est plus servi, mais le message est celui d’une erreur (voir constat ci-dessous). |
+| Collections | Page chargée, « Pilots » toujours publiée. Création d’une collection de test « Audit V1 · collection de test 2026-09-08 » (active, non publiée, aucun objet) : `saveRegistryCollection` répond, la carte apparaît sans erreur. `deleteRegistryCollection` non exercé : l’auditeur ne supprime rien. |
+| Console Chrome | Aucune erreur App Check, aucune erreur de fonction sur ces pages. |
+
+**Objets de test laissés en place, à supprimer par Jérôme :** le Cartulaire `AUD-A3DA4019` (mini-site retiré) et la collection « Audit V1 · collection de test 2026-09-08 ».
+
+**Constat nouveau, pour V2.** Après retrait, le visiteur voit « Publication indisponible » avec un bouton Réessayer, alors que le code prévoit « Publication absente ou révoquée ». Cause : la règle `match /publications/{publicCode}` n’autorise `get` que si `status == 'published'` ; pour une publication retirée, `getDoc` lève `permission-denied`, `loadPublicProjection` (`src/services/projections.ts`) ne l’intercepte pas, et le `catch` de `App.tsx` affiche le message d’erreur générique. `loadPublicPublicationStatuses`, dans le même fichier, traite déjà `permission-denied` comme « non publié ». Correction attendue : même traitement dans `loadPublicProjection` (retour `null`), sans bouton Réessayer pour ce cas. Non déployé aujourd’hui.
+
+**Bruit de console, sans suite.** Sur la page publique, une ressource en 400 sans URL lisible correspond à la fermeture du canal Firestore (WebChannel `terminate`), comportement connu du SDK. L’avertissement « Deprecated API for given entry type » y apparaît aussi sans script d’audit ; le bundle déployé n’appelle `getEntriesByType` que pour `resource` et `navigation` et n’observe aucun type déprécié : l’avertissement vient de l’instrumentation du navigateur d’audit, ce qui confirme la requalification de V-B6.
+
+## 7. État de V1
+
+| Point du plan | État |
+|---|---|
+| Build et déploiement Hosting | Fait deux fois (`a35233b`, puis `9d60495` après correction de l’identité hors connexion) |
+| Pages légales (V-A1) | Closes |
+| Lecteur unique en production (ADR-028, ADR-029) | Vérifié visiteur et propriétaire ; régression hors connexion corrigée |
+| Publication serveur du mini-site (P-A1) | Cinq fonctions créées en production ; publication, contrôle anonyme et retrait vérifiés ; collection de test créée |
+| Scripts distants (`import:rolex`, clés IWC) | Rendus sûrs, testés, simulés contre la production ; **exécution en attente de l’accord de Jérôme** |
+| `schema:upgrade --dry-run` sur le pilote IWC | Non lancé : à faire après les écritures ci-dessus, sur accord |
+
+Constats nouveaux transmis aux vagues suivantes : page publique après retrait (V4), verrou de session sans message (V5), objets de test à supprimer (Cartulaire `AUD-A3DA4019`, collection « Audit V1 · collection de test 2026-09-08 »).
