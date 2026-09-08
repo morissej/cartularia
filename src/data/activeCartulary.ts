@@ -1,5 +1,5 @@
 import type { Cartulary, Valuation } from '../types';
-import type { WatchCartularyCreationProfile } from '../domain/cartularyCreation.ts';
+import { creationProfileFromSpecificationGroups, type WatchCartularyCreationProfile } from '../domain/cartularyCreation.ts';
 import { ACTIVE_CARTULARY_ID } from '../domain/cartularyIds.ts';
 import { WATCH_SCHEMA_VERSION } from '../schema/watchSchema.ts';
 import { cartulariaStorage } from '../persistence/localVault.ts';
@@ -74,9 +74,13 @@ const demoCreationProfile = (cartulary: DemoCartularyDefinition): WatchCartulary
   assertedAt: '2026-08-22T08:00:00.000Z',
 });
 
+// Ordre de repli hors démo : profil de création du brouillon privé, sinon identité relue dans la
+// fiche de spécifications enregistrée (dossiers sans profil, session verrouillée ou hors ligne).
+// Connecté, l'enveloppe autoritaire prend le pas dans le lecteur (ADR-028).
 export const activeCreationProfile = activeDemoCartulary
   ? demoCreationProfile(activeDemoCartulary)
-  : normalizeWatchCreationProfile(parseStored<unknown>('cartularia-creation-profile')) as WatchCartularyCreationProfile | null;
+  : (normalizeWatchCreationProfile(parseStored<unknown>('cartularia-creation-profile')) as WatchCartularyCreationProfile | null)
+    ?? (creationProfileFromSpecificationGroups(parseStored<unknown>('cartularia-specification-groups'), placeholderProfile) as WatchCartularyCreationProfile | null);
 
 export const isDemoCartulary = Boolean(activeDemoCartulary);
 

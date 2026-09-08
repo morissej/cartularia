@@ -119,3 +119,30 @@ test('le délai prévient qu’une création peut encore aboutir avant toute nou
   assert.match(CARTULARY_CREATION_TIMEOUT_MESSAGE, /Vérifiez le catalogue/);
   assert.match(CARTULARY_CREATION_TIMEOUT_MESSAGE, /même demande sans téléverser à nouveau/);
 });
+
+test('sans profil de création, l’identité se relit dans la fiche de spécifications enregistrée', async () => {
+  const { creationProfileFromSpecificationGroups } = await import('../src/domain/cartularyCreation.ts');
+  const base = { profileVersion: '1.0.0', assetType: 'watch', schemaId: 'watch', schemaVersion: '1.6.0', collectionId: 'col_pilots', brand: 'Montre', model: 'Dossier à compléter', reference: 'À documenter', manufactureYear: null, serialNumber: '', caliber: 'À documenter', description: '', conditionSummary: '', purchaseDate: '', purchasePrice: null, currency: 'EUR', seller: '', valuationDate: '', valuationLow: null, valuationMid: null, valuationHigh: null, sourceLabel: 'Dossier privé', assertedAt: '2026-08-16T00:00:00.000Z' };
+  const groups = [
+    { id: 'basic', title: 'Données de base', items: [
+      { id: 'ad-code', label: 'Code annonce', value: 'Non applicable · dossier OP-4892-XZ9' },
+      { id: 'brand', label: 'Marque', value: 'IWC Schaffhausen' },
+      { id: 'model', label: 'Modèle', value: 'Flieger UTC (Die Fliegeruhr)' },
+      { id: 'reference', label: 'Numéro de référence', value: 'IW3251-001 · 3251-001' },
+      { id: 'year', label: 'Année de fabrication', value: '2002' },
+    ] },
+    { id: 'caliber', title: 'Calibre', items: [{ id: 'caliber', label: 'Calibre', value: 'IWC 37526 · module TZC' }] },
+  ];
+  const profile = creationProfileFromSpecificationGroups(groups, base);
+  assert.equal(profile.brand, 'IWC Schaffhausen');
+  assert.equal(profile.model, 'Flieger UTC (Die Fliegeruhr)');
+  assert.equal(profile.reference, 'IW3251-001 · 3251-001');
+  assert.equal(profile.manufactureYear, 2002);
+  assert.equal(profile.caliber, 'IWC 37526 · module TZC');
+  assert.equal(profile.sourceLabel, 'Fiche de spécifications enregistrée');
+  assert.equal(profile.serialNumber, '', 'aucune donnée confidentielle n’est déduite');
+  assert.equal(creationProfileFromSpecificationGroups(null, base), null);
+  assert.equal(creationProfileFromSpecificationGroups([{ id: 'basic', title: 'x', items: [{ id: 'brand', label: 'Marque', value: '   ' }] }], base), null);
+  const partial = creationProfileFromSpecificationGroups([{ id: 'basic', title: 'x', items: [{ id: 'brand', label: 'Marque', value: 'Tudor' }, { id: 'year', label: 'Année', value: 'inconnue' }] }], base);
+  assert.deepEqual([partial.brand, partial.model, partial.reference, partial.manufactureYear], ['Tudor', 'Dossier à compléter', 'À documenter', null]);
+});

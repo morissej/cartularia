@@ -105,6 +105,42 @@ export const buildCreationSpecificationGroups = (
   ],
 }];
 
+/**
+ * Identité minimale d'un Cartulaire relue depuis ses groupes de spécifications enregistrés
+ * (`cartularia-specification-groups`), pour les Cartulaires dont le brouillon privé ne porte pas
+ * de profil de création (dossiers antérieurs à la création depuis le Registre, comme le pilote IWC)
+ * et lorsque l'enveloppe autoritaire n'est pas accessible (hors connexion, session verrouillée).
+ * Renvoie `null` si ni marque ni modèle ne sont renseignés.
+ */
+export const creationProfileFromSpecificationGroups = (
+  groups: unknown,
+  base: CartularyCreationProfile,
+): CartularyCreationProfile | null => {
+  if (!Array.isArray(groups)) return null;
+  const values = new Map<string, string>();
+  for (const group of groups) {
+    const items = (group as { items?: unknown })?.items;
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      const { id, value } = (item ?? {}) as { id?: unknown; value?: unknown };
+      if (typeof id === 'string' && typeof value === 'string' && value.trim() && !values.has(id)) values.set(id, value.trim());
+    }
+  }
+  const brand = values.get('brand') ?? '';
+  const model = values.get('model') ?? '';
+  if (!brand && !model) return null;
+  const year = Number.parseInt(values.get('year') ?? '', 10);
+  return {
+    ...base,
+    brand: brand || base.brand,
+    model: model || base.model,
+    reference: values.get('reference') ?? base.reference,
+    manufactureYear: Number.isInteger(year) && year >= 1500 && year <= 2200 ? year : base.manufactureYear,
+    caliber: values.get('caliber') ?? base.caliber,
+    sourceLabel: 'Fiche de spécifications enregistrée',
+  };
+};
+
 export interface CartularyCreationMediaAsset {
   id: string;
   name: string;
