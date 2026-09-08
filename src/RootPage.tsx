@@ -1,10 +1,8 @@
 import { lazy } from 'react';
 import { BrandLogo } from './components/BrandLogo';
-import { cartularyIdFromLocation } from './domain/cartularyIds';
 import { applicationRouteFromPathname } from './utils/interfaceState';
 
 const CartularyApp = lazy(() => import('./App.tsx'));
-const GenericCartularyPage = lazy(() => import('./components/GenericCartularyPage.tsx').then((module) => ({ default: module.GenericCartularyPage })));
 const CollectionWebsitePage = lazy(() => import('./components/CollectionWebsitePage.tsx').then((module) => ({ default: module.CollectionWebsitePage })));
 const CommunityPage = lazy(() => import('./components/CommunityPage.tsx').then((module) => ({ default: module.CommunityPage })));
 const RegistryApp = lazy(() => import('./features/registry/RegistryApp.tsx').then((module) => ({ default: module.RegistryApp })));
@@ -19,7 +17,6 @@ const CodeHandoffReturnPage = lazy(() => import('./personalVault/CodeHandoffRetu
 
 export function RootPage() {
   const route = applicationRouteFromPathname(window.location.pathname);
-  const isDemoCartularyRoute = cartularyIdFromLocation(window.location).startsWith('cart_demo_');
   if (new URLSearchParams(window.location.search).get('data-deleted') === '1') {
     return (
       <main style={{ minHeight: '100vh', display: 'grid', placeContent: 'center', padding: '32px', background: 'var(--paper)' }}>
@@ -47,7 +44,7 @@ export function RootPage() {
     : route === 'administration'
       ? AdministrationApp
     : route === 'cartulary-view'
-    ? (isDemoCartularyRoute ? CartularyApp : GenericCartularyPage)
+    ? CartularyApp
     : route === 'cartulary-demo'
       ? CartularyApp
     : route === 'collection-website'

@@ -1,16 +1,21 @@
+import { CREATION_PROFILE_DEFINITIONS, type CreationProfileDefinition } from '../../scripts/lib/creation-profile-map.mjs';
+
 export const CARTULARY_CREATION_PROFILE_VERSION = '1.0.0';
 
-export const SUPPORTED_CREATION_PROFILES = {
-  watch: { label: 'Montre', schemaId: 'watch', schemaVersion: '1.6.0', makerLabel: 'Marque', referenceLabel: 'Référence', serialLabel: 'Numéro de série', technicalLabel: 'Calibre', minYear: 1500 },
-  car: { label: 'Automobile', schemaId: 'car', schemaVersion: '1.2.0', makerLabel: 'Constructeur', referenceLabel: 'Version', serialLabel: 'VIN / numéro de châssis', technicalLabel: 'Motorisation', minYear: 1886 },
-} as const;
+/**
+ * Types d'objets proposés à la création : libellés et règles de saisie viennent de la table de
+ * création partagée avec le serveur (ADR-030). La version de schéma n'est pas codée ici : elle
+ * est résolue dans le catalogue au moment de la création (`loadCreationSchemaVersion`).
+ */
+export const SUPPORTED_CREATION_PROFILES: { readonly watch: CreationProfileDefinition; readonly car: CreationProfileDefinition } = CREATION_PROFILE_DEFINITIONS;
 export type SupportedCreationAssetType = keyof typeof SUPPORTED_CREATION_PROFILES;
 
 export interface CartularyCreationProfile {
   profileVersion: typeof CARTULARY_CREATION_PROFILE_VERSION;
   assetType: SupportedCreationAssetType;
   schemaId: SupportedCreationAssetType;
-  schemaVersion: '1.5.0' | '1.6.0' | '1.2.0';
+  /** Version publiée du catalogue retenue à la création (`x.y.z`). */
+  schemaVersion: string;
   collectionId: string;
   brand: string;
   model: string;
@@ -32,7 +37,7 @@ export interface CartularyCreationProfile {
   assertedAt: string;
 }
 
-export type WatchCartularyCreationProfile = CartularyCreationProfile & { assetType: 'watch'; schemaId: 'watch'; schemaVersion: '1.5.0' | '1.6.0' };
+export type WatchCartularyCreationProfile = CartularyCreationProfile & { assetType: 'watch'; schemaId: 'watch' };
 
 export interface CartularyCreationMediaAsset {
   id: string;

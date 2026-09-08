@@ -1,0 +1,1957 @@
+{
+  "watch_full": {
+    "envelope": {
+      "id": "cart_fixture_0001",
+      "organizationId": "org_test",
+      "registryId": "reg_test",
+      "collectionId": "col_test",
+      "assetType": "watch",
+      "schemaId": "watch",
+      "schemaVersion": "1.6.0",
+      "publicCode": "OBJ-00001",
+      "displayTitle": "Marque Modèle",
+      "makerName": "Marque",
+      "modelName": "Modèle",
+      "referenceCode": "Réf",
+      "manufactureYear": 1967,
+      "accountHolderId": "owner",
+      "userAlias": null,
+      "objectCode": "OBJ-00001",
+      "storageCodeNames": [],
+      "legalOwnerRelationId": "owner_relation_current",
+      "lifecycleStatus": "review",
+      "patrimonialStatus": "Patrimonial",
+      "possessionStatus": "in_possession",
+      "purchasePrice": 1000,
+      "costBasis": 1000,
+      "grossValuation": 1000,
+      "netValuation": null,
+      "netAfterTaxValuation": null,
+      "valuationCurrency": "EUR",
+      "defaultVisibility": "secret",
+      "publicationStatus": "none",
+      "primaryAssetId": "asset_cover",
+      "completenessLevel": "imported_unreviewed",
+      "lastVerifiedAt": null,
+      "revision": 1,
+      "integrityHead": "",
+      "integritySequence": 0,
+      "modelVersion": "1.0.0",
+      "deletedAt": null
+    },
+    "sections": [
+      {
+        "id": "identity.summary",
+        "schemaSectionId": "cover.watch",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Identité de l’objet",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "cover.asset.type": {
+            "value": "Montre",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.brand": {
+            "value": "Marque",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.model": {
+            "value": "Modèle",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.reference": {
+            "value": "Réf",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.status": {
+            "value": "Patrimonial",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "ownership.history",
+        "schemaSectionId": "cover.ownership_history",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Historique de l'objet - Propriétaires précédents",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {},
+        "revision": 1
+      },
+      {
+        "id": "watch.reference",
+        "schemaSectionId": "reference.specifications",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Spécifications de référence",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "reference.specifications[].label": [
+            {
+              "value": "Année de fabrication",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            },
+            {
+              "value": "Calibre",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ],
+          "reference.specifications[].value": [
+            {
+              "value": "1967",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            },
+            {
+              "value": "Calibre",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ]
+        },
+        "revision": 1
+      },
+      {
+        "id": "watch.instance.private",
+        "schemaSectionId": "watch.instance.private",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Identité confidentielle de l’exemplaire",
+        "visibility": "secret",
+        "status": "imported_unmapped",
+        "fields": {},
+        "extensions": {
+          "watch.serialNumber": {
+            "value": "SERIE-1",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "condition.description",
+        "schemaSectionId": "condition.description",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Description de l’objet",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "condition.description.paragraphs[]": [
+            {
+              "value": "Description.",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ]
+        },
+        "revision": 1
+      },
+      {
+        "id": "condition.summary",
+        "schemaSectionId": "condition.summary",
+        "schemaVersion": "watch@1.6.0",
+        "title": "État déclaré",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "condition.summary.paragraphs[]": [
+            {
+              "value": "État.",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ],
+          "condition.summary.conclusion": {
+            "value": "État déclaré lors de la création ; revue humaine requise.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "condition.summary.openPoint": {
+            "value": "Authenticité, configuration et état à confirmer à partir des pièces versées.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "value.purchase",
+        "schemaSectionId": "value.cost_basis",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Acquisition",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.purchase.date": {
+            "value": "2026-01-02",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.purchase.price": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "extensions": {
+          "value.purchase.seller": {
+            "value": "Vendeur",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "value.market-depth",
+        "schemaSectionId": "value.market_depth",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Fourchette de marché déclarée",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.market.analysisDate": {
+            "value": "2026-02-03",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.lowValue": {
+            "value": {
+              "amount": 900,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.midValue": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.highValue": {
+            "value": {
+              "amount": 1100,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "value.retained",
+        "schemaSectionId": "value.retained_value",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Valeur de travail",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.retained.amount": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.retained.explanation": {
+            "value": "Valeur déclarée lors de la création ; sources et méthode à revalider.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      }
+    ],
+    "sources": [
+      {
+        "id": "source_owner_creation",
+        "kind": "project_document",
+        "label": "Source",
+        "locator": "privateDrafts/owner/cartularies/cart_fixture_0001",
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ],
+    "assets": [
+      {
+        "id": "asset_cover",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "originalVersionId": null,
+        "mediaKind": "image",
+        "displayName": "Couverture",
+        "mimeDeclared": "image/jpeg",
+        "mimeDetected": null,
+        "sizeBytes": null,
+        "sha256": null,
+        "storagePath": "private-drafts/owner/cart_fixture_0001/bin_cover/abc/original",
+        "binaryId": "bin_cover",
+        "capturedAt": "2026-01-01T00:00:00.000Z",
+        "timestampSource": "exif.DateTimeOriginal",
+        "tags": [
+          "main-photo"
+        ],
+        "componentCode": "ensemble",
+        "evidencePurpose": "prototype_migration",
+        "processingState": "pending_binary_reingest",
+        "visibility": "secret",
+        "requestedVisibility": "secret",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "accessPolicyVersion": "wave2-deny-all"
+      }
+    ],
+    "spinSets": [],
+    "observations": [],
+    "valuations": [
+      {
+        "id": "valuation_initial",
+        "cartularyId": "cart_fixture_0001",
+        "observedAt": "2026-02-03T00:00:00.000Z",
+        "lowValue": 900,
+        "midValue": 1000,
+        "highValue": 1100,
+        "currency": "EUR",
+        "sourceLabel": "Source",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "confidence": "low",
+        "visibility": "secret",
+        "reviewStatus": "pending_human_review"
+      }
+    ],
+    "comparables": [],
+    "reports": [],
+    "reminders": [],
+    "ownerRelations": [
+      {
+        "id": "owner_relation_current",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "userId": "owner",
+        "relationType": "legal_owner",
+        "status": "pending_evidence",
+        "validFrom": "2026-09-01T00:00:00.000Z",
+        "validUntil": null,
+        "proofStatus": "unverified",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "visibility": "secret"
+      }
+    ],
+    "events": [
+      {
+        "id": "event_created_from_private_draft",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "eventType": "cartulary.created_from_private_draft",
+        "occurredAt": "2026-09-01T00:00:00.000Z",
+        "actorId": "owner",
+        "summary": "Création privée demandée par le propriétaire depuis le Registre.",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ]
+  },
+  "watch_legacy": {
+    "envelope": {
+      "id": "cart_fixture_0001",
+      "organizationId": "org_test",
+      "registryId": "reg_test",
+      "collectionId": "col_test",
+      "assetType": "watch",
+      "schemaId": "watch",
+      "schemaVersion": "1.5.0",
+      "publicCode": "OBJ-00001",
+      "displayTitle": "Marque Modèle",
+      "makerName": "Marque",
+      "modelName": "Modèle",
+      "referenceCode": "Réf",
+      "manufactureYear": 1967,
+      "accountHolderId": "owner",
+      "userAlias": null,
+      "objectCode": "OBJ-00001",
+      "storageCodeNames": [],
+      "legalOwnerRelationId": "owner_relation_current",
+      "lifecycleStatus": "review",
+      "patrimonialStatus": "Patrimonial",
+      "possessionStatus": "in_possession",
+      "purchasePrice": 1000,
+      "costBasis": 1000,
+      "grossValuation": 1000,
+      "netValuation": null,
+      "netAfterTaxValuation": null,
+      "valuationCurrency": "EUR",
+      "defaultVisibility": "secret",
+      "publicationStatus": "none",
+      "primaryAssetId": "asset_cover",
+      "completenessLevel": "imported_unreviewed",
+      "lastVerifiedAt": null,
+      "revision": 1,
+      "integrityHead": "",
+      "integritySequence": 0,
+      "modelVersion": "1.0.0",
+      "deletedAt": null
+    },
+    "sections": [
+      {
+        "id": "identity.summary",
+        "schemaSectionId": "cover.watch",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Identité de l’objet",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "cover.asset.type": {
+            "value": "Montre",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.brand": {
+            "value": "Marque",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.model": {
+            "value": "Modèle",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.reference": {
+            "value": "Réf",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.status": {
+            "value": "Patrimonial",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "ownership.history",
+        "schemaSectionId": "cover.ownership_history",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Historique de l'objet - Propriétaires précédents",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {},
+        "revision": 1
+      },
+      {
+        "id": "watch.reference",
+        "schemaSectionId": "reference.specifications",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Spécifications de référence",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "reference.specifications[].label": [
+            {
+              "value": "Année de fabrication",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            },
+            {
+              "value": "Calibre",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ],
+          "reference.specifications[].value": [
+            {
+              "value": "1967",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            },
+            {
+              "value": "Calibre",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ]
+        },
+        "revision": 1
+      },
+      {
+        "id": "watch.instance.private",
+        "schemaSectionId": "watch.instance.private",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Identité confidentielle de l’exemplaire",
+        "visibility": "secret",
+        "status": "imported_unmapped",
+        "fields": {},
+        "extensions": {
+          "watch.serialNumber": {
+            "value": "SERIE-1",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "condition.description",
+        "schemaSectionId": "condition.description",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Description de l’objet",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "condition.description.paragraphs[]": [
+            {
+              "value": "Description.",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ]
+        },
+        "revision": 1
+      },
+      {
+        "id": "condition.summary",
+        "schemaSectionId": "condition.summary",
+        "schemaVersion": "watch@1.5.0",
+        "title": "État déclaré",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "condition.summary.paragraphs[]": [
+            {
+              "value": "État.",
+              "proofStatus": "unverified",
+              "confidence": "low",
+              "sourceRefs": [
+                "source_owner_creation"
+              ],
+              "observedAt": "2026-09-01T00:00:00.000Z",
+              "assertedBy": "owner",
+              "visibility": "secret"
+            }
+          ],
+          "condition.summary.conclusion": {
+            "value": "État déclaré lors de la création ; revue humaine requise.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "condition.summary.openPoint": {
+            "value": "Authenticité, configuration et état à confirmer à partir des pièces versées.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "value.purchase",
+        "schemaSectionId": "value.cost_basis",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Acquisition",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.purchase.date": {
+            "value": "2026-01-02",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.purchase.price": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "extensions": {
+          "value.purchase.seller": {
+            "value": "Vendeur",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "value.market-depth",
+        "schemaSectionId": "value.market_depth",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Fourchette de marché déclarée",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.market.analysisDate": {
+            "value": "2026-02-03",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.lowValue": {
+            "value": {
+              "amount": 900,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.midValue": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.highValue": {
+            "value": {
+              "amount": 1100,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "value.retained",
+        "schemaSectionId": "value.retained_value",
+        "schemaVersion": "watch@1.5.0",
+        "title": "Valeur de travail",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.retained.amount": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.retained.explanation": {
+            "value": "Valeur déclarée lors de la création ; sources et méthode à revalider.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      }
+    ],
+    "sources": [
+      {
+        "id": "source_owner_creation",
+        "kind": "project_document",
+        "label": "Source",
+        "locator": "privateDrafts/owner/cartularies/cart_fixture_0001",
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ],
+    "assets": [
+      {
+        "id": "asset_cover",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "originalVersionId": null,
+        "mediaKind": "image",
+        "displayName": "Couverture",
+        "mimeDeclared": "image/jpeg",
+        "mimeDetected": null,
+        "sizeBytes": null,
+        "sha256": null,
+        "storagePath": "private-drafts/owner/cart_fixture_0001/bin_cover/abc/original",
+        "binaryId": "bin_cover",
+        "capturedAt": "2026-01-01T00:00:00.000Z",
+        "timestampSource": "exif.DateTimeOriginal",
+        "tags": [
+          "main-photo"
+        ],
+        "componentCode": "ensemble",
+        "evidencePurpose": "prototype_migration",
+        "processingState": "pending_binary_reingest",
+        "visibility": "secret",
+        "requestedVisibility": "secret",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "accessPolicyVersion": "wave2-deny-all"
+      }
+    ],
+    "spinSets": [],
+    "observations": [],
+    "valuations": [
+      {
+        "id": "valuation_initial",
+        "cartularyId": "cart_fixture_0001",
+        "observedAt": "2026-02-03T00:00:00.000Z",
+        "lowValue": 900,
+        "midValue": 1000,
+        "highValue": 1100,
+        "currency": "EUR",
+        "sourceLabel": "Source",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "confidence": "low",
+        "visibility": "secret",
+        "reviewStatus": "pending_human_review"
+      }
+    ],
+    "comparables": [],
+    "reports": [],
+    "reminders": [],
+    "ownerRelations": [
+      {
+        "id": "owner_relation_current",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "userId": "owner",
+        "relationType": "legal_owner",
+        "status": "pending_evidence",
+        "validFrom": "2026-09-01T00:00:00.000Z",
+        "validUntil": null,
+        "proofStatus": "unverified",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "visibility": "secret"
+      }
+    ],
+    "events": [
+      {
+        "id": "event_created_from_private_draft",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "eventType": "cartulary.created_from_private_draft",
+        "occurredAt": "2026-09-01T00:00:00.000Z",
+        "actorId": "owner",
+        "summary": "Création privée demandée par le propriétaire depuis le Registre.",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ]
+  },
+  "watch_minimal": {
+    "envelope": {
+      "id": "cart_fixture_0001",
+      "organizationId": "org_test",
+      "registryId": "reg_test",
+      "collectionId": "col_test",
+      "assetType": "watch",
+      "schemaId": "watch",
+      "schemaVersion": "1.6.0",
+      "publicCode": "OBJ-00001",
+      "displayTitle": "Marque Modèle",
+      "makerName": "Marque",
+      "modelName": "Modèle",
+      "referenceCode": "Réf",
+      "manufactureYear": null,
+      "accountHolderId": "owner",
+      "userAlias": null,
+      "objectCode": "OBJ-00001",
+      "storageCodeNames": [],
+      "legalOwnerRelationId": "owner_relation_current",
+      "lifecycleStatus": "review",
+      "patrimonialStatus": "Patrimonial",
+      "possessionStatus": "in_possession",
+      "purchasePrice": null,
+      "costBasis": null,
+      "grossValuation": null,
+      "netValuation": null,
+      "netAfterTaxValuation": null,
+      "valuationCurrency": "EUR",
+      "defaultVisibility": "secret",
+      "publicationStatus": "none",
+      "primaryAssetId": "asset_cover",
+      "completenessLevel": "imported_unreviewed",
+      "lastVerifiedAt": null,
+      "revision": 1,
+      "integrityHead": "",
+      "integritySequence": 0,
+      "modelVersion": "1.0.0",
+      "deletedAt": null
+    },
+    "sections": [
+      {
+        "id": "identity.summary",
+        "schemaSectionId": "cover.watch",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Identité de l’objet",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "cover.asset.type": {
+            "value": "Montre",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.brand": {
+            "value": "Marque",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.model": {
+            "value": "Modèle",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.reference": {
+            "value": "Réf",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.watch.status": {
+            "value": "Patrimonial",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "ownership.history",
+        "schemaSectionId": "cover.ownership_history",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Historique de l'objet - Propriétaires précédents",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {},
+        "revision": 1
+      },
+      {
+        "id": "watch.reference",
+        "schemaSectionId": "reference.specifications",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Spécifications de référence",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "reference.specifications[].label": [],
+          "reference.specifications[].value": []
+        },
+        "revision": 1
+      },
+      {
+        "id": "watch.instance.private",
+        "schemaSectionId": "watch.instance.private",
+        "schemaVersion": "watch@1.6.0",
+        "title": "Identité confidentielle de l’exemplaire",
+        "visibility": "secret",
+        "status": "imported_unmapped",
+        "fields": {},
+        "extensions": {},
+        "revision": 1
+      }
+    ],
+    "sources": [
+      {
+        "id": "source_owner_creation",
+        "kind": "project_document",
+        "label": "Source",
+        "locator": "privateDrafts/owner/cartularies/cart_fixture_0001",
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ],
+    "assets": [
+      {
+        "id": "asset_cover",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "originalVersionId": null,
+        "mediaKind": "image",
+        "displayName": "Couverture",
+        "mimeDeclared": "image/jpeg",
+        "mimeDetected": null,
+        "sizeBytes": null,
+        "sha256": null,
+        "storagePath": "private-drafts/owner/cart_fixture_0001/bin_cover/abc/original",
+        "binaryId": "bin_cover",
+        "capturedAt": "2026-01-01T00:00:00.000Z",
+        "timestampSource": "exif.DateTimeOriginal",
+        "tags": [
+          "main-photo"
+        ],
+        "componentCode": "ensemble",
+        "evidencePurpose": "prototype_migration",
+        "processingState": "pending_binary_reingest",
+        "visibility": "secret",
+        "requestedVisibility": "secret",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "accessPolicyVersion": "wave2-deny-all"
+      }
+    ],
+    "spinSets": [],
+    "observations": [],
+    "valuations": [],
+    "comparables": [],
+    "reports": [],
+    "reminders": [],
+    "ownerRelations": [
+      {
+        "id": "owner_relation_current",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "userId": "owner",
+        "relationType": "legal_owner",
+        "status": "pending_evidence",
+        "validFrom": "2026-09-01T00:00:00.000Z",
+        "validUntil": null,
+        "proofStatus": "unverified",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "visibility": "secret"
+      }
+    ],
+    "events": [
+      {
+        "id": "event_created_from_private_draft",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "eventType": "cartulary.created_from_private_draft",
+        "occurredAt": "2026-09-01T00:00:00.000Z",
+        "actorId": "owner",
+        "summary": "Création privée demandée par le propriétaire depuis le Registre.",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ]
+  },
+  "car_full": {
+    "envelope": {
+      "id": "cart_fixture_0001",
+      "organizationId": "org_test",
+      "registryId": "reg_test",
+      "collectionId": "col_test",
+      "assetType": "car",
+      "schemaId": "car",
+      "schemaVersion": "1.2.0",
+      "publicCode": "OBJ-00001",
+      "displayTitle": "Marque Modèle",
+      "makerName": "Marque",
+      "modelName": "Modèle",
+      "referenceCode": "Réf",
+      "manufactureYear": 1967,
+      "accountHolderId": "owner",
+      "userAlias": null,
+      "objectCode": "OBJ-00001",
+      "storageCodeNames": [],
+      "legalOwnerRelationId": "owner_relation_current",
+      "lifecycleStatus": "review",
+      "patrimonialStatus": "Patrimonial",
+      "possessionStatus": "in_possession",
+      "purchasePrice": 1000,
+      "costBasis": 1000,
+      "grossValuation": 1000,
+      "netValuation": null,
+      "netAfterTaxValuation": null,
+      "valuationCurrency": "EUR",
+      "defaultVisibility": "secret",
+      "publicationStatus": "none",
+      "primaryAssetId": "asset_cover",
+      "completenessLevel": "imported_unreviewed",
+      "lastVerifiedAt": null,
+      "revision": 1,
+      "integrityHead": "",
+      "integritySequence": 0,
+      "modelVersion": "1.0.0",
+      "deletedAt": null
+    },
+    "sections": [
+      {
+        "id": "cover.asset",
+        "schemaSectionId": "cover.asset",
+        "schemaVersion": "car@1.2.0",
+        "title": "Type de bien",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "cover.asset.type": {
+            "value": "Voiture",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "identity.summary",
+        "schemaSectionId": "cover.car",
+        "schemaVersion": "car@1.2.0",
+        "title": "Identité de l’objet",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "cover.car.maker": {
+            "value": "Marque",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.car.model": {
+            "value": "Modèle",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.car.version": {
+            "value": "Réf",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.car.year": {
+            "value": 1967,
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "ownership.history",
+        "schemaSectionId": "cover.ownership_history",
+        "schemaVersion": "car@1.2.0",
+        "title": "Historique de l'objet - Propriétaires précédents",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {},
+        "revision": 1
+      },
+      {
+        "id": "technical.powertrain",
+        "schemaSectionId": "technical.powertrain",
+        "schemaVersion": "car@1.2.0",
+        "title": "Spécifications de référence",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "technical.engine.architecture": {
+            "value": "Calibre",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "identity.private",
+        "schemaSectionId": "identity.private",
+        "schemaVersion": "car@1.2.0",
+        "title": "Identité confidentielle de l’exemplaire",
+        "visibility": "secret",
+        "status": "imported_unmapped",
+        "fields": {
+          "identity.car.vin": {
+            "value": "SERIE-1",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "extensions": {},
+        "revision": 1
+      },
+      {
+        "id": "condition.summary",
+        "schemaSectionId": "condition.current",
+        "schemaVersion": "car@1.2.0",
+        "title": "État déclaré",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "condition.overall.conclusion": {
+            "value": "État.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1,
+        "extensions": {
+          "creation.description": {
+            "value": "Description.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        }
+      },
+      {
+        "id": "value.purchase",
+        "schemaSectionId": "value.provenance",
+        "schemaVersion": "car@1.2.0",
+        "title": "Acquisition",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {},
+        "extensions": {
+          "value.purchase.seller": {
+            "value": "Vendeur",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.purchase.date": {
+            "value": "2026-01-02",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.purchase.price": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "value.market-depth",
+        "schemaSectionId": "value.market",
+        "schemaVersion": "car@1.2.0",
+        "title": "Fourchette de marché déclarée",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.market.analysisDate": {
+            "value": "2026-02-03",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1,
+        "extensions": {
+          "value.market.lowValue": {
+            "value": {
+              "amount": 900,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.midValue": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.market.highValue": {
+            "value": {
+              "amount": 1100,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        }
+      },
+      {
+        "id": "value.retained",
+        "schemaSectionId": "value.retained",
+        "schemaVersion": "car@1.2.0",
+        "title": "Valeur de travail",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "value.retained.amount": {
+            "value": {
+              "amount": 1000,
+              "currency": "EUR"
+            },
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "value.retained.explanation": {
+            "value": "Valeur déclarée lors de la création ; sources et méthode à revalider.",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      }
+    ],
+    "sources": [
+      {
+        "id": "source_owner_creation",
+        "kind": "project_document",
+        "label": "Source",
+        "locator": "privateDrafts/owner/cartularies/cart_fixture_0001",
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ],
+    "assets": [
+      {
+        "id": "asset_cover",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "originalVersionId": null,
+        "mediaKind": "image",
+        "displayName": "Couverture",
+        "mimeDeclared": "image/jpeg",
+        "mimeDetected": null,
+        "sizeBytes": null,
+        "sha256": null,
+        "storagePath": "private-drafts/owner/cart_fixture_0001/bin_cover/abc/original",
+        "binaryId": "bin_cover",
+        "capturedAt": "2026-01-01T00:00:00.000Z",
+        "timestampSource": "exif.DateTimeOriginal",
+        "tags": [
+          "main-photo"
+        ],
+        "componentCode": "ensemble",
+        "evidencePurpose": "prototype_migration",
+        "processingState": "pending_binary_reingest",
+        "visibility": "secret",
+        "requestedVisibility": "secret",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "accessPolicyVersion": "wave2-deny-all"
+      }
+    ],
+    "spinSets": [],
+    "observations": [],
+    "valuations": [
+      {
+        "id": "valuation_initial",
+        "cartularyId": "cart_fixture_0001",
+        "observedAt": "2026-02-03T00:00:00.000Z",
+        "lowValue": 900,
+        "midValue": 1000,
+        "highValue": 1100,
+        "currency": "EUR",
+        "sourceLabel": "Source",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "confidence": "low",
+        "visibility": "secret",
+        "reviewStatus": "pending_human_review"
+      }
+    ],
+    "comparables": [],
+    "reports": [],
+    "reminders": [],
+    "ownerRelations": [
+      {
+        "id": "owner_relation_current",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "userId": "owner",
+        "relationType": "legal_owner",
+        "status": "pending_evidence",
+        "validFrom": "2026-09-01T00:00:00.000Z",
+        "validUntil": null,
+        "proofStatus": "unverified",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "visibility": "secret"
+      }
+    ],
+    "events": [
+      {
+        "id": "event_created_from_private_draft",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "eventType": "cartulary.created_from_private_draft",
+        "occurredAt": "2026-09-01T00:00:00.000Z",
+        "actorId": "owner",
+        "summary": "Création privée demandée par le propriétaire depuis le Registre.",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ]
+  },
+  "car_minimal": {
+    "envelope": {
+      "id": "cart_fixture_0001",
+      "organizationId": "org_test",
+      "registryId": "reg_test",
+      "collectionId": "col_test",
+      "assetType": "car",
+      "schemaId": "car",
+      "schemaVersion": "1.2.0",
+      "publicCode": "OBJ-00001",
+      "displayTitle": "Marque Modèle",
+      "makerName": "Marque",
+      "modelName": "Modèle",
+      "referenceCode": "Réf",
+      "manufactureYear": 1967,
+      "accountHolderId": "owner",
+      "userAlias": null,
+      "objectCode": "OBJ-00001",
+      "storageCodeNames": [],
+      "legalOwnerRelationId": "owner_relation_current",
+      "lifecycleStatus": "review",
+      "patrimonialStatus": "Patrimonial",
+      "possessionStatus": "in_possession",
+      "purchasePrice": null,
+      "costBasis": null,
+      "grossValuation": null,
+      "netValuation": null,
+      "netAfterTaxValuation": null,
+      "valuationCurrency": "EUR",
+      "defaultVisibility": "secret",
+      "publicationStatus": "none",
+      "primaryAssetId": "asset_cover",
+      "completenessLevel": "imported_unreviewed",
+      "lastVerifiedAt": null,
+      "revision": 1,
+      "integrityHead": "",
+      "integritySequence": 0,
+      "modelVersion": "1.0.0",
+      "deletedAt": null
+    },
+    "sections": [
+      {
+        "id": "cover.asset",
+        "schemaSectionId": "cover.asset",
+        "schemaVersion": "car@1.2.0",
+        "title": "Type de bien",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "cover.asset.type": {
+            "value": "Voiture",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "identity.summary",
+        "schemaSectionId": "cover.car",
+        "schemaVersion": "car@1.2.0",
+        "title": "Identité de l’objet",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {
+          "cover.car.maker": {
+            "value": "Marque",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.car.model": {
+            "value": "Modèle",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.car.version": {
+            "value": "Réf",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          },
+          "cover.car.year": {
+            "value": 1967,
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "revision": 1
+      },
+      {
+        "id": "ownership.history",
+        "schemaSectionId": "cover.ownership_history",
+        "schemaVersion": "car@1.2.0",
+        "title": "Historique de l'objet - Propriétaires précédents",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {},
+        "revision": 1
+      },
+      {
+        "id": "technical.powertrain",
+        "schemaSectionId": "technical.powertrain",
+        "schemaVersion": "car@1.2.0",
+        "title": "Spécifications de référence",
+        "visibility": "secret",
+        "status": "imported_unreviewed",
+        "fields": {},
+        "revision": 1
+      },
+      {
+        "id": "identity.private",
+        "schemaSectionId": "identity.private",
+        "schemaVersion": "car@1.2.0",
+        "title": "Identité confidentielle de l’exemplaire",
+        "visibility": "secret",
+        "status": "imported_unmapped",
+        "fields": {
+          "identity.car.vin": {
+            "value": "VIN-1",
+            "proofStatus": "unverified",
+            "confidence": "low",
+            "sourceRefs": [
+              "source_owner_creation"
+            ],
+            "observedAt": "2026-09-01T00:00:00.000Z",
+            "assertedBy": "owner",
+            "visibility": "secret"
+          }
+        },
+        "extensions": {},
+        "revision": 1
+      }
+    ],
+    "sources": [
+      {
+        "id": "source_owner_creation",
+        "kind": "project_document",
+        "label": "Source",
+        "locator": "privateDrafts/owner/cartularies/cart_fixture_0001",
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ],
+    "assets": [
+      {
+        "id": "asset_cover",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "originalVersionId": null,
+        "mediaKind": "image",
+        "displayName": "Couverture",
+        "mimeDeclared": "image/jpeg",
+        "mimeDetected": null,
+        "sizeBytes": null,
+        "sha256": null,
+        "storagePath": "private-drafts/owner/cart_fixture_0001/bin_cover/abc/original",
+        "binaryId": "bin_cover",
+        "capturedAt": "2026-01-01T00:00:00.000Z",
+        "timestampSource": "exif.DateTimeOriginal",
+        "tags": [
+          "main-photo"
+        ],
+        "componentCode": "ensemble",
+        "evidencePurpose": "prototype_migration",
+        "processingState": "pending_binary_reingest",
+        "visibility": "secret",
+        "requestedVisibility": "secret",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "accessPolicyVersion": "wave2-deny-all"
+      }
+    ],
+    "spinSets": [],
+    "observations": [],
+    "valuations": [],
+    "comparables": [],
+    "reports": [],
+    "reminders": [],
+    "ownerRelations": [
+      {
+        "id": "owner_relation_current",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "userId": "owner",
+        "relationType": "legal_owner",
+        "status": "pending_evidence",
+        "validFrom": "2026-09-01T00:00:00.000Z",
+        "validUntil": null,
+        "proofStatus": "unverified",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "visibility": "secret"
+      }
+    ],
+    "events": [
+      {
+        "id": "event_created_from_private_draft",
+        "cartularyId": "cart_fixture_0001",
+        "organizationId": "org_test",
+        "eventType": "cartulary.created_from_private_draft",
+        "occurredAt": "2026-09-01T00:00:00.000Z",
+        "actorId": "owner",
+        "summary": "Création privée demandée par le propriétaire depuis le Registre.",
+        "sourceRefs": [
+          "source_owner_creation"
+        ],
+        "proofStatus": "unverified",
+        "visibility": "secret"
+      }
+    ]
+  }
+}

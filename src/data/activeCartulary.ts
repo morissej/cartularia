@@ -1,9 +1,9 @@
-import type { Cartulary, ComparableTransaction, Valuation } from '../types';
+import type { Cartulary, Valuation } from '../types';
 import type { WatchCartularyCreationProfile } from '../domain/cartularyCreation.ts';
-import { ACTIVE_CARTULARY_ID, IWC_CARTULARY_ID, ROLEX_CARTULARY_ID } from '../domain/cartularyIds.ts';
+import { ACTIVE_CARTULARY_ID } from '../domain/cartularyIds.ts';
+import { WATCH_SCHEMA_VERSION } from '../schema/watchSchema.ts';
 import { cartulariaStorage } from '../persistence/localVault.ts';
 import { normalizeWatchCreationProfile, readValidatedStoredJson } from '../persistence/storedStateValidation.ts';
-import { mockCartulary as iwcCartulary } from './mockData.ts';
 import {
   buildDemoCartularyAssets,
   demoCartularyById,
@@ -18,29 +18,30 @@ const parseStored = <T,>(key: string): T | null => readValidatedStoredJson({
   onRepair: ({ reason }) => console.warn(`État persistant réparé pour ${key} (${reason}).`),
 });
 
-const rolexFallbackProfile: WatchCartularyCreationProfile = {
+/** Profil neutre d'un Cartulaire dont le brouillon privé n'est pas encore hydraté. Aucune marque n'est présumée. */
+const placeholderProfile: WatchCartularyCreationProfile = {
   profileVersion: '1.0.0',
   assetType: 'watch',
   schemaId: 'watch',
-  schemaVersion: '1.5.0',
+  schemaVersion: WATCH_SCHEMA_VERSION,
   collectionId: 'col_pilots',
-  brand: 'Rolex',
-  model: 'GMT-Master Mark I Long E',
-  reference: '1675',
-  manufactureYear: 1969,
-  serialNumber: '1 982 530',
-  caliber: 'Rolex 1575',
-  description: 'Rolex GMT-Master réf. 1675 de 1969, cadran mat Mark I « Long E », insert Pepsi fuchsia et bracelet Jubilee.',
-  conditionSummary: 'État déclaré par le propriétaire et le vendeur. L’authenticité, la configuration, le niveau de polissage et l’étanchéité restent à confirmer par une revue indépendante.',
-  purchaseDate: '2026-07-23',
-  purchasePrice: 21_900,
+  brand: 'Montre',
+  model: 'Dossier à compléter',
+  reference: 'À documenter',
+  manufactureYear: null,
+  serialNumber: '',
+  caliber: 'À documenter',
+  description: 'Cartulaire créé depuis le Registre. Les données privées restent à compléter.',
+  conditionSummary: 'État à documenter.',
+  purchaseDate: '',
+  purchasePrice: null,
   currency: 'EUR',
-  seller: 'L’Atelier du Temps',
-  valuationDate: '2026-08-16',
-  valuationLow: 21_000,
-  valuationMid: 23_000,
-  valuationHigh: 25_000,
-  sourceLabel: 'Dossier Rolex transmis par le propriétaire · données à revoir',
+  seller: '',
+  valuationDate: '',
+  valuationLow: null,
+  valuationMid: null,
+  valuationHigh: null,
+  sourceLabel: 'Dossier privé',
   assertedAt: '2026-08-16T00:00:00.000Z',
 };
 
@@ -51,7 +52,7 @@ const demoCreationProfile = (cartulary: DemoCartularyDefinition): WatchCartulary
   profileVersion: '1.0.0',
   assetType: 'watch',
   schemaId: 'watch',
-  schemaVersion: '1.6.0',
+  schemaVersion: WATCH_SCHEMA_VERSION,
   collectionId: 'col_demo_montres',
   brand: cartulary.brand,
   model: cartulary.model,
@@ -75,18 +76,14 @@ const demoCreationProfile = (cartulary: DemoCartularyDefinition): WatchCartulary
 
 export const activeCreationProfile = activeDemoCartulary
   ? demoCreationProfile(activeDemoCartulary)
-  : normalizeWatchCreationProfile(parseStored<unknown>('cartularia-creation-profile')) as WatchCartularyCreationProfile | null
-    ?? (ACTIVE_CARTULARY_ID === ROLEX_CARTULARY_ID ? rolexFallbackProfile : null);
+  : normalizeWatchCreationProfile(parseStored<unknown>('cartularia-creation-profile')) as WatchCartularyCreationProfile | null;
 
-export const isIwcCartulary = ACTIVE_CARTULARY_ID === IWC_CARTULARY_ID;
-export const isRolexCartulary = ACTIVE_CARTULARY_ID === ROLEX_CARTULARY_ID;
 export const isDemoCartulary = Boolean(activeDemoCartulary);
 
 const fallbackPublicCode = () => {
   if (activeDemoCartulary) return activeDemoCartulary.publicCode;
   const stored = parseStored<string>('cartularia-public-code');
   if (stored) return stored;
-  if (ACTIVE_CARTULARY_ID === ROLEX_CARTULARY_ID) return 'ROL-487D9CAD';
   return `WCH-${ACTIVE_CARTULARY_ID.slice(-8).toUpperCase()}`;
 };
 
@@ -112,65 +109,8 @@ const buildValuation = (profile: WatchCartularyCreationProfile): Valuation => {
   };
 };
 
-const rolexComparables: ComparableTransaction[] = [
-  {
-    id: 'rolex-comparable-17000',
-    date: '2026-08-16',
-    channel: 'Chrono24',
-    description: 'Rolex GMT-Master 1675 Long E · annonce observée dans le dossier',
-    amount: 17_000,
-    currency: 'EUR',
-    condition: 'À vérifier',
-    sourceType: 'Annonce',
-    source: 'Chrono24 · prix affiché documenté dans le dossier',
-    saleChannel: 'Annonce',
-  },
-  {
-    id: 'rolex-comparable-16958',
-    date: '2026-08-16',
-    channel: 'Chrono24',
-    description: 'Rolex GMT-Master 1675 Long E · annonce observée dans le dossier',
-    amount: 16_958,
-    currency: 'EUR',
-    condition: 'À vérifier',
-    sourceType: 'Annonce',
-    source: 'Chrono24 · prix affiché documenté dans le dossier',
-    saleChannel: 'Annonce',
-  },
-  {
-    id: 'rolex-comparable-21774',
-    date: '2026-08-16',
-    channel: 'Chrono24',
-    description: 'Rolex GMT-Master 1675 Long E · exemplaire annoncé full set',
-    amount: 21_774,
-    currency: 'EUR',
-    condition: 'Full set déclaré',
-    sourceType: 'Annonce',
-    source: 'Chrono24 · prix affiché documenté dans le dossier',
-    saleChannel: 'Annonce',
-  },
-];
-
 const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): Cartulary => {
-  const safeProfile = profile ?? {
-    ...rolexFallbackProfile,
-    brand: 'Montre',
-    model: 'Dossier à compléter',
-    reference: 'À documenter',
-    manufactureYear: null,
-    serialNumber: '',
-    caliber: 'À documenter',
-    description: 'Cartulaire créé depuis le Registre. Les données privées restent à compléter.',
-    conditionSummary: 'État à documenter.',
-    purchaseDate: '',
-    purchasePrice: null,
-    seller: '',
-    valuationDate: '',
-    valuationLow: null,
-    valuationMid: null,
-    valuationHigh: null,
-    sourceLabel: 'Dossier privé',
-  };
+  const safeProfile = profile ?? placeholderProfile;
   const valuation = buildValuation(safeProfile);
   const reviewDate = safeProfile.purchaseDate || safeProfile.assertedAt.slice(0, 10);
   const publicCode = fallbackPublicCode();
@@ -236,10 +176,10 @@ const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): 
       author: 'Cartularia Demo',
       status: 'Reviewed',
     }] : [],
-    comparables: activeDemoContent?.comparables ?? (isRolexCartulary ? rolexComparables : []),
+    comparables: activeDemoContent?.comparables ?? [],
     marketSnapshot: {
       date: valuation.date,
-      activeListings: activeDemoContent?.marketDepth.activeListings ?? (isRolexCartulary ? 56 : 0),
+      activeListings: activeDemoContent?.marketDepth.activeListings ?? 0,
       observedTransactions90d: activeDemoContent?.marketDepth.transactions12m ?? 0,
       medianDaysOnMarket: activeDemoContent?.marketDepth.medianDaysOnMarket ?? 0,
       lowValue: valuation.lowValue,
@@ -274,6 +214,5 @@ const buildImportedCartulary = (profile: WatchCartularyCreationProfile | null): 
   };
 };
 
-export const activeCartulary = isIwcCartulary
-  ? iwcCartulary
-  : buildImportedCartulary(activeCreationProfile);
+/** Tout Cartulaire, IWC et Rolex compris, est construit depuis son brouillon privé et son enveloppe (ADR-029). */
+export const activeCartulary = buildImportedCartulary(activeCreationProfile);

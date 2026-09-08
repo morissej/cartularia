@@ -1,6 +1,7 @@
 export const REGISTRY_AUDIT_ACTION_LABELS: Record<string, string> = {
   'cartulary.created': 'Cartulaire créé',
   'cartulary.live_state.synced': 'Modifications du Cartulaire raccordées',
+  'cartulary.schema.upgraded': 'Remontée du Cartulaire vers la version de schéma en vigueur',
   'registry.projected': 'Projection du Registre actualisée',
   'projection.approved': 'Projection approuvée',
   'publication.published': 'Publication réalisée',

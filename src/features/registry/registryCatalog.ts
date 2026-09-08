@@ -1,5 +1,4 @@
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
-import { IWC_CARTULARY_ID, ROLEX_CARTULARY_ID } from '../../domain/cartularyIds.ts';
 
 export type RegistryCatalogSort = 'updated-desc' | 'title-asc' | 'year-desc';
 
@@ -78,10 +77,9 @@ export const buildCartularyHref = (cartularyId: string, returnTo: string, assetT
   if (cartularyId.startsWith('cart_demo_')) {
     return `/cartulary-demo?${params.toString()}`;
   }
-  const usesFullCartulary = assetType === 'watch'
-    || cartularyId === IWC_CARTULARY_ID
-    || cartularyId === ROLEX_CARTULARY_ID;
-  return `${usesFullCartulary ? '/cartulary' : '/cartulary-view'}?${params.toString()}`;
+  // Lecteur unique (ADR-028) : tout objet, quel que soit son type, ouvre le même Cartulaire.
+  void assetType;
+  return `/cartulary?${params.toString()}`;
 };
 
 export const isRegistryReturnPath = (value: string | null): value is string => Boolean(

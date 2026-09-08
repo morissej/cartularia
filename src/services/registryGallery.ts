@@ -1,6 +1,5 @@
 import { collection, getDocs } from 'firebase/firestore';
 import { mockCartulary } from '../data/mockData.ts';
-import { IWC_CARTULARY_ID } from '../domain/cartularyIds.ts';
 import type { RegistryGalleryEntry, RegistryGallerySlide } from '../domain/gallery.ts';
 import { db } from '../firebase.ts';
 import { loadRegistryItems, observeRegistryItems } from './projections.ts';
@@ -35,10 +34,13 @@ const prototypePresentationUrl = (source: string, width: 480 | 1200) => {
   }
 };
 
+// Les médias déjà présents dans le bundle Hosting (fixture du prototype) évitent tout téléchargement
+// Storage au chargement de la Galerie. La clé porte le Cartulaire : aucune marque n'est testée.
+const prototypePreviewKey = (cartularyId: string, assetId: string) => `${cartularyId}::${assetId}`;
 const prototypePreviewByAssetId = new Map(
   mockCartulary.assets
     .filter((asset) => asset.type === 'image')
-    .map((asset) => [asset.id, {
+    .map((asset) => [prototypePreviewKey(mockCartulary.id, asset.id), {
       url: prototypePresentationUrl(asset.url, 1200),
       thumbnailUrl: prototypePresentationUrl(asset.thumbnailUrl || asset.url, 480),
     }]),
@@ -63,12 +65,8 @@ const resolveAssetPreview = async (
     };
   }
 
-  // Les médias du Cartulaire IWC existent déjà dans le bundle Hosting. Les
-  // utiliser évite tout téléchargement Storage au chargement de la Galerie.
-  if (cartularyId === IWC_CARTULARY_ID) {
-    const preview = prototypePreviewByAssetId.get(assetId);
-    if (preview) return { ...preview, source: 'prototype_bundle' };
-  }
+  const prototypePreview = prototypePreviewByAssetId.get(prototypePreviewKey(cartularyId, assetId));
+  if (prototypePreview) return { ...prototypePreview, source: 'prototype_bundle' };
 
   if (typeof asset.storagePath === 'string' && asset.storagePath.startsWith('private-drafts/')) {
     try {
@@ -106,7 +104,7 @@ const loadEntry = async (
   }).filter((candidate): candidate is { assetId: string; asset: ReadableAssetDocument } => Boolean(candidate));
   const slides = (await Promise.all(candidates.map(async ({ assetId, asset }): Promise<RegistryGallerySlide | null> => {
     const hasAuthorizedDerivative = safeSameOriginPath(asset.presentationDerivative?.url);
-    const shouldResolveNow = item.cartularyId === IWC_CARTULARY_ID
+    const shouldResolveNow = prototypePreviewByAssetId.has(prototypePreviewKey(item.cartularyId, assetId))
       || hasAuthorizedDerivative;
     const preview = shouldResolveNow
       ? await resolveAssetPreview(item.cartularyId, assetId, asset)

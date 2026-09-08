@@ -3,6 +3,7 @@ import { importCartularyBundle } from './import-cartulary-command.mjs';
 import { projectRegistryItem } from './projection-command.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
 import { privateBinaryIsVerified } from './private-upload-command.mjs';
+import { CREATION_PROFILE_DEFINITIONS, mappedSchemaSections, materializeCreationSections } from './creation-profile-map.mjs';
 
 const CREATE_RATE_LIMIT_PER_DAY = 12;
 const ONE_DAY_MS = 24 * 60 * 60 * 1_000;
@@ -46,17 +47,37 @@ const provenance = ({ value, sourceId, observedAt, actorId }) => ({
   visibility: 'secret',
 });
 
-export const buildCreationBundle = ({ requestData, profile, media }) => {
-  const definitions = {
-    watch: { schemaId: 'watch', versions: ['1.5.0', '1.6.0'], label: 'Montre' },
-    car: { schemaId: 'car', versions: ['1.2.0'], label: 'Voiture' },
-  };
-  const definition = definitions[profile?.assetType];
+/**
+ * Version de création d'une verticale, résolue dans le catalogue (ADR-030) : version active
+ * désignée par `schemaCatalog/{schemaId}`, à défaut dernière version publiée, à défaut la
+ * version demandée par le client si elle est publiée. La version retenue doit connaître toutes
+ * les sections de la table de création.
+ */
+export const resolveCreationSchemaVersion = async ({ firestore, schemaId, requestedVersion }) => {
+  const definition = CREATION_PROFILE_DEFINITIONS[schemaId];
+  if (!definition) throw new CreateCartularyCommandError('unsupported_profile', 'Le profil de création demandé n’est pas pris en charge.');
+  const pointer = await firestore.doc(`schemaCatalog/${schemaId}`).get();
+  const pointerData = pointer.exists ? pointer.data() : null;
+  const resolved = pointerData?.activeVersion || pointerData?.latestVersion || requestedVersion || null;
+  if (!resolved) throw new CreateCartularyCommandError('schema_not_ready', `Le catalogue ne désigne aucune version pour ${schemaId}.`);
+  const versionDocument = await firestore.doc(`schemaCatalog/${schemaId}/versions/${resolved}`).get();
+  if (!versionDocument.exists) throw new CreateCartularyCommandError('schema_not_ready', `La version ${schemaId}@${resolved} n’est pas publiée dans le catalogue.`);
+  const sectionIds = versionDocument.data()?.sectionIds;
+  if (Array.isArray(sectionIds)) {
+    const missing = mappedSchemaSections(definition).map(({ schemaSectionId }) => schemaSectionId).filter((id) => !sectionIds.includes(id));
+    if (missing.length) throw new CreateCartularyCommandError('schema_not_ready', `La version ${schemaId}@${resolved} ne connaît pas les sections de création : ${missing.join(', ')}.`);
+  }
+  return { schemaVersion: resolved, source: pointerData?.activeVersion ? 'active' : pointerData?.latestVersion ? 'latest' : 'requested' };
+};
+
+export const buildCreationBundle = ({ requestData, profile, media, schemaVersion: resolvedSchemaVersion }) => {
+  const definition = CREATION_PROFILE_DEFINITIONS[profile?.assetType];
+  const schemaVersionValue = resolvedSchemaVersion || profile?.schemaVersion;
   if (
     profile?.profileVersion !== '1.0.0'
     || !definition
     || profile.schemaId !== definition.schemaId
-    || !definition.versions.includes(profile.schemaVersion)
+    || !/^\d+\.\d+\.\d+$/.test(String(schemaVersionValue))
   ) {
     throw new CreateCartularyCommandError('unsupported_profile', 'Le profil de création demandé n’est pas pris en charge.');
   }
@@ -99,178 +120,23 @@ export const buildCreationBundle = ({ requestData, profile, media }) => {
   }
   const primaryAssetId = mediaAssets.find((asset) => Array.isArray(asset.tags) && asset.tags.includes('main-photo'))?.id || null;
   const manufactureYear = year(profile.manufactureYear);
-  if (profile.assetType === 'car' && (!serialNumber || !manufactureYear || manufactureYear < 1886 || manufactureYear > new Date().getFullYear() + 1)) {
+  const currentYear = new Date().getFullYear();
+  const missingRequirement = definition.requires.some((key) => key === 'serialNumber'
+    ? !serialNumber
+    : key === 'manufactureYear'
+      ? !manufactureYear || manufactureYear < definition.minYear || manufactureYear > currentYear + 1
+      : false);
+  if (missingRequirement) {
     throw new CreateCartularyCommandError('invalid_profile', 'Le numéro de châssis et une année automobile valide sont requis.');
   }
-  const sections = [
-    {
-      id: 'identity.summary',
-      schemaSectionId: 'cover.watch',
-      schemaVersion: 'watch@1.6.0',
-      title: "Identité de l’objet",
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: {
-        'cover.asset.type': value('Montre'),
-        'cover.watch.brand': value(brand),
-        'cover.watch.model': value(model),
-        'cover.watch.reference': value(reference),
-        'cover.watch.status': value('Patrimonial'),
-      },
-      revision: 1,
-    },
-    {
-      id: 'ownership.history',
-      schemaSectionId: 'cover.ownership_history',
-      schemaVersion: 'watch@1.6.0',
-      title: "Historique de l'objet - Propriétaires précédents",
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: {},
-      revision: 1,
-    },
-    {
-      id: 'watch.reference',
-      schemaSectionId: 'reference.specifications',
-      schemaVersion: 'watch@1.6.0',
-      title: 'Spécifications de référence',
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: {
-        'reference.specifications[].label': [
-          ...(manufactureYear ? [value('Année de fabrication')] : []),
-          ...(caliber ? [value('Calibre')] : []),
-        ],
-        'reference.specifications[].value': [
-          ...(manufactureYear ? [value(String(manufactureYear))] : []),
-          ...(caliber ? [value(caliber)] : []),
-        ],
-      },
-      revision: 1,
-    },
-    {
-      id: 'watch.instance.private',
-      schemaSectionId: 'watch.instance.private',
-      schemaVersion: 'watch@1.6.0',
-      title: 'Identité confidentielle de l’exemplaire',
-      visibility: 'secret',
-      status: 'imported_unmapped',
-      fields: {},
-      extensions: {
-        ...(serialNumber ? { 'watch.serialNumber': value(serialNumber) } : {}),
-      },
-      revision: 1,
-    },
-    ...(description ? [{
-      id: 'condition.description',
-      schemaSectionId: 'condition.description',
-      schemaVersion: 'watch@1.6.0',
-      title: "Description de l’objet",
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: { 'condition.description.paragraphs[]': [value(description)] },
-      revision: 1,
-    }] : []),
-    ...(conditionSummary ? [{
-      id: 'condition.summary',
-      schemaSectionId: 'condition.summary',
-      schemaVersion: 'watch@1.6.0',
-      title: 'État déclaré',
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: {
-        'condition.summary.paragraphs[]': [value(conditionSummary)],
-        'condition.summary.conclusion': value('État déclaré lors de la création ; revue humaine requise.'),
-        'condition.summary.openPoint': value('Authenticité, configuration et état à confirmer à partir des pièces versées.'),
-      },
-      revision: 1,
-    }] : []),
-    ...(purchaseDate || purchasePrice !== null ? [{
-      id: 'value.purchase',
-      schemaSectionId: 'value.cost_basis',
-      schemaVersion: 'watch@1.6.0',
-      title: 'Acquisition',
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: {
-        ...(purchaseDate ? { 'value.purchase.date': value(purchaseDate) } : {}),
-        ...(purchasePrice !== null ? { 'value.purchase.price': value({ amount: purchasePrice, currency }) } : {}),
-      },
-      extensions: { ...(seller ? { 'value.purchase.seller': value(seller) } : {}) },
-      revision: 1,
-    }] : []),
-    ...(valuationMid !== null ? [{
-      id: 'value.market-depth',
-      schemaSectionId: 'value.market_depth',
-      schemaVersion: 'watch@1.6.0',
-      title: 'Fourchette de marché déclarée',
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: {
-        ...(valuationDate ? { 'value.market.analysisDate': value(valuationDate) } : {}),
-        ...(valuationLow !== null ? { 'value.market.lowValue': value({ amount: valuationLow, currency }) } : {}),
-        'value.market.midValue': value({ amount: valuationMid, currency }),
-        ...(valuationHigh !== null ? { 'value.market.highValue': value({ amount: valuationHigh, currency }) } : {}),
-      },
-      revision: 1,
-    }, {
-      id: 'value.retained',
-      schemaSectionId: 'value.retained_value',
-      schemaVersion: 'watch@1.6.0',
-      title: 'Valeur de travail',
-      visibility: 'secret',
-      status: 'imported_unreviewed',
-      fields: {
-        'value.retained.amount': value({ amount: valuationMid, currency }),
-        'value.retained.explanation': value('Valeur déclarée lors de la création ; sources et méthode à revalider.'),
-      },
-      revision: 1,
-    }] : []),
-  ];
 
-  // The common creation flow preserves each published vertical's field IDs.
-  const schemaVersion = `${profile.schemaId}@${profile.schemaVersion}`;
-  const adaptedSections = sections.map((section) => ({ ...section, schemaVersion }));
-  if (profile.assetType === 'car') {
-    const identity = adaptedSections.find((section) => section.id === 'identity.summary');
-    identity.schemaSectionId = 'cover.car';
-    identity.fields = {
-      'cover.car.maker': value(brand),
-      'cover.car.model': value(model), 'cover.car.version': value(reference), 'cover.car.year': value(manufactureYear),
-    };
-    adaptedSections.unshift({ id: 'cover.asset', schemaSectionId: 'cover.asset', schemaVersion, title: 'Type de bien', visibility: 'secret', status: 'imported_unreviewed', fields: { 'cover.asset.type': value(definition.label) }, revision: 1 });
-    const technical = adaptedSections.find((section) => section.id === 'watch.reference');
-    technical.id = 'technical.powertrain';
-    technical.schemaSectionId = 'technical.powertrain';
-    technical.fields = caliber ? { 'technical.engine.architecture': value(caliber) } : {};
-    const confidential = adaptedSections.find((section) => section.id === 'watch.instance.private');
-    confidential.id = 'identity.private';
-    confidential.schemaSectionId = 'identity.private';
-    confidential.fields = { 'identity.car.vin': value(serialNumber) };
-    confidential.extensions = {};
-    const condition = adaptedSections.find((section) => section.id === 'condition.summary');
-    if (condition) { condition.schemaSectionId = 'condition.current'; condition.fields = { 'condition.overall.conclusion': value(conditionSummary) }; }
-    const retained = adaptedSections.find((section) => section.id === 'value.retained');
-    if (retained) retained.schemaSectionId = 'value.retained';
-    const market = adaptedSections.find((section) => section.id === 'value.market-depth');
-    if (market) {
-      market.schemaSectionId = 'value.market';
-      market.extensions = Object.fromEntries(Object.entries(market.fields).filter(([key]) => key !== 'value.market.analysisDate'));
-      market.fields = valuationDate ? { 'value.market.analysisDate': value(valuationDate) } : {};
-    }
-    const descriptionSection = adaptedSections.find((section) => section.id === 'condition.description');
-    if (descriptionSection) {
-      descriptionSection.schemaSectionId = 'condition.current';
-      descriptionSection.fields = {};
-      descriptionSection.extensions = { 'creation.description': value(description) };
-      if (condition) {
-        condition.extensions = { ...condition.extensions, ...descriptionSection.extensions };
-        adaptedSections.splice(adaptedSections.indexOf(descriptionSection), 1);
-      }
-    }
-    const purchaseSection = adaptedSections.find((section) => section.id === 'value.purchase');
-    if (purchaseSection) { purchaseSection.extensions = { ...purchaseSection.extensions, ...purchaseSection.fields }; purchaseSection.fields = {}; }
-  }
+  // Sections et champs : table de création partagée, validée contre le catalogue par les tests.
+  const adaptedSections = materializeCreationSections({
+    definition,
+    normalized: { brand, model, reference, manufactureYear, serialNumber, caliber, description, conditionSummary, purchaseDate, purchasePrice, currency, seller, valuationDate, valuationLow, valuationMid, valuationHigh },
+    provenance: value,
+    schemaVersion: schemaVersionValue,
+  });
 
   return {
     envelope: {
@@ -280,7 +146,7 @@ export const buildCreationBundle = ({ requestData, profile, media }) => {
       collectionId,
       assetType: profile.assetType,
       schemaId: profile.schemaId,
-      schemaVersion: profile.schemaVersion,
+      schemaVersion: schemaVersionValue,
       publicCode: requestData.publicCode,
       displayTitle: `${brand} ${model}`.trim(),
       makerName: brand,
@@ -463,7 +329,8 @@ export const processCartularyCreateRequest = async ({
   if (!claim.claimed) return { requestDocumentId, status: 'ignored', reason: claim.reason };
 
   const { profile, media } = await loadCreationDraft(firestore, requestData);
-  const bundle = buildCreationBundle({ requestData, profile, media });
+  const { schemaVersion } = await resolveCreationSchemaVersion({ firestore, schemaId: profile?.schemaId, requestedVersion: profile?.schemaVersion });
+  const bundle = buildCreationBundle({ requestData, profile, media, schemaVersion });
   const imported = await importCartularyBundle({
     firestore,
     bundle,

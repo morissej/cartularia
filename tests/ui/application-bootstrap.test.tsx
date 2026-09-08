@@ -107,7 +107,7 @@ describe('barrière d’hydratation PF3', () => {
     expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '?cartularyId=cart_demo_rolex_submariner_124060' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/cartulary', search: '?data-deleted=1' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/watch-website', search: '' })).toBe(false);
-    expect(requiresPrivateCartularyHydration({ pathname: '/cartulary-view', search: '' })).toBe(false);
+    expect(requiresPrivateCartularyHydration({ pathname: '/cartulary-view', search: '' })).toBe(true);
     expect(requiresPrivateCartularyHydration({ pathname: '/community', search: '' })).toBe(false);
     expect(requiresPrivateCartularyHydration({ pathname: '/registry/gallery', search: '' })).toBe(false);
   });

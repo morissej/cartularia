@@ -105,7 +105,7 @@ test('les Cartulaires du compte démo utilisent le gabarit Cartulaire standard',
   for (const cartulary of DEMO_CARTULARIES) {
     assert.match(buildCartularyHref(cartulary.id, '/registry/reg_cartularia_demo/items', 'watch'), /^\/cartulary-demo\?/);
   }
-  assert.match(rootPage, /isDemoCartularyRoute \? CartularyApp : GenericCartularyPage/);
+  assert.match(rootPage, /'cartulary-view'\s*\?\s*CartularyApp/);
 });
 
 test('le déploiement évite les vues sans style après une nouvelle version', () => {

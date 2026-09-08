@@ -21,7 +21,7 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/registry/invitation?invitationId=inv_test&token=opaque_token');
 });
 
-it.each([['car', '/cartulary-view?'], ['watch', '/cartulary?']])('l’invitation %s conduit au Cartulaire autorisé, jamais à l’accueil public', async (type, route) => {
+it.each([['car', '/cartulary?'], ['watch', '/cartulary?']])('l’invitation %s conduit au Cartulaire autorisé, jamais à l’accueil public', async (type, route) => {
   fixture.type = type; render(<RegistryInvitationPage />);
   fireEvent.change(screen.getByLabelText('Adresse électronique'), { target: { value: 'invite@example.test' } });
   fireEvent.click(screen.getByRole('button', { name: 'Accepter l’invitation' }));

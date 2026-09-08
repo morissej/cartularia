@@ -25,6 +25,7 @@ import { scopedStorageForCartulary } from '../persistence/localVault.ts';
 import { validateFileForUpload, type TrustedFileInspection } from '../security/fileValidation.ts';
 import { waitForPrivateUploadVerification } from './privateUploadVerification.ts';
 import { generateCorrespondenceCode } from '../domain/correspondenceCodes.ts';
+import { loadCreationSchemaVersion } from './schemaCatalog.ts';
 
 export interface CreateWatchCartularyInput {
   assetType?: SupportedCreationAssetType;
@@ -195,6 +196,7 @@ export const createCartulary = async ({
 }: CreateWatchCartularyInput): Promise<CartularyCreationResult> => {
   const definition = SUPPORTED_CREATION_PROFILES[assetType];
   if (!definition) throw new Error('Ce type d’objet n’est pas encore proposé à la création.');
+  const schemaVersion = await loadCreationSchemaVersion(definition.schemaId);
   const cartularySlug = slugify([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'objet';
   const cartularyId = `cart_${cartularySlug}_${randomToken()}`;
   const publicCode = generateCorrespondenceCode('object', profile.brand || 'WCH');
@@ -250,8 +252,8 @@ export const createCartulary = async ({
   const creationProfile: CartularyCreationProfile = {
     profileVersion: CARTULARY_CREATION_PROFILE_VERSION,
     assetType,
-    schemaId: definition.schemaId,
-    schemaVersion: definition.schemaVersion,
+    schemaId: definition.schemaId as SupportedCreationAssetType,
+    schemaVersion,
     ...profile,
     assertedAt: new Date().toISOString(),
   };

@@ -117,7 +117,7 @@ test('les trois tris restent déterministes et ne modifient pas la source', () =
 test('le lien Cartulaire conserve le contexte et encode les paramètres', () => {
   const href = buildCartularyHref('cartulary/à vérifier', '/registry/reg_demo/items?q=IWC UTC');
   const url = new URL(href, 'https://cartularia.test');
-  assert.equal(url.pathname, '/cartulary-view');
+  assert.equal(url.pathname, '/cartulary');
   assert.equal(url.searchParams.get('cartularyId'), 'cartulary/à vérifier');
   assert.equal(url.searchParams.get('returnTo'), '/registry/reg_demo/items?q=IWC UTC');
 });
@@ -142,6 +142,11 @@ test('le Cartulaire Rolex ouvre la même interface complète que l’IWC', () =>
 
 test('toute nouvelle montre est dirigée vers le Cartulaire complet', () => {
   const href = buildCartularyHref('cart_watch_future_0001', '/registry/reg_demo/items', 'watch');
+  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/cartulary');
+});
+
+test('un objet d’une autre verticale ouvre le même lecteur unique (ADR-028)', () => {
+  const href = buildCartularyHref('cart_car_future_0001', '/registry/reg_demo/items', 'car');
   assert.equal(new URL(href, 'https://cartularia.test').pathname, '/cartulary');
 });
 

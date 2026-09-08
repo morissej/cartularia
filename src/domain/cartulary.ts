@@ -85,6 +85,8 @@ export interface CartularySectionDocument {
   status: 'imported_unreviewed' | 'imported_unmapped';
   fields: Record<string, unknown>;
   extensions?: Record<string, unknown>;
+  /** Posé par une remontée de schéma (ADR-031) quand la version cible ne connaît plus la section. */
+  retiredFromSchema?: { version: string; reason: 'section_removed' };
   revision: 1;
 }
 

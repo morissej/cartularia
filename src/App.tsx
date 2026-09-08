@@ -25,10 +25,12 @@ import {
   activeCreationProfile,
   activeDemoContent,
   isDemoCartulary,
-  isIwcCartulary,
-  isRolexCartulary,
 } from './data/activeCartulary';
 import { ACTIVE_CARTULARY_ID } from './domain/cartularyIds';
+import { useAuthoritativeCartulary } from './features/cartulary/state/useAuthoritativeCartulary';
+import { useGenericSectionEdits } from './features/cartulary/state/useGenericSectionEdits';
+import { GenericSchemaPageSections } from './components/GenericSchemaPageSections';
+import type { VerticalSchema } from './schema/schemaTypes';
 import type { Asset, ComparableTransaction, MediaTag, Valuation } from './types';
 import { BarreDossier } from './components/BarreDossier';
 import { CartularyTodoBoard } from './components/CartularyTodoBoard';
@@ -211,6 +213,7 @@ interface SpecificationGroupData {
 }
 
 interface EditableCopyData {
+  originTitle?: string;
   heroSummary: string;
   originParagraphs: string[];
   originKnowledge: string;
@@ -260,83 +263,9 @@ const creationModel = activeCreationProfile?.model || mockCartulary.watchInstanc
 const creationReference = activeCreationProfile?.reference || mockCartulary.watchInstance.reference.reference || 'Référence à documenter';
 const creationYear = activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : 'À documenter';
 const creationCaliber = activeCreationProfile?.caliber || 'Calibre à documenter';
-const hasDocumentedReferenceProfile = isIwcCartulary || isRolexCartulary || isDemoCartulary;
+const hasDocumentedReferenceProfile = isDemoCartulary;
 
-const DEFAULT_CHECKS: IdentificationCheck[] = isDemoCartulary && activeDemoContent ? activeDemoContent.checks : isIwcCartulary ? [
-  {
-    id: 'dial-tzc',
-    title: 'Cadran noir IW3251-001',
-    note: 'Mention « TZC » au-dessus de 6 h, chiffres arabes peints et typographie cohérente avec le millésime 2002.',
-    checked: true,
-  },
-  {
-    id: 'utc-date',
-    title: 'Disque UTC et date',
-    note: 'Disque 24 heures visible dans le secteur à 12 h, guichet de date à 3 h et alignement fonctionnel des deux indications.',
-    checked: true,
-  },
-  {
-    id: 'case-geometry',
-    title: 'Boîtier acier de 39 mm',
-    note: 'Diamètre 39 mm et épaisseur de référence 13,5 mm. Les vues documentent les finitions ; l’absence de sur-polissage reste à confirmer.',
-    checked: false,
-  },
-  {
-    id: 'fish-crown',
-    title: 'Couronne « poisson »',
-    note: 'Gravure poisson attendue sur un exemplaire de 2002 selon le rapport interne, mais non lisible sur les vues versées.',
-    checked: false,
-  },
-  {
-    id: 'caliber-tzc',
-    title: 'Calibre IWC 37526 et module TZC',
-    note: 'Mouvement automatique IWC photographié ouvert, rotor signé et mention 21 rubis visibles. Fonctionnement du correcteur à tester.',
-    checked: true,
-  },
-  {
-    id: 'serial-paperwork',
-    title: 'Série et facture du 08.03.2002',
-    note: 'Numéro 2715537 porté par la facture et lisible sur les vues extérieure et intérieure du fond. Carte de garantie distincte non retrouvée.',
-    checked: true,
-  },
-] : isRolexCartulary ? [
-  {
-    id: 'dial-long-e',
-    title: 'Cadran mat Mark I « Long E »',
-    note: 'Typographie du E de ROLEX, couronne fine et marquage SWISS – T < 25 à contrôler sur les vues macro.',
-    checked: false,
-  },
-  {
-    id: 'serial-period',
-    title: 'Série et millésime 1969',
-    note: `Numéro ${mockCartulary.watchInstance.serialNumber || 'à documenter'} à rapprocher de la période de production de la référence 1675.`,
-    checked: false,
-  },
-  {
-    id: 'case-geometry',
-    title: 'Boîtier et protège-couronne',
-    note: 'Géométrie du boîtier, épaisseur des cornes, arêtes et éventuelles reprises de polissage à examiner.',
-    checked: false,
-  },
-  {
-    id: 'fuchsia-insert',
-    title: 'Insert Pepsi fuchsia',
-    note: 'Insert déclaré d’époque ; teinte, typographie, usure et cohérence avec le millésime doivent être revues.',
-    checked: false,
-  },
-  {
-    id: 'caliber-1575',
-    title: 'Calibre Rolex 1575',
-    note: 'Mouvement, pont marqué 1570 le cas échéant, numéro et fonctionnement GMT à confirmer montre ouverte.',
-    checked: false,
-  },
-  {
-    id: 'bracelet-jubilee',
-    title: 'Bracelet Jubilee',
-    note: 'Références de bracelet et d’end-links, date de fermoir, allongement et cohérence avec la montre à documenter.',
-    checked: false,
-  },
-] : [
+const DEFAULT_CHECKS: IdentificationCheck[] = isDemoCartulary && activeDemoContent ? activeDemoContent.checks : [
   {
     id: 'identity-reference',
     title: 'Marque, modèle et référence',
@@ -375,29 +304,15 @@ const DEFAULT_CHECKS: IdentificationCheck[] = isDemoCartulary && activeDemoConte
   },
 ];
 
-const DEFAULT_CONDITION_ENTRIES: ConditionEntry[] = mockCartulary.conditionReports.map((report, index) => ({
+const DEFAULT_CONDITION_ENTRIES: ConditionEntry[] = mockCartulary.conditionReports.map((report) => ({
   id: report.id,
   date: report.date,
   title: report.title,
   note: report.summary,
-  attachments: isIwcCartulary && index === 0
-    ? [{ name: 'Rapport_etat_2026-08-08.pdf' }, { name: 'Fiche_controle_fonctionnel.pdf' }]
-    : isIwcCartulary
-      ? [{ name: 'Revue_visuelle_2024-02-15.pdf' }]
-      : [],
+  attachments: [],
 }));
 
-const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isDemoCartulary && activeDemoContent ? activeDemoContent.documentation : isIwcCartulary ? [
-  { id: 'doc-invoice', category: 'Facture', description: 'Facture originale nominative du 08.03.2002, boutique Aldebert à Paris.', state: 'Présent' },
-  { id: 'doc-warranty', category: 'Garantie', description: 'Aucune carte de garantie distincte dans les fichiers versés ; à rechercher physiquement.', state: 'À vérifier' },
-  { id: 'doc-box', category: 'Boîte', description: 'Boîte et coussin IWC photographiés le 28.08.2026 ; revêtement extérieur fortement dégradé.', state: 'Présent' },
-  { id: 'doc-manual', category: 'Manuel', description: 'Livret utilisateur et documentation de la fonction UTC.', state: 'À vérifier' },
-] : isRolexCartulary ? [
-  { id: 'doc-purchase', category: 'Facture', description: `Acquisition du ${activeCreationProfile?.purchaseDate || '23.07.2026'} auprès de ${activeCreationProfile?.seller || 'L’Atelier du Temps'}. Pièce à identifier dans les documents importés.`, state: 'À vérifier' },
-  { id: 'doc-seller', category: 'Garantie', description: 'Garantie vendeur de cinq ans déclarée dans le dossier. Étendue et conditions à confirmer.', state: 'À vérifier' },
-  { id: 'doc-box', category: 'Boîte', description: 'Boîte et accessoires non confirmés à ce stade.', state: 'À vérifier' },
-  { id: 'doc-expertise', category: 'Certificat', description: 'Notes d’expertise et sources de marché importées ; revue humaine requise avant validation.', state: 'À vérifier' },
-] : [
+const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isDemoCartulary && activeDemoContent ? activeDemoContent.documentation : [
   {
     id: 'doc-purchase',
     category: 'Facture',
@@ -413,43 +328,26 @@ const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isDemoCartulary && acti
 
 const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de l’objet, de la complétude de son dossier et du canal de cession.';
 
-const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isDemoCartulary && activeDemoContent ? activeDemoContent.popularityResources : isIwcCartulary ? [
-  { id: 'pop-iwc-forum', name: 'IWC Collectors Forum', type: 'Forum officiel', url: 'https://forum.iwc.com/' },
-  { id: 'pop-iwc-3251-thread', name: 'IWC Die Fliegeruhr UTC Ref. 3251', type: 'Discussion dédiée', url: 'https://forum.iwc.com/t/iwc-die-fliegeruhr-utc-ref3251/30513/' },
-  { id: 'pop-watchbase', name: 'WatchBase · IW3251-01', type: 'Base de données', url: 'https://watchbase.com/iwc/pilot/iw3251-01' },
-  { id: 'pop-reddit', name: 'r/IWCschaffhausen', type: 'Communauté', url: 'https://www.reddit.com/r/IWCschaffhausen/' },
-  { id: 'pop-timezone', name: 'TimeZone · IWC 3251 Review', type: 'Revue', url: 'https://forums.timezone.com/index.php?goto=594&rid=0&t=tree' },
-] : [];
+const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isDemoCartulary && activeDemoContent ? activeDemoContent.popularityResources : [];
 
 const DEFAULT_EXPENSES: PurchaseExpense[] = isDemoCartulary && activeDemoContent ? activeDemoContent.expenses : [];
 
-const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isDemoCartulary && activeDemoContent ? activeDemoContent.comparableAnalysis : isIwcCartulary ? [
-  { id: 'analysis-listings', angle: 'Prix affichés', finding: '4 150 €', reading: 'Deux annonces observées ; ce niveau reste un prix demandé et non un prix encaissé.' },
-  { id: 'analysis-transactions', angle: 'Prix réalisés', finding: '3 450 €', reading: 'Une transaction observée ; ce point dispose d’une valeur probante supérieure mais l’échantillon reste limité.' },
-  { id: 'analysis-gap', angle: 'Écart annonce / transaction', finding: '20,3 %', reading: 'L’écart mesure la prime d’affichage observée. Il doit couvrir la négociation, le délai et les frais de cession.' },
-  { id: 'analysis-price-channel', angle: 'Canal de prix', finding: 'Annonce spécialisée', reading: 'Canal à privilégier pour défendre le prix d’un exemplaire complet, avec un délai de commercialisation plus long.' },
-  { id: 'analysis-liquidity-channel', angle: 'Canal de liquidité', finding: 'Enchère', reading: 'Exécution plus rapide et prix public, mais résultat plus volatil et frais généralement plus élevés.' },
-] : isRolexCartulary ? [
-  { id: 'analysis-listings', angle: 'Prix affichés', finding: '16 958 € à 21 774 €', reading: 'Trois annonces 1969 relevées dans le dossier. Ce sont des prix demandés, non des transactions réalisées.' },
-  { id: 'analysis-pivot', angle: 'Niveau de travail', finding: '21 000 € à 25 000 €', reading: 'Fourchette de travail pour l’exemplaire déclaré, à revalider après contrôle du cadran, de l’insert, du boîtier et du bracelet.' },
-  { id: 'analysis-liquidity', angle: 'Liquidité', finding: 'Marché international', reading: 'La profondeur observée facilite la comparaison, mais la dispersion des configurations vintage impose une sélection stricte.' },
-  { id: 'analysis-premium', angle: 'Facteurs de prime', finding: 'Long E · fuchsia · patine', reading: 'Ces caractéristiques ne justifient une prime qu’après confirmation de leur authenticité et de leur cohérence.' },
-] : [];
+const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isDemoCartulary && activeDemoContent ? activeDemoContent.comparableAnalysis : [];
 
 const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   {
     id: 'basic', title: 'Données de base', items: [
       ['ad-code', 'Code annonce', `Non applicable · dossier ${mockCartulary.publicCode}`],
       ['brand', 'Marque', mockCartulary.watchInstance.reference.brand],
-      ['collection', 'Collection', isRolexCartulary ? 'GMT-Master' : isIwcCartulary ? 'Pilot’s Watches' : 'Collection à documenter'],
+      ['collection', 'Collection', 'Collection à documenter'],
       ['model', 'Modèle', mockCartulary.watchInstance.reference.model],
       ['reference', 'Numéro de référence', mockCartulary.watchInstance.reference.reference],
       ['movement', 'Mouvement', hasDocumentedReferenceProfile ? 'Remontage automatique' : 'Type de mouvement à documenter'],
       ['case', 'Boîtier', mockCartulary.watchInstance.reference.material],
-      ['bracelet', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
-      ['year', 'Année de fabrication', activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : isIwcCartulary ? '2002' : 'À documenter'],
+      ['bracelet', 'Matière du bracelet', 'À documenter'],
+      ['year', 'Année de fabrication', activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : 'À documenter'],
       ['condition', 'État', 'Voir 03 · L’objet'],
-      ['delivered', 'Contenu livré', isRolexCartulary ? 'Montre et bracelet Jubilee · accessoires à documenter' : isIwcCartulary ? 'Montre, boîte, écrin et facture · garantie et manuel à vérifier' : 'Montre et accessoires à inventorier'],
+      ['delivered', 'Contenu livré', 'Montre et accessoires à inventorier'],
       ['gender', 'Sexe', 'Montre homme / Unisexe'],
       ['location', 'Emplacement', 'Accès restreint'],
       ['price', 'Prix', 'Voir 04 · Valorisation'],
@@ -460,9 +358,9 @@ const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
     id: 'caliber', title: 'Calibre', items: [
       ['cal-movement', 'Mouvement', hasDocumentedReferenceProfile ? 'Remontage automatique' : 'À documenter'],
       ['caliber', 'Calibre', mockCartulary.watchInstance.reference.caliber],
-      ['base-caliber', 'Calibre de base', isRolexCartulary ? 'Rolex 1570 · pont pouvant être marqué 1570' : isIwcCartulary ? 'ETA 2893-2 selon les sources les mieux recoupées · divergence interne avec ETA 2892-A2' : 'À documenter'],
+      ['base-caliber', 'Calibre de base', 'À documenter'],
       ['power-reserve', 'Réserve de marche', mockCartulary.watchInstance.reference.powerReserve],
-      ['jewels', 'Nombre de pierres', isRolexCartulary ? '26' : isIwcCartulary ? '21 · visible sur le rotor' : 'À documenter'],
+      ['jewels', 'Nombre de pierres', 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
@@ -471,31 +369,31 @@ const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
       ['diameter', 'Diamètre', hasDocumentedReferenceProfile ? `${mockCartulary.watchInstance.reference.diameter.toFixed(1)} mm` : 'À documenter'],
       ['height', 'Hauteur', hasDocumentedReferenceProfile ? `${mockCartulary.watchInstance.reference.thickness.toFixed(1)} mm` : 'À documenter'],
       ['water', 'Étanche', hasDocumentedReferenceProfile ? mockCartulary.watchInstance.reference.waterResistance : 'À documenter'],
-      ['bezel', 'Matériau de la lunette', isRolexCartulary ? 'Insert aluminium Pepsi fuchsia déclaré' : isIwcCartulary ? 'Acier' : 'À documenter'],
-      ['crystal', 'Verre', isRolexCartulary ? 'Plexiglas' : isIwcCartulary ? 'Saphir' : 'À documenter'],
+      ['bezel', 'Matériau de la lunette', 'À documenter'],
+      ['crystal', 'Verre', 'À documenter'],
       ['dial', 'Cadran', hasDocumentedReferenceProfile ? 'Voir la fiche de référence' : 'Couleur et finition à documenter'],
-      ['numerals', 'Chiffres du cadran', isRolexCartulary ? 'Index appliqués au tritium' : isIwcCartulary ? 'Arabes' : 'À documenter'],
+      ['numerals', 'Chiffres du cadran', 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'bracelet', title: 'Bracelet', items: [
-      ['strap-material', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
-      ['strap-color', 'Couleur du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Marron foncé patiné' : 'À documenter'],
-      ['clasp', 'Boucle', isRolexCartulary ? 'Boucle déployante Rolex · référence à documenter' : isIwcCartulary ? 'Ardillon IWC' : 'À documenter'],
+      ['strap-material', 'Matière du bracelet', 'À documenter'],
+      ['strap-color', 'Couleur du bracelet', 'À documenter'],
+      ['clasp', 'Boucle', 'À documenter'],
       ['clasp-material', 'Matière de la boucle', 'Acier'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'functions', title: 'Fonctions', items: [
-      ['date', 'Date', isRolexCartulary ? 'Guichet à 3 heures · réglage non rapide' : isIwcCartulary ? 'Guichet à 3 heures' : 'À documenter'],
-      ['gmt', 'GMT', isRolexCartulary ? 'Aiguille GMT 24 heures' : isIwcCartulary ? 'Disque UTC 24 heures' : 'À documenter'],
-      ['timezone', 'Second fuseau horaire', isRolexCartulary ? 'Lunette bidirectionnelle 24 heures' : isIwcCartulary ? 'Réglage par module TZC' : 'À documenter'],
+      ['date', 'Date', 'À documenter'],
+      ['gmt', 'GMT', 'À documenter'],
+      ['timezone', 'Second fuseau horaire', 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'other', title: 'Autres', items: [
       ['seconds', 'Seconde', hasDocumentedReferenceProfile ? 'Selon la configuration de référence' : 'À documenter'],
-      ['crown', 'Couronne', isRolexCartulary ? 'Couronne Rolex déclarée d’origine' : isIwcCartulary ? 'Gravure à confirmer · couronne poisson attendue mais non établie' : 'À documenter'],
+      ['crown', 'Couronne', 'À documenter'],
       ['caseback', 'Fond', hasDocumentedReferenceProfile ? 'Selon la configuration de référence' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
@@ -511,49 +409,7 @@ const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = BASE_DEFAULT_SPEC
   })),
 }));
 
-const DEFAULT_EDITABLE_COPY: EditableCopyData = isDemoCartulary && activeDemoContent ? activeDemoContent.editableCopy : isIwcCartulary ? {
-  heroSummary: 'Flieger UTC en acier de 39 mm, acquise neuve en 2002. Le dossier réunit la facture d’origine, la boîte IWC, des vues de 2022 et 2026, le mouvement ouvert et une vidéo.',
-  originParagraphs: [
-    'La Flieger UTC associe la lisibilité des montres d’aviateur IWC à un disque 24 heures qui conserve l’heure du domicile pendant les déplacements. La génération IW3251 a été introduite en 1998 et sa production s’est poursuivie jusqu’en 2005 environ.',
-    'La famille comprend plusieurs variantes documentées : les références 3251-001 et 3251-002 à cadran noir, les versions Spitfire 3251-005 et 3251-007, la rare 3251-009 en platine et la 3251-010 à cadran clair. Le présent exemplaire correspond à la 3251-001, livrée sur cuir et identifiable par la mention « TZC » au-dessus de 6 heures.',
-    'IWC n’a pas publié le nombre total de montres produites pour cette génération. L’estimation du volume reste donc à documenter et doit être considérée comme non vérifiée tant qu’une archive de manufacture ou une source de référence n’est pas disponible.',
-  ],
-  originKnowledge: 'Sur un exemplaire de 2002, la couronne « poisson » est cohérente avec la période. Une couronne « Probus Scafusia » indique généralement un remplacement en service.',
-  watchDescription: [
-    'Cette IWC Flieger UTC IW3251-001 est une montre d’aviateur automatique en acier de 39 mm, produite en 2002. Son cadran noir à chiffres arabes associe un guichet de date à 3 heures à un disque UTC 24 heures disposé à 12 heures.',
-    'L’exemplaire est présenté sur bracelet cuir marron fortement patiné. Le cadran TZC, le disque UTC, le fond numéroté et le mouvement IWC 21 rubis sont documentés ; la gravure de couronne reste à confirmer.',
-  ],
-  conditionSummary: [
-    'L’exemplaire est cohérent avec une IWC Flieger UTC IW3251-001 de 2002. Les vues documentent le cadran, les affichages, le boîtier, le fond numéroté et le mouvement, avec des marques d’usage et un bracelet très patiné.',
-    'La boîte est présente mais son revêtement extérieur est fortement dégradé. Le fonctionnement du module UTC, la marche, l’étanchéité, la gravure de couronne, le lume et le niveau de polissage restent à contrôler.',
-  ],
-  conditionFacts: {
-    lastCondition: '08/08/2026',
-    conclusion: 'Configuration cohérente · contrôles fonctionnels à compléter',
-    openPoint: 'TZC, marche, étanchéité, couronne, lume et service',
-  },
-} : isRolexCartulary ? {
-  heroSummary: activeCreationProfile?.description || 'GMT-Master 1675 de 1969, cadran mat Mark I « Long E », insert Pepsi fuchsia et bracelet Jubilee.',
-  originParagraphs: [
-    'La GMT-Master référence 1675 appartient à la génération vintage produite par Rolex de la fin des années 1950 au début des années 1980. Son aiguille 24 heures et sa lunette graduée permettent la lecture d’un second fuseau horaire.',
-    'Le présent dossier décrit un exemplaire de 1969 avec cadran mat Mark I dit « Long E ». Cette qualification repose sur la typographie du mot ROLEX et doit être confirmée sur les vues macro versées au Cartulaire.',
-    'L’insert Pepsi à décoloration fuchsia, le tritium à patine coquille d’œuf et le bracelet Jubilee sont déclarés dans les pièces sources. Leur période, leur authenticité et leur association à l’exemplaire restent soumises à revue.',
-  ],
-  originKnowledge: 'Sur une 1675 vintage, la valeur dépend fortement du cadran, de l’insert, de la géométrie du boîtier, du mouvement et de la cohérence du bracelet. Toute conclusion doit être rattachée à une preuve datée.',
-  watchDescription: [
-    activeCreationProfile?.description || 'Rolex GMT-Master réf. 1675 de 1969 en acier, cadran mat Mark I « Long E », aiguille GMT et insert Pepsi fuchsia déclaré.',
-    'L’exemplaire porte le numéro de série 1 982 530 et est présenté sur bracelet Jubilee déclaré d’origine. Le calibre indiqué au dossier est le Rolex 1575.',
-  ],
-  conditionSummary: [
-    activeCreationProfile?.conditionSummary || 'L’état a été déclaré lors de la création du Cartulaire et n’a pas encore été confirmé par une revue indépendante.',
-    'Points ouverts : authenticité et période du cadran et de l’insert, niveau de polissage du boîtier, références du bracelet, inspection du mouvement et contrôle d’étanchéité.',
-  ],
-  conditionFacts: {
-    lastCondition: 'À revoir',
-    conclusion: 'État déclaré · non validé',
-    openPoint: 'Authenticité et configuration',
-  },
-} : {
+const DEFAULT_EDITABLE_COPY: EditableCopyData = isDemoCartulary && activeDemoContent ? activeDemoContent.editableCopy : {
   heroSummary: activeCreationProfile?.description
     || `${creationBrand} ${creationModel}, référence ${creationReference}. Dossier créé depuis le Registre et à compléter sur pièces.`,
   originParagraphs: [
@@ -577,15 +433,11 @@ const DEFAULT_EDITABLE_COPY: EditableCopyData = isDemoCartulary && activeDemoCon
   },
 };
 
-const DEFAULT_SENSITIVITY_PRICES = isIwcCartulary
-  ? [3200, 3600, 4000, 4400, 4800]
-  : [
-      mockCartulary.marketSnapshot.lowValue,
-      Math.round((mockCartulary.marketSnapshot.lowValue + mockCartulary.marketSnapshot.midValue) / 2),
-      mockCartulary.marketSnapshot.midValue,
-      Math.round((mockCartulary.marketSnapshot.midValue + mockCartulary.marketSnapshot.highValue) / 2),
-      mockCartulary.marketSnapshot.highValue,
-    ];
+/** Grille de sensibilité par défaut : dérivée de la profondeur de marché enregistrée, sans valeur codée par marque. */
+const defaultSensitivityPrices = () => {
+  const { lowValue, midValue, highValue } = loadMarketDepth();
+  return [lowValue, Math.round((lowValue + midValue) / 2), midValue, Math.round((midValue + highValue) / 2), highValue];
+};
 const DEFAULT_SENSITIVITY_COSTS = [0, 5, 10, 15, 20];
 
 const pageFromHash = (): CartularyPage => {
@@ -706,16 +558,10 @@ const loadSpecificationGroups = (): SpecificationGroupData[] => {
   if (isDemoCartulary) return DEFAULT_SPECIFICATION_GROUPS;
   const stored = readStored<SpecificationGroupData[] | null>('cartularia-specification-groups', null);
   if (stored?.length) {
-    if (!isIwcCartulary) {
-      const storedValues = new Map(stored.flatMap((group) => group.items || []).map((item) => [item.id, item.value]));
-      return DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.map((item) => ({ ...item, value: storedValues.get(item.id) || item.value })),
-      }));
-    }
-    return stored.map((group) => ({
+    const storedValues = new Map(stored.flatMap((group) => group.items || []).map((item) => [item.id, item.value === 'Voir 04 · Valeur' ? 'Voir 04 · Valorisation' : item.value]));
+    return DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
       ...group,
-      items: group.items.map((item) => ({ ...item, value: item.value === 'Voir 04 · Valeur' ? 'Voir 04 · Valorisation' : item.value })),
+      items: group.items.map((item) => ({ ...item, value: storedValues.get(item.id) || item.value })),
     }));
   }
   const legacy = readStored<Record<string, string> | null>('cartularia-basic-watch-data', null);
@@ -810,6 +656,9 @@ const persistJson = (key: string, value: unknown) => {
 };
 
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+/** Schéma vide tant que l'enveloppe autoritaire n'est pas chargée : aucun rendu générique, aucun masquage. */
+const EMPTY_SCHEMA: VerticalSchema = { schemaId: '', assetType: '', version: '', status: 'baseline', defaultVisibility: 'secret', fieldCount: 0, sections: [], fields: [] };
+
 function App() {
   const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
   const routeParameters = new URLSearchParams(window.location.search);
@@ -820,12 +669,23 @@ function App() {
   const localPublicationPreviewAllowed = isWatchWebsite
     && routeParameters.get('preview') === 'local';
   const invalidPublicCode = isWatchWebsite && !requestedPublicCode;
+  // Lecteur unique : l'enveloppe, les sections et le schéma autoritaires pilotent l'identité et les
+  // sections génériques de tout objet ; le brouillon privé reste la source des blocs spécialisés.
+  const authoritative = useAuthoritativeCartulary(ACTIVE_CARTULARY_ID, { enabled: !isDemoCartulary && !isWatchWebsite });
+  const envelope = authoritative.snapshot?.envelope ?? null;
+  const cartularyPublicCode = envelope?.publicCode || mockCartulary.publicCode;
+  const schema = authoritative.schema;
+  const schemaHas = (sectionId: string) => !schema || schema.sections.includes(sectionId);
+  const sectionEdits = useGenericSectionEdits({ schema: schema ?? EMPTY_SCHEMA, onSave: authoritative.saveFields, canManage: authoritative.canManage });
+  const genericPageProps = { sections: authoritative.snapshot?.sections, schema, edits: sectionEdits, canManage: authoritative.canManage };
+  const watch = useMemo(() => envelope
+    ? { ...mockCartulary.watchInstance, reference: { ...mockCartulary.watchInstance.reference, brand: envelope.makerName || mockCartulary.watchInstance.reference.brand, model: envelope.modelName || mockCartulary.watchInstance.reference.model, reference: envelope.referenceCode || mockCartulary.watchInstance.reference.reference } }
+    : mockCartulary.watchInstance, [envelope]);
   useEffect(() => {
     if (!isWatchWebsite) {
-      const reference = mockCartulary.watchInstance.reference;
-      document.title = `Cartulaire ${reference.brand} ${reference.model} · Cartularia`;
+      document.title = `Cartulaire ${watch.reference.brand} ${watch.reference.model} · Cartularia`;
     }
-  }, [isWatchWebsite]);
+  }, [isWatchWebsite, watch]);
   const [language, setLanguage] = useState<InterfaceLanguage>(() => normalizeInterfaceLanguage(
     readStored<unknown>(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR'),
   ));
@@ -864,7 +724,7 @@ function App() {
     loadWatchStatus: () => readStored<WatchPatrimonialStatus>('cartularia-watch-status', 'Patrimonial'),
     loadCollectionId: () => isDemoCartulary ? DEMO_ACCOUNT.collectionId : readStored<string>('cartularia-collection-id', activeCreationProfile?.collectionId || 'col_pilots'),
     loadUserAlias: () => isDemoCartulary ? 'COLLECTIONNEUR-DEMO' : readStored<string>('cartularia-user-alias', ''),
-    loadObjectCode: () => readStored<string>('cartularia-object-code', mockCartulary.publicCode),
+    loadObjectCode: () => readStored<string>('cartularia-object-code', cartularyPublicCode),
     loadStorageCodes: () => normalizeStorageCodeReferences(isDemoCartulary ? activeDemoContent?.storageCodes ?? [] : readStored<unknown>('cartularia-storage-code-names', [])),
     loadTransmissionCodes: () => normalizeTransmissionCodeReferences(isDemoCartulary ? activeDemoContent?.transmissionCodes ?? [] : readStored<unknown>('cartularia-transmission-code-references', [])),
   });
@@ -924,7 +784,7 @@ function App() {
     loadMarketDepth,
     loadComparables: () => isDemoCartulary ? mockCartulary.comparables : readStored('cartularia-comparables', mockCartulary.comparables),
     loadComparableAnalysis: () => isDemoCartulary ? DEFAULT_COMPARABLE_ANALYSIS : readStored('cartularia-comparable-analysis', DEFAULT_COMPARABLE_ANALYSIS),
-    loadSensitivityPrices: () => isDemoCartulary ? DEFAULT_SENSITIVITY_PRICES : readStored('cartularia-sensitivity-prices', DEFAULT_SENSITIVITY_PRICES),
+    loadSensitivityPrices: () => isDemoCartulary ? defaultSensitivityPrices() : readStored('cartularia-sensitivity-prices', defaultSensitivityPrices()),
     loadSensitivityCosts: () => isDemoCartulary ? DEFAULT_SENSITIVITY_COSTS : readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
     loadRetainedValuation: () => (isDemoCartulary ? {
       amount: mockCartulary.marketSnapshot.midValue,
@@ -1327,7 +1187,6 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [integritySnapshot]);
 
-  const watch = mockCartulary.watchInstance;
   const visibleAssets = mediaAssets;
   const localWebsiteAssets = mediaAssets.filter((asset) => asset.visibility === 'Tous');
   const renderedAssets = isWatchWebsite && !requestedPublicCode ? localWebsiteAssets : visibleAssets;
@@ -1407,9 +1266,9 @@ function App() {
   };
   const websiteDraft = buildWebsiteDraft(websiteContent, approvedWebsiteBlocks);
   const localPreviewBlocks = websiteDraftPreview(buildWebsiteDraft(websiteContent, watchWebsiteBlocks));
-  const publicShareUrl = `${window.location.origin}/watch-website?publicCode=${encodeURIComponent(mockCartulary.publicCode)}`;
+  const publicShareUrl = `${window.location.origin}/watch-website?publicCode=${encodeURIComponent(cartularyPublicCode)}`;
   const localPublicationPreviewParameters = new URLSearchParams({
-    publicCode: mockCartulary.publicCode,
+    publicCode: cartularyPublicCode,
     preview: 'local',
     cartularyId: mockCartulary.id,
     blocks: approvedWebsiteBlocks.join(','),
@@ -1847,6 +1706,7 @@ function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    sectionEdits.reset(); sectionEdits.clearMessages();
     setActivePage(page);
     window.location.hash = page;
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1880,8 +1740,8 @@ function App() {
         return definition ? `${definition.pageNumber} · ${definition.pageLabel} — ${definition.title}` : blockId;
       });
       const date = new Date().toISOString().slice(0, 10);
-      const exportMode = downloadTextPdf(`cartularia-${mockCartulary.publicCode}-${date}.pdf`, [
-        `RAPPORT CARTULARIA · ${mockCartulary.publicCode}`,
+      const exportMode = downloadTextPdf(`cartularia-${cartularyPublicCode}-${date}.pdf`, [
+        `RAPPORT CARTULARIA · ${cartularyPublicCode}`,
         `${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`,
         `${tx('Référence', 'Reference')} · ${specificationValue('Numéro de référence', watch.reference.reference)}`,
         `${tx('Date du rapport', 'Report date')} · ${date}`,
@@ -2317,7 +2177,7 @@ function App() {
         return (
           <section className="cover-sheet cover-sheet--published">
             <div className="cover-sheet__identity">
-              <span className="eyebrow">Cartulaire · {mockCartulary.publicCode}</span>
+              <span className="eyebrow">Cartulaire · {cartularyPublicCode}</span>
               <div className="cover-sheet__published-title">
                 <p>{specificationValue('Marque', watch.reference.brand)}</p>
                 <h1>{specificationValue('Modèle', watch.reference.model)}</h1>
@@ -2408,7 +2268,7 @@ function App() {
                 <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
                 <div><dt>{tx('Dernier contrôle', 'Last inspection')}</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
                 <div><dt>{tx('Référence', 'Reference')}</dt><dd>{watch.reference.reference}</dd></div>
-                <div><dt>{tx('Dossier', 'Record')}</dt><dd>{mockCartulary.publicCode}</dd></div>
+                <div><dt>{tx('Dossier', 'Record')}</dt><dd>{cartularyPublicCode}</dd></div>
               </dl>
               {mainPhoto && <MediaDownloadLink media={mainPhoto} language={language} />}
             </div>
@@ -2695,7 +2555,7 @@ function App() {
     const nextWebsitePage = activeWebsitePageIndex >= 0
       ? publishedWebsitePages[activeWebsitePageIndex + 1] ?? null
       : null;
-    const websiteCode = publicProjection?.publication.publicCode ?? mockCartulary.publicCode;
+    const websiteCode = publicProjection?.publication.publicCode ?? cartularyPublicCode;
     const websiteBrand = publicProjection?.publication.makerName ?? watch.reference.brand;
     const websiteModel = publicProjection?.publication.modelName ?? watch.reference.model;
     return (
@@ -2748,7 +2608,7 @@ function App() {
     <div className="app-shell" data-ai-schema-version={AI_SCHEMA_VERSION} data-cartulary-presentation-version={CARTULARY_PRESENTATION_CONTRACT_VERSION}>
       <a className="skip-link" href="#cartulary-content">{language === 'FR' ? 'Aller au contenu' : 'Skip to content'}</a>
       <BarreDossier
-        publicCode={mockCartulary.publicCode}
+        publicCode={cartularyPublicCode}
         brand={watch.reference.brand}
         model={watch.reference.model}
         language={language}
@@ -2796,7 +2656,7 @@ function App() {
             <section className="cover-sheet publishable-block">
               <BlockMarkers selection={publishProps('cover-watch', true)} label={tx("Accueil de l’objet", 'Object cover')} />
               <div className="cover-sheet__identity">
-                <span className="eyebrow">Cartulaire · {mockCartulary.publicCode}</span>
+                <span className="eyebrow">Cartulaire · {cartularyPublicCode}</span>
                 {editingBlock === 'cover-watch' ? (
                   <><h1 className="sr-only">{specificationValue('Marque', watch.reference.brand)} {specificationValue('Modèle', watch.reference.model)}</h1><div className="cover-sheet__identity-editor">
                     <label>{tx('Marque', 'Brand')}<input {...aiFieldProps('cover.watch.brand')} type="text" value={specificationValue('Marque', watch.reference.brand)} onChange={(event) => updateSpecificationValue('Marque', event.target.value)} /></label>
@@ -2847,9 +2707,11 @@ function App() {
             <span hidden {...aiFieldProps('cover.privacy.userAlias')}>{userAlias}</span>
             <span hidden {...aiFieldProps('cover.privacy.objectCode')}>{objectCode}</span>
 
+            <GenericSchemaPageSections page="cover" {...genericPageProps} />
         </CoverPage>
 
         <MediaPage active={activePage === 'media'}>
+            {schemaHas('media.hero') && (
             <section className="watch-hero publishable-block">
               <BlockMarkers selection={publishProps('media-hero', true)} label={tx('Présentation principale', 'Main presentation')} />
               <button
@@ -2880,10 +2742,11 @@ function App() {
                   <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
                   <div><dt>{tx('Dernier contrôle', 'Last inspection')}</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
                   <div><dt>{tx('Valeur retenue', 'Retained value')}</dt><dd>{canEdit ? formatMoney(retainedValuation.amount, watch.currency) : tx('ACCÈS RESTREINT', 'RESTRICTED ACCESS')}</dd></div>
-                  <div><dt>{tx('Dossier', 'Record')}</dt><dd>{mockCartulary.publicCode}</dd></div>
+                  <div><dt>{tx('Dossier', 'Record')}</dt><dd>{cartularyPublicCode}</dd></div>
                 </dl>
               </div>
             </section>
+            )}
 
             <section className="media-wide-section">
               <SectionTitle eyebrow={tx('02 · Vidéo principale', '02 · Main video')} title={tx("L’objet en mouvement", 'The object in motion')} publish={publishProps('media-motion')} />
@@ -2971,21 +2834,19 @@ function App() {
                 </div>
               </section>
             )}
+            <GenericSchemaPageSections page="media" {...genericPageProps} />
         </MediaPage>
 
         <ReferencePage active={activePage === 'reference'}>
             <PageIntroduction number="02" title={tx('Caractéristiques générales', 'General characteristics')} />
 
+            {schemaHas('reference.origins') && (
             <section>
               <SectionTitle eyebrow={tx('La référence', 'The reference')} title={tx('Origines', 'Origins')} publish={publishProps('reference-history', true)} />
               <div className="reference-story-grid">
                 <article className="editorial-card editorial-card--large">
                 <span className="eyebrow">{tx('Historique du modèle', 'Model history')}</span>
-                <h2>{isRolexCartulary
-                  ? 'La référence qui a défini la GMT vintage'
-                  : isIwcCartulary
-                    ? 'Une montre de pilote pensée pour voyager'
-                    : `Histoire de la référence ${creationReference}`}</h2>
+                <h2>{editableCopy.originTitle || `Histoire de la référence ${watch.reference.reference}`}</h2>
                 <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={() => canEdit && setEditingBlock('reference-history')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
                 </article>
                 <aside className="quote-card">
@@ -2994,7 +2855,9 @@ function App() {
                 </aside>
               </div>
             </section>
+            )}
 
+            {schemaHas('reference.specifications') && (
             <section>
               <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} publish={publishProps('reference-specs')} />
               <div className="specification-groups">
@@ -3019,7 +2882,9 @@ function App() {
                 ))}
               </div>
             </section>
+            )}
 
+            {schemaHas('reference.checks') && (
             <section>
               <div className="section-heading-row">
                 <SectionTitle eyebrow={tx('Identification', 'Identification')} title={tx('Points à contrôler', 'Inspection points')} />
@@ -3070,7 +2935,9 @@ function App() {
               )}
               <p className="method-note">{tx('Le Sceau public identifie une publication émise par le serveur. La chaîne serveur se vérifie dans « Preuves ». Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert.', 'The public Seal identifies a server-issued publication. The server chain is checked under “Proofs”. Neither indicator replaces a physical examination or an expert opinion.')}</p>
             </section>
+            )}
 
+            {schemaHas('reference.popularity') && (
             <section>
               <SectionTitle eyebrow={tx('Communauté et ressources', 'Community and resources')} title={tx('Popularité du modèle', 'Model popularity')} publish={publishProps('reference-popularity')} />
               <div className="popularity-resources">
@@ -3108,6 +2975,7 @@ function App() {
                 <button type="button" className="button button--quiet no-print" onClick={() => setPopularityResources((current) => [...current, { id: newId('popularity'), name: '', type: 'Communauté', url: '' }])}><Plus size={14} /> {tx('Ajouter un site ou forum', 'Add a website or forum')}</button>
               )}
             </section>
+            )}
 
             <section>
               <SectionTitle eyebrow={tx('Documentation externe', 'External documentation')} title={tx('Rapports sur la référence', 'Reference reports')} />
@@ -3137,6 +3005,7 @@ function App() {
                 ) : <p className="storage-empty">{tx('Aucun rapport chargé.', 'No report uploaded.')}</p>}
               </article>
             </section>
+            <GenericSchemaPageSections page="reference" {...genericPageProps} />
         </ReferencePage>
 
         <ConditionPage active={activePage === 'condition'}>
@@ -3221,6 +3090,7 @@ function App() {
 
             {showCompleteContent ? (
               <>
+                {schemaHas('condition.description') && (
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx("Description de l’objet", 'Object description')} publish={publishProps('condition-description', true)} />
                   <article className="watch-description-card">
@@ -3228,7 +3098,9 @@ function App() {
                     <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance prise en compte', 'Provenance considered')}</strong><p>{ownershipSummary}</p></aside>
                   </article>
                 </section>
+                )}
 
+                {schemaHas('condition.summary') && (
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx('État actuel', 'Current condition')} publish={publishProps('condition-summary', true)} />
                   <article className="current-condition-summary">
@@ -3240,7 +3112,9 @@ function App() {
                     </dl>
                   </article>
                 </section>
+                )}
 
+                {schemaHas('condition.documentation') && (
                 <section>
                   <SectionTitle eyebrow={tx('Ensemble associé', 'Associated set')} title={tx('Papiers, documentation et accessoires', 'Papers, documentation and accessories')} publish={publishProps('condition-documentation')} />
                   <div className="documentation-register">
@@ -3289,7 +3163,9 @@ function App() {
                     )}
                   </div>
                 </section>
+                )}
 
+                {schemaHas('condition.reports') && (
                 <section>
                   <SectionTitle eyebrow={tx('Rapports et notes', 'Reports and notes')} title={tx("Rapport sur l’état de l’objet", 'Object condition report')} />
                   <div className="condition-layout">
@@ -3356,6 +3232,7 @@ function App() {
                     )}
                   </div>
                 </section>
+                )}
               </>
             ) : (
               <AccessRestricted title={tx("Rapports et notes de l’objet", 'Object reports and notes')} language={language} />
@@ -3396,13 +3273,14 @@ function App() {
               </section>
             )}
             </fieldset>
+            <GenericSchemaPageSections page="condition" {...genericPageProps} />
         </ConditionPage>
 
         <ValuePage active={activePage === 'value'}>
             <PageIntroduction number="04" title={tx('Valorisation', 'Valuation')} />
             <fieldset className="cartulary-readonly-scope" disabled={!canEdit}>
 
-            {showCompleteContent ? (
+            {!schemaHas('value.market_depth') ? null : showCompleteContent ? (
               <section>
                 <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} publish={publishProps('value-market')} />
                 <div className="market-grid">
@@ -3472,7 +3350,7 @@ function App() {
               <AccessRestricted title={tx('Analyse de marché', 'Market analysis')} language={language} />
             )}
 
-            {showCompleteContent && (
+            {showCompleteContent && schemaHas('value.comparables') && (
               <section>
                 <SectionTitle eyebrow={tx('Analyse de marché', 'Market analysis')} title={tx('Comparables', 'Comparable items')} />
                 <div className="comparable-groups">
@@ -3501,7 +3379,7 @@ function App() {
               </section>
             )}
 
-            {showCompleteContent && (
+            {showCompleteContent && schemaHas('value.cost_basis') && (
               <section>
                 <SectionTitle eyebrow={tx('Acquisition', 'Acquisition')} title={tx('Prix de revient', 'Cost basis')} publish={publishProps('value-cost-basis')} />
                 <div className="cost-basis-card">
@@ -3537,7 +3415,7 @@ function App() {
               </section>
             )}
 
-            {showCompleteContent && (
+            {showCompleteContent && schemaHas('value.performance') && (
               <section>
                 <SectionTitle eyebrow={tx('Performance de détention', 'Holding performance')} title={tx('Plus-value, moins-value et TRI', 'Capital gain, loss and IRR')} publish={publishProps('value-performance')} />
                 <div className="performance-card">
@@ -3565,7 +3443,7 @@ function App() {
               </section>
             )}
 
-            {showCompleteContent && (
+            {showCompleteContent && schemaHas('value.sensitivity') && (
               <section>
                 <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} publish={publishProps('value-sensitivity')} />
                 <div {...aiFieldProps('value.computed.sensitivity')} className="sensitivity-stack">
@@ -3607,6 +3485,7 @@ function App() {
               </section>
             )}
             </fieldset>
+            <GenericSchemaPageSections page="value" {...genericPageProps} />
         </ValuePage>
 
         <PublicationPage active={activePage === 'publication'}>
@@ -3698,6 +3577,7 @@ function App() {
               {renderPublicationBlockSelector('report', reportBlocks)}
             </article>
           </div>
+            <GenericSchemaPageSections page="publication" {...genericPageProps} />
         </PublicationPage>
 
         <nav className="page-turner no-print" aria-label={language === 'FR' ? 'Navigation entre les pages' : 'Page navigation'}>
@@ -3721,14 +3601,14 @@ function App() {
       </main>
 
       <footer className="editorial-footer">
-        <div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Cartulaire {mockCartulary.publicCode}</span></span><span>Prototype v2.1 · 2026</span></div>
+        <div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Cartulaire {cartularyPublicCode}</span></span><span>Prototype v2.1 · 2026</span></div>
       </footer>
 
       {orderedReportBlocks.length > 0 && reportPreparation.active && (
         <div className="report-print-view" key={reportPreparation.attempt}>
           <header className="report-print-view__header">
             <BrandLogo className="report-print-view__logo" variant="monochrome" />
-            <span className="eyebrow">{tx('Rapport Cartularia', 'Cartularia report')} · {mockCartulary.publicCode}</span>
+            <span className="eyebrow">{tx('Rapport Cartularia', 'Cartularia report')} · {cartularyPublicCode}</span>
             <h1>{specificationValue('Marque', watch.reference.brand)}<br />{specificationValue('Modèle', watch.reference.model)}</h1>
             <dl>
               <div><dt>{tx('Référence', 'Reference')}</dt><dd>{specificationValue('Numéro de référence', watch.reference.reference)}</dd></div>
@@ -3770,7 +3650,7 @@ function App() {
               </section>
             ))}
           </main>
-          <footer><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>{tx('Rapport généré depuis le Cartulaire', 'Report generated from the Cartulary')}</span></span><span>{mockCartulary.publicCode}</span></footer>
+          <footer><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>{tx('Rapport généré depuis le Cartulaire', 'Report generated from the Cartulary')}</span></span><span>{cartularyPublicCode}</span></footer>
         </div>
       )}
 

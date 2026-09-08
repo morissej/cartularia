@@ -6,7 +6,6 @@ import {
   CARTULARY_PRESENTATION_CONTRACT_VERSION,
   COMMON_CARTULARY_STRUCTURE,
   cartularyPageDefinitions,
-  cartularyPageForSchemaSection,
 } from '../features/cartulary/presentation/cartularyPresentationContract.ts';
 import { cartularyPageFromHash, type CartularyPage } from '../utils/interfaceState.ts';
 import { BrandLogo } from './BrandLogo';
@@ -15,7 +14,6 @@ import type { Asset } from '../types';
 import type { RegistryItemProjection } from '../domain/projections.ts';
 import type { RegistryFollowUpItem } from '../domain/followUp.ts';
 import { RegistryTodoBoard } from '../features/registry/RegistryTodoBoard';
-import { genericFieldGroupIsEditable, validateGenericFieldValue } from '../../scripts/lib/generic-editing-policy.mjs';
 import { schemaSectionLabel } from '../schema/schemaLabels.ts';
 import { assetTypeLabel, LIFECYCLE_LABELS } from '../features/registry/registryPresentation.ts';
 import { PrivateMediaImage } from './PrivateMediaImage';
@@ -26,7 +24,9 @@ import { GenericCartularyPrintSummary } from './GenericCartularyPrintSummary';
 import { PUBLICATION_BLOCK_CATALOG } from '../domain/publication';
 import { buildWebsiteDraft, websiteDraftRequest } from '../domain/websiteDraft';
 import { confirmUnsavedNavigation, useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
-import { GenericRepeatedFields } from './GenericRepeatedFields';
+import { GenericSchemaSection } from './GenericSchemaSection';
+import { emptySchemaSection, schemaSectionsForPage } from '../schema/schemaSections.ts';
+import { useGenericSectionEdits } from '../features/cartulary/state/useGenericSectionEdits';
 import { GenericMediaEditor } from './GenericMediaEditor';
 import type { GenericMediaMutation } from '../services/genericCartulary';
 import type { WebsitePublicationState } from '../services/websitePublication';
@@ -54,11 +54,9 @@ interface GenericCartularyViewProps {
 
 export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionName, canManage = false, canPublish = false, assets = [], mediaError = false, registryItem, todos = [], followUpState = 'ready', onRetryFollowUp, onSave, onSaveMedia, onUploadMedia, onRetryMedia, onPublicationChanged }: GenericCartularyViewProps) => {
   const [activePage, setActivePage] = useState<CartularyPage>(() => cartularyPageFromHash(window.location.hash));
-  const [editing, setEditing] = useState(false);
-  const [edits, setEdits] = useState<Record<string, unknown>>({});
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
+  const sectionEdits = useGenericSectionEdits({ schema, onSave, canManage });
+  const { editing, edits, saving, notice, error, hasEdits } = sectionEdits;
+  const [publicationError, setPublicationError] = useState('');
   const [publicationSelection, setPublicationSelection] = useState<string[]>([]);
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [authorizingMedia, setAuthorizingMedia] = useState(false);
@@ -76,24 +74,14 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionN
     setPublicationBaseline(next); setPublicationSelection(next.blocks); setSelectedMediaIds(next.media);
   };
   const busy = saving || authorizingMedia || publicationBusy;
-  const { confirmDiscard } = useUnsavedChangesGuard(busy || publicationDirty || Object.keys(edits).length > 0, { busy, onDiscard: () => { setEdits({}); setEditing(false); setError(''); resetPublicationSelection(); } });
-  const fieldIsEditable = (field: VerticalSchema['fields'][number] | undefined) => genericFieldGroupIsEditable(field, schema.fields);
+  const { confirmDiscard } = useUnsavedChangesGuard(busy || publicationDirty || hasEdits, { busy, onDiscard: () => { sectionEdits.reset(); resetPublicationSelection(); } });
   const pages = cartularyPageDefinitions('FR');
   const ownershipSectionId = 'cover.ownership_history';
   const exposesOwnershipHistory = schema.sections.includes(ownershipSectionId);
   const hasOwnershipSection = snapshot.sections.some((section) => section.schemaSectionId === ownershipSectionId);
   const sections = useMemo(() => exposesOwnershipHistory && !hasOwnershipSection
-    ? [{
-        id: 'ownership.history',
-        schemaSectionId: ownershipSectionId,
-        schemaVersion: `${schema.schemaId}@${schema.version}`,
-        title: "Historique de l'objet - Propriétaires précédents",
-        visibility: 'secret' as const,
-        status: 'imported_unreviewed' as const,
-        fields: {},
-        revision: 1 as const,
-      }, ...snapshot.sections]
-    : snapshot.sections, [exposesOwnershipHistory, hasOwnershipSection, schema.schemaId, schema.version, snapshot.sections]);
+    ? [emptySchemaSection(schema, ownershipSectionId, 'ownership.history', "Historique de l'objet - Propriétaires précédents"), ...snapshot.sections]
+    : snapshot.sections, [exposesOwnershipHistory, hasOwnershipSection, schema, snapshot.sections]);
 
   useEffect(() => {
     const updatePage = () => setActivePage(cartularyPageFromHash(window.location.hash));
@@ -101,12 +89,8 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionN
     return () => window.removeEventListener('hashchange', updatePage);
   }, []);
 
-  const visibleSections = useMemo(() => sections.filter((section) => (
-    cartularyPageForSchemaSection(section.schemaSectionId) === activePage
-  )), [activePage, sections]);
-  const displayedSections = [...visibleSections, ...schema.sections.filter((id) => editing && cartularyPageForSchemaSection(id) === activePage
-    && !sections.some((section) => section.schemaSectionId === id) && schema.fields.some((field) => field.sectionId === id && fieldIsEditable(field)))
-    .map((id) => ({ id, schemaSectionId: id, schemaVersion: `${schema.schemaId}@${schema.version}`, title: schemaSectionLabel(id), visibility: 'secret' as const, status: 'imported_unreviewed' as const, fields: {}, revision: 1 as const }))];
+  const visibleSections = useMemo(() => schemaSectionsForPage({ sections, schema, page: activePage, editing: false }), [activePage, schema, sections]);
+  const displayedSections = schemaSectionsForPage({ sections, schema, page: activePage, editing });
   const missingCommonSections = COMMON_CARTULARY_STRUCTURE.filter((definition) => (
     definition.page === activePage
     && !sections.some((section) => section.schemaSectionId === definition.id)
@@ -114,21 +98,10 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionN
 
   const navigateTo = (page: CartularyPage) => {
     if (!confirmUnsavedNavigation()) return;
-    setEditing(false); setEdits({}); setError(''); setNotice('');
+    sectionEdits.reset(); sectionEdits.clearMessages(); setPublicationError('');
     window.location.hash = page;
     setActivePage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  const save = async () => {
-    if (!onSave || !canManage || saving) return;
-    setSaving(true); setError(''); setNotice('');
-    try {
-      const values = Object.entries(edits).map(([fieldId, value]) => ({ fieldId, value: validateGenericFieldValue(schema.fields.find((field) => field.fieldId === fieldId), value) }));
-      if (!values.length) { setEditing(false); return; }
-      await onSave(values);
-      setEdits({}); setEditing(false); setNotice('Modifications enregistrées dans le Cartulaire et son Registre.');
-    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Enregistrement impossible. Votre saisie est conservée.'); }
-    finally { setSaving(false); }
   };
   const publicationDraft = useMemo(() => buildWebsiteDraft({ brand: snapshot.envelope.makerName, model: snapshot.envelope.modelName, reference: snapshot.envelope.referenceCode || '', assets: assets.filter((asset) => selectedMediaIds.includes(asset.id)),
     specifications: snapshot.sections.map((section) => ({ title: schemaSectionLabel(section.schemaSectionId), items: buildGenericFieldRows(section, schema)
@@ -141,9 +114,9 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionN
     if (!selected) { setSelectedMediaIds((current) => current.filter((id) => id !== asset.id)); return; }
     if (asset.visibility !== 'Tous') {
       if (!onSaveMedia || !window.confirm(`Autoriser « ${asset.name} » à être sélectionné pour le public ? L’autorisation sera enregistrée. L’original restera privé et la mise en ligne exigera encore votre confirmation.`)) return;
-      setAuthorizingMedia(true); setError('');
+      setAuthorizingMedia(true); setPublicationError('');
       try { await onSaveMedia({ changes: [{ id: asset.id, visibility: 'Tous' }], removeIds: [], confirmedPublicIds: [asset.id] }); }
-      catch (failure) { setError(failure instanceof Error ? failure.message : 'Autorisation non enregistrée. Le média reste non sélectionné.'); return; }
+      catch (failure) { setPublicationError(failure instanceof Error ? failure.message : 'Autorisation non enregistrée. Le média reste non sélectionné.'); return; }
       finally { setAuthorizingMedia(false); }
     }
     setSelectedMediaIds((current) => [...new Set([...current, asset.id])]);
@@ -177,10 +150,10 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionN
 
       <main className="generic-cartulary__sections">
         {canManage && onSave && !['media', 'publication'].includes(activePage) && <div className="generic-cartulary__edit-actions">
-          {!editing ? <button type="button" className="button button--primary" onClick={() => setEditing(true)}>Modifier les informations</button>
-            : <><button type="button" className="button button--primary" disabled={saving || !Object.keys(edits).length} onClick={() => void save()}>{saving ? 'Enregistrement en cours…' : 'Enregistrer'}</button><button type="button" className="button button--quiet" disabled={saving} onClick={() => { if (confirmDiscard()) { setEditing(false); setEdits({}); setError(''); } }}>Annuler</button><p>Les champs calculés et système restent en lecture seule. Les informations personnelles se gèrent dans le Coffre, séparément. Le profil {schema.schemaId}@{schema.version} est conservé.</p></>}
+          {!editing ? <button type="button" className="button button--primary" onClick={sectionEdits.start}>Modifier les informations</button>
+            : <><button type="button" className="button button--primary" disabled={saving || !hasEdits} onClick={() => void sectionEdits.save()}>{saving ? 'Enregistrement en cours…' : 'Enregistrer'}</button><button type="button" className="button button--quiet" disabled={saving} onClick={() => { if (confirmDiscard()) sectionEdits.reset(); }}>Annuler</button><p>Les champs calculés et système restent en lecture seule. Les informations personnelles se gèrent dans le Coffre, séparément. Le profil {schema.schemaId}@{schema.version} est conservé.</p></>}
         </div>}
-        {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
+        {error && <p role="alert">{error}</p>}{publicationError && <p role="alert">{publicationError}</p>}{notice && <p role="status">{notice}</p>}
         {activePage === 'cover' && (
           <section className="generic-section generic-section--common">
             <header><div><span className="eyebrow">Structure commune</span><h2>Collection</h2></div></header>
@@ -209,45 +182,9 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionN
           <WebsiteDraftWarnings blocks={publicationDraft} />
           <PublicWebsitePublicationPanel cartularyId={snapshot.envelope.id} blocks={publicationBlocks} onSelectionLoaded={hydratePublication} onStateChanged={(state) => { hydratePublication(state, true); onPublicationChanged?.(); }} onBusyChange={setPublicationBusy} publishingDisabled={authorizingMedia || mediaError || unavailableSelectedMedia || publicationSelection.some((id) => !['cover-watch', 'reference-specs', 'media-library'].includes(id))} readOnly={!canPublish} />
         </section>}
-        {displayedSections.map((section) => {
-          const rows = buildGenericFieldRows(section, schema);
-          const repeatedFields = schema.fields.filter((field) => field.sectionId === section.schemaSectionId && field.cardinality === 'repeatable' && fieldIsEditable(field));
-          const repeatedGroups = [...new Set(repeatedFields.map((field) => field.fieldId.split('[]')[0]))].map((prefix) => repeatedFields.filter((field) => field.fieldId.split('[]')[0] === prefix));
-          if (editing) for (const field of schema.fields.filter((field) => field.sectionId === section.schemaSectionId && fieldIsEditable(field))) {
-            if (!rows.some((row) => row.fieldId === field.fieldId)) rows.push({ fieldId: field.fieldId, label: field.label, value: null, proofStatus: null, visibility: 'secret', knownBySchema: true, source: 'fields' });
-          }
-          return (
-            <section key={section.id} className="generic-section">
-              <header>
-                <div><h2>{schemaSectionLabel(section.schemaSectionId) === section.schemaSectionId ? section.title : schemaSectionLabel(section.schemaSectionId)}</h2></div>
-                <span className="generic-section__status">Déclarations à vérifier</span>
-              </header>
-              {rows.length ? (
-                <dl className="generic-field-list">
-                  {rows.filter((row) => !repeatedFields.some((field) => field.fieldId === row.fieldId)).map((row) => {
-                    const field = schema.fields.find((candidate) => candidate.fieldId === row.fieldId);
-                    const value = Object.hasOwn(edits, row.fieldId) ? edits[row.fieldId] : row.value;
-                    const editable = editing && fieldIsEditable(field);
-                    const inputId = `generic-field-${row.fieldId}`;
-                    const change = (next: unknown) => setEdits((current) => ({ ...current, [row.fieldId]: next }));
-                    return (
-                    <div key={`${row.source}:${row.fieldId}`} className={!row.knownBySchema ? 'is-unknown' : undefined}>
-                      <dt>{editable ? <label htmlFor={inputId}>{row.label}{field?.required ? ' *' : ''}</label> : row.label}{!row.knownBySchema && <small>Information complémentaire importée</small>}</dt>
-                      <dd>{!editable ? formatGenericValue(row.value) : field!.dataType === 'boolean' ? <select id={inputId} value={value === null ? '' : String(value)} disabled={saving} onChange={(event) => change(event.target.value === '' ? null : event.target.value === 'true')}><option value="">Non renseigné</option><option value="true">Oui</option><option value="false">Non</option></select>
-                        : field!.dataType === 'enum' && field!.allowedValues?.length ? <select id={inputId} value={String(value ?? '')} disabled={saving} onChange={(event) => change(event.target.value)}><option value="">Non renseigné</option>{field!.allowedValues.map((option) => <option key={option}>{option}</option>)}</select>
-                        : field!.dataType === 'money' ? <div><input id={inputId} type="number" min="0" step="any" disabled={saving} value={String((value as { amount?: number })?.amount ?? '')} onChange={(event) => change(event.target.value === '' ? null : { amount: Number(event.target.value), currency: (value as { currency?: string })?.currency || 'EUR' })} /><span>{(value as { currency?: string })?.currency || 'EUR'}</span></div>
-                        : field!.dataType === 'long_text' ? <textarea id={inputId} value={String(value ?? '')} disabled={saving} maxLength={10000} onChange={(event) => change(event.target.value)} />
-                        : <input id={inputId} type={['number', 'percentage'].includes(field!.dataType) ? 'number' : field!.dataType === 'date' ? 'date' : field!.dataType === 'url' ? 'url' : 'text'} value={String(value ?? '')} disabled={saving} maxLength={1000} onChange={(event) => change(['number', 'percentage'].includes(field!.dataType) ? event.target.value === '' ? null : Number(event.target.value) : event.target.value)} />}</dd>
-                      <span>{editable ? 'Déclaration privée · validation à l’enregistrement' : 'Donnée privée · provenance conservée'}</span>
-                    </div>
-                  ); })}
-                </dl>
-              ) : <p className="generic-section__empty">Aucune valeur dans cette section.</p>}
-              {repeatedGroups.map((fields) => <GenericRepeatedFields key={fields[0].fieldId} fields={fields} values={Object.fromEntries(fields.map((field) => [field.fieldId, Object.hasOwn(edits, field.fieldId) ? edits[field.fieldId] : rows.find((row) => row.fieldId === field.fieldId)?.value]))} editing={editing} busy={saving} onChange={(next) => setEdits((current) => ({ ...current, ...next }))} />)}
-              {editing && schema.fields.some((field) => field.sectionId === section.schemaSectionId && field.cardinality === 'repeatable' && !fieldIsEditable(field)) && <p>Les listes contenant des pièces jointes, des montants composés ou des informations personnelles restent en lecture seule dans cet écran. Leurs données existantes sont conservées.</p>}
-            </section>
-          );
-        })}
+        {displayedSections.map((section) => (
+          <GenericSchemaSection key={section.id} section={section} schema={schema} editing={editing} edits={edits} saving={saving} onChange={sectionEdits.change} />
+        ))}
         {activePage === 'publication' && <GenericCartularyPrintSummary snapshot={snapshot} schema={schema} assets={assets} />}
         {missingCommonSections.filter((definition) => !['cover.collection', 'cover.todos', 'publication.cartulary', 'publication.report'].includes(definition.id)).map((definition) => (
           <section key={definition.id} className="generic-section generic-section--common">

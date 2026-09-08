@@ -3,6 +3,8 @@ import type { CartulariaLocalVault, LocalStateRestoreResult } from '../persisten
 
 const AUTH_STATE_TIMEOUT_MS = 3_000;
 const CLOUD_PRIME_TIMEOUT_MS = 5_000;
+// Migration datée (ADR-029) : la consolidation du dossier IWC du 29/08/2026 l'emporte une fois sur
+// la copie locale. Ce n'est pas une branche de présentation ; ne pas l'étendre à d'autres marques.
 const IWC_AUTHORITATIVE_HYDRATION_ID = 'iwc-source-dossier-2026-08-29-v1';
 const IWC_AUTHORITATIVE_STATE_KEYS = [
   'cartularia-specification-groups',
@@ -116,7 +118,8 @@ export const requiresPrivateCartularyHydration = (
 ) => {
   const parameters = new URLSearchParams(location.search);
   const requestedCartularyId = parameters.get('cartularyId');
-  return location.pathname.replace(/\/$/, '') === '/cartulary'
+  const pathname = location.pathname.replace(/\/$/, '');
+  return (pathname === '/cartulary' || pathname === '/cartulary-view')
     && parameters.get('data-deleted') !== '1'
     && !requestedCartularyId?.startsWith('cart_demo_');
 };

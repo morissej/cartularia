@@ -242,6 +242,7 @@ const publicationDecision: Normalizer = (value, fallback) => {
 };
 
 const editableCopy = partialObjectValue({
+  originTitle: stringValue,
   heroSummary: stringValue,
   originParagraphs: stringArray,
   originKnowledge: stringValue,
@@ -418,7 +419,7 @@ export const normalizeWatchCreationProfile = (value: unknown) => {
     source.profileVersion !== '1.0.0'
     || source.assetType !== 'watch'
     || source.schemaId !== 'watch'
-    || !['1.5.0', '1.6.0'].includes(String(source.schemaVersion))
+    || !/^\d+\.\d+\.\d+$/.test(String(source.schemaVersion))
   ) return null;
   return {
     ...source,

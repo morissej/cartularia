@@ -174,6 +174,7 @@ const identificationChecks = [
 ];
 
 const editableCopy = {
+  originTitle: 'Une montre de pilote pensée pour voyager',
   heroSummary: 'IWC Flieger UTC 3251-001 en acier de 39 mm, achetée neuve le 8 mars 2002. Le dossier réunit la facture d’origine, la boîte IWC, des vues d’état de 2022 et 2026, le mouvement ouvert, une vidéo et cinq analyses.',
   originParagraphs: [
     'Introduite en 1998, la Fliegeruhr UTC 3251 associe la lisibilité des montres de pilote IWC à une complication de voyage : l’heure de référence demeure sur un disque de 24 heures à 12 heures, tandis que l’heure locale se règle par sauts d’une heure sans arrêter la trotteuse.',
@@ -464,7 +465,37 @@ const ownerDocuments = records
     sha256: record.sha256,
   }));
 
+const creationProfile = {
+  profileVersion: '1.0.0',
+  assetType: 'watch',
+  schemaId: 'watch',
+  schemaVersion: '1.6.0',
+  collectionId: 'col_pilots',
+  brand: 'IWC Schaffhausen',
+  model: 'Flieger UTC (Die Fliegeruhr)',
+  reference: 'IW3251-001',
+  manufactureYear: 2002,
+  serialNumber: '2715537',
+  caliber: 'IWC 37526',
+  description: editableCopy.heroSummary,
+  conditionSummary: editableCopy.conditionFacts.conclusion,
+  purchaseDate: '2002-03-08',
+  purchasePrice: 3200,
+  currency: 'EUR',
+  seller: 'Aldebert, Paris',
+  valuationDate: '2026-08-18',
+  valuationLow: 2500,
+  valuationMid: 2900,
+  valuationHigh: 3300,
+  sourceLabel: 'Dossier source IWC consolidé le 29/08/2026',
+  assertedAt: `${UPDATE_DATE}T00:00:00.000Z`,
+};
+
 const stateValues = new Map([
+  // ADR-029 : le Cartulaire complet n'a plus de repli IWC codé ; le brouillon privé porte tout.
+  ['cartularia-creation-profile', creationProfile],
+  ['cartularia-public-code', 'OP-4892-XZ9'],
+  ['cartularia-sensitivity-prices', [3200, 3600, 4000, 4400, 4800]],
   ['cartularia-specification-groups', buildSpecificationGroups()],
   ['cartularia-identification-checks', identificationChecks],
   ['cartularia-condition-entries', conditionEntries],
