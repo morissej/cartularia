@@ -6,6 +6,8 @@ import {
   normalizeWatchCreationProfile,
   readValidatedStoredJson,
 } from '../src/persistence/storedStateValidation.ts';
+import { SUPPORTED_CREATION_PROFILES, buildCreationSpecificationGroups } from '../src/domain/cartularyCreation.ts';
+import { buildRolexDossierState } from '../src/migrations/rolexImport.ts';
 
 const storageWith = (entries) => ({
   getItem: (key) => entries[key] ?? null,
@@ -208,4 +210,55 @@ test('un profil de création valide conserve les extensions et répare les nombr
   assert.equal(normalized.purchasePrice, null);
   assert.equal(normalized.valuationMid, 23_000);
   assert.equal(normalized.futureField, 'préservé');
+});
+
+const readSpecificationGroups = (groups) => {
+  const repairs = [];
+  const value = readValidatedStoredJson({
+    storage: storageWith({ 'cartularia-specification-groups': JSON.stringify(groups) }),
+    key: 'cartularia-specification-groups',
+    fallback: null,
+    onRepair: (repair) => repairs.push(repair),
+  });
+  return { value, repairs };
+};
+
+test('les groupes de spécifications écrits à la création sont relus sans réparation', () => {
+  const groups = buildCreationSpecificationGroups(SUPPORTED_CREATION_PROFILES.watch, {
+    brand: 'Rolex',
+    model: 'GMT-Master',
+    reference: '1675',
+    manufactureYear: null,
+    caliber: '1575',
+  });
+  const { value, repairs } = readSpecificationGroups(groups);
+
+  assert.deepEqual(repairs, []);
+  assert.deepEqual(value, groups);
+  assert.deepEqual(groups.map((group) => Object.keys(group)), [['id', 'title', 'items']]);
+  assert.equal(groups[0].items.find((item) => item.id === 'year').value, '');
+});
+
+test('les groupes de spécifications du seed Rolex sont relus sans réparation', () => {
+  const groups = buildRolexDossierState().get('cartularia-specification-groups');
+  const { value, repairs } = readSpecificationGroups(groups);
+
+  assert.deepEqual(repairs, []);
+  assert.deepEqual(value, groups);
+  assert.ok(groups.every((group) => typeof group.title === 'string' && !Object.hasOwn(group, 'label')));
+});
+
+test('un groupe de spécifications hérité avec « label » reste réparable sans perdre ses valeurs', () => {
+  const legacy = [{
+    id: 'identity',
+    label: 'Identification',
+    items: [
+      { id: 'brand', label: 'Marque', value: 'Rolex' },
+      { id: 'year', label: 'Année de fabrication', value: '' },
+    ],
+  }];
+  const { value, repairs } = readSpecificationGroups(legacy);
+
+  assert.deepEqual(repairs, [{ key: 'cartularia-specification-groups', reason: 'invalid-shape' }]);
+  assert.deepEqual(value, [{ ...legacy[0], title: '' }]);
 });

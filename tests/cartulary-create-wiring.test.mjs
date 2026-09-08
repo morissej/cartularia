@@ -17,3 +17,11 @@ test('le worker local de création écoute les demandes pending et câble les de
   assert.equal(JSON.parse(packageJson).scripts['create:worker'], 'node scripts/run-cartulary-create-worker.mjs');
   assert.match(readme, /npm run create:worker/);
 });
+
+test('le service de création écrit les spécifications et le slug par les constructeurs purs du domaine', async () => {
+  const service = await readProjectFile('src/services/cartularyCreation.ts');
+  assert.match(service, /buildCreationSpecificationGroups\(definition, profile\)/);
+  assert.match(service, /slugifyCartularyLabel\(/);
+  assert.doesNotMatch(service, /label: 'Identification'/, 'le groupe de spécifications ne doit plus être écrit en ligne avec « label »');
+  assert.doesNotMatch(service, /\.slice\(0, 44\)/);
+});

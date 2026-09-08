@@ -12,7 +12,7 @@ Le plan comporte **8 vagues, de V0 à V7**. Chaque constat a une vague responsab
 
 | Vague | Résultat attendu | Constats à clôturer | Taille | Prérequis |
 |---|---|---|---|---|
-| V0 | Base saine, sécurisée et déployable | V-A2, V-B6, P-B4 + commit des ADR-028 à 031 | S | Aucun |
+| V0 | Base saine, sécurisée et déployable | V-A2, V-B6 (requalifié : sonde d’audit et garde-fou), P-B4 + commit des ADR-028 à 031 | S | Aucun |
 | V1 | Déploiement des correctifs déjà réalisés | V-A1, P-A1, P-A2 (partie), pages de service | S | V0 |
 | V2 | Démonstration cohérente avec la promesse de l’accueil | V-A3, V-A4, V-A5, V-C1, V-C2, V-C3, V-C5, V-D2 | M | V1 |
 | V3 | Médias : dérivés de présentation partout, Galerie et Catalogue utilisables | P-A3, P-A4, V-B1, V-B3, P-B2 | L | V1 |
@@ -30,9 +30,9 @@ Objectif : ne plus déployer sur une base qui échoue silencieusement.
 1. **App Check.** Diagnostiquer le 403 : clé `VITE_FIREBASE_APP_CHECK_SITE_KEY` (fournisseur reCAPTCHA Enterprise dans `src/firebase.ts`), domaine `studio-2614005370-a3e51.web.app` autorisé sur la clé, application enregistrée dans la console App Check, mode « appliqué » ou « surveillance » des fonctions. Décider si reCAPTCHA (346 ko) doit se charger sur les surfaces publiques ; sinon, ne l’initialiser qu’après connexion. Clôt V-A2.
 2. **Commit des travaux d’architecture** sur une branche dédiée (`feat/lecteur-unique-adr-028-031`), après relecture de la note de passation. Aucun code nouveau.
 3. **Environnement de recette local** : réinstaller un JDK 21 pour les émulateurs, rétablir `VITE_USE_FIREBASE_EMULATORS=true` dans `.env`, rejouer la séquence de seed avec `import:rolex`, puis `test:create`, `test:cartulary`, `test:import`, `test:live-sync`, jamais exécutés depuis les ADR-028 à 031.
-4. **Hygiène de base** : observateur de performance à jour (V-B6) ; forme de `cartularia-specification-groups` alignée entre création, seed et lecteur pour supprimer l’avertissement de réparation (P-B4) ; troncature du slug d’identifiant sur une frontière de mot (P-D5).
+4. **Hygiène de base** : V-B6 requalifié le 8 septembre 2026 : l’avertissement « Deprecated API for given entry type » venait du script de mesure de l’audit (`performance.getEntriesByType('largest-contentful-paint')` et `('layout-shift')`, refusés par Chromium hors `PerformanceObserver`), pas du site, qui n’instancie aucun observateur de performance ; livrable : sonde d’audit `scripts/lib/web-vitals-probe.mjs` (`observe({ type, buffered: true })` par type, protégé par `supportedEntryTypes`, jamais `entryTypes`) et garde-fou `tests/performance-api-hygiene.test.mjs`, à mesurer dans un onglet neuf par page ; forme de `cartularia-specification-groups` alignée entre création, seed et lecteur pour supprimer l’avertissement de réparation (P-B4) ; troncature du slug d’identifiant sur une frontière de mot (P-D5).
 
-Vérification : aucune erreur 403 en console sur accueil, démo, Registre ; `npm run test:wave8` au vert avec émulateurs ; branche poussée.
+Vérification : aucune erreur 403 en console sur accueil, démo, Registre (onglet neuf par page) ; `npm run test:performance-hygiene` au vert (sans émulateur) ; `npm run test:wave8` au vert avec émulateurs ; branche poussée.
 
 ### V1 — Déploiement des correctifs déjà réalisés
 

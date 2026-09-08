@@ -4,14 +4,97 @@ import test from 'node:test';
 import { COLLECTION_ID_PATTERN } from '../src/domain/collectionIdentifiers.ts';
 import {
   CARTULARY_CREATION_TIMEOUT_MESSAGE,
+  CARTULARY_SLUG_MAX_LENGTH,
   resumeOrCreateCartulary,
+  slugifyCartularyLabel,
 } from '../src/domain/cartularyCreation.ts';
+
+/** Regex la plus stricte rencontrée par un cartularyId côté serveur (scripts/lib/transfer-request-command.mjs). */
+const STRICTEST_SERVER_CARTULARY_ID = /^[a-z0-9][a-z0-9_-]{5,127}$/;
+/** Reproduit la concaténation de `createCartulary` (src/services/cartularyCreation.ts) avec un jeton de 12 hexadécimaux. */
+const buildCartularyId = (label) => `cart_${slugifyCartularyLabel(label) || 'objet'}_${'a'.repeat(12)}`;
 
 test('le pattern HTML de collection reste valide sous le drapeau v et rejette AB!', () => {
   const browserPattern = new RegExp(`^(?:${COLLECTION_ID_PATTERN})$`, 'v');
   assert.equal(browserPattern.test('AB!'), false);
   assert.equal(browserPattern.test('x'), false);
   assert.equal(browserPattern.test('col_divers'), true);
+});
+
+test('la limite du slug reste à 44 caractères', () => {
+  assert.equal(CARTULARY_SLUG_MAX_LENGTH, 44);
+});
+
+test('une entrée courte garde exactement l’ancien slug (accents, ponctuation, casse)', () => {
+  assert.equal(slugifyCartularyLabel('Breitling Navitimer A23322'), 'breitling_navitimer_a23322');
+  assert.equal(slugifyCartularyLabel('Émile & Cie — série n°12'), 'emile_cie_serie_n_12');
+  assert.equal(slugifyCartularyLabel('  --Rolex__Daytona--  '), 'rolex_daytona');
+  assert.equal(slugifyCartularyLabel('Citroën DS 21 Pallas'), 'citroen_ds_21_pallas');
+});
+
+test('le cas D5 est tronqué sur une frontière de mot, sans soulignement final ni double soulignement', () => {
+  const label = 'Audit Cartularia Parcours propriétaire 2026 Ref X';
+  const slug = slugifyCartularyLabel(label);
+  assert.equal(slug, 'audit_cartularia_parcours_proprietaire_2026');
+  assert.equal(slug.length, 43);
+  const cartularyId = buildCartularyId(label);
+  assert.equal(cartularyId, 'cart_audit_cartularia_parcours_proprietaire_2026_aaaaaaaaaaaa');
+  assert.doesNotMatch(cartularyId, /__/);
+  assert.match(cartularyId, STRICTEST_SERVER_CARTULARY_ID);
+});
+
+test('une coupe au milieu d’un mot recule jusqu’au séparateur précédent', () => {
+  // Normalisé : 'patek_philippe_nautilus_5711_1a_010_acier_bracelet_…' ; la limite de 44 tombe au milieu
+  // de « bracelet » (une coupe brute suivie du retrait des `_` finaux donnerait '…_acier_br').
+  const slug = slugifyCartularyLabel('Patek Philippe Nautilus 5711/1A-010 acier bracelet intégré cadran bleu');
+  assert.equal(slug, 'patek_philippe_nautilus_5711_1a_010_acier');
+  assert.equal(slugifyCartularyLabel('Audit Cartularia Parcours propriétaire 2026 documentaire'), 'audit_cartularia_parcours_proprietaire_2026');
+});
+
+test('un mot complet qui se termine exactement à la limite est conservé', () => {
+  const prefix = 'audit_cartularia_parcours_proprietaire_2026'; // 43 caractères
+  const slug = slugifyCartularyLabel(`${prefix}x suite`);
+  assert.equal(slug, `${prefix}x`);
+  assert.equal(slug.length, CARTULARY_SLUG_MAX_LENGTH);
+});
+
+test('un premier mot plus long que la limite est coupé brutalement à la limite', () => {
+  const slug = slugifyCartularyLabel('a'.repeat(50));
+  assert.equal(slug, 'a'.repeat(44));
+  const withTail = slugifyCartularyLabel(`${'b'.repeat(50)} suite`);
+  assert.equal(withTail, 'b'.repeat(44));
+  assert.doesNotMatch(buildCartularyId('a'.repeat(50)), /__/);
+});
+
+test('une entrée vide donne un slug vide et l’appelant retombe sur « objet »', () => {
+  assert.equal(slugifyCartularyLabel(''), '');
+  assert.equal(slugifyCartularyLabel('   '), '');
+  assert.equal(slugifyCartularyLabel('—&°'), '');
+  assert.equal(buildCartularyId(''), 'cart_objet_aaaaaaaaaaaa');
+});
+
+test('aucun slug ne dépasse la limite, ne finit par _ ni ne produit d’identifiant hors regex serveur', () => {
+  const labels = [
+    'Audit Cartularia Parcours propriétaire 2026 Ref X',
+    'Audit Cartularia Parcours propriétaire 2026 documentaire',
+    'Patek Philippe Nautilus 5711/1A-010 acier bracelet intégré cadran bleu',
+    `${'x'.repeat(43)} y`,
+    `${'x'.repeat(44)} y`,
+    `${'x'.repeat(45)} y`,
+    'a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc',
+    'Émile & Cie — série n°12',
+    '',
+  ];
+  for (const label of labels) {
+    const slug = slugifyCartularyLabel(label);
+    assert.ok(slug.length <= CARTULARY_SLUG_MAX_LENGTH, `${JSON.stringify(label)} → ${slug.length} caractères`);
+    assert.doesNotMatch(slug, /_$/, `${JSON.stringify(label)} → ${slug}`);
+    assert.doesNotMatch(slug, /__/, `${JSON.stringify(label)} → ${slug}`);
+    const cartularyId = buildCartularyId(label);
+    assert.doesNotMatch(cartularyId, /__/, cartularyId);
+    assert.match(cartularyId, STRICTEST_SERVER_CARTULARY_ID, cartularyId);
+    assert.ok(cartularyId.length <= 62, cartularyId);
+  }
 });
 
 test('une reprise réutilise la demande existante sans relancer la création', async () => {

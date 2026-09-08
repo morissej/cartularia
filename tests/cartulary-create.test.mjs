@@ -61,7 +61,7 @@ const seed = async () => {
   }];
   const specifications = [{
     id: 'identity',
-    label: 'Identification',
+    title: 'Identification',
     items: [
       { id: 'brand', label: 'Marque', value: 'Rolex' },
       { id: 'model', label: 'Modèle', value: 'GMT-Master Mark I Long E' },

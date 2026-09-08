@@ -14,6 +14,8 @@ import {
   CARTULARY_CREATION_TIMEOUT_MESSAGE,
   CARTULARY_CREATION_PROFILE_VERSION,
   SUPPORTED_CREATION_PROFILES,
+  buildCreationSpecificationGroups,
+  slugifyCartularyLabel,
   type CartularyCreationProfile,
   type SupportedCreationAssetType,
   type CartularyCreationMediaAsset,
@@ -76,14 +78,6 @@ const RETRYABLE_CREATION_ERROR_CODES = new Set([
   'internal',
   'unavailable',
 ]);
-
-const slugify = (value: string) => value
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, '_')
-  .replace(/^_+|_+$/g, '')
-  .slice(0, 44);
 
 const randomToken = (length = 12) => {
   const bytes = crypto.getRandomValues(new Uint8Array(Math.ceil(length / 2)));
@@ -197,7 +191,7 @@ export const createCartulary = async ({
   const definition = SUPPORTED_CREATION_PROFILES[assetType];
   if (!definition) throw new Error('Ce type d’objet n’est pas encore proposé à la création.');
   const schemaVersion = await loadCreationSchemaVersion(definition.schemaId);
-  const cartularySlug = slugify([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'objet';
+  const cartularySlug = slugifyCartularyLabel([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'objet';
   const cartularyId = `cart_${cartularySlug}_${randomToken()}`;
   const publicCode = generateCorrespondenceCode('object', profile.brand || 'WCH');
   const requestId = `create_${randomToken(28)}`;
@@ -257,17 +251,7 @@ export const createCartulary = async ({
     ...profile,
     assertedAt: new Date().toISOString(),
   };
-  const specifications = [{
-    id: 'identity',
-    label: 'Identification',
-    items: [
-      { id: 'brand', label: definition.makerLabel, value: profile.brand },
-      { id: 'model', label: 'Modèle', value: profile.model },
-      { id: 'reference', label: definition.referenceLabel, value: profile.reference },
-      { id: 'year', label: 'Année de fabrication', value: profile.manufactureYear ? String(profile.manufactureYear) : '' },
-      { id: 'caliber', label: definition.technicalLabel, value: profile.caliber },
-    ],
-  }];
+  const specifications = buildCreationSpecificationGroups(definition, profile);
 
   const writeState = (key: string, value: unknown) => setDoc(doc(draftRef, 'state', key), {
     ownerUid: user.uid,
