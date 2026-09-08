@@ -44,6 +44,8 @@ Objectif : livrer ce qui existe déjà dans le dossier de travail et qui corrige
 
 Vérification : parcours visiteur rejoué sur les liens du pied de page ; parcours propriétaire rejoué jusqu’à la publication serveur d’un mini-site de test.
 
+**Complément du 8 septembre (soir), après V1.** Trois décisions instruites (journal V1 §8) : (1) redéploiement des 15 fonctions existantes avant V2, en lots filtrés par nom, fonctions de secours exclues — lot A (synchronisation, création depuis brouillon) déployé et vérifié ; lot B (callables, téléversements) et index Firestore à décider ; (2) remontée de schéma des deux pilotes (IWC 1.3.0, Rolex 1.4.0 → 1.6.0) juste après les fonctions, simulation Rolex d’abord ; (3) objets de test : collection supprimable dans l’interface, Cartulaire de test à purger par un script Admin dédié avec simulation (aucun chemin de suppression n’existe), sans jamais utiliser « Supprimer mes données ».
+
 ### V2 — Démonstration cohérente avec la promesse de l’accueil
 
 Objectif : chaque promesse de l’accueil aboutit à un écran qui la tient.

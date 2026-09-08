@@ -79,9 +79,9 @@ Après reconnexion de Jérôme dans Chrome (session verrouillée entre-temps) :
 - Catalogue : les trois cartes ouvrent `/cartulary` (lecteur unique), aucune erreur console.
 - Page Publication de l’objet de test : le panneau serveur est présent (« Publier le mini-site »), mais désactivé avec « État de publication indisponible. Connectez-vous avec le compte propriétaire puis réessayez. » Aucun appel réseau vers une fonction : le message vient de l’échec de `getCartularyWebsiteState`.
 
-**Écart constaté.** `firebase functions:list` montre 15 fonctions en production ; le client déployé en appelle cinq qui n’existent pas : `getCartularyWebsiteState`, `publishCartularyWebsite`, `revokeCartularyWebsite`, `saveRegistryCollection`, `deleteRegistryCollection`. Le dossier de travail en définit 32 (12 fonctions de secours Registre et Coffre manquent aussi, sans appel depuis les surfaces vérifiées). Cet écart est antérieur à la journée : le bundle de production du 6 septembre appelait déjà ces fonctions (introduites entre le 21 août et le 7 septembre, commit `fe3aa90`). La publication du mini-site et la gestion des Collections étaient donc déjà inopérantes en production, ce que l’audit propriétaire du matin n’avait pas vu faute de panneau serveur dans l’ancien client.
+**Écart constaté.** `firebase functions:list` montre 15 fonctions en production ; le client déployé en appelle cinq qui n’existent pas : `getCartularyWebsiteState`, `publishCartularyWebsite`, `revokeCartularyWebsite`, `saveRegistryCollection`, `deleteRegistryCollection`. Le dossier de travail en définit 31 (11 fonctions de secours Registre et Coffre manquent aussi, sans appel depuis les surfaces vérifiées). Cet écart est antérieur à la journée : le bundle de production du 6 septembre appelait déjà ces fonctions (introduites entre le 21 août et le 7 septembre, commit `fe3aa90`). La publication du mini-site et la gestion des Collections étaient donc déjà inopérantes en production, ce que l’audit propriétaire du matin n’avait pas vu faute de panneau serveur dans l’ancien client.
 
-**Décision de Jérôme :** déployer uniquement les cinq fonctions manquantes (`firebase deploy --only functions:…`), sans toucher aux 15 existantes ni aux 12 fonctions de secours, qui exigent un compte de service dédié (`RECOVERY_RUNTIME_SERVICE_ACCOUNT`, présent dans `.env.studio-2614005370-a3e51`). Résultat : voir §6.
+**Décision de Jérôme :** déployer uniquement les cinq fonctions manquantes (`firebase deploy --only functions:…`), sans toucher aux 15 existantes ni aux 11 fonctions de secours, qui exigent un compte de service dédié (`RECOVERY_RUNTIME_SERVICE_ACCOUNT`, présent dans `.env.studio-2614005370-a3e51`). Résultat : voir §6.
 
 ## 6. Déploiement des cinq fonctions et vérification de bout en bout
 
@@ -118,3 +118,26 @@ Après reconnexion de Jérôme dans Chrome (session verrouillée entre-temps) :
 | Fonction `syncCartularyToRegistry` déployée | **En retard sur le dépôt** (montants IWC non calculés) : décision de redéploiement à prendre |
 
 V1 est close. Constats nouveaux transmis aux vagues suivantes : redéploiement des fonctions existantes (à décider), page publique après retrait (V4), verrou de session sans message (V5), objets de test à supprimer (Cartulaire `AUD-A3DA4019`, collection « Audit V1 · collection de test 2026-09-08 »).
+
+## 8. Suite de V1 : lot A des fonctions redéployé (8 septembre, soir)
+
+Décision de Jérôme après l’analyse des trois points ouverts (« lance suites émulateur », puis « Oui, déployer le lot A »).
+
+**Ce que l’analyse a établi.** Le code des 15 fonctions anciennes n’était dans aucun commit : c’était un état intermédiaire du dossier de travail (l’administration y est, la publication de mini-site non), donc `fe3aa90^` n’est pas la version déployée et le retour arrière réaliste est un redéploiement depuis `fe3aa90`. L’ancienne synchronisation ignorait les clés génériques du lecteur unique (jeton d’opération jamais posé, chaque enregistrement générique se terminant par « Une autre modification a été traitée entre-temps »), pouvait retirer médias et rappels synchronisés d’un brouillon sans clés legacy, et ne calculait pas les montants. Les fonctions de secours sont 11, non 12 (corrigé au §5).
+
+**Préalables rejoués** sur `6c466f8`, arbre propre : lint ; tests mémoire (édition et médias génériques, téléversement privé, runtime de présentation, création, comptes, administration) ; suites émulateur `test:live-sync` (4), `test:create` (27), `test:security-wave2` (33), `test:invitation` : 0 échec. `.env` ne porte que des clés `VITE_*` ; `.env.studio-2614005370-a3e51` porte les trois variables attendues. Tag local `deploy/functions-lot-a-2026-09-08` sur `6c466f8`.
+
+**Déploiement.** `firebase deploy --only functions:cartularia-sync:syncCartularyToRegistry,functions:cartularia-sync:createCartularyFromPrivateDraft` : deux mises à jour réussies, 20 fonctions en production, aucune autre touchée. Index Firestore et règles non déployés (décisions séparées) ; lot B (callables et téléversements) et lot C (horodatage, cession, ancrage) non déployés.
+
+**Vérification en production** (Chrome, compte propriétaire, objet de test `AUD-A3DA4019` seulement) :
+
+| Étape | Résultat |
+|---|---|
+| Changement du statut « Patrimonial » → « Ouvert à proposition » (mode « Modifier les informations ») | Persisté localement et poussé dans le brouillon privé |
+| Première demande de synchronisation | Bloquée côté client par un conflit sur `cartularia-external-publication-enabled` (copie locale non poussée contre version cloud) : aucune demande autoritaire émise. C’est le risque `owner_local_copy_conflict` décrit au §4, observé en vrai. Résolu par « Prendre la version cloud ». |
+| Synchronisation par la nouvelle fonction | Journal Cloud Functions : `outcome updated`, révision 11, puis `no_change` ; carte du Registre passée à « Ouvert à proposition » |
+| Retour au statut « Patrimonial » | Synchronisation automatique, `updated` révision 13 ; carte du Registre de nouveau « Patrimonial ». L’objet de test est revenu à son état antérieur (révision incrémentée). |
+| Rolex | Une synchronisation déclenchée par le lecteur propriétaire à 19 h 01 (ancienne fonction, révision 15) n’a pas altéré les montants ; contrôle `import:rolex --dry-run` : 6 inchangées, 4 conservées, 4 clés de projection conservées, brouillon en phase, montants présents. |
+| IWC | Inchangé (révision 7, sans montant) : ils apparaîtront à la prochaine synchronisation propriétaire, désormais traitée par la nouvelle fonction. |
+
+**Point d’attention pour V5.** Le conflit client sur une clé persistée au montage empêche silencieusement toute synchronisation autoritaire tant que l’utilisateur n’a pas tranché dans le panneau Preuves ; l’alerte n’apparaît qu’après une tentative de synchronisation. À traiter avec le verrou de session sans message.
