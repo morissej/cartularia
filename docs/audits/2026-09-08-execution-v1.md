@@ -167,3 +167,20 @@ GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mj
 ```
 
 Attendus : lot B, neuf « Successful update operation », toujours 20 fonctions ; remontées, `status: upgraded`, IWC révision 8, Rolex révision 16, un `auditEventId` chacun, second passage `already_current` ; purge, `TEST_CARTULARY_PURGE_APPLIED`, puis la même commande sans `--execute --confirm-test-purge` répond `alreadyPurged: true`. Contrôles ensuite : page Preuves du Registre « vérifiée » pour IWC et Rolex, Objets = 2, IWC connecté avec le bloc « Sensibilité » et sans section « Conservation », `update:iwc-profile-keys --dry-run --allow-remote` sans `schema_version_declared_differs`.
+
+## 10. Clôture avant V2 (9 septembre) : commandes lancées par Jérôme, contrôles au vert
+
+Les quatre commandes du §9 ont été lancées par Jérôme dans son terminal ; sortie relue depuis le terminal de l’application.
+
+| Commande | Résultat |
+|---|---|
+| Lot B des fonctions | Neuf « Successful update operation », « Deploy complete » ; `functions:list` : toujours 20 fonctions. |
+| Remontée IWC 1.3.0 → 1.6.0 | `upgraded`, révision 8, événement `evt_dd05185acdc4eec0a48c13d5`, 7 sections, `storage.current` retirée, 5 champs déplacés en extensions. |
+| Remontée Rolex 1.4.0 → 1.6.0 | `upgraded`, révision 16, événement `evt_17b270ee3a30705eca1e36ff`, 6 sections, 1 champ déplacé. |
+| Purge de l’objet de test | `TEST_CARTULARY_PURGE_APPLIED`, `ok` : item du Registre supprimé (`itemCount` 3 → 2), racine et 82 documents, brouillon privé et 47 documents, 7 fichiers Storage privés, demandes de création et de synchronisation, demande et reçu d’horodatage ; `publications/AUD-A3DA4019` et `seals/AUD-A3DA4019` conservés en `revoked` ; aucun fichier public résiduel. |
+
+**Contrôles en lecture seule après coup** : remontées rejouées → `ignored / already_current` pour les deux pilotes ; `update:iwc-profile-keys --dry-run` → 0 écriture, racine révision 8 en `1.6.0`, plus d’avertissement `schema_version_declared_differs` (restent `valuation_currency_switch` et `legacy_media_digest_missing`, qui disparaîtront à la prochaine synchronisation propriétaire, traitée désormais par la nouvelle fonction) ; `import:rolex --dry-run` → racine révision 16 en `watch@1.6.0`, chaîne d’audit valide (16 événements), brouillon en phase, montants présents, 6 inchangées / 4 conservées / 4 clés de projection conservées ; purge rejouée en simulation → `alreadyPurged: true`, 0 résidu, aucun bloquant.
+
+**Non refait** : contrôle visuel connecté (Objets = 2, page Preuves, IWC sans « Conservation » et avec « Sensibilité »), la session Chrome s’étant de nouveau verrouillée ; à faire en ouverture de V2, où la session propriétaire sera de toute façon nécessaire.
+
+**État en entrée de V2** : Hosting à jour ; 20 fonctions dont 16 depuis `6c466f8` (les quatre du lot C, sans changement fonctionnel, restent sur l’ancienne version) ; index déployés ; règles Firestore et Storage non déployées (décision séparée, diff plus large) ; fonctions de secours non déployées (décision séparée) ; les deux pilotes en `watch@1.6.0` ; aucun objet de test résiduel hors publication et sceau révoqués.
