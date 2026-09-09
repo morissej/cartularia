@@ -141,3 +141,29 @@ Décision de Jérôme après l’analyse des trois points ouverts (« lance suit
 | IWC | Inchangé (révision 7, sans montant) : ils apparaîtront à la prochaine synchronisation propriétaire, désormais traitée par la nouvelle fonction. |
 
 **Point d’attention pour V5.** Le conflit client sur une clé persistée au montage empêche silencieusement toute synchronisation autoritaire tant que l’utilisateur n’a pas tranché dans le panneau Preuves ; l’alerte n’apparaît qu’après une tentative de synchronisation. À traiter avec le verrou de session sans message.
+
+## 9. Reste avant V2 (9 septembre, matin) : fait, simulé, et ce qui attend une exécution manuelle
+
+Décision de Jérôme : « lance tout ce qui reste avant V2 ». État à la fin de la session :
+
+| Point | État |
+|---|---|
+| Index Firestore (deux index composites de `firestore.indexes.json`) | **Déployés** (`firebase deploy --only firestore:indexes`, règles compilées sans erreur, non déployées). |
+| Lot B des fonctions (activation de compte, invitations, administration, vérification des téléversements) | Suites au vert la veille ; **déploiement refusé par le classificateur de sécurité de l'assistant** (trois formes de commande) : à lancer par Jérôme, commandes ci-dessous. |
+| Remontée de schéma Rolex | Simulation faite : 1.4.0 → 1.6.0, aucune section retirée, un champ déplacé en extension (`cover.asset.type`, écart d'import préexistant), six sections. |
+| Remontée de schéma IWC et Rolex (réelle) | **Refusée par le classificateur** ; à lancer par Jérôme, hors session propriétaire ouverte sur ces objets. |
+| Collection de test « Audit V1 · collection de test 2026-09-08 » | **Supprimée** dans l'interface (session propriétaire), « Pilots » intacte. |
+| Script de purge de l'objet de test | **Écrit, testé, relu** : `scripts/lib/test-cartulary-purge-command.mjs`, `scripts/purge-test-cartulary.mjs`, `tests/test-cartulary-purge.test.mjs` (32 tests en mémoire, deux tours de relecture contradictoire, plus aucun point bloquant ; garde `--expect-owner` durcie ensuite pour une racine absente). Simulation par défaut ; exécution avec `--execute --confirm-test-purge` ; liste blanche `cart_audit_*`/`cart_test_*`, refus explicite d'IWC, Rolex et démo ; item du Registre et `itemCount` traités avant la racine ; publication et sceau révoqués conservés sans `--purge-publication`. |
+| Simulation de purge en production (lecture seule) | Faite : plan `ok`, aucun bloquant, propriétaire et code public confirmés ; inventaire : racine révision 13 (4 médias, 13 événements d'audit, 5 reçus de commande, état vivant), item du Registre actif (`itemCount` 3 → 2), brouillon privé 42 clés et 4 binaires, 7 fichiers Storage privés, aucun fichier public résiduel, demandes traitées, un reçu d'horodatage, publication et sceau `revoked` conservés, aucune référence d'ancrage, d'export ni de communauté. Deux avertissements attendus `collection_group_fallback` (aucun index de groupe sur `cartularyId` : parcours explicite). |
+| Exécution de la purge | **Refusée par le classificateur** ; à lancer par Jérôme, commande ci-dessous. |
+
+**Commandes à lancer par Jérôme**, depuis `04_Application/Prototype Antigravity`, dans cet ordre, avec la session Firebase CLI :
+
+```bash
+./node_modules/.bin/firebase deploy --only functions:cartularia-sync:activateRegistryAccount,functions:cartularia-sync:createRegistryInvitation,functions:cartularia-sync:acceptRegistryInvitationLink,functions:cartularia-sync:revokeRegistryInvitationLink,functions:cartularia-sync:getAdministrationOverview,functions:cartularia-sync:getAdministrationUserDashboard,functions:cartularia-sync:setAdministrationUserState,functions:cartularia-sync:verifyPrivateDraftUpload,functions:cartularia-sync:verifyPrivateDraftBacklogDaily --project studio-2614005370-a3e51 --non-interactive
+GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/upgrade-cartulary-schema.mjs --cartulary cart_iwc_flieger_utc_2002 --target 1.6.0 --allow-remote
+GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/upgrade-cartulary-schema.mjs --cartulary cart_rolex_gmt_master_mark_i_long_e_1675_642cf3adba60 --target 1.6.0 --allow-remote
+GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/purge-test-cartulary.mjs --cartulary cart_audit_cartularia_parcours_proprietaire_2026__d2adb72533ad --expect-public-code AUD-A3DA4019 --expect-owner wave1-owner --allow-remote --execute --confirm-test-purge
+```
+
+Attendus : lot B, neuf « Successful update operation », toujours 20 fonctions ; remontées, `status: upgraded`, IWC révision 8, Rolex révision 16, un `auditEventId` chacun, second passage `already_current` ; purge, `TEST_CARTULARY_PURGE_APPLIED`, puis la même commande sans `--execute --confirm-test-purge` répond `alreadyPurged: true`. Contrôles ensuite : page Preuves du Registre « vérifiée » pour IWC et Rolex, Objets = 2, IWC connecté avec le bloc « Sensibilité » et sans section « Conservation », `update:iwc-profile-keys --dry-run --allow-remote` sans `schema_version_declared_differs`.
