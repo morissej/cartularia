@@ -8,7 +8,6 @@ import { BrandLogo } from './BrandLogo';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import type { RemovedItem } from '../utils/undoableDeletion';
 import type { CartularyFollowUpController } from '../features/cartulary/state/useCartularyFollowUp';
-import { isRegistryReturnPath } from '../features/registry/registryCatalog';
 
 type TodoItem = CartularyFollowUpTodo;
 
@@ -20,6 +19,8 @@ interface BarreDossierProps {
   setLanguage: (lang: 'FR' | 'EN') => void;
   followUp: CartularyFollowUpController;
   readOnly?: boolean;
+  /** Cible du logo, décidée par App.tsx via resolveRegistryReturn (une seule règle de retour). */
+  returnHref?: string;
 }
 
 export const BarreDossier: React.FC<BarreDossierProps> = ({
@@ -30,6 +31,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
   setLanguage,
   followUp,
   readOnly = false,
+  returnHref = '/registry',
 }) => {
   const { todos, syncError: todoSyncError, addTodo: addFollowUpTodo, updateTodo, removeTodo, restoreTodo } = followUp;
   const [isTodoOpen, setIsTodoOpen] = useState(false);
@@ -147,7 +149,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
       }}>
         {/* Logo / Nom du Service */}
         <div className="dossier-bar__logo">
-          <BrandLogo href={(() => { const candidate = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('returnTo') : null; return isRegistryReturnPath(candidate) ? candidate : '/registry'; })()} />
+          <BrandLogo href={returnHref} />
         </div>
 
         {/* Identité de l’objet (centrée) */}

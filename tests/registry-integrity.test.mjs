@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import {
   computeRegistryAuditEventHash,
   verifyRegistryAuditChain,
 } from '../src/utils/auditChain.ts';
+import { REGISTRY_AUDIT_ACTION_LABELS, auditActionLabel } from '../src/features/registry/registryIntegrity.ts';
 
 const ZERO_HASH = `sha256:${'0'.repeat(64)}`;
 
@@ -43,4 +45,21 @@ test('une altération reste détectable sans réécrire le journal', async () =>
   assert.equal(result.valid, false);
   assert.ok(result.errors.some((error) => error.startsWith('event_hash:')));
   assert.equal(altered.hash, first.hash);
+});
+
+test('la page Preuves du Registre démo rend en français chaque action écrite par les scripts démo', () => {
+  assert.equal(auditActionLabel('cartulary.demo.created'), 'Cartulaire de démonstration créé');
+  assert.equal(auditActionLabel('cartulary.demo.data_repaired'), 'Données de démonstration réparées');
+  assert.equal(auditActionLabel('cartulary.demo.enriched'), 'Données de démonstration enrichies');
+  assert.equal(auditActionLabel('publication.published'), 'Publication réalisée');
+  // Toute action émise par le seed, la réparation v1/v2 ou la publication démo doit avoir un libellé FR :
+  // le repli « Cartulary · Demo · Created » ne doit jamais atteindre le visiteur.
+  const scripts = ['../scripts/seed-demo-account.mjs', '../scripts/lib/demo-data-repair.mjs', '../scripts/lib/demo-publication-command.mjs']
+    .map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
+  const actions = new Set(scripts.flatMap((source) => [...source.matchAll(/action: '([a-z_.]+)'/g)].map((match) => match[1])));
+  assert.ok(actions.has('cartulary.demo.created') && actions.has('cartulary.demo.enriched') && actions.has('publication.published'));
+  for (const action of actions) {
+    assert.ok(Object.hasOwn(REGISTRY_AUDIT_ACTION_LABELS, action), `libellé manquant pour ${action}`);
+    assert.doesNotMatch(auditActionLabel(action), /·|^[A-Z][a-z]+ [A-Z]/, `libellé technique pour ${action}`);
+  }
 });

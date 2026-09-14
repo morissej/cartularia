@@ -78,6 +78,15 @@ test('le routage et le clavier sont effectivement raccordés aux composants', ()
   assert.match(registryApp, /window\.history\.pushState/);
   assert.match(registryApp, /addEventListener\('popstate'/);
   assert.match(registryApp, /registry-main-content/);
+  // La Comparaison est une entrée de la barre latérale, marquée courante par la règle partagée du routage.
+  assert.match(registryApp, /section: 'compare', label: 'Comparaison', icon: Scale/);
+  assert.match(registryApp, /isRegistrySidebarCurrent\(effectiveSection, target\)/);
+  assert.doesNotMatch(registryApp, /effectiveSection === 'compare' && target === 'items'/);
+  assert.match(registryApp, /useComparisonSelectionCount\(\)/);
+  assert.match(registryApp, /registry-sidebar__badge/);
+  // Le nom accessible du lien reste son libellé (matrice R8) ; le compteur est une description.
+  assert.match(registryApp, /aria-label=\{meta\.label\}/);
+  assert.match(registryApp, /aria-describedby=\{badge > 0 \? comparisonBadgeId\(target\) : undefined\}/);
   assert.match(carousel, /onKeyDown=\{handleKeyDown\}/);
   assert.match(modals, /media-modal__arrow--previous/);
   assert.match(app, /targetConsumesHorizontalNavigation\(event\.target\)/);

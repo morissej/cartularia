@@ -70,6 +70,21 @@ test('la page Publication sélectionne les contenus autorisés sans confirmation
   assert.doesNotMatch(app, /window\.print\(\)/);
   assert.match(app, /localCollectionWebsiteUrl/);
   assert.match(app, /localCommunityWebsiteUrl/);
+  // V2, décision (b) : la branche éditeur est enveloppée par le droit de gérer, jamais remplacée.
+  assert.match(app, /canManagePublication \? \(\s*<div className="publication-center">/);
+  assert.match(app, /<PublicationReadOnlySummary[\s\S]{0,900}publishedWebsiteUrl=\{publishedWebsiteUrl\}[\s\S]{0,600}onPrintReport=\{handleReportPrint\}/);
+  assert.doesNotMatch(app, /isDemoCartulary\s*\?\s*\(?\s*<PublicationReadOnlySummary/);
+  assert.match(app, /if \(isDemoCartulary \|\| isWatchWebsite\) return;[\s\S]{0,1500}Collections indisponibles/);
+  // Quatre appels (une destination par structure commune) ; la définition s'écrit « = (» et n'est pas comptée.
+  assert.equal((app.match(/renderPublicationBlockSelector\(/g) ?? []).length, 4);
+  assert.match(app, /if \(isDemoCartulary\) return; \/\/ démonstration : aucune journalisation locale/);
+  // Décision (c) : la garde de démonstration ne coupe que la journalisation locale, jamais la préparation ni l’impression du rapport.
+  const reportPrintBody = app.slice(app.indexOf('const handleReportPrint'), app.indexOf('const handleDeleteAllData'));
+  const demoGuardIndex = reportPrintBody.indexOf('if (isDemoCartulary) return; // démonstration');
+  assert.ok(demoGuardIndex > 0, 'garde de démonstration présente dans handleReportPrint');
+  assert.ok(reportPrintBody.indexOf('reportPreparation.prepare()') < demoGuardIndex, 'la préparation du rapport précède la garde de démonstration');
+  assert.ok(reportPrintBody.indexOf('downloadTextPdf(') < demoGuardIndex, 'l’impression du rapport précède la garde de démonstration');
+  assert.ok(reportPrintBody.search(/journal\s*\.logEvent\(/) > demoGuardIndex, 'la journalisation locale suit la garde de démonstration');
 });
 
 test('l’aperçu local conserve le Cartulaire choisi sans changer une autre surface', () => {
@@ -177,4 +192,40 @@ test('ADR-026 durci : le mode démonstration ne décide ni des pages ni des stru
   }
   assert.doesNotMatch(app, /isDemoCartulary\s*(?:&&|\?)\s*\(?\s*<CartularyTodoBoard\b/);
   assert.doesNotMatch(app, /isDemoCartulary\s*(?:&&|\?)\s*\(?\s*<GenericSchemaPageSections\b/);
+});
+
+test('V2 décision (b) : la page Publication bascule en rendu lecture sur le droit de gérer, sans branche démo sur les structures communes', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  // La bascule ne dépend que du droit reconnu par le serveur (faux en démonstration, hook désactivé).
+  assert.match(app, /const canManagePublication = authoritative\.canManage;/);
+  const publication = app.slice(app.indexOf('<PublicationPage'), app.indexOf('</PublicationPage>'));
+  assert.doesNotMatch(publication, /isDemoCartulary\s*(?:&&|\?)\s*\(?\s*</, 'aucune structure de la page Publication n’est conditionnée par la démo');
+  // Les quatre structures communes restent dans la branche éditeur, et le rendu lecture est un seul composant pur.
+  for (const scope of ['cartulary', 'collection', 'community', 'report']) assert.match(publication, new RegExp(`publication-scope--${scope}`));
+  assert.match(publication, /\) : \(\s*<PublicationReadOnlySummary/);
+  assert.match(publication, /demonstration=\{isDemoCartulary\}/, 'la démo ne fournit que les textes contextuels');
+  const summary = readFileSync(new URL('../src/features/cartulary/components/PublicationReadOnlySummary.tsx', import.meta.url), 'utf8');
+  for (const title of ['Mini-site de votre objet', 'Publiez votre objet dans une Collection', 'Publiez votre objet dans Le Cercle', 'Rapport PDF']) assert.match(summary, new RegExp(title));
+  assert.doesNotMatch(summary, /firebase|firestore|isDemoCartulary/i);
+});
+
+test('le panneau Preuves reçoit le mode lecture et la publication constatée depuis App.tsx (V2 messages-techniques)', () => {
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const start = appSource.indexOf('<AuditPanel');
+  const auditPanelBlock = appSource.slice(start, appSource.indexOf('/>', start));
+  assert.match(auditPanelBlock, /readOnly=\{isDemoCartulary\}/);
+  assert.match(auditPanelBlock, /publishedWebsiteUrl=\{publishedWebsiteUrl\}/);
+  assert.match(auditPanelBlock, /demoRegistryProofsHref=\{isDemoCartulary \?/);
+  assert.match(appSource, /const handleDeleteAllData = async \(\) => \{\s*if \(isDemoCartulary\) return;/);
+  assert.match(appSource, /useEffect\(\(\) => \{\s*if \(isDemoCartulary\) return undefined;[\s\S]{0,200}journal\.reconcileSnapshot/);
+  // Décision (c) étendue : la consultation démo n'écrit pas non plus l'événement d'accès dans le navigateur.
+  assert.match(appSource, /useEffect\(\(\) => \{\s*if \(isDemoCartulary\) return;[^\n]*\n\s*journal\s*\.logEvent\(\s*'ACCESS_CARTULARY'/);
+  // Les autres journalisations locales sont derrière des gestes d'édition (canEdit) ou le mode propriétaire du panneau Preuves.
+  assert.equal((appSource.match(/journal\s*\.logEvent\(/g) ?? []).length, 6);
+  assert.match(appSource, /loadPublicPublicationSummaries\(\[cartularyPublicCode\]\)/);
+  // Le compte « en ligne » du résumé lecture vient des blocs réellement publiés, jamais de la sélection démo.
+  assert.match(appSource, /setPublishedWebsiteBlockIds\(summary\?\.published === true \? summary\.blockIds : null\)/);
+  assert.match(appSource, /publishedWebsiteBlockIds=\{publishedWebsiteBlockIds\}/);
+  // Décision (d) : le lien mini-site dérive uniquement de l'état constaté, jamais d'une constante.
+  assert.match(appSource, /const publishedWebsiteUrl = websitePublished \? publicShareUrl : null;/);
 });

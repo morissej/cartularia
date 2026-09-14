@@ -38,12 +38,20 @@ it('un lien imbriqué invalide affiche une erreur récupérable sans casser la p
 it('un visiteur du Cercle peut rejoindre directement la connexion avec retour', async () => {
   fixture.user = null; render(<CommunityPage />);
   expect((await screen.findByRole('link', { name: 'Se connecter pour ouvrir Le Cercle' })).getAttribute('href')).toBe('/account/sign-in?returnTo=%2Fcommunity');
+  // V-A5 : sans session, jamais un « Retour au Registre » vers un formulaire sans issue.
+  expect(screen.getByRole('link', { name: 'Ouvrir le Registre démo' }).getAttribute('href')).toBe('/account/sign-in?demo=1');
+  expect(screen.getByRole('link', { name: 'Retour à l’accueil' }).getAttribute('href')).toBe('/');
+  expect(screen.queryByRole('link', { name: 'Retour au Registre' })).toBeNull();
+  expect(screen.getAllByRole('link').some((link) => (link.getAttribute('href') || '').startsWith('/registry'))).toBe(false);
 });
 it('l’admission absente explique la démarche réelle', async () => {
   fixture.catalog.mockRejectedValue(Object.assign(new Error('Admission absente'), { code: 'community/admission-required' }));
   render(<CommunityPage />);
   expect(await screen.findByRole('heading', { name: 'Admission au Cercle requise' })).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Demander les modalités d’admission' }).getAttribute('href')).toBe('/#contact');
+  // Utilisateur connecté (compte démo compris) : le retour Registre reste, l'entrée démo n'apparaît pas.
+  expect(screen.getByRole('link', { name: 'Retour au Registre' }).getAttribute('href')).toBe('/registry');
+  expect(screen.queryByRole('link', { name: 'Ouvrir le Registre démo' })).toBeNull();
 });
 it('une erreur réseau ne se fait pas passer pour un refus d’admission et se relance', async () => {
   fixture.catalog.mockRejectedValueOnce(new Error('network offline')).mockResolvedValue([]);

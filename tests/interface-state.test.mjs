@@ -12,6 +12,7 @@ import {
   IWC_CARTULARY_ID,
   ROLEX_CARTULARY_ID,
 } from '../src/domain/cartularyIds.ts';
+import { DEMO_SUBMARINER_CARTULARY_ID } from '../src/data/demoCartularies.ts';
 
 test('les fragments absents ou inconnus reviennent sur une page d’accueil valide', () => {
   assert.equal(cartularyPageFromHash(''), 'cover');
@@ -56,6 +57,19 @@ test('la route Cartulaire conserve l’identifiant demandé sans contaminer les 
     cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '?cartularyId=cart_demo_rolex_submariner_124060' }),
     'cart_demo_rolex_submariner_124060',
   );
+});
+
+test('la route de démonstration ne retombe jamais sur un Cartulaire privé', () => {
+  assert.equal(DEMO_SUBMARINER_CARTULARY_ID, 'cart_demo_rolex_submariner_124060');
+  // Adresse tapée à la main ou lien tronqué : la Submariner, pas l’IWC (qui exigerait une session).
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '' }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo/', search: '?returnTo=%2Fregistry' }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '?cartularyId=../../secret' }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: `?cartularyId=${ROLEX_CARTULARY_ID}` }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '?cartularyId=cart_demo_ap_royal_oak_15510st' }), 'cart_demo_ap_royal_oak_15510st');
+  // Le repli propriétaire reste inchangé hors de la route de démonstration.
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary', search: '' }), IWC_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-view', search: '' }), IWC_CARTULARY_ID);
 });
 
 test('les préférences persistées invalides utilisent des valeurs sûres', () => {

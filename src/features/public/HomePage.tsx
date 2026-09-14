@@ -26,10 +26,11 @@ import {
 } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 import { DEMO_SUBMARINER_CARTULARY_ID } from '../../data/demoCartularies.ts';
+import { DEMO_REGISTRY_ENTRY_HREF } from '../registry/registryReturn.ts';
 import './public-site.css';
 
 const DEMO_SUBMARINER_HREF = `/cartulary-demo?cartularyId=${encodeURIComponent(DEMO_SUBMARINER_CARTULARY_ID)}#cover`;
-const DEMO_REGISTRY_HREF = '/account/sign-in?demo=1';
+const DEMO_REGISTRY_HREF = DEMO_REGISTRY_ENTRY_HREF;
 
 const HERO_DEMO_TABS = [
   {

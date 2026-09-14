@@ -199,6 +199,18 @@ img { display: block; max-width: 100%; }
 .cartulary-demo-notice span,
 .demo-read-only-hint { color: var(--muted); }
 
+/* Panneau Preuves en lecture seule (démonstration) — ADR-026/028 : même structure, textes contextuels */
+.audit-panel--read-only .cartulary-demo-proofs-note {
+  border-left: 3px solid color-mix(in srgb, var(--gold) 45%, var(--rule));
+  padding-left: var(--s3);
+}
+.audit-panel--read-only .cartulary-demo-proofs-note p { color: var(--muted); }
+.audit-panel--read-only .cartulary-demo-proofs-share {
+  padding: var(--s3);
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, var(--rule));
+  background: color-mix(in srgb, var(--gold) 9%, var(--sheet));
+}
+
 .demo-read-only-hint {
   margin: 0;
   font-family: var(--font-mono);
@@ -513,6 +525,31 @@ img { display: block; max-width: 100%; }
 .publication-collection-create input { min-height: 40px; padding: 0 var(--s3); border: 1px solid var(--rule); background: var(--sheet); font: 14px var(--font-sans); }
 .publication-inline-error { margin-bottom: var(--s3); color: var(--danger); font-size: 12px; }
 .publication-report-message { margin: 0 0 var(--s4); padding: var(--s3); border-left: 2px solid var(--mark); background: var(--fill); font-size: 12px; }
+
+/* Page Publication — rendu lecture (PublicationReadOnlySummary) */
+.publication-summary__context { margin: 0; padding: var(--s3) var(--s4); border-left: 2px solid var(--mark); background: var(--fill); font-size: 13px; }
+.publication-summary__destinations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
+.publication-scope--summary { display: grid; align-content: start; gap: var(--s3); padding: clamp(18px, 3vw, 28px); }
+.publication-scope--summary > header { margin-bottom: 0; }
+.publication-summary__count { display: flex; align-items: baseline; gap: var(--s1); margin: 0; white-space: nowrap; }
+.publication-summary__count strong { font-size: 28px; font-weight: 600; line-height: 1; color: var(--mark); }
+.publication-summary__count span { color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; }
+.publication-summary__status { margin: 0; font-size: 13px; }
+.publication-summary__status--published strong { color: var(--mark); }
+.publication-summary__detail { margin: 0; color: var(--muted); font-size: 12px; }
+.publication-summary__links { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.publication-scope--summary .publication-report-message { margin: 0; }
+.publication-summary__scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--sheet); }
+.publication-summary__scroll:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+.publication-summary { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 12px; }
+.publication-summary thead th { position: sticky; top: 0; z-index: 1; padding: var(--s2) var(--s3); background: var(--paper); color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; text-align: center; border-bottom: 1px solid var(--rule); }
+.publication-summary thead th:first-child { text-align: left; }
+.publication-summary tbody th { padding: var(--s2) var(--s3); text-align: left; font-weight: 500; border-bottom: 1px solid var(--rule); }
+.publication-summary tbody td { padding: var(--s2) var(--s3); text-align: center; border-bottom: 1px solid var(--rule); }
+.publication-summary__group th { background: var(--fill); color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; }
+.publication-summary td.is-included { color: var(--mark); font-weight: 600; }
+.publication-summary td.is-excluded { color: var(--muted); }
+.publication-summary__note { margin: 0; color: var(--muted); font-size: 12px; }
 
 .cartulary-main { padding-block: var(--s6); }
 
@@ -2965,6 +3002,8 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .page-tabs button { min-width: 98px; padding-inline: var(--s3); font-size: 11px; }
   .page-tabs .page-tabs__audit { min-width: 88px; }
   .publication-scope > header { align-items: stretch; flex-direction: column; }
+  .publication-summary__destinations { grid-template-columns: 1fr; }
+  .publication-scope--summary > header { flex-direction: row; align-items: center; }
   .publication-scope__actions,
   .publication-block-selector__toolbar { align-items: stretch; flex-direction: column; }
   .publication-url-panel,

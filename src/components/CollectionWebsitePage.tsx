@@ -13,6 +13,7 @@ import { registryItemCollectionIds, type RegistryItemProjection } from '../domai
 import { loadCollectionWebsitePublication, loadRegistryCollections } from '../services/collections.ts';
 import { loadRegistryItems, loadPublicPublicationStatuses } from '../services/projections.ts';
 import { BrandLogo } from './BrandLogo.tsx';
+import { registryCollectionsHref, signedOutRegistryLinks } from '../features/registry/registryReturn.ts';
 
 type CollectionWebsiteState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'not-published' | 'denied' | 'invalid' | 'error';
 
@@ -132,7 +133,12 @@ export const CollectionWebsitePage = () => {
         <BrandLogo href="/" />
         <h1>{heading}</h1>
         <p>Ce mini-site lit uniquement une projection de publication dédiée et ne donne jamais accès aux Cartulaires maîtres ni aux données privées du Registre.</p>
-        <a className="button button--quiet" href={selection.preview && selection.registryId ? `/registry/${encodeURIComponent(selection.registryId)}/collections` : '/'}>{selection.preview ? 'Retour au Registre' : 'Retour à Cartularia'}</a>
+        {state === 'signed-out' ? <>
+          <a className="button button--primary" href={`/account/sign-in?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Se connecter pour voir l’aperçu</a>
+          {signedOutRegistryLinks(selection.registryId).map((link) => <a className="button button--quiet" href={link.href} key={link.kind}>{link.label}</a>)}
+        </> : selection.preview && selection.registryId
+          ? <a className="button button--quiet" href={registryCollectionsHref(selection.registryId)}>Retour au Registre</a>
+          : <a className="button button--quiet" href="/">Retour à l’accueil</a>}
         {state === 'error' && <button type="button" onClick={() => window.location.reload()}>Réessayer</button>}
       </main>
     );

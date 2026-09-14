@@ -7,6 +7,7 @@ import { PUBLICATION_BLOCK_CATALOG } from '../domain/publication.ts';
 import { loadCommunityCatalog } from '../services/community.ts';
 import { formatGenericValue } from '../schema/fieldPresentation.ts';
 import { BrandLogo } from './BrandLogo.tsx';
+import { signedOutRegistryLinks } from '../features/registry/registryReturn.ts';
 import { schemaFieldLabel } from '../schema/schemaLabels.ts';
 
 type CommunityState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'denied' | 'error';
@@ -96,13 +97,15 @@ export const CommunityPage = () => {
         : 'Chargement du Cercle';
     return (
       <main className="community-state">
-        <BrandLogo />
+        <BrandLogo href={state === 'signed-out' ? '/' : '/registry'} />
         <h1>{heading}</h1>
         <p>Le Cercle agrège uniquement les projections choisies par leurs propriétaires. Il ne lit jamais les Cartulaires maîtres.</p>
         {state === 'signed-out' && <a className="button button--primary" href="/account/sign-in?returnTo=%2Fcommunity">Se connecter pour ouvrir Le Cercle</a>}
         {state === 'denied' && <><p>L’accès au Registre ne vaut pas admission au Cercle. Contactez Cartularia en indiquant votre nom utilisateur pour demander les modalités d’admission.</p><a className="button button--primary" href="/#contact">Demander les modalités d’admission</a></>}
         {state === 'error' && <><p role="alert">La lecture n’a pas abouti. Il peut s’agir d’une interruption réseau ou d’un droit modifié ; aucune décision d’admission ne peut être déduite de cette erreur.</p><button type="button" className="button button--primary" onClick={() => setAttempt((value) => value + 1)}>Réessayer</button></>}
-        <a className="button button--quiet community-back-link" href="/registry">Retour au Registre</a>
+        {state === 'signed-out'
+          ? signedOutRegistryLinks(null).map((link) => <a className="button button--quiet community-back-link" href={link.href} key={link.kind}>{link.label}</a>)
+          : <a className="button button--quiet community-back-link" href="/registry">Retour au Registre</a>}
       </main>
     );
   }

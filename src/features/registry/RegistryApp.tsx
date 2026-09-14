@@ -19,6 +19,7 @@ import {
   LockKeyhole,
   LogIn,
   LogOut,
+  Scale,
   Settings,
   ShieldCheck,
   UserRound,
@@ -26,6 +27,7 @@ import {
 import { BrandLogo } from '../../components/BrandLogo';
 import { confirmUnsavedNavigation } from '../../hooks/useUnsavedChangesGuard';
 import { DEMO_ACCOUNT } from '../../data/demoCartularies';
+import { DEMO_REGISTRY_ENTRY_HREF, PUBLIC_HOME_HREF, shouldOfferDemoRegistryEntry } from './registryReturn.ts';
 import type {
   AccountOrganizationContext,
   MembershipDocument,
@@ -41,12 +43,17 @@ import {
 import { RegistryOverview } from './RegistryOverview.tsx';
 import { ROLE_LABELS } from './registryAdministration.ts';
 import {
+  isRegistrySidebarCurrent,
   parseRegistryRoute,
+  REGISTRY_SIDEBAR_SECTIONS,
   registryHref,
   registryNavigationTarget,
   shouldInterceptRegistryNavigation,
   type RegistrySection,
+  type RegistrySidebarSection,
 } from './registryRouting.ts';
+import { buildRegistryComparisonHref } from './registryComparison.ts';
+import { useComparisonSelectionCount } from './comparisonSelection.ts';
 import './registry.css';
 
 const RegistryItems = lazy(() => import('./RegistryItems.tsx').then((module) => ({ default: module.RegistryItems })));
@@ -105,20 +112,33 @@ const focusRegistryMainContent = () => {
   });
 };
 
-const SECTION_META: Array<{
-  section: Exclude<RegistrySection, 'compare' | 'new'>;
+interface SectionMeta {
+  section: RegistrySidebarSection;
   label: string;
   icon: typeof BookOpen;
-}> = [
+}
+
+const SECTION_META_ENTRIES: SectionMeta[] = [
   { section: 'overview', label: "Vue d'ensemble", icon: BookOpen },
   { section: 'items', label: 'Catalogue', icon: LibraryBig },
   { section: 'collections', label: 'Collections', icon: Layers3 },
   { section: 'gallery', label: 'Galerie', icon: Images },
+  { section: 'compare', label: 'Comparaison', icon: Scale },
   { section: 'follow-up', label: 'Suivi', icon: Bell },
   { section: 'access', label: 'Accès', icon: KeyRound },
   { section: 'integrity', label: 'Preuves', icon: Fingerprint },
   { section: 'admin', label: 'Organisation et droits', icon: Settings },
 ];
+
+// L'ordre d'affichage est celui de REGISTRY_SIDEBAR_SECTIONS (registryRouting.ts), source unique.
+const SECTION_META: SectionMeta[] = [...SECTION_META_ENTRIES]
+  .sort((left, right) => REGISTRY_SIDEBAR_SECTIONS.indexOf(left.section) - REGISTRY_SIDEBAR_SECTIONS.indexOf(right.section));
+
+// Description accessible de la pastille de comparaison ; le nom du lien reste son libellé (aria-label={meta.label}).
+const comparisonSelectionDescription = (count: number) => (
+  `${count} objet${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''}`
+);
+const comparisonBadgeId = (section: RegistrySidebarSection) => `registry-sidebar-badge-${section}`;
 
 const flattenRegistryChoices = (contexts: AccountOrganizationContext[]): RegistryChoice[] => {
   const seen = new Set<string>();
@@ -142,7 +162,7 @@ function RegistrySectionLoading() {
   return <div className="registry-state-page" role="status" aria-live="polite"><LoaderCircle className="registry-spinner" aria-hidden="true" /><p>Chargement de cette vue…</p></div>;
 }
 
-function RegistrySignIn() {
+function RegistrySignIn({ demoRequested = false }: { demoRequested?: boolean }) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -182,6 +202,15 @@ function RegistrySignIn() {
       </section>
 
       <section className="registry-auth-panel" aria-label="Connexion au Registre">
+        {demoRequested && (
+          <div className="registry-auth-demo">
+            <p className="registry-kicker">Démonstration</p>
+            <h2>Registre de démonstration</h2>
+            <p>Ce Registre fictif s’ouvre avec le compte partagé en lecture seule, sans identifiant personnel.</p>
+            <a className="button button--primary" href={DEMO_REGISTRY_ENTRY_HREF}>Ouvrir le Registre démo</a>
+            <a className="registry-auth-create-link" href={PUBLIC_HOME_HREF}>Retour à l’accueil</a>
+          </div>
+        )}
         <div>
           <span className="registry-step">01</span>
           <h2>Connexion</h2>
@@ -311,6 +340,12 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
     : undefined;
   const visibleSections = invitationGrant ? SECTION_META.filter((meta) => meta.section === 'items') : SECTION_META;
   const effectiveSection = invitationGrant ? 'items' : section;
+  const comparisonSelection = useComparisonSelectionCount();
+  const sidebarHref = (target: RegistrySidebarSection) => {
+    if (target !== 'compare' || comparisonSelection.count === 0) return registryHref(registry.id, target);
+    const returnTo = effectiveSection === 'items' ? `${window.location.pathname}${window.location.search}` : undefined;
+    return buildRegistryComparisonHref(registry.id, comparisonSelection.ids, returnTo);
+  };
   const handleRegistryChange = (registryId: string) => {
     navigateRegistry(registryHref(registryId));
   };
@@ -362,16 +397,24 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
             {visibleSections.map((meta) => {
               const target = meta.section;
               const Icon = meta.icon;
-              const current = effectiveSection === target || (effectiveSection === 'compare' && target === 'items');
+              const current = isRegistrySidebarCurrent(effectiveSection, target);
+              const badge = target === 'compare' ? comparisonSelection.count : 0;
               return (
                 <a
-                  href={registryHref(registry.id, target)}
+                  href={sidebarHref(target)}
                   aria-current={current ? 'page' : undefined}
                   aria-label={meta.label}
+                  aria-describedby={badge > 0 ? comparisonBadgeId(target) : undefined}
                   key={target}
                 >
                   <Icon aria-hidden="true" />
                   <span>{meta.label}</span>
+                  {badge > 0 && (
+                    <small className="registry-sidebar__badge" id={comparisonBadgeId(target)}>
+                      <span aria-hidden="true">{badge}</span>
+                      <span className="sr-only">{comparisonSelectionDescription(badge)}</span>
+                    </small>
+                  )}
                 </a>
               );
             })}
@@ -557,7 +600,7 @@ export function RegistryApp() {
   }, [choices, contextError, loadingContexts, navigateRegistry, route.registryId, user]);
 
   if (user === undefined) return <RegistryLoading message="Vérification de la session…" />;
-  if (!user) return <RegistrySignIn />;
+  if (!user) return <RegistrySignIn demoRequested={shouldOfferDemoRegistryEntry(route.registryId)} />;
   if (loadingContexts) return <RegistryLoading />;
   if (contextError) {
     return (

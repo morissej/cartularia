@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { isRegistryReturnPath } from '../features/registry/registryCatalog.ts';
+import { resolveRegistryReturn } from '../features/registry/registryReturn.ts';
+import { isDemoCartularyId } from '../data/demoCartularies.ts';
 import { GenericCartularyView } from './GenericCartularyView';
 import { useAuthoritativeCartulary } from '../features/cartulary/state/useAuthoritativeCartulary.ts';
 import { loadScopedRegistryItems } from '../services/projections';
@@ -11,7 +12,7 @@ export const GenericCartularyPage = () => {
   const parameters = new URLSearchParams(window.location.search);
   const cartularyId = parameters.get('cartularyId');
   const returnToParameter = parameters.get('returnTo');
-  const returnTo = isRegistryReturnPath(returnToParameter) ? returnToParameter : '/registry';
+  const returnTo = resolveRegistryReturn(returnToParameter, { demo: isDemoCartularyId(cartularyId) }).href;
   const cartulary = useAuthoritativeCartulary(cartularyId);
   const { status, snapshot, schema } = cartulary;
   const [registryItem, setRegistryItem] = useState<RegistryItemProjection | null>(null);

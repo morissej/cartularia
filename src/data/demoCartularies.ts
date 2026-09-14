@@ -509,6 +509,8 @@ export const demoCartularyContentById = (cartularyId: string | null | undefined)
 );
 
 export const DEMO_SUBMARINER_CARTULARY_ID = DEMO_CARTULARIES[0].id;
+/** Code public du seul objet démo publié en V2 ; ce n'est pas une source de « publié » (lecture à l'exécution). */
+export const DEMO_SUBMARINER_PUBLIC_CODE = DEMO_CARTULARIES[0].publicCode;
 
 export const demoCartularyById = (cartularyId: string | null | undefined) => (
   DEMO_CARTULARIES.find((cartulary) => cartulary.id === cartularyId) ?? null

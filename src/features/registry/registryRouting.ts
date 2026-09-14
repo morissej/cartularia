@@ -13,6 +13,29 @@ export const REGISTRY_SECTIONS = [
 
 export type RegistrySection = typeof REGISTRY_SECTIONS[number];
 
+/** Sections qui possèdent une entrée dans la barre latérale : la création reste rattachée au Catalogue. */
+export type RegistrySidebarSection = Exclude<RegistrySection, 'new'>;
+
+export const REGISTRY_SIDEBAR_SECTIONS: readonly RegistrySidebarSection[] = [
+  'overview',
+  'items',
+  'collections',
+  'gallery',
+  'compare',
+  'follow-up',
+  'access',
+  'integrity',
+  'admin',
+];
+
+/**
+ * Entrée de la barre latérale marquée comme courante pour une section active :
+ * la comparaison a désormais sa propre entrée, la création reste rattachée au Catalogue.
+ */
+export const isRegistrySidebarCurrent = (active: RegistrySection, target: RegistrySidebarSection) => (
+  active === target || (active === 'new' && target === 'items')
+);
+
 export interface RegistryRoute {
   registryId: string | null;
   section: RegistrySection;

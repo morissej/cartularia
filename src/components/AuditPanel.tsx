@@ -37,7 +37,127 @@ interface AuditPanelProps {
   persistence: HybridPersistenceState;
   onDeleteAllData: () => Promise<void>;
   onJournalUpdate: () => void;
+  /**
+   * Rendu « lecture » du panneau : aucune action propriétaire, aucune observation de session,
+   * aucun accès au carnet local (convention readOnly={isDemoCartulary} du lecteur unique).
+   */
+  readOnly?: boolean;
+  /** Lien vers la page Preuves du Registre de démonstration, affiché seulement en lecture seule. */
+  demoRegistryProofsHref?: string | null;
+  /**
+   * Adresse du mini-site réellement publié, constatée à l'exécution (loadPublicPublicationStatuses).
+   * En lecture seule, le code public et le QR ne s'affichent que si cette adresse est fournie :
+   * jamais de faux « publié ».
+   */
+  publishedWebsiteUrl?: string | null;
 }
+
+const PANEL_STYLE: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--s4)',
+  padding: 'var(--s4)',
+  height: '100%',
+  overflowY: 'auto',
+  backgroundColor: 'var(--sheet)',
+  color: 'var(--ink)',
+};
+
+const SECTION_TITLE_STYLE: React.CSSProperties = {
+  margin: 0,
+  fontFamily: 'var(--font-sans)',
+  fontSize: '13px',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+};
+
+const MUTED_PARAGRAPH_STYLE: React.CSSProperties = { margin: 0, color: 'var(--muted)', fontSize: '12px', lineHeight: 1.5 };
+
+interface ReadOnlyProofsProps {
+  language: 'FR' | 'EN';
+  publicShareCode: string;
+  publishedWebsiteUrl: string | null;
+  demoRegistryProofsHref: string | null;
+  qrDataUrl: string;
+  serverProofTitle: string;
+  serverProofDoctrine: string;
+}
+
+/**
+ * Rendu « lecture » des Preuves pour un lecteur qui ne peut ni éditer ni publier (démonstration comprise) :
+ * la structure reste celle du panneau propriétaire (conservation, cession, preuve serveur, partage),
+ * seuls les textes sont contextuels. Aucun bouton d'action, aucune observation de session Firebase.
+ */
+const ReadOnlyProofs: React.FC<ReadOnlyProofsProps> = ({
+  language,
+  publicShareCode,
+  publishedWebsiteUrl,
+  demoRegistryProofsHref,
+  qrDataUrl,
+  serverProofTitle,
+  serverProofDoctrine,
+}) => {
+  const tx = (french: string, english: string) => language === 'FR' ? french : english;
+  return (
+    <div className="audit-panel audit-panel--read-only" style={PANEL_STYLE}>
+      <section aria-labelledby="persistence-title" className="cartulary-demo-proofs-note" style={{ display: 'grid', gap: 'var(--s2)', borderBottom: '1px solid var(--rule)', paddingBottom: 'var(--s4)' }}>
+        <h4 id="persistence-title" style={SECTION_TITLE_STYLE}>{tx('Conservation des données', 'Data preservation')}</h4>
+        <p style={MUTED_PARAGRAPH_STYLE}>
+          {tx(
+            'Démonstration en lecture seule. Rien n’est enregistré dans ce navigateur ni synchronisé ; le compte de démonstration ne possède pas de copie privée.',
+            'Read-only demonstration. Nothing is saved in this browser or synchronized; the demonstration account has no private copy.',
+          )}
+        </p>
+      </section>
+
+      <section aria-labelledby="cartulary-transfer-title" className="cartulary-demo-proofs-note" style={{ display: 'grid', gap: 'var(--s2)', borderBottom: '1px solid var(--rule)', paddingBottom: 'var(--s4)' }}>
+        <h4 id="cartulary-transfer-title" style={SECTION_TITLE_STYLE}>{tx('Cession du Cartulaire', 'Cartulary transfer')}</h4>
+        <p style={MUTED_PARAGRAPH_STYLE}>
+          {tx(
+            'La cession n’est pas démontrée : elle exige le compte propriétaire et une confirmation humaine.',
+            'Transfer is not demonstrated: it requires the owner account and a human confirmation.',
+          )}
+        </p>
+      </section>
+
+      <section aria-labelledby="server-proof-title" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s3)', border: '1px solid var(--ink)', background: 'var(--paper)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--s2)' }}>
+          <h4 id="server-proof-title" style={SECTION_TITLE_STYLE}>{serverProofTitle}</h4>
+          <strong style={{ fontSize: '11px', textAlign: 'right' }}>{tx('Chaîne fictive de démonstration', 'Fictional demonstration chain')}</strong>
+        </div>
+        <p style={{ ...MUTED_PARAGRAPH_STYLE, fontSize: '11px' }}>{serverProofDoctrine}</p>
+        {demoRegistryProofsHref && (
+          <a className="button button--quiet" href={demoRegistryProofsHref} style={{ justifySelf: 'start' }}>
+            {tx('Voir les preuves du Registre démo', 'View the demo Registry proofs')}
+          </a>
+        )}
+      </section>
+
+      {publishedWebsiteUrl && (
+        <section aria-labelledby="public-share-title" className="cartulary-demo-proofs-share" style={{ display: 'grid', gap: 'var(--s2)' }}>
+          <h4 id="public-share-title" style={SECTION_TITLE_STYLE}>{tx('Mini-site publié', 'Published mini-site')}</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
+            <span style={{ color: 'var(--muted)' }}>{tx('Code public du Cartulaire', 'Public Cartulary code')}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{publicShareCode}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', backgroundColor: 'var(--paper)', padding: 'var(--s3)', border: '1px solid var(--rule)' }}>
+            <a href={publishedWebsiteUrl} target="_blank" rel="noreferrer" aria-label={tx('Ouvrir le mini-site publié lié au QR code', 'Open the published mini-site linked to the QR code')}>
+              {qrDataUrl
+                ? <img src={qrDataUrl} width="64" height="64" alt={tx('QR code vers le mini-site publié', 'QR code to the published mini-site')} style={{ display: 'block', border: '1px solid var(--ink)' }} />
+                : <span style={{ display: 'grid', width: '64px', height: '64px', placeItems: 'center', border: '1px solid var(--rule)', color: 'var(--muted)', fontSize: '9px' }}>QR</span>}
+            </a>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)' }}>{tx('QR CODE DE PARTAGE', 'SHARE QR CODE')}</span>
+              <span style={{ fontSize: '10px', color: 'var(--muted)' }}>{tx('Scannez pour ouvrir le mini-site publié.', 'Scan to open the published mini-site.')}</span>
+              <span style={{ maxWidth: '330px', overflowWrap: 'anywhere', fontSize: '8px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{publishedWebsiteUrl}</span>
+            </div>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+};
 
 export const AuditPanel: React.FC<AuditPanelProps> = ({
   journal,
@@ -50,6 +170,9 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   persistence,
   onDeleteAllData,
   onJournalUpdate,
+  readOnly = false,
+  demoRegistryProofsHref = null,
+  publishedWebsiteUrl = null,
 }) => {
   const tx = (french: string, english: string) => language === 'FR' ? french : english;
   const deleteKeyword = language === 'FR' ? 'SUPPRIMER' : 'DELETE';
@@ -87,12 +210,21 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   }, [journal]);
 
   useEffect(() => {
+    // Lecture seule : le carnet local n'est ni lu ni ouvert (rien n'est enregistré dans ce navigateur).
+    if (readOnly) return;
     refreshJournal();
-  }, [refreshJournal, refreshToken]);
+  }, [readOnly, refreshJournal, refreshToken]);
+
+  // En lecture seule, le QR ne vise que le mini-site réellement publié ; sinon aucun QR.
+  const qrTarget = readOnly ? (publishedWebsiteUrl ?? '') : publicShareUrl;
 
   useEffect(() => {
     let active = true;
-    void QRCode.toDataURL(publicShareUrl, {
+    if (!qrTarget) {
+      setQrDataUrl('');
+      return () => { active = false; };
+    }
+    void QRCode.toDataURL(qrTarget, {
       width: 192,
       margin: 1,
       errorCorrectionLevel: 'M',
@@ -103,10 +235,10 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
       if (active) setQrDataUrl('');
     });
     return () => { active = false; };
-  }, [publicShareUrl]);
+  }, [qrTarget]);
 
   useEffect(() => {
-    if (!persistence.authenticated) {
+    if (readOnly || !persistence.authenticated) {
       setAuthorityLoadState('idle');
       setAuthorityIntegrity(null);
       return undefined;
@@ -120,7 +252,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
       setAuthorityIntegrity(null);
       setAuthorityLoadState('error');
     });
-  }, [cartularyId, persistence.authenticated]);
+  }, [cartularyId, persistence.authenticated, readOnly]);
 
   const handleExternalTimestamp = async () => {
     setIsTimestamping(true);
@@ -232,18 +364,27 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
     anchor_failed: tx('Ancrage public en échec temporaire', 'Temporary public anchoring failure'),
     anchored: tx('Ancrage OpenTimestamps confirmé sur Bitcoin', 'OpenTimestamps anchor confirmed on Bitcoin'),
   }[authorityLevel];
+  const serverProofTitle = tx('Preuve serveur du Cartulaire', 'Cartulary server proof');
+  const serverProofDoctrine = tx('Cette chaîne serveur est l’unique autorité d’intégrité affichée pour les opérations partagées, les cessions et les preuves exportables. Elle détecte les modifications ; elle ne prouve ni l’authenticité physique, ni la vérité des déclarations, ni la propriété juridique.', 'This server chain is the only displayed integrity authority for shared operations, transfers and portable proofs. It detects changes; it proves neither physical authenticity, factual truth nor legal ownership.');
+
+  // Tous les hooks sont appelés avant cette bascule (règles des hooks) ; la branche lecture ne monte
+  // ni CartularyTransferPanel (qui observerait la session) ni aucune action propriétaire.
+  if (readOnly) {
+    return (
+      <ReadOnlyProofs
+        language={language}
+        publicShareCode={publicShareCode}
+        publishedWebsiteUrl={publishedWebsiteUrl}
+        demoRegistryProofsHref={demoRegistryProofsHref}
+        qrDataUrl={qrDataUrl}
+        serverProofTitle={serverProofTitle}
+        serverProofDoctrine={serverProofDoctrine}
+      />
+    );
+  }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 'var(--s4)',
-      padding: 'var(--s4)',
-      height: '100%',
-      overflowY: 'auto',
-      backgroundColor: 'var(--sheet)',
-      color: 'var(--ink)'
-    }}>
+    <div style={PANEL_STYLE}>
       {stepUpDialog}
       <section aria-labelledby="persistence-title" style={{ borderBottom: '1px solid var(--rule)', paddingBottom: 'var(--s4)' }}>
         <h4 id="persistence-title" style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 'var(--s3)' }}>
@@ -321,7 +462,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
       <section aria-labelledby="server-proof-title" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s3)', border: '1px solid var(--ink)', background: 'var(--paper)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--s2)' }}>
           <h4 id="server-proof-title" style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            {tx('Preuve serveur du Cartulaire', 'Cartulary server proof')}
+            {serverProofTitle}
           </h4>
           <strong style={{ fontSize: '11px', color: authorityLevel === 'broken' || authorityLevel === 'unavailable' ? 'var(--mark)' : 'var(--ink)', textAlign: 'right' }}>{authorityStatusLabel}</strong>
         </div>
@@ -338,7 +479,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             ? tx('Connectez-vous pour lire la chaîne transactionnelle du serveur. Le carnet local présenté plus bas reste un cache de travail et ne la remplace pas.', 'Sign in to read the transactional server chain. The local work journal below remains a cache and does not replace it.')
             : authorityLevel === 'unavailable'
               ? tx('Aucun repli local n’est présenté comme preuve serveur. Réessayez lorsque le service autoritaire est disponible.', 'No local fallback is presented as server proof. Retry when the authoritative service is available.')
-              : tx('Cette chaîne serveur est l’unique autorité d’intégrité affichée pour les opérations partagées, les cessions et les preuves exportables. Elle détecte les modifications ; elle ne prouve ni l’authenticité physique, ni la vérité des déclarations, ni la propriété juridique.', 'This server chain is the only displayed integrity authority for shared operations, transfers and portable proofs. It detects changes; it proves neither physical authenticity, factual truth nor legal ownership.')}
+              : serverProofDoctrine}
         </p>
       </section>
 

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { DEMO_CARTULARIES } from '../src/data/demoCartularies.ts';
+import { buildDemoRegistryItem } from '../src/data/demoCartularyDocuments.ts';
 import { buildRegistryAggregates } from '../src/features/registry/registryAggregates.ts';
 
 const item = (overrides) => ({
@@ -94,4 +96,14 @@ test('un Registre vide retourne des séries et indicateurs vides', () => {
   assert.equal(summary.needsReviewCount, 0);
   assert.deepEqual(summary.byAssetType, []);
   assert.deepEqual(summary.recentItems, []);
+});
+
+test('le Registre démo enrichi n’affiche plus « À revoir 5 » : cinq projections « Complet », aucun signal de revue', () => {
+  const summary = buildRegistryAggregates(DEMO_CARTULARIES.map((cartulary) => buildDemoRegistryItem(cartulary, 'sha256:test')));
+  assert.equal(summary.total, 5);
+  assert.equal(summary.needsReviewCount, 0);
+  assert.equal(summary.attention.review, 0);
+  assert.equal(summary.attention.total, 0);
+  assert.deepEqual(summary.byCompleteness, [{ key: 'complete', count: 5 }]);
+  assert.deepEqual(summary.byLifecycle, [{ key: 'active', count: 5 }]);
 });

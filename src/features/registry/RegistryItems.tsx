@@ -42,6 +42,7 @@ import {
 } from './registryPresentation.ts';
 import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
 import { useRegistryCollections } from './useRegistryCollections.ts';
+import { announceComparisonSelection } from './comparisonSelection.ts';
 
 type CatalogView = 'grid' | 'list';
 type CatalogLoadState = 'loading' | 'ready' | 'error';
@@ -135,6 +136,11 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
     window.history.replaceState(null, '', nextUrl);
   }, [queryString]);
+
+  // La coquille du Registre suit la sélection de comparaison de cette vue (sans persistance) ;
+  // elle est vidée quand la vue disparaît, la sélection ne vivant que dans son URL.
+  useEffect(() => { announceComparisonSelection(comparisonIds); }, [comparisonIds]);
+  useEffect(() => () => announceComparisonSelection([]), []);
 
   const filteredItems = useMemo(() => filterAndSortRegistryItems(items, {
     query,

@@ -1,8 +1,12 @@
+import type { RegistryAccessProjection } from '../domain/access.ts';
 import { CARTULARY_MODEL_VERSION, type CartularyEnvelope, type CartularySectionDocument, type ProvenancedValue } from '../domain/cartulary.ts';
+import type { CartularyReminderDocument, FollowUpCategory, FollowUpSourceStatus } from '../domain/followUp.ts';
 import type { RegistryItemProjection } from '../domain/projections.ts';
 import { DEMO_ACCOUNT, buildDemoCartularyAssets, demoCartularyContentById, type DemoCartularyDefinition } from './demoCartularies.ts';
 
 export const DEMO_ASSERTED_AT = '2026-08-22T08:00:00.000Z';
+/** Date fictive de la revue des cinq dossiers (enrichissement démo v2) : « Complet » dans le Registre. */
+export const DEMO_REVIEWED_AT = '2026-09-01T09:00:00.000Z';
 
 export const buildDemoAssetDocuments = (cartulary: DemoCartularyDefinition) => buildDemoCartularyAssets(cartulary).map((asset) => ({
   id: asset.id, cartularyId: cartulary.id, organizationId: DEMO_ACCOUNT.organizationId,
@@ -238,8 +242,8 @@ export const buildDemoCartularyEnvelope = (
   defaultVisibility: 'secret',
   publicationStatus: 'none',
   primaryAssetId: buildDemoCartularyAssets(cartulary).find((asset) => asset.tags?.includes('main-photo'))?.id || null,
-  completenessLevel: 'imported_unreviewed',
-  lastVerifiedAt: null,
+  completenessLevel: 'complete',
+  lastVerifiedAt: DEMO_REVIEWED_AT,
   revision: 1,
   integrityHead,
   integritySequence: 0,
@@ -273,9 +277,98 @@ export const buildDemoRegistryItem = (
   netValuation: demoValuationAmounts(cartulary).netValuation,
   netAfterTaxValuation: demoValuationAmounts(cartulary).netAfterTaxValuation,
   valuationCurrency: cartulary.currency,
-  completenessLevel: 'imported_unreviewed',
+  completenessLevel: 'complete',
   primaryAssetId: buildDemoCartularyAssets(cartulary).find((asset) => asset.tags?.includes('main-photo'))?.id || null,
   sourceRevision: 1,
   projectionStatus: 'active',
   contentHash,
 });
+
+/**
+ * Rappel de démonstration conforme au contrat de firestore.rules (`cartularies/{id}/reminders`) :
+ * clés exactement id, cartularyId, organizationId, title, dueAt, category, reminderStatus,
+ * visibility, source, createdBy ; `createdAt`/`updatedAt` sont posés par l'écrivain.
+ */
+export interface DemoReminderDocument extends Required<Pick<CartularyReminderDocument, 'id' | 'cartularyId' | 'organizationId' | 'title' | 'visibility'>> {
+  dueAt: string;
+  category: FollowUpCategory;
+  reminderStatus: FollowUpSourceStatus;
+  source: 'registry';
+  createdBy: string;
+}
+
+interface DemoReminderSeed { suffix: string; title: string; category: FollowUpCategory; dueAt: string; reminderStatus: FollowUpSourceStatus }
+
+const DEMO_REMINDER_SEEDS: Record<string, DemoReminderSeed[]> = {
+  cart_demo_rolex_submariner_124060: [
+    { suffix: 'insurance', title: 'Renouveler l’attestation d’assurance fictive', category: 'insurance', dueAt: '2026-12-15', reminderStatus: 'planned' },
+    { suffix: 'photos', title: 'Refaire les vues 360° fictives', category: 'visual_evidence', dueAt: '2026-08-20', reminderStatus: 'completed' },
+  ],
+  cart_demo_ap_royal_oak_15510st: [
+    { suffix: 'service', title: 'Révision d’entretien fictive', category: 'maintenance', dueAt: '2027-03-31', reminderStatus: 'planned' },
+  ],
+  cart_demo_tudor_black_bay_chrono_79360n: [
+    // Volontairement en retard pour montrer l'alerte « Échéances en retard » du Registre.
+    { suffix: 'waterproof', title: 'Contrôle d’étanchéité fictif', category: 'maintenance', dueAt: '2026-06-30', reminderStatus: 'active' },
+  ],
+  cart_demo_jlc_reverso_tribute_q397848j: [
+    { suffix: 'strap', title: 'Remplacer le bracelet fictif', category: 'custom', dueAt: '2027-01-20', reminderStatus: 'planned' },
+  ],
+  cart_demo_breguet_classique_5157bb: [
+    { suffix: 'valuation', title: 'Actualiser la fourchette de valeur fictive', category: 'custom', dueAt: '2026-10-01', reminderStatus: 'dismissed' },
+  ],
+};
+
+export const buildDemoReminderDocuments = (
+  cartulary: DemoCartularyDefinition,
+  accountUid = 'demo-account',
+): DemoReminderDocument[] => (DEMO_REMINDER_SEEDS[cartulary.id] || []).map((seed) => ({
+  id: `rem_demo_${cartulary.mediaSlug}_${seed.suffix}`,
+  cartularyId: cartulary.id,
+  organizationId: DEMO_ACCOUNT.organizationId,
+  title: seed.title,
+  dueAt: seed.dueAt,
+  category: seed.category,
+  reminderStatus: seed.reminderStatus,
+  visibility: 'secret',
+  source: 'registry',
+  createdBy: accountUid,
+}));
+
+/**
+ * Projection d'accès de démonstration (`registries/{reg}/accesses/{id}`), même forme que celle
+ * écrite par invitation-command.mjs, sans registryInvitations ni mail. Dates en ISO : l'écrivain
+ * les convertit en Timestamp, calcule `contentHash` et pose `generatedAt`/`updatedAt`.
+ * Domaine `.invalid` (RFC 2606) : aucune adresse réelle.
+ */
+export type DemoAccessDocument = Omit<RegistryAccessProjection, 'contentHash' | 'generatedAt' | 'updatedAt' | 'issuedAt' | 'expiresAt' | 'revokedAt' | 'lastConsultedAt'> & {
+  issuedAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastConsultedAt: string | null;
+};
+
+export const buildDemoAccessDocuments = (): DemoAccessDocument[] => {
+  const common = { organizationId: DEMO_ACCOUNT.organizationId, registryId: DEMO_ACCOUNT.registryId, permissions: ['read'] as Array<'read'>, sourceRevision: 1, projectionStatus: 'active' as const };
+  return [
+    {
+      id: 'acc_demo_invitation_expert', ...common,
+      cartularyId: 'cart_demo_rolex_submariner_124060', collectionId: null, scopeType: 'cartulary', scopeId: 'cart_demo_rolex_submariner_124060',
+      displayTitle: 'Rolex Submariner — avis d’un expert fictif', recipientLabel: 'e***@cartularia.invalid', recipientKind: 'person', accessKind: 'invitation',
+      sourceStatus: 'pending', issuedAt: '2026-09-01T09:00:00.000Z', expiresAt: '2027-12-31T23:59:59.000Z', revokedAt: null, lastConsultedAt: null, consultationCount: 0,
+    },
+    {
+      id: 'acc_demo_mandate_assureur', ...common,
+      cartularyId: null, collectionId: DEMO_ACCOUNT.collectionId, scopeType: 'collection', scopeId: DEMO_ACCOUNT.collectionId,
+      displayTitle: 'Les cinq icônes — mandat d’assurance fictif', recipientLabel: 'Assureur fictif Cartularia', recipientKind: 'organization', accessKind: 'mandate',
+      // Sans échéance : reste « actif » quelle que soit la date de consultation.
+      sourceStatus: 'active', issuedAt: '2026-08-25T10:00:00.000Z', expiresAt: null, revokedAt: null, lastConsultedAt: '2026-09-05T16:30:00.000Z', consultationCount: 3,
+    },
+    {
+      id: 'acc_demo_link_revoked', ...common,
+      cartularyId: 'cart_demo_breguet_classique_5157bb', collectionId: null, scopeType: 'cartulary', scopeId: 'cart_demo_breguet_classique_5157bb',
+      displayTitle: 'Breguet Classique — lien révoqué', recipientLabel: 'Lien de consultation fictif', recipientKind: 'link', accessKind: 'shared_link',
+      sourceStatus: 'revoked', issuedAt: '2026-07-10T08:00:00.000Z', expiresAt: '2026-08-10T08:00:00.000Z', revokedAt: '2026-07-20T18:00:00.000Z', lastConsultedAt: '2026-07-12T09:15:00.000Z', consultationCount: 1,
+    },
+  ];
+};

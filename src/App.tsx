@@ -151,11 +151,13 @@ import type {
   PurchaseExpense,
   WatchPatrimonialStatus,
 } from './features/cartulary/state/cartularyStateTypes';
-import { isRegistryReturnPath } from './features/registry/registryCatalog';
-import { parseRegistryRoute } from './features/registry/registryRouting';
+import { resolveRegistryReturn } from './features/registry/registryReturn.ts';
+import { parseRegistryRoute, registryHref } from './features/registry/registryRouting';
 import type { RegistryCollectionDocument } from './domain/collections';
 import { loadCartularyCollectionContext, saveRegistryCollection } from './services/collections';
 import { DEMO_ACCOUNT } from './data/demoCartularies';
+import { loadPublicPublicationSummaries } from './services/projections';
+import { PublicationReadOnlySummary } from './features/cartulary/components/PublicationReadOnlySummary';
 import {
   normalizeStorageCodeReferences,
   normalizeTransmissionCodeReferences,
@@ -662,8 +664,10 @@ const EMPTY_SCHEMA: VerticalSchema = { schemaId: '', assetType: '', version: '',
 function App() {
   const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
   const routeParameters = new URLSearchParams(window.location.search);
-  const requestedRegistryReturn = routeParameters.get('returnTo');
-  const registryReturnHref = isRegistryReturnPath(requestedRegistryReturn) ? requestedRegistryReturn : '/registry';
+  const registryReturn = resolveRegistryReturn(routeParameters.get('returnTo'), { demo: isDemoCartulary });
+  const registryReturnHref = registryReturn.href;
+  // En démo sans returnTo, requestedRegistryId vaut le Registre démo : le contexte de Collection n'est
+  // pas chargé en démo (effet gardé plus bas) et la page Publication passe en rendu lecture.
   const requestedRegistryId = parseRegistryRoute(registryReturnHref).registryId;
   const requestedPublicCode = publicCodeFromUrl();
   const localPublicationPreviewAllowed = isWatchWebsite
@@ -692,6 +696,9 @@ function App() {
   const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary });
   const canEdit = !isDemoCartulary;
   const showCompleteContent = canEdit || isDemoCartulary;
+  // Décision V2 (b) : la page Publication n'est éditable que si le serveur reconnaît le droit de gérer l'objet ;
+  // tout autre lecteur (démonstration comprise, hook autoritaire désactivé) reçoit le rendu lecture des quatre structures.
+  const canManagePublication = authoritative.canManage;
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
   const [eventTrigger, setEventTrigger] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -752,6 +759,11 @@ function App() {
   const [publicationUrlCopied, setPublicationUrlCopied] = useState(false);
   const [collectionUrlCopied, setCollectionUrlCopied] = useState(false);
   const [communityUrlCopied, setCommunityUrlCopied] = useState(false);
+  // Décision V2 (d) : le mini-site n'est annoncé (lien, code public, QR) que si publications/{code} est
+  // réellement publié à l'exécution ; jamais de faux « publié », jamais de message technique.
+  const [websitePublished, setWebsitePublished] = useState(false);
+  // Blocs réellement en ligne (publications/{code}.blockIds), lus avec le statut ; null tant que rien n'est constaté.
+  const [publishedWebsiteBlockIds, setPublishedWebsiteBlockIds] = useState<string[] | null>(null);
   useEffect(() => {
     if (isDemoCartulary || isWatchWebsite) return;
     let active = true;
@@ -1086,6 +1098,7 @@ function App() {
   }, [publicProjection]);
 
   useEffect(() => {
+    if (isDemoCartulary) return; // décision V2 (c) : aucune trace locale de la consultation démo
     journal
       .logEvent(
         'ACCESS_CARTULARY',
@@ -1179,6 +1192,7 @@ function App() {
   }, [editableCopy]);
 
   useEffect(() => {
+    if (isDemoCartulary) return undefined; // rien n'est enregistré dans le navigateur du visiteur
     const timeout = window.setTimeout(() => {
       void journal.reconcileSnapshot(integritySnapshot).then((event) => {
         if (event) setEventTrigger((previous) => previous + 1);
@@ -1267,6 +1281,20 @@ function App() {
   const websiteDraft = buildWebsiteDraft(websiteContent, approvedWebsiteBlocks);
   const localPreviewBlocks = websiteDraftPreview(buildWebsiteDraft(websiteContent, watchWebsiteBlocks));
   const publicShareUrl = `${window.location.origin}/watch-website?publicCode=${encodeURIComponent(cartularyPublicCode)}`;
+  useEffect(() => {
+    if (isWatchWebsite || !cartularyPublicCode) return undefined;
+    let active = true;
+    loadPublicPublicationSummaries([cartularyPublicCode])
+      .then((summaries) => {
+        if (!active) return;
+        const summary = summaries[cartularyPublicCode];
+        setWebsitePublished(summary?.published === true);
+        setPublishedWebsiteBlockIds(summary?.published === true ? summary.blockIds : null);
+      })
+      .catch(() => { if (active) { setWebsitePublished(false); setPublishedWebsiteBlockIds(null); } });
+    return () => { active = false; };
+  }, [cartularyPublicCode, isWatchWebsite]);
+  const publishedWebsiteUrl = websitePublished ? publicShareUrl : null;
   const localPublicationPreviewParameters = new URLSearchParams({
     publicCode: cartularyPublicCode,
     preview: 'local',
@@ -1763,6 +1791,7 @@ function App() {
       return;
     }
 
+    if (isDemoCartulary) return; // démonstration : aucune journalisation locale
     const scope = `rapport personnalisé · ${orderedReportBlocks.length} blocs`;
     void journal
       .logEvent('EXPORT_PDF', 'Propriétaire', `Ouverture de la boîte d’impression : ${scope}`)
@@ -1771,6 +1800,7 @@ function App() {
   };
 
   const handleDeleteAllData = async () => {
+    if (isDemoCartulary) return; // défense en profondeur : le bouton n'est plus rendu en lecture seule
     await journal.logEvent(
       'PRIVATE_DATA_DELETION_REQUESTED',
       'Propriétaire',
@@ -2615,6 +2645,7 @@ function App() {
         setLanguage={setLanguage}
         followUp={followUp}
         readOnly={isDemoCartulary}
+        returnHref={registryReturnHref}
       />
 
       {isDemoCartulary && (
@@ -2627,7 +2658,7 @@ function App() {
 
       <a className="cartulary-registry-return no-print" href={registryReturnHref}>
         <ArrowLeft size={14} aria-hidden="true" />
-        {language === 'FR' ? 'Retour au Registre' : 'Back to Registry'}
+        {registryReturn.label[language]}
       </a>
 
       <nav className="page-tabs no-print" aria-label={language === 'FR' ? 'Pages du Cartulaire' : 'Cartulary pages'}>
@@ -3490,6 +3521,7 @@ function App() {
 
         <PublicationPage active={activePage === 'publication'}>
           <PageIntroduction number="05" title={tx('Publication', 'Publication')} />
+          {canManagePublication ? (
           <div className="publication-center">
             <article className="publication-scope publication-scope--cartulary">
               <header>
@@ -3577,6 +3609,19 @@ function App() {
               {renderPublicationBlockSelector('report', reportBlocks)}
             </article>
           </div>
+          ) : (
+            <PublicationReadOnlySummary
+              language={language}
+              selections={{ website: publishedBlocks, collection: collectionBlocks, community: communityBlocks, report: reportBlocks }}
+              previewUrl={localPublicationPreviewUrl}
+              collectionName={isDemoCartulary ? DEMO_ACCOUNT.collectionName : authoritative.collectionName}
+              publishedWebsiteUrl={publishedWebsiteUrl}
+              publishedWebsiteBlockIds={publishedWebsiteBlockIds}
+              demonstration={isDemoCartulary}
+              onPrintReport={handleReportPrint}
+              reportState={{ phase: reportPreparation.phase, message: reportExportMessage }}
+            />
+          )}
             <GenericSchemaPageSections page="publication" {...genericPageProps} />
         </PublicationPage>
 
@@ -3681,6 +3726,9 @@ function App() {
               persistence={persistence}
               onDeleteAllData={handleDeleteAllData}
               onJournalUpdate={() => setEventTrigger((previous) => previous + 1)}
+              readOnly={isDemoCartulary}
+              demoRegistryProofsHref={isDemoCartulary ? registryHref(DEMO_ACCOUNT.registryId, 'integrity') : null}
+              publishedWebsiteUrl={publishedWebsiteUrl}
             />
           </Suspense>
         </aside>

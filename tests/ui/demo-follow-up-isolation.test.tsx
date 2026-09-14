@@ -1,6 +1,7 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, render, renderHook, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useCartularyFollowUp } from '../../src/features/cartulary/state/useCartularyFollowUp';
+import { CartularyTodoBoard } from '../../src/components/CartularyTodoBoard';
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), persist: vi.fn(), observe: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() }));
 vi.mock('../../src/persistence/localVault.ts', () => ({ readCartulariaStorage: mocks.read, persistCartulariaJson: mocks.persist }));
@@ -21,5 +22,15 @@ describe('Suivi de la démonstration anonyme', () => {
     });
     expect(result.current.todos).toEqual([]);
     for (const fn of [mocks.persist, mocks.create, mocks.update, mocks.remove]) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('n’affiche aucun état de synchronisation sur l’Accueil démo, seulement la mention de lecture seule', () => {
+    const { result } = renderHook(() => useCartularyFollowUp({ cartularyId: 'demo-object', language: 'FR', readOnlyPreview: true }));
+    const { container } = render(<CartularyTodoBoard followUp={result.current} language="FR" readOnly />);
+    expect(container.querySelector('.todo-sync-error')).toBeNull();
+    expect(screen.queryByText(/Synchronisation/)).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByText('Démonstration en lecture seule')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 });
