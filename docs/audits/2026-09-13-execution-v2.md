@@ -141,3 +141,14 @@ Restent à rejouer par l’orchestrateur (émulateurs interdits aux agents) : `n
 **Correctif après recette** : sur une publication absente ou révoquée, le bouton « Réessayer » s’affichait encore ; état définitif désormais distingué (`publicProjectionAbsent`) : plus de bouton, lien « Retour à l’accueil » (contrat étendu). Redéployé.
 
 **P1 et P2** : écritures de production à lancer par Jérôme (commandes du §3), le garde-fou de l’assistant refusant les écritures distantes ; P2.c, P5 et la mise à jour de ce journal suivront.
+
+**P1 et P2 exécutés par Jérôme (14 septembre)**, sorties relues dans le terminal de l’application :
+
+| Étape | Résultat |
+|---|---|
+| P1 seed démo v2 | Simulation puis application, sauvegarde `cartularia-demo-repair-20260914/demo-data-enrichment-v2-T47LTc/backup.json` (empreinte `sha256:9135d8bf…`) ; relance `--data-only --expect-no-writes` par l’assistant : `applied: false`, 0 écriture. |
+| P2 publication Submariner | Simulation : racine révision 3, chaîne d’audit valide (3 événements), 8 blocs, 3 dérivés WebP (236 ko), 23 chemins d’écriture, aucun bloqueur. Application : `published`, révision 4, événement `evt_97c1b092315e6d6abac15202`, sceau `S-05BB8C0F`, 3 fichiers `public/DEMO-ROL-124060/…`. Relance en simulation : `alreadyPublished: true`, 0 écriture, publication 8 blocs / 3 accès média, sceau `issued`. |
+| P2.c vérification anonyme | `/watch-website?publicCode=DEMO-ROL-124060` : « Mini-site publié · DEMO-ROL-124060 », quatre pages (Accueil, Médias, La référence, L’objet), bandeau « Démonstration · données fictives », pied `DEMO-ROL-124060 · S-05BB8C0F`, aucun mot privé. Les trois dérivés répondent en anonyme sur Storage (HTTP 200, `image/webp`, 59 / 48 / 129 ko) ; dans un onglet en arrière-plan les images restent « loading » (chargement à la visibilité, comportement attendu), à voir dans un onglet actif. |
+| Page Publication de la Submariner | « Publié : 8 contenus en ligne. » + « Ouvrir le mini-site » ; compteurs 8 / 14 / 20 / 23 ; panneau Preuves avec code public, QR et lien vers le mini-site réel ; aucun message de connexion. |
+
+**État de V2** : les cinq points du plan ont un écran qui les tient ; il reste la recette visiteur complète sur ordinateur et téléphone (P5, à mener au début de V3 avec la session Chrome active) et les limites connues du §3. V2 est close.
