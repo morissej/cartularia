@@ -78,6 +78,10 @@ test('la page Publication sélectionne les contenus autorisés sans confirmation
   // Quatre appels (une destination par structure commune) ; la définition s'écrit « = (» et n'est pas comptée.
   assert.equal((app.match(/renderPublicationBlockSelector\(/g) ?? []).length, 4);
   assert.match(app, /if \(isDemoCartulary\) return; \/\/ démonstration : aucune journalisation locale/);
+  // Publication absente ou révoquée : état définitif, sans bouton « Réessayer », avec retour à l’accueil.
+  assert.match(app, /setPublicProjectionError\('Publication absente ou révoquée\.'\);\s*setPublicProjectionAbsent\(true\);/);
+  assert.match(app, /!publicProjectionLoading && !publicProjectionAbsent && <button[^\n]*Réessayer/);
+  assert.match(app, /!publicProjectionLoading && publicProjectionAbsent && <a className="button button--quiet" href="\/">/);
   // Décision (c) : la garde de démonstration ne coupe que la journalisation locale, jamais la préparation ni l’impression du rapport.
   const reportPrintBody = app.slice(app.indexOf('const handleReportPrint'), app.indexOf('const handleDeleteAllData'));
   const demoGuardIndex = reportPrintBody.indexOf('if (isDemoCartulary) return; // démonstration');

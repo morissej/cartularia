@@ -888,6 +888,8 @@ function App() {
     isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed,
   ));
   const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
+  // Vrai quand la publication est absente ou révoquée : état définitif, sans bouton « Réessayer ».
+  const [publicProjectionAbsent, setPublicProjectionAbsent] = useState(false);
   const persistence = useHybridPersistence(mockCartulary.id, !isDemoCartulary && !isWatchWebsite);
   const drawerRef = useRef<HTMLElement>(null);
   const publicationDialogRef = useRef<HTMLDivElement>(null);
@@ -1067,6 +1069,7 @@ function App() {
     let active = true;
     setPublicProjectionLoading(true);
     setPublicProjectionError(null);
+    setPublicProjectionAbsent(false);
     import('./services/projections.ts')
       .then(({ loadPublicProjection }) => loadPublicProjection(requestedPublicCode))
       .then((projection) => {
@@ -1074,11 +1077,13 @@ function App() {
         setPublicProjection(projection);
         if (!projection && !localPublicationPreviewAllowed) {
           setPublicProjectionError('Publication absente ou révoquée.');
+          setPublicProjectionAbsent(true);
         }
       })
       .catch(() => {
         if (!active) return;
         setPublicProjection(null);
+        setPublicProjectionAbsent(false);
         if (!localPublicationPreviewAllowed) {
           setPublicProjectionError('Publication indisponible.');
         }
@@ -2538,7 +2543,8 @@ function App() {
             {publicProjectionLoading ? <RotateCw className="is-spinning" size={26} /> : <Lock size={26} />}
             <h1>{publicProjectionLoading ? tx('Chargement de la publication', 'Loading publication') : tx('Publication indisponible', 'Publication unavailable')}</h1>
             <p>{publicProjectionLoading ? tx('Lecture des contenus publiés…', 'Loading published content…') : publicProjectionError}</p>
-            {!publicProjectionLoading && <button type="button" className="button button--quiet" onClick={() => window.location.reload()}>{tx('Réessayer', 'Retry')}</button>}
+            {!publicProjectionLoading && !publicProjectionAbsent && <button type="button" className="button button--quiet" onClick={() => window.location.reload()}>{tx('Réessayer', 'Retry')}</button>}
+            {!publicProjectionLoading && publicProjectionAbsent && <a className="button button--quiet" href="/">{tx('Retour à l’accueil', 'Back to home')}</a>}
           </div>
         </main>
       </div>
