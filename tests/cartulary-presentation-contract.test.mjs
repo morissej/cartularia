@@ -889,3 +889,60 @@ test('V6 (V-D9, V-D10) : aucune bascule FR/EN rendue, langue fixée à FR sans r
   assert.deepEqual(faulty, []);
   assert.equal(CARTULARY_PRESENTATION_CONTRACT_VERSION, 'cartulary-presentation@1.4.0', 'D3 : version conservée, titre jamais rendu');
 });
+
+// V6 — point « cartulaire-mobile » (V-D3 onglets, V-D4 Valorisation ; D4 (b) crochet, D5 (a) ancrage, D6 (a) graphique, D13 (a) barre, D14 (b) borne).
+// Sans redondance avec les blocs V6 précédents : l'arithmétique 69 px, les cibles de 44 px et l'espace des onglets vivent dans
+// tests/cartulary-headings.test.mjs et tests/touch-targets-contract.test.mjs ; la langue et la garde « mini-site » dans le bloc V-D9/V-D10.
+test('V6 (V-D3, V-D4) : onglet actif révélé par crochet, piste avec indice de débordement sur fond opaque, barre à 69 px par sa rangée, graphique de marché borné, régions défilantes focalisables, App.tsx borné', () => {
+  const app = readSource('../src/App.tsx');
+  const css = readSource('../src/index.css');
+  const hook = readSource('../src/hooks/useRevealActiveTab.ts');
+  const block = (source, opener) => source.slice(source.indexOf(opener), source.indexOf('}', source.indexOf(opener)));
+  const count = (source, pattern) => (source.match(pattern) ?? []).length;
+  // V-D3 (D4 (b)) : le crochet vise l'onglet courant de la piste seule (coque et mini-site partagent la classe, branches exclusives),
+  // défile horizontalement sans déplacer la fenêtre, tolère jsdom ; appelé une fois, juste après l'état de page, avant tout retour anticipé.
+  assert.match(hook, /querySelector<HTMLElement>\('\.page-tabs__inner \[aria-current="page"\]'\)/, 'le crochet vise l’onglet courant de la piste');
+  assert.match(hook, /scrollIntoView\?\.\(\{ inline: 'center', block: 'nearest' \}\)/, 'défilement horizontal seul (block: nearest), tolérant à jsdom');
+  assert.doesNotMatch(hook, /behavior:/, 'défilement immédiat : neutre pour prefers-reduced-motion');
+  assert.match(app, /^import \{ useRevealActiveTab \} from '\.\/hooks\/useRevealActiveTab';$/m);
+  assert.equal(count(app, /useRevealActiveTab\(/g), 1, 'un seul appel du crochet');
+  assert.match(app, /useState<CartularyPage>\(pageFromHash\);\n  useRevealActiveTab\(activePage\);/, 'le crochet suit activePage, immédiatement après l’état de page');
+  assert.equal(count(app, /className="container page-tabs__inner"/g), 2, 'la piste porte la même classe dans la coque et le mini-site : une seule cible pour le crochet');
+  assert.equal(count(app, /aria-current=\{[^}]+\? 'page' : undefined\}/g), 2, 'chaque onglet actif porte aria-current="page"');
+  assert.doesNotMatch(app, /key=\{page\.id\} id=\{page\.id\}/, 'aucune ancre générique sur les onglets (variante (a) écartée)');
+  assert.doesNotMatch(app, /scrollIntoView/, 'aucun défilement d’onglet hors du crochet');
+  // V-D3 : la piste défile (inchangé) et porte l'indice de débordement en CSS pur (ombres aux bords, caches défilants) sur un fond opaque.
+  const track = block(css, '.page-tabs__inner {');
+  assert.match(track, /overflow-x: auto;/, 'la piste d’onglets reste un conteneur défilant');
+  assert.match(track, /background-attachment: local, local, scroll, scroll;/, 'ombres de défilement : deux caches liés au contenu, deux ombres fixées aux bords');
+  assert.match(track, /background-size: 48px 100%, 48px 100%, 24px 100%, 24px 100%;/);
+  const tabs = block(css, '.page-tabs {');
+  assert.match(tabs, /\n  background: var\(--paper\);\n/, 'fond opaque des onglets : le titre ne transparaît plus sous la barre collante');
+  assert.doesNotMatch(tabs, /color-mix/);
+  // D13 (a) : la rangée de contrôles garantit 69 px quelle que soit la composition de la barre (règle hors tranche mobile, sur sa propre ligne, après la règle du logo).
+  assert.match(css, /\n\.dossier-bar__logo \.brand-logo-link \{ min-height: var\(--control-size\); \}\n[^\n]*\n\.dossier-bar__inner \{ min-height: var\(--control-size\); \}\n/);
+  assert.ok(css.indexOf('.dossier-bar__inner { min-height: var(--control-size); }') < css.indexOf('@media (max-width: 767px) {'), 'règle de base, valable à toute largeur');
+  // D5 (a) : plus d'ancrage de défilement sur le tourne-page (saut au bas de la nouvelle page mesuré à 6 318 px sur HEAD).
+  assert.match(block(css, '.page-turner {'), /overflow-anchor: none;/);
+  // V-D4 (D6 (a)) : sur mobile, la carte du graphique défile depuis le début de l'historique (la page ne s'élargit plus), garde son fond blanc
+  // et l'axe couvre toutes les barres ; les tableaux restent défilants. Même découpe de la tranche mobile que le contrat V5.
+  const mobileStart = css.indexOf('@media (max-width: 767px) {');
+  const mobile = css.slice(mobileStart, css.indexOf('@media (prefers-reduced-motion: reduce) {', mobileStart));
+  const card = block(mobile, '.market-chart-card {');
+  assert.match(card, /^\.market-chart-card \{\n    overflow-x: auto;/, 'la carte « Évolution du marché » est un conteneur défilant sur mobile');
+  assert.match(card, /background-attachment: local, local, scroll, scroll;/, 'ombres de défilement sur la carte');
+  assert.match(card, /\n    background-color: var\(--sheet\);\n/, 'le raccourci background ne retire pas le fond blanc de la carte');
+  assert.doesNotMatch(card, /scroll-behavior|scrollLeft/, 'position initiale : début de l’historique, CSS seul');
+  assert.match(mobile, /\n  \.market-bars \{ height: 220px; min-width: max-content; \}\n/, 'l’axe s’étend sous toutes les barres');
+  assert.doesNotMatch(css.slice(0, mobileStart), /\.market-chart-card \{[^}]*overflow-x/, 'bureau et tablette inchangés');
+  assert.match(css, /\n\.sensitivity-table \{ overflow-x: auto;/);
+  assert.match(css, /\n\.expense-table \{ overflow-x: auto; \}\n/);
+  // Accessibilité : régions défilantes focalisables et nommées, aria-label porté par un rôle, contour de focus visible.
+  assert.equal(count(app, /<div className="market-bars" role="group" tabIndex=\{0\} aria-label=\{tx\('Évolution des évaluations médianes', 'Median valuation trend'\)\}>/g), 2, 'graphique nommé et focalisable dans le lecteur et le mini-site');
+  assert.doesNotMatch(app, /<div className="market-bars" aria-label/, 'plus d’aria-label sur un div sans rôle');
+  assert.equal(count(app, /role="table" tabIndex=\{0\} aria-label=\{tx\('Sensibilité/g), 2, 'les deux tableaux de sensibilité de la coque sont focalisables');
+  assert.equal(count(app, /className="sensitivity-table( sensitivity-table--irr)?" role="group" tabIndex=\{0\} aria-label=\{tx\('Sensibilité/g), 2, 'parité mini-site : tableaux de sensibilité nommés et focalisables');
+  assert.match(css, /\n\.market-bars:focus-visible,\n\.sensitivity-table:focus-visible \{ outline: 2px solid var\(--mark\); outline-offset: 2px; \}\n/);
+  // D14 (b) : borne unique de la vague, valeur mesurée après intégration (A1 −4, A2 −2, A3 +2 sur 3 477).
+  assert.ok(count(app, /\n/g) <= 3473, `App.tsx compte ${count(app, /\n/g)} lignes (plafond 3 473, comme wc -l)`);
+});

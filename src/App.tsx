@@ -81,6 +81,7 @@ import {
   type CartularyPage,
 } from './utils/interfaceState';
 import { useDialogFocus } from './hooks/useDialogFocus';
+import { useRevealActiveTab } from './hooks/useRevealActiveTab';
 import { removeItemById, restoreItemAtIndex } from './utils/undoableDeletion';
 import { horizontalNavigationDirection, targetConsumesHorizontalNavigation } from './utils/horizontalNavigation';
 import { mediaDownloadFileName } from './utils/mediaDownload';
@@ -670,6 +671,7 @@ function App() {
   // tout autre lecteur (démonstration comprise, hook autoritaire désactivé) reçoit le rendu lecture des quatre structures.
   const canManagePublication = authoritative.canManage;
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
+  useRevealActiveTab(activePage);
   const [eventTrigger, setEventTrigger] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSpinOpen, setIsSpinOpen] = useState(false);
@@ -2166,7 +2168,7 @@ function App() {
           <section>
             <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} />
             <div className="market-grid">
-              <article className="market-chart-card"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><div className="market-bars">{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>{isDemoCartulary ? tx('Source : historique fictif de démonstration · aucune transaction réelle', 'Source: fictional demonstration history · no real transaction') : tx('Source : évaluations datées du dossier', 'Source: dated valuations from the record')}</small></article>
+              <article className="market-chart-card"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><div className="market-bars" role="group" tabIndex={0} aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>{isDemoCartulary ? tx('Source : historique fictif de démonstration · aucune transaction réelle', 'Source: fictional demonstration history · no real transaction') : tx('Source : évaluations datées du dossier', 'Source: dated valuations from the record')}</small></article>
               <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">{tx('Profondeur de marché', 'Market depth')}</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? tx(`Analyse du ${formatDate(marketDepth.analysisDate)}`, `Analysis dated ${formatDate(marketDepth.analysisDate)}`) : tx('Date non renseignée', 'Date not provided')}</time></div><div className="metric-grid"><div><strong>{marketDepth.activeListings}</strong><span>{tx('Annonces actives', 'Active listings')}</span></div><div><strong>{marketDepth.transactions12m}</strong><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div><div><strong>{marketDepth.medianDaysOnMarket} {tx('j', 'd')}</strong><span>{tx('Délai médian estimé', 'Estimated median time')}</span></div></div><div className="valuation-range"><span>{tx('Fourchette actuelle', 'Current range')}</span><strong>{formatMoney(marketDepth.lowValue)} — {formatMoney(marketDepth.highValue)}</strong><small>{tx('VALEUR MÉDIANE', 'MEDIAN VALUE')} {formatMoney(marketDepth.midValue)}</small></div></article>
               <article className="retained-value-card retained-value-card--published">
                 <div><span className="eyebrow">{tx('Décision du propriétaire', 'Owner decision')}</span><h3>{tx('Valeur retenue', 'Retained value')}</h3></div>
@@ -2215,7 +2217,7 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} />
-            <div className="sensitivity-stack"><div><h3>{tx('Plus-value ou moins-value nette', 'Net capital gain or loss')}</h3><div className="sensitivity-table"><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>; })}</div>)}</div></div><div><h3>{tx('TRI annualisé', 'Annualized IRR')}</h3><div className="sensitivity-table sensitivity-table--irr"><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>; })}</div>)}</div></div></div>
+            <div className="sensitivity-stack"><div><h3>{tx('Plus-value ou moins-value nette', 'Net capital gain or loss')}</h3><div className="sensitivity-table" role="group" tabIndex={0} aria-label={tx('Sensibilité de la plus-value ou moins-value', 'Capital gain or loss sensitivity')}><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>; })}</div>)}</div></div><div><h3>{tx('TRI annualisé', 'Annualized IRR')}</h3><div className="sensitivity-table sensitivity-table--irr" role="group" tabIndex={0} aria-label={tx('Sensibilité du TRI annualisé', 'Annualized IRR sensitivity')}><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>; })}</div>)}</div></div></div>
           </section>
         );
       default:
@@ -2992,7 +2994,7 @@ function App() {
                 <div className="market-grid">
                   <article className="market-chart-card">
                     <div className="market-chart-card__heading"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span>{canEdit && <button type="button" className="button button--quiet no-print" onClick={() => setIsMarketHistoryEditorOpen(true)}><Plus size={14} /> {tx('Ajouter une évaluation', 'Add valuation')}</button>}</div>
-                    <div className="market-bars" aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>
+                    <div className="market-bars" role="group" tabIndex={0} aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>
                       {marketValues.map((valuation) => (
                         <div key={valuation.id} data-ai-scope="value.market.valuations[]" data-ai-instance={valuation.id}>
                           <span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} />
@@ -3169,7 +3171,7 @@ function App() {
                   )}
                   <div>
                     <h3>{tx('Plus-value ou moins-value nette', 'Net capital gain or loss')}</h3>
-                    <div className="sensitivity-table" role="table" aria-label={tx('Sensibilité de la plus-value ou moins-value', 'Capital gain or loss sensitivity')}>
+                    <div className="sensitivity-table" role="table" tabIndex={0} aria-label={tx('Sensibilité de la plus-value ou moins-value', 'Capital gain or loss sensitivity')}>
                       <div className="sensitivity-table__head" role="row"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>
                       {sensitivityCosts.map((costPct, costIndex) => (
                         <div role="row" key={`${costPct}-${costIndex}`}>
@@ -3184,7 +3186,7 @@ function App() {
                   </div>
                   <div>
                     <h3>{tx('TRI annualisé', 'Annualized IRR')}</h3>
-                    <div className="sensitivity-table sensitivity-table--irr" role="table" aria-label={tx('Sensibilité du TRI annualisé', 'Annualized IRR sensitivity')}>
+                    <div className="sensitivity-table sensitivity-table--irr" role="table" tabIndex={0} aria-label={tx('Sensibilité du TRI annualisé', 'Annualized IRR sensitivity')}>
                       <div className="sensitivity-table__head" role="row"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>
                       {sensitivityCosts.map((costPct, costIndex) => (
                         <div role="row" key={`${costPct}-${costIndex}`}>

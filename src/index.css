@@ -165,6 +165,8 @@ img { display: block; max-width: 100%; }
 
 .dossier-bar__logo .brand-logo { height: 34px; }
 .dossier-bar__logo .brand-logo-link { min-height: var(--control-size); }
+/* V6 V-D3 (D13 (a)) : la rangée de contrôles fait 44 px quelle que soit sa composition ; avec le padding vertical var(--s3) et la bordure, la barre mesure 69 px, valeur reprise par .page-tabs et .todo-popover (top: 69px). */
+.dossier-bar__inner { min-height: var(--control-size); }
 
 .cartulary-registry-return {
   display: inline-flex;
@@ -416,7 +418,8 @@ img { display: block; max-width: 100%; }
   position: sticky;
   top: 69px;
   z-index: 90;
-  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  /* V6 V-D3 : fond opaque — le titre de la page ne transparaît plus sous la barre collante (mesuré à 96 %). */
+  background: var(--paper);
   border-bottom: 1px solid var(--rule);
 }
 
@@ -425,6 +428,15 @@ img { display: block; max-width: 100%; }
   align-items: stretch;
   min-height: 54px;
   overflow-x: auto;
+  /* V6 V-D3 : ombres de défilement — les deux caches (attachment local) défilent avec la piste et découvrent l'ombre du bord où le contenu continue ; rien n'apparaît quand la piste tient (1 280 px). */
+  background:
+    linear-gradient(to right, var(--paper) 50%, rgb(244 242 237 / 0)),
+    linear-gradient(to left, var(--paper) 50%, rgb(244 242 237 / 0)) 100% 0,
+    linear-gradient(to right, rgb(26 24 21 / .16), rgb(26 24 21 / 0)),
+    linear-gradient(to left, rgb(26 24 21 / .16), rgb(26 24 21 / 0)) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 48px 100%, 48px 100%, 24px 100%, 24px 100%;
+  background-attachment: local, local, scroll, scroll;
 }
 
 .page-tabs button {
@@ -2466,6 +2478,9 @@ textarea {
 .performance-results .is-negative strong { color: var(--negative); }
 
 .sensitivity-table { overflow-x: auto; border: 1px solid var(--rule); background: var(--sheet); }
+/* V6 V-D4 : régions défilantes atteignables au clavier (tabIndex 0 dans App.tsx), contour identique à .publication-summary__scroll. */
+.market-bars:focus-visible,
+.sensitivity-table:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
 .sensitivity-stack { display: grid; gap: var(--s6); }
 .sensitivity-stack > div { min-width: 0; }
 .sensitivity-stack h3 { margin-bottom: var(--s3); font-size: 18px; }
@@ -2517,6 +2532,8 @@ textarea {
   margin-top: var(--s7);
   padding-top: var(--s4);
   border-top: 1px solid var(--rule);
+  /* V6 (D5 (a)) : sans ancrage de défilement, un changement de page depuis une page défilée ne saute plus au bas de la nouvelle page avant le retour lisse en haut. */
+  overflow-anchor: none;
 }
 
 .page-turner button {
@@ -3066,7 +3083,20 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .watch-description-card { padding: var(--s4); }
   .current-condition-summary { padding: var(--s4); }
   .current-condition-summary dl { grid-template-columns: 1fr; }
-  .market-bars { height: 220px; }
+  /* V6 V-D4 (D6 (a)) : cinq barres de 66 px ne tiennent pas dans 308 px ; la carte défile depuis le début de l'historique (barre coupée au bord + ombre), la page ne s'élargit plus. Le fond blanc est redonné après le raccourci background. */
+  .market-chart-card {
+    overflow-x: auto;
+    background:
+      linear-gradient(to right, var(--sheet) 50%, rgb(255 255 255 / 0)),
+      linear-gradient(to left, var(--sheet) 50%, rgb(255 255 255 / 0)) 100% 0,
+      linear-gradient(to right, rgb(26 24 21 / .16), rgb(26 24 21 / 0)),
+      linear-gradient(to left, rgb(26 24 21 / .16), rgb(26 24 21 / 0)) 100% 0;
+    background-color: var(--sheet);
+    background-repeat: no-repeat;
+    background-size: 48px 100%, 48px 100%, 24px 100%, 24px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .market-bars { height: 220px; min-width: max-content; }
   .metric-grid { grid-template-columns: 1fr; }
   .metric-grid > div { min-height: 90px; }
   .retained-value-card,
