@@ -45,14 +45,35 @@ test('les deux lecteurs existants consomment le même contrat de présentation',
 
 test('la page Publication sélectionne les contenus autorisés sans confirmation à chaque case, puis confirme au serveur', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  const selector = app.slice(
-    app.indexOf('const renderPublicationBlockSelector'),
-    app.indexOf('const ownershipSummary'),
-  );
-  assert.match(selector, /togglePublicationBlock/);
-  assert.match(selector, /Tout sélectionner/);
-  assert.doesNotMatch(selector, /requestPublicationChange|À valider/);
-  assert.match(selector, /getPublicationPolicy\(destination, definition.id\).allowed/);
+  const sliceBetween = (source, from, to, label) => {
+    const start = source.indexOf(from); const end = source.indexOf(to);
+    assert.ok(start >= 0 && end > start, `tranche ${label} introuvable`);
+    return source.slice(start, end);
+  };
+  const table = readFileSync(new URL('../src/features/cartulary/components/PublicationSelectionTable.tsx', import.meta.url), 'utf8');
+  const model = readFileSync(new URL('../src/features/cartulary/components/publicationSummaryModel.ts', import.meta.url), 'utf8');
+  const summary = readFileSync(new URL('../src/features/cartulary/components/PublicationReadOnlySummary.tsx', import.meta.url), 'utf8');
+  // V4 P-D4 : une seule table de sélection, rendue une fois, alimentée par les quatre tranches et les commandes existantes.
+  assert.equal((app.match(/<PublicationSelectionTable\b/g) ?? []).length, 1);
+  assert.doesNotMatch(app, /renderPublicationBlockSelector/);
+  assert.match(app, /<PublicationSelectionTable[\s\S]{0,400}onToggle=\{togglePublicationBlock\}\s*onReplace=\{replacePublicationBlocks\}/);
+  const commands = sliceBetween(app, 'const replacePublicationBlocks', 'const ownershipSummary', 'commandes de publication');
+  assert.match(commands, /const togglePublicationBlock[\s\S]{0,120}if \(!canEdit\) return;[\s\S]{0,80}getPublicationPolicy\(destination, blockId\)\.allowed/);
+  assert.doesNotMatch(commands, /requestPublicationChange|À valider/);
+  assert.match(table, /Tout sélectionner/);
+  assert.doesNotMatch(table, /requestPublicationChange|À valider|firebase|firestore|isDemoCartulary/i, 'composant pur, sans validation par case');
+  assert.doesNotMatch(table, /getPublicationPolicy\(/, 'la politique est portée par cellState (modèle), jamais recodée dans la table');
+  assert.match(table, /aria-labelledby=\{`\$\{idPrefix\}-row-\$\{definition\.id\} \$\{idPrefix\}-col-\$\{destination\}`\}/, 'chaque case est nommée par sa ligne et sa colonne');
+  assert.match(table, /cellState\(destination, definition/);
+  assert.match(table, /Non proposé pour cette destination/);
+  assert.match(model, /getPublicationPolicy\(destination, definition\.id\)\.allowed/);
+  // D4-B : trois destinations à sélection de contenus, une seule constante.
+  assert.match(model, /export const DESTINATIONS: readonly PublicationDestination\[\] = \['website', 'community', 'report'\];/);
+  // Parité éditeur/lecture : les deux tables lisent le même modèle ; D6 (a) : même note Cercle des deux côtés.
+  for (const source of [table, summary]) { assert.match(source, /from '\.\/publicationSummaryModel\.ts'/); assert.match(source, /communityPublicationNote\(language\)/); }
+  assert.doesNotMatch(summary, /const DESTINATIONS\b|const DESTINATION_LABELS\b|getPublicationPolicy/);
+  assert.match(summary, /la Collection renvoie au mini-site de l’objet ; aucune sélection de contenus propre/);
+  assert.match(app, /La Collection renvoie au mini-site de l’objet ; aucune sélection de contenus propre/, 'l’article 02 de l’éditeur dit la même chose que la carte 02 du résumé');
   for (const destination of ['website', 'collection', 'community', 'report']) {
     const selection = filterPublicationBlockIds(destination, PUBLISHED_BLOCK_IDS);
     assert.ok(selection.length > 0);
@@ -75,15 +96,13 @@ test('la page Publication sélectionne les contenus autorisés sans confirmation
   assert.match(app, /<PublicationReadOnlySummary[\s\S]{0,900}publishedWebsiteUrl=\{publishedWebsiteUrl\}[\s\S]{0,600}onPrintReport=\{handleReportPrint\}/);
   assert.doesNotMatch(app, /isDemoCartulary\s*\?\s*\(?\s*<PublicationReadOnlySummary/);
   assert.match(app, /if \(isDemoCartulary \|\| isWatchWebsite\) return;[\s\S]{0,1500}Collections indisponibles/);
-  // Quatre appels (une destination par structure commune) ; la définition s'écrit « = (» et n'est pas comptée.
-  assert.equal((app.match(/renderPublicationBlockSelector\(/g) ?? []).length, 4);
   assert.match(app, /if \(isDemoCartulary\) return; \/\/ démonstration : aucune journalisation locale/);
   // Publication absente ou révoquée : état définitif, sans bouton « Réessayer », avec retour à l’accueil.
   assert.match(app, /setPublicProjectionError\('Publication absente ou révoquée\.'\);\s*setPublicProjectionAbsent\(true\);/);
   assert.match(app, /!publicProjectionLoading && !publicProjectionAbsent && <button[^\n]*Réessayer/);
   assert.match(app, /!publicProjectionLoading && publicProjectionAbsent && <a className="button button--quiet" href="\/">/);
   // Décision (c) : la garde de démonstration ne coupe que la journalisation locale, jamais la préparation ni l’impression du rapport.
-  const reportPrintBody = app.slice(app.indexOf('const handleReportPrint'), app.indexOf('const handleDeleteAllData'));
+  const reportPrintBody = sliceBetween(app, 'const handleReportPrint', 'const handleDeleteAllData', 'handleReportPrint');
   const demoGuardIndex = reportPrintBody.indexOf('if (isDemoCartulary) return; // démonstration');
   assert.ok(demoGuardIndex > 0, 'garde de démonstration présente dans handleReportPrint');
   assert.ok(reportPrintBody.indexOf('reportPreparation.prepare()') < demoGuardIndex, 'la préparation du rapport précède la garde de démonstration');

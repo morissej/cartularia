@@ -1,13 +1,17 @@
 import { Fragment } from 'react';
 import { Download, ExternalLink } from 'lucide-react';
-import {
-  filterPublicationBlockIds,
-  getPublicationPolicy,
-  PUBLICATION_BLOCK_CATALOG,
-  type PublicationBlockDefinition,
-  type PublicationDestination,
-} from '../../../domain/publication.ts';
+import type { PublicationDestination } from '../../../domain/publication.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
+import {
+  cellState,
+  communityPublicationNote,
+  DESTINATIONS,
+  destinationLabelFor,
+  joinNames,
+  privateBlocks,
+  selectedCount,
+  summaryGroups,
+} from './publicationSummaryModel.ts';
 
 /**
  * Rendu « lecture » des quatre structures communes de la page Publication
@@ -21,6 +25,10 @@ import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
  * (compte, statut, colonne de la table) reflète les blocs réellement en ligne
  * (`publishedWebsiteBlockIds`, lus dans publications/{code}) et non la sélection locale :
  * une seule vérité par destination.
+ *
+ * Colonnes, lignes, groupes, blocs privés et état de cellule viennent du modèle partagé
+ * avec l'éditeur (`publicationSummaryModel.ts`) : les deux tables lisent la même vérité.
+ * D4-B : la Collection renvoie au mini-site de l'objet et n'a aucune sélection propre.
  */
 
 export type PublicationSummarySelections = Record<PublicationDestination, readonly string[]>;
@@ -46,42 +54,6 @@ export interface PublicationReadOnlySummaryProps {
   reportState?: PublicationReportState;
 }
 
-const DESTINATIONS: readonly PublicationDestination[] = ['website', 'collection', 'community', 'report'];
-
-const DESTINATION_LABELS: Record<PublicationDestination, { fr: string; en: string }> = {
-  website: { fr: 'Mini-site', en: 'Website' },
-  collection: { fr: 'Collection', en: 'Collection' },
-  community: { fr: 'Le Cercle', en: 'The Circle' },
-  report: { fr: 'Rapport PDF', en: 'PDF report' },
-};
-
-const isAllowedSomewhere = (definition: PublicationBlockDefinition) => (
-  DESTINATIONS.some((destination) => getPublicationPolicy(destination, definition.id).allowed)
-);
-
-interface SummaryGroup {
-  pageNumber: PublicationBlockDefinition['pageNumber'];
-  pageLabel: string;
-  rows: PublicationBlockDefinition[];
-}
-
-/** Blocs listés dans la table (admis dans au moins une destination), groupés par page. */
-const summaryGroups = (): SummaryGroup[] => PUBLICATION_BLOCK_CATALOG.filter(isAllowedSomewhere).reduce<SummaryGroup[]>((groups, definition) => {
-  const last = groups[groups.length - 1];
-  if (last && last.pageNumber === definition.pageNumber) last.rows.push(definition);
-  else groups.push({ pageNumber: definition.pageNumber, pageLabel: definition.pageLabel, rows: [definition] });
-  return groups;
-}, []);
-
-/** Blocs privés partout : cités dans la note, jamais dans la table. */
-const privateBlocks = () => PUBLICATION_BLOCK_CATALOG.filter((definition) => !isAllowedSomewhere(definition));
-
-const joinNames = (names: string[], language: InterfaceLanguage) => {
-  if (names.length <= 1) return names.join('');
-  const conjunction = language === 'FR' ? ' et ' : ' and ';
-  return `${names.slice(0, -1).join(', ')}${conjunction}${names[names.length - 1]}`;
-};
-
 export function PublicationReadOnlySummary({
   language,
   selections,
@@ -101,11 +73,8 @@ export function PublicationReadOnlySummary({
     ? { ...selections, website: publishedWebsiteBlockIds ?? [] }
     : selections;
   const counts = Object.fromEntries(
-    DESTINATIONS.map((destination) => [destination, filterPublicationBlockIds(destination, effectiveSelections[destination] ?? []).length]),
+    DESTINATIONS.map((destination) => [destination, selectedCount(destination, effectiveSelections[destination] ?? [])]),
   ) as Record<PublicationDestination, number>;
-  const included = (destination: PublicationDestination, definition: PublicationBlockDefinition) => (
-    getPublicationPolicy(destination, definition.id).allowed && (effectiveSelections[destination] ?? []).includes(definition.id)
-  );
   const contentWord = (count: number) => tx(count > 1 ? 'contenus' : 'contenu', count === 1 ? 'item' : 'items');
   const contentCount = (count: number) => `${count} ${contentWord(count)}`;
   const wouldBePublished = (count: number) => tx(
@@ -177,13 +146,12 @@ export function PublicationReadOnlySummary({
         <article className="publication-scope publication-scope--collection publication-scope--summary">
           <header>
             <div><span className="eyebrow">02</span><h2>{tx('Publiez votre objet dans une Collection', 'Publish your object in a Collection')}</h2></div>
-            <p className="publication-summary__count"><strong>{counts.collection}</strong> <span>{contentWord(counts.collection)}</span></p>
           </header>
-          <p className="publication-summary__status">{wouldBePublished(counts.collection)}</p>
+          {/* D4-B : aucun compteur ; la Collection lie l'objet à son propre mini-site, sans sélection de contenus propre. */}
           <p className="publication-summary__detail">
             {demonstration
-              ? tx(`Collection de démonstration : ${collectionName} — publication non simulée.`, `Demonstration collection: ${collectionName} — publication not simulated.`)
-              : tx(`Collection : ${collectionName} — publication non simulée.`, `Collection: ${collectionName} — publication not simulated.`)}
+              ? tx(`Collection de démonstration : ${collectionName} — la Collection renvoie au mini-site de l’objet ; aucune sélection de contenus propre.`, `Demonstration collection: ${collectionName} — the Collection links to the object website; it has no content selection of its own.`)
+              : tx(`Collection : ${collectionName} — la Collection renvoie au mini-site de l’objet ; aucune sélection de contenus propre.`, `Collection: ${collectionName} — the Collection links to the object website; it has no content selection of its own.`)}
           </p>
         </article>
 
@@ -193,7 +161,7 @@ export function PublicationReadOnlySummary({
             <p className="publication-summary__count"><strong>{counts.community}</strong> <span>{contentWord(counts.community)}</span></p>
           </header>
           <p className="publication-summary__status">{wouldBePublished(counts.community)}</p>
-          <p className="publication-summary__detail">{tx('Publication dans Le Cercle non simulée.', 'Publication in The Circle not simulated.')}</p>
+          <p className="publication-summary__detail">{communityPublicationNote(language)}</p>
         </article>
 
         <article className="publication-scope publication-scope--report publication-scope--summary">
@@ -225,7 +193,7 @@ export function PublicationReadOnlySummary({
             <tr>
               <th scope="col">{tx('Contenu', 'Content')}</th>
               {DESTINATIONS.map((destination) => (
-                <th scope="col" key={destination}>{language === 'FR' ? DESTINATION_LABELS[destination].fr : DESTINATION_LABELS[destination].en}</th>
+                <th scope="col" key={destination}>{destinationLabelFor(destination, language)}</th>
               ))}
             </tr>
           </thead>
@@ -239,7 +207,7 @@ export function PublicationReadOnlySummary({
                   <tr key={definition.id}>
                     <th scope="row">{definition.title}</th>
                     {DESTINATIONS.map((destination) => {
-                      const active = included(destination, definition);
+                      const active = cellState(destination, definition, effectiveSelections[destination] ?? []) === 'included';
                       return (
                         <td key={destination} className={active ? 'is-included' : 'is-excluded'}>
                           <span aria-hidden="true">{active ? '✓' : '—'}</span>

@@ -72,7 +72,6 @@ import {
   evaluatePublicationEligibility,
   filterPublicationBlockIds,
   filterRequestedWebsiteBlocks,
-  publicationBlockIdsFor,
   getPublicationPolicy,
   isSelectionValidated,
   publicationActionFor,
@@ -160,6 +159,7 @@ import { loadCartularyCollectionContext, saveRegistryCollection } from './servic
 import { DEMO_ACCOUNT, DEMO_WEBSITE_BLOCK_IDS } from './data/demoCartularies';
 import { loadPublicPublicationSummaries } from './services/projections';
 import { PublicationReadOnlySummary } from './features/cartulary/components/PublicationReadOnlySummary';
+import { PublicationSelectionTable } from './features/cartulary/components/PublicationSelectionTable';
 import {
   normalizeStorageCodeReferences,
   normalizeTransmissionCodeReferences,
@@ -1576,55 +1576,6 @@ function App() {
     replacePublicationBlocks(destination, (current) => current.includes(blockId)
       ? current.filter((id) => id !== blockId)
       : [...current, blockId]);
-  };
-  const renderPublicationBlockSelector = (
-    destination: PublicationDestination,
-    selected: readonly PublishedBlockId[],
-  ) => {
-    const allowedSelection = filterPublicationBlockIds(destination, selected);
-    const count = allowedSelection.length;
-    return (
-    <div className="publication-block-selector">
-      <div className="publication-block-selector__toolbar">
-        <span>{tx(`${count} contenu${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''}`, `${count} selected item${count === 1 ? '' : 's'}`)}</span>
-        <button
-          type="button"
-          className="button button--quiet"
-          onClick={() => replacePublicationBlocks(destination, () => count === publicationBlockIdsFor(destination).length ? [] : publicationBlockIdsFor(destination))}
-          disabled={!canEdit}
-        >{count === publicationBlockIdsFor(destination).length ? tx('Tout décocher', 'Clear all') : tx('Tout sélectionner parmi les contenus autorisés', 'Select all allowed content')}</button>
-      </div>
-      {(['00', '01', '02', '03', '04'] as const).map((pageNumber) => {
-        const definitions = PUBLICATION_BLOCK_CATALOG.filter((definition) => definition.pageNumber === pageNumber && getPublicationPolicy(destination, definition.id).allowed);
-        if (!definitions.length) return null;
-        return (
-          <details key={pageNumber} open={pageNumber === '00'}>
-            <summary><span>{pageNumber}</span><strong>{definitions[0]?.pageLabel}</strong><small>{definitions.filter((definition) => selected.includes(definition.id)).length}/{definitions.length}</small></summary>
-            <div>
-              {definitions.map((definition) => {
-                const isSelected = selected.includes(definition.id);
-                const aiBinding = destination === 'website'
-                  ? aiFieldProps('publishing.blocks.website', definition.id)
-                  : destination === 'report' ? aiFieldProps('publishing.blocks.report', definition.id) : {};
-                return (
-                  <label key={definition.id} className={isSelected ? 'is-selected' : undefined}>
-                    <input
-                      {...aiBinding}
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => togglePublicationBlock(destination, definition.id)}
-                      disabled={!canEdit}
-                    />
-                    <span>{definition.title}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </details>
-        );
-      })}
-    </div>
-  );
   };
   const ownershipSummary = ownershipHistorySummary(ownershipHistory, language);
   const ownershipAssessment = ownershipValuationAssessment(ownershipHistory, language);
@@ -3502,6 +3453,7 @@ function App() {
           <PageIntroduction number="05" title={tx('Publication', 'Publication')} />
           {canManagePublication ? (
           <div className="publication-center">
+            <PublicationSelectionTable language={language} selections={{ website: publishedBlocks, collection: collectionBlocks, community: communityBlocks, report: reportBlocks }} canEdit={canEdit} onToggle={togglePublicationBlock} onReplace={replacePublicationBlocks} />
             <article className="publication-scope publication-scope--cartulary">
               <header>
                 <div><span className="eyebrow">01</span><h2>{tx('Mini-site de votre objet', 'Your object website')}</h2></div>
@@ -3514,7 +3466,6 @@ function App() {
                   <a className="button button--primary" href={localPublicationPreviewUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder', 'Open')}</a>
                 </div>
               )}
-              {renderPublicationBlockSelector('website', publishedBlocks)}
               <WebsiteDraftWarnings blocks={websiteDraft} language={language} />
               <PublicWebsitePublicationPanel cartularyId={mockCartulary.id} blocks={websiteDraftRequest(websiteDraft)} beforePublish={persistence.syncNow} readOnly={isDemoCartulary} language={language} onStateChanged={() => setWebsitePublicationCheck((value) => value + 1)} />
             </article>
@@ -3560,7 +3511,7 @@ function App() {
                 </div>
               )}
               {collectionPublicationEnabled && publicationCollectionIds.length === 0 && <p className="publication-report-message" role="status">{tx('Sélectionnez au moins une Collection pour ouvrir son mini-site.', 'Select at least one Collection to open its mini-site.')}</p>}
-              {renderPublicationBlockSelector('collection', collectionBlocks)}
+              <p className="publication-summary__detail">{tx('La Collection renvoie au mini-site de l’objet ; aucune sélection de contenus propre.', 'The Collection links to the object website; it has no content selection of its own.')}</p>
             </article>
 
             <article className="publication-scope publication-scope--community">
@@ -3575,7 +3526,6 @@ function App() {
                   <a className="button button--primary" href={localCommunityWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder au Cercle', 'Open The Circle')}</a>
                 </div>
               )}
-              {renderPublicationBlockSelector('community', communityBlocks)}
             </article>
 
             <article className="publication-scope publication-scope--report">
@@ -3585,7 +3535,6 @@ function App() {
               </header>
               {reportExportMessage && <p className="publication-report-message" role="status">{reportExportMessage}</p>}
               <p className="publication-report-message" role="status">{reportPreparation.phase === 'error' ? tx('Une image reste indisponible. Réessayez la préparation ou retirez le bloc concerné de la sélection ; aucune impression incomplète n’a été lancée.', 'An image is unavailable. Retry preparation or deselect its block; no incomplete print was started.') : reportPreparation.phase === 'ready' ? tx('Images chargées. Vous pouvez maintenant imprimer le rapport.', 'Images loaded. You can now print the report.') : tx('La préparation charge les images sélectionnées avant d’ouvrir l’impression.', 'Preparation loads selected images before opening print.')}</p>
-              {renderPublicationBlockSelector('report', reportBlocks)}
             </article>
           </div>
           ) : (
