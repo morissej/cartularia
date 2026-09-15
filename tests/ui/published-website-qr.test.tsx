@@ -30,6 +30,18 @@ describe('PublishedWebsiteQr', () => {
     expect(screen.getByText('SHARE QR CODE')).toBeTruthy();
   });
 
+  it('régénère le QR pour une nouvelle adresse (V4 relecture F3, M15)', async () => {
+    const other = 'https://cartularia.test/watch-website?publicCode=OBJ-2';
+    qr.toDataURL.mockImplementation(async (value: string) => `data:image/png;base64,${value.endsWith('OBJ-2') ? 'two' : 'one'}`);
+    const view = render(<PublishedWebsiteQr language="FR" url={url} />);
+    await waitFor(() => expect(screen.getByRole('img').getAttribute('src')).toBe('data:image/png;base64,one'));
+    view.rerender(<PublishedWebsiteQr language="FR" url={other} />);
+    await waitFor(() => expect(screen.getByRole('img').getAttribute('src')).toBe('data:image/png;base64,two'));
+    expect(screen.getByRole('link', { name: 'Ouvrir le mini-site publié lié au QR code' }).getAttribute('href')).toBe(other);
+    expect(qr.toDataURL).toHaveBeenCalledTimes(2);
+    expect(qr.toDataURL.mock.calls[1][0]).toBe(other);
+  });
+
   it('garde un espace réservé lisible si la génération du QR échoue', async () => {
     qr.toDataURL.mockRejectedValueOnce(new Error('canvas indisponible'));
     render(<PublishedWebsiteQr language="FR" url={url} />);

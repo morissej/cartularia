@@ -52,10 +52,16 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
   const privateInPreview = (asset: Asset) => preview && Boolean(asset.binaryId);
   const downloadLink = (asset: Asset, showName = false) => privateInPreview(asset) ? null : <MediaDownloadLink media={asset} language={language} compact showName={showName} />;
   const previewNote = language === 'FR' ? 'Téléchargement et lecture disponibles sur la page publiée, depuis la copie vérifiée par le serveur.' : 'Download and playback available on the published page, from the server-verified copy.';
+  // Vidéo téléversée : cet aperçu ne connaît aucune copie publique vérifiée (le client ne lit pas le manifeste serveur) ; le serveur
+  // refuse toute la publication (derivative_not_ready) tant qu'il n'a pas produit de copie transcodée — l'aperçu ne promet rien.
+  const previewVideoNote = language === 'FR' ? 'Cette vidéo n’a pas de copie publique vérifiée connue de cet aperçu : le serveur refusera la publication s’il n’en a pas produit (transcodage).' : 'This video has no server-verified public copy known to this preview: the server will refuse publication if it has not produced one (transcoding).';
+  const privateVideoInPreview = (asset: Asset) => privateInPreview(asset) && asset.type === 'video';
+  const noteFor = (asset: Asset) => privateVideoInPreview(asset) ? previewVideoNote : previewNote;
+  // La visionneuse ne parcourt que les médias qu'elle peut ouvrir : un binaire privé en aperçu reste hors de sa navigation.
   const downloadableAssets = assets.filter((asset) => !privateInPreview(asset));
   const heroAsset = assets.find((asset) => asset.type === 'image');
-  const selected = assets.find((asset) => asset.id === selectedId);
-  const selectedIndex = selected ? assets.indexOf(selected) : 0;
+  const selected = downloadableAssets.find((asset) => asset.id === selectedId);
+  const selectedIndex = selected ? downloadableAssets.indexOf(selected) : 0;
   const isInteractive = ['media-motion', 'media-spin', 'media-slideshow', 'media-library'].includes(block.blockId);
 
   return (
@@ -72,9 +78,10 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
         {block.blockId === 'media-motion' && assets.filter((asset) => asset.type === 'video' && !privateInPreview(asset)).map((asset) => <div key={asset.id}><MediaVideo asset={asset} language={language} />{downloadLink(asset)}</div>)}
         {block.blockId === 'media-spin' && assets.some((asset) => asset.type === 'image') && <SpinSequence images={assets.filter((asset) => asset.type === 'image')} language={language} />}
         {block.blockId === 'media-slideshow' && <MediaCarousel assets={assets} language={language} downloads={!preview} onOpen={(asset) => { if (!privateInPreview(asset)) setSelectedId(asset.id); }} />}
-        {block.blockId === 'media-library' && <div className="media-library public-media-library">{assets.map((asset) => <article key={asset.id}><button type="button" disabled={privateInPreview(asset)} title={privateInPreview(asset) ? previewNote : undefined} onClick={() => setSelectedId(asset.id)}>{asset.type === 'image' && <PrivateMediaImage asset={asset} language={language} alt="" sizes="240px" role="thumbnail" />}<strong>{asset.name}</strong><small>{asset.mimeType || asset.type}</small></button>{downloadLink(asset)}</article>)}</div>}
+        {block.blockId === 'media-library' && <div className="media-library public-media-library">{assets.map((asset) => <article key={asset.id}><button type="button" disabled={privateInPreview(asset)} title={privateInPreview(asset) ? noteFor(asset) : undefined} onClick={() => setSelectedId(asset.id)}>{asset.type === 'image' && <PrivateMediaImage asset={asset} language={language} alt="" sizes="240px" role="thumbnail" />}<strong>{asset.name}</strong><small>{asset.mimeType || asset.type}</small></button>{downloadLink(asset)}</article>)}</div>}
         {block.blockId === 'media-spin' && downloadableAssets.length > 0 && <details className="public-media-downloads"><summary>{language === 'FR' ? `Télécharger les vues (${downloadableAssets.length})` : `Download views (${downloadableAssets.length})`}</summary>{downloadableAssets.map((asset, index) => <div key={asset.id} className="spin-downloads__row"><span>{language === 'FR' ? 'Vue' : 'View'} {index + 1}/{downloadableAssets.length}</span>{downloadLink(asset, true)}</div>)}</details>}
-        {assets.some(privateInPreview) && <p role="status" className="media-load-prompt">{previewNote}</p>}
+        {assets.some((asset) => privateInPreview(asset) && !privateVideoInPreview(asset)) && <p role="status" className="media-load-prompt">{previewNote}</p>}
+        {assets.some(privateVideoInPreview) && <p role="status" className="media-load-prompt">{previewVideoNote}</p>}
         {block.assets.some((asset) => !resolvable(asset)) && <p role="status">{preview
           ? (language === 'FR' ? 'Un média sélectionné n’est pas encore enregistré dans le dossier : le serveur refusera la publication tant qu’il ne l’est pas.' : 'A selected media is not yet saved in the record: the server will refuse publication until it is.')
           : (language === 'FR' ? 'Une référence de copie publique est absente. Les originaux restent privés ; le propriétaire doit vérifier cette publication.' : 'A public copy reference is missing. Originals remain private; the owner needs to check this publication.')}</p>}
@@ -104,7 +111,7 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
           </article>
         ))}
       </div>
-      {selected && <MediaViewerModal asset={selected} assetCount={assets.length} position={selectedIndex} audience="Tous" language={language} mediaTags={[]} dialogRef={dialogRef} onClose={() => setSelectedId(null)} onMove={(direction) => setSelectedId(assets[(selectedIndex + direction + assets.length) % assets.length].id)} onToggleTag={() => undefined} onDelete={() => undefined} readOnly originalOnDemand={!preview} />}
+      {selected && <MediaViewerModal asset={selected} assetCount={downloadableAssets.length} position={selectedIndex} audience="Tous" language={language} mediaTags={[]} dialogRef={dialogRef} onClose={() => setSelectedId(null)} onMove={(direction) => setSelectedId(downloadableAssets[(selectedIndex + direction + downloadableAssets.length) % downloadableAssets.length].id)} onToggleTag={() => undefined} onDelete={() => undefined} readOnly originalOnDemand={!preview} />}
     </section>
   );
 };

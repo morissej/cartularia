@@ -44,6 +44,13 @@ describe('contrat unique de projection publique', () => {
     expect(JSON.stringify(preview)).not.toContain('personne privée');
     expect(JSON.stringify(preview)).not.toContain('secret_01');
   });
+  it('un média du bundle porteur d’un binaryId est une source privée seule, jamais une adresse (V4 relecture F3, M03)', () => {
+    const draft = buildWebsiteDraft({ brand: 'Atelier', model: 'Objet', reference: 'REF', assets: [{ ...media, url: '/assets/x.jpg', visibility: 'Tous' }] }, ['media-hero']);
+    const [asset] = websiteDraftPreview(draft)[0].assets;
+    expect(asset.downloadUrl).toBeNull();
+    expect(asset.localPreview?.binaryId).toBe('binary_01');
+    expect(JSON.stringify(websiteDraftPreview(draft))).not.toContain('/assets/x.jpg');
+  });
   it('conserve les descriptions légitimes et compte les omissions sans exposer leur texte', () => {
     const draft = buildWebsiteDraft({ brand: 'Atelier', model: 'Objet', reference: 'REF', assets: [],
       description: ['Cadran original bleu, sans restauration.', 'Propriétaire : personne privée', 'originalUrl=https://secret.example/test.jpg', ''],

@@ -5,6 +5,15 @@ import { clearWebsiteRequestSession, readWebsiteRequestSession, writeWebsiteRequ
 
 type PendingRequest = Omit<WebsiteRequestSessionEntry, 'requestedAtIso'>;
 const RETRYABLE_CODES = ['functions/unavailable', 'functions/deadline-exceeded', 'functions/internal'];
+/** Échec de lecture de l'état : sentinelle traduite au rendu (l'alerte suit la langue de l'interface, sans relire l'état). */
+const LOAD_FAILED = 'load-failed';
+/**
+ * Lot B : une demande n'est conservée que si rien ne s'est produit côté serveur depuis sa préparation. La révision racine
+ * en est le témoin, sauf pour la suppression des anciennes copies (elle ne bouge pas la révision) : là, c'est la fin du
+ * nettoyage en attente qui atteste la réponse du serveur.
+ */
+const requestSettled = (entry: PendingRequest, latest: WebsitePublicationState) => latest.revision !== entry.request.expectedRevision
+  || (entry.action === 'cleanup' && latest.cleanupPending !== true);
 
 export function PublicWebsitePublicationPanel({ cartularyId, blocks, beforePublish, onStateChanged, onSelectionLoaded, onBusyChange, publishingDisabled = false, readOnly = false, language = 'FR' }: {
   cartularyId: string; blocks: WebsiteDraftBlock[]; beforePublish?: () => Promise<void>; onStateChanged?: (state: WebsitePublicationState) => void; onSelectionLoaded?: (state: WebsitePublicationState) => void; onBusyChange?: (busy: boolean) => void; publishingDisabled?: boolean; readOnly?: boolean; language?: 'FR' | 'EN';
@@ -32,11 +41,12 @@ export function PublicWebsitePublicationPanel({ cartularyId, blocks, beforePubli
     loadWebsitePublicationState(cartularyId).then((value) => {
       if (!active) return;
       setState(value); selectionLoaded.current?.(value);
-      // La demande conservée n'est reprise que si rien ne s'est produit côté serveur depuis sa préparation ; sinon l'état serveur fait foi.
+      // La demande conservée n'est reprise que si rien ne s'est produit côté serveur depuis sa préparation ; sinon l'état
+      // serveur fait foi et la demande est oubliée partout, y compris en mémoire (aucun rejeu d'une demande dépassée).
       const entry = readWebsiteRequestSession(cartularyId);
-      if (entry && entry.request.expectedRevision === value.revision) { pending.current = entry; setRetained(entry); } else { clearWebsiteRequestSession(cartularyId); setRetained(null); }
+      if (entry && !requestSettled(entry, value)) { pending.current = entry; setRetained(entry); } else { pending.current = null; clearWebsiteRequestSession(cartularyId); setRetained(null); }
     })
-      .catch(() => active && setError('État de publication indisponible. Connectez-vous avec le compte propriétaire puis réessayez.'))
+      .catch(() => active && setError(LOAD_FAILED))
       .finally(() => active && setBusy(null));
     return () => { active = false; };
   }, [cartularyId, readOnly, reload]);
@@ -50,6 +60,20 @@ export function PublicWebsitePublicationPanel({ cartularyId, blocks, beforePubli
     writeWebsiteRequestSession(cartularyId, { ...entry, requestedAtIso: new Date().toISOString() });
     return entry;
   };
+  // Le SDK Firebase fabrique un message égal au code nu pour les échecs sans réponse (coupure réseau → « internal »,
+  // délai → « deadline-exceeded ») : ces jetons sont traduits ; un message serveur lisible est conservé tel quel.
+  const readableMessage = (failure: unknown, code: string | undefined) => {
+    const raw = failure instanceof Error ? failure.message.trim() : '';
+    return raw && raw !== (code ?? '').replace(/^functions\//, '') ? raw : '';
+  };
+  const fallbackMessage = (code: string | undefined) => code === 'functions/deadline-exceeded' ? tx('Le serveur n’a pas répondu dans le délai.', 'The server did not respond in time.')
+    : code === 'functions/unavailable' || code === 'functions/internal' ? tx('Connexion au serveur interrompue.', 'Server connection interrupted.')
+      : tx('La demande n’a pas abouti. Réessayez.', 'The request did not complete. Retry.');
+  // Un « internal » porteur d'un message serveur est une réponse du serveur (erreur ou refus non détaillé), pas une absence
+  // de réponse : la demande est conservée pour un rejeu à l'identique, sans prétendre qu'aucune confirmation n'est arrivée.
+  const retainedSuffix = (serverAnswered: boolean) => serverAnswered
+    ? tx('Demande conservée : réponse serveur non concluante (erreur ou refus non détaillé) ; le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon.', 'Request kept: inconclusive server response (error or undetailed refusal); the next click on the same button resumes this exact request, without duplication.')
+    : tx('Demande conservée, confirmation serveur non reçue : le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon.', 'Request kept, no server confirmation received: the next click on the same button resumes this exact request, without duplication.');
   const run = async (action: WebsiteRequestAction, options: { replay?: boolean } = {}) => {
     if (inFlight.current || !confirmed || readOnly || (action === 'publish' && publishingDisabled)) return;
     inFlight.current = true;
@@ -69,9 +93,18 @@ export function PublicWebsitePublicationPanel({ cartularyId, blocks, beforePubli
     } catch (failure) {
       const code = (failure as { code?: string })?.code;
       if (code && !RETRYABLE_CODES.includes(code)) forgetRequest();
-      setError((failure instanceof Error ? failure.message : tx('La demande n’a pas abouti. Réessayez.', 'The request did not complete. Retry.'))
-        + (pending.current ? ' ' + tx('Demande conservée, confirmation serveur non reçue : le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon.', 'Request kept, no server confirmation received: the next click on the same button resumes this exact request, without duplication.') : ''));
-      try { setState(await loadWebsitePublicationState(cartularyId)); } catch { /* Preserve the initial failure; a refresh offers another status check. */ }
+      // Relecture avant l'alerte : si le serveur a bougé depuis la préparation de la demande (réponse perdue après
+      // exécution), la demande est oubliée et l'état relu fait foi, chez les hôtes aussi (QR, résumé).
+      let overtaken = false;
+      try {
+        const latest = await loadWebsitePublicationState(cartularyId);
+        setState(latest);
+        overtaken = pending.current !== null && requestSettled(pending.current, latest);
+        if (overtaken) { forgetRequest(); onStateChanged?.(latest); }
+      } catch { /* Preserve the initial failure; a refresh offers another status check. */ }
+      const readable = readableMessage(failure, code);
+      setError((readable || fallbackMessage(code)) + (pending.current ? ' ' + retainedSuffix(code === 'functions/internal' && Boolean(readable))
+        : overtaken ? ' ' + tx('Le serveur a répondu entre-temps : l’état affiché ci-dessus fait foi.', 'The server answered in the meantime: the status shown above is authoritative.') : ''));
     } finally { inFlight.current = false; setBusy(null); }
   };
   const published = state?.status === 'published';
@@ -79,6 +112,9 @@ export function PublicWebsitePublicationPanel({ cartularyId, blocks, beforePubli
   const onlineIds = published ? state.blockIds : null;
   const selectedIds = blocks.map((block) => block.id);
   const selectionDiffers = onlineIds !== null && (onlineIds.length !== selectedIds.length || onlineIds.some((id) => !selectedIds.includes(id)));
+  // Demande de publication retrouvée dont le contenu diffère de la sélection affichée : l'écart est annoncé avant tout clic.
+  const retainedBlocks = retained?.action === 'publish' ? retained.request.blocks ?? [] : null;
+  const retainedDiffers = retainedBlocks !== null && retained !== null && retained.signature !== signature;
   const requestedAt = (entry: WebsiteRequestSessionEntry) => { const date = new Date(entry.requestedAtIso); const locale = language === 'FR' ? 'fr-FR' : 'en-GB'; return tx(`le ${date.toLocaleDateString(locale)} à ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`, `on ${date.toLocaleDateString(locale)} at ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`); };
   const retainedLabel = (entry: WebsiteRequestSessionEntry) => entry.action === 'revoke'
     ? tx(`Retrait demandé · non confirmé (${requestedAt(entry)}). Revérifiez, reprenez ou abandonnez la demande.`, `Withdrawal requested · unconfirmed (${requestedAt(entry)}). Check again, resume or abandon the request.`)
@@ -89,6 +125,7 @@ export function PublicWebsitePublicationPanel({ cartularyId, blocks, beforePubli
   return <section aria-label={tx('Mise en ligne du mini-site', 'Website publication')}>
     <p role="status">{busy === 'loading' ? tx('Vérification de la publication…', 'Checking publication…') : busy === 'publish' ? tx('Publication demandée · en cours (10 à 30 s)…', 'Publication requested · in progress (10 to 30 s)…') : busy === 'revoke' ? tx('Retrait demandé · en cours…', 'Withdrawal requested · in progress…') : busy === 'cleanup' ? tx('Suppression des anciennes copies…', 'Deleting old copies…') : retained ? retainedLabel(retained) : published ? tx('Mini-site publié', 'Website published') : !state ? tx('État de publication inconnu', 'Publication status unknown') : state.status === 'revoked' ? tx('Mini-site retiré', 'Website withdrawn') : tx('Brouillon · aucun mini-site publié', 'Draft · no published website')}</p>
     {selectionDiffers && <p role="note">{tx(`Sélection différente des contenus en ligne : ${onlineIds.length} en ligne, ${selectedIds.length} sélectionnés. « Mettre à jour le mini-site » publiera la sélection actuelle.`, `Selection differs from the online content: ${onlineIds.length} online, ${selectedIds.length} selected. “Update website” will publish the current selection.`)}</p>}
+    {retainedDiffers && <p role="note">{tx(`La demande conservée (${retainedBlocks.length} contenus) diffère de la sélection actuelle (${selectedIds.length} contenus) : « Reprendre la demande » publiera la demande conservée telle quelle, « Publier le mini-site » la sélection actuelle.`, `The kept request (${retainedBlocks.length} items) differs from the current selection (${selectedIds.length} items): “Resume the request” will publish the kept request as it is, “Publish website” the current selection.`)}</p>}
     {state?.cleanupPending && <p role="alert">{tx('Suppression des anciennes copies incomplète. Certaines anciennes adresses peuvent rester accessibles jusqu’à la fin du nettoyage. Vous pouvez reprendre cette opération, même après fermeture de cette page.', 'Old copy deletion is incomplete. Some previous URLs may remain accessible until cleanup finishes. You can resume this operation even after closing this page.')}</p>}
     {published && <p><a href={`/watch-website?publicCode=${encodeURIComponent(state.publicCode)}`} target="_blank" rel="noreferrer">{tx('Ouvrir le mini-site public', 'Open public website')}</a></p>}
     <p>{tx('La mise en ligne utilise uniquement les médias autorisés « Tous » avec une copie de présentation vérifiée. Les PDF sont reconstruits en pages images, sans liens actifs, formulaires ni signatures vérifiables. Les vidéos exigent un transcodeur sécurisé disponible ; sinon elles restent privées et la publication est refusée. Les originaux sont conservés.', 'Publication uses only media marked “All” with verified presentation copies. PDFs are rebuilt as page images, without active links, forms or verifiable signatures. Videos require an available secure transcoder; otherwise they remain private and publication is refused. Originals are retained.')}</p>
@@ -102,6 +139,6 @@ export function PublicWebsitePublicationPanel({ cartularyId, blocks, beforePubli
       <button type="button" className="button button--quiet" disabled={Boolean(busy) || !confirmed} onClick={() => void run(retained.action, { replay: true })}>{tx('Reprendre la demande', 'Resume the request')}</button>
       <button type="button" className="button button--quiet" disabled={Boolean(busy)} onClick={forgetRequest}>{tx('Abandonner la demande', 'Abandon the request')}</button>
     </div>}
-    {error && <p role="alert">{error}</p>}{!state && !busy && <button type="button" onClick={() => setReload((value) => value + 1)}>{tx('Réessayer la vérification', 'Retry status check')}</button>}{message && <p role="status">{message}</p>}
+    {error && <p role="alert">{error === LOAD_FAILED ? tx('État de publication indisponible. Connectez-vous avec le compte propriétaire puis réessayez.', 'Publication status unavailable. Sign in with the owner account and retry.') : error}</p>}{!state && !busy && <button type="button" onClick={() => setReload((value) => value + 1)}>{tx('Réessayer la vérification', 'Retry status check')}</button>}{message && <p role="status">{message}</p>}
   </section>;
 }

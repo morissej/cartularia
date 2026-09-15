@@ -34,15 +34,75 @@ describe('publication confirmée uniquement après réponse serveur', () => {
     await waitFor(() => expect(screen.getByRole('checkbox').hasAttribute('checked')).toBe(false));
   });
   it('n’annonce pas de demande conservée quand le serveur a refusé la demande', async () => {
-    api.publish.mockRejectedValueOnce(Object.assign(new Error('La révision attendue a changé.'), { code: 'functions/failed-precondition' })).mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    // functions/invalid-argument est un code réellement émis par la fonction déployée (callableError conserve invalid_argument).
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('Sélection de blocs invalide.'), { code: 'functions/invalid-argument' })).mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
     render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
     await screen.findByText('Brouillon · aucun mini-site publié');
     fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('La révision attendue a changé.');
+    expect((await screen.findByRole('alert')).textContent).toBe('Sélection de blocs invalide.');
     expect(sessionStorage.getItem('cartularia-website-request:cart_test')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
     await screen.findByRole('link', { name: 'Ouvrir le mini-site public' });
     expect(api.publish.mock.calls[1][0].requestId).not.toBe(api.publish.mock.calls[0][0].requestId);
+  });
+  it('traduit les jetons nus du SDK (coupure réseau, délai) au lieu de les afficher (V4 relecture A2)', async () => {
+    // @firebase/functions fabrique message === code : FunctionsError('internal', 'internal') sur fetch rejeté, ('deadline-exceeded', 'deadline-exceeded') au délai.
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('internal'), { code: 'functions/internal' }));
+    const view = render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Connexion au serveur interrompue. Demande conservée, confirmation serveur non reçue : le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon.');
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).not.toBeNull();
+    view.unmount(); sessionStorage.clear();
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('deadline-exceeded'), { code: 'functions/deadline-exceeded' }));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} language="EN" />);
+    await screen.findByText('Draft · no published website');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publish website' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('The server did not respond in time. Request kept, no server confirmation received: the next click on the same button resumes this exact request, without duplication.');
+  });
+  it('un refus serveur replié en « internal » est conservé pour rejeu, sans prétendre qu’aucune réponse n’est arrivée (V4 relecture F1)', async () => {
+    // callableError (scripts/firebase-functions.mjs) replie tout code métier hors liste en internal + message générique.
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('L’opération n’a pas pu être confirmée. Réessayez.'), { code: 'functions/internal' })).mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('L’opération n’a pas pu être confirmée. Réessayez. Demande conservée : réponse serveur non concluante (erreur ou refus non détaillé) ; le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon.');
+    expect(alert.textContent).not.toMatch(/confirmation serveur non reçue/);
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    await screen.findByRole('link', { name: 'Ouvrir le mini-site public' });
+    expect(api.publish.mock.calls[1][0].requestId).toBe(api.publish.mock.calls[0][0].requestId);
+  });
+  it('traduit l’échec de lecture de l’état en anglais (V4 relecture A3)', async () => {
+    api.load.mockRejectedValue(new Error('unavailable'));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} language="EN" />);
+    expect(await screen.findByText('Publication status unknown')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe('Publication status unavailable. Sign in with the owner account and retry.');
+    expect(screen.getByRole('button', { name: 'Retry status check' })).toBeTruthy();
+  });
+  it('une réponse perdue après exécution serveur est constatée à la relecture : demande oubliée, hôtes prévenus (V4 relecture H6)', async () => {
+    const changed = vi.fn();
+    const publishedState = { ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] };
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('deadline-exceeded'), { code: 'functions/deadline-exceeded' }));
+    api.load.mockResolvedValueOnce(state).mockResolvedValueOnce(state).mockResolvedValue(publishedState);
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} onStateChanged={changed} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('Le serveur n’a pas répondu dans le délai. Le serveur a répondu entre-temps : l’état affiché ci-dessus fait foi.');
+    expect(alert.textContent).not.toMatch(/Demande conservée/);
+    expect(screen.getByText('Mini-site publié')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Ouvrir le mini-site public' })).toBeTruthy();
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledWith(publishedState);
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).toBeNull();
+    // Le clic suivant (case toujours cochée) prépare une demande neuve à la révision relue : rien n'est rejoué.
+    api.publish.mockResolvedValue({ ...publishedState, revision: 5 });
+    fireEvent.click(screen.getByRole('button', { name: 'Mettre à jour le mini-site' }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(2));
+    expect(api.publish.mock.calls[1][0].requestId).not.toBe(api.publish.mock.calls[0][0].requestId);
+    expect(api.publish.mock.calls[1][0].expectedRevision).toBe(3);
   });
   it('nomme la demande pendant l’appel, puis constate la publication', async () => {
     let resolvePublish: (value: unknown) => void = () => undefined;

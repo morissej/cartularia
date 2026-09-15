@@ -134,7 +134,7 @@ export function PublicationReadOnlySummary({
           <div className="publication-summary__links">
             {publishedWebsiteUrl && (
               <a className="button button--primary" href={publishedWebsiteUrl} target="_blank" rel="noreferrer">
-                <ExternalLink size={15} />{tx('Ouvrir le mini-site', 'Open the website')}
+                <ExternalLink size={15} />{tx('Ouvrir le mini-site public', 'Open public website')}
               </a>
             )}
             <a className="button button--quiet" href={previewUrl} target="_blank" rel="noreferrer">
@@ -186,7 +186,8 @@ export function PublicationReadOnlySummary({
         </article>
       </div>
 
-      <div className="publication-summary__scroll" style={{ overflowX: 'auto' }} tabIndex={0} aria-label={tx('Contenus par destination, défilement horizontal possible', 'Content by destination, horizontal scrolling available')}>
+      {/* role="region" : un conteneur générique ne peut pas porter aria-label (ARIA 1.2) ; la région nommée est un arrêt de tabulation qui défile au clavier. */}
+      <div className="publication-summary__scroll" role="region" style={{ overflowX: 'auto' }} tabIndex={0} aria-label={tx('Contenus par destination, défilement horizontal possible', 'Content by destination, horizontal scrolling available')}>
         <table className="publication-summary">
           <caption className="sr-only">{tx('Contenus inclus par destination', 'Content included by destination')}</caption>
           <thead>
@@ -207,11 +208,12 @@ export function PublicationReadOnlySummary({
                   <tr key={definition.id}>
                     <th scope="row">{definition.title}</th>
                     {DESTINATIONS.map((destination) => {
-                      const active = cellState(destination, definition, effectiveSelections[destination] ?? []) === 'included';
+                      // Même vocabulaire que l'éditeur : une cellule interdite par la politique n'est pas une cellule décochée.
+                      const state = cellState(destination, definition, effectiveSelections[destination] ?? []);
                       return (
-                        <td key={destination} className={active ? 'is-included' : 'is-excluded'}>
-                          <span aria-hidden="true">{active ? '✓' : '—'}</span>
-                          <span className="sr-only">{active ? tx('Inclus', 'Included') : tx('Exclu', 'Excluded')}</span>
+                        <td key={destination} className={state === 'included' ? 'is-included' : state === 'unavailable' ? 'is-unavailable' : 'is-excluded'}>
+                          <span aria-hidden="true">{state === 'included' ? '✓' : '—'}</span>
+                          <span className="sr-only">{state === 'included' ? tx('Inclus', 'Included') : state === 'unavailable' ? tx('Non proposé pour cette destination', 'Not offered for this destination') : tx('Exclu', 'Excluded')}</span>
                         </td>
                       );
                     })}

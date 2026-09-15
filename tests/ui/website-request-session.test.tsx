@@ -83,6 +83,76 @@ describe('demande de publication conservée dans l’onglet', () => {
     expect(api.publish).toHaveBeenCalledOnce();
   });
 
+  it('après « Revérifier », une demande dépassée n’est plus rejouée : le clic suivant prépare une demande neuve (V4 relecture F2)', async () => {
+    await requestThenReload();
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText(/Publication demandée · non confirmée/);
+    api.load.mockResolvedValue({ ...state, revision: 2, status: 'revoked' });
+    fireEvent.click(screen.getByRole('button', { name: 'Revérifier' }));
+    await screen.findByText('Mini-site retiré');
+    expect(sessionStorage.getItem(KEY)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reprendre la demande' })).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    await screen.findByText('Mini-site publié');
+    expect(api.publish).toHaveBeenCalledTimes(2);
+    expect(api.publish.mock.calls[1][0].requestId).not.toBe(api.publish.mock.calls[0][0].requestId);
+    expect(api.publish.mock.calls[1][0].expectedRevision).toBe(2);
+  });
+
+  it('une demande conservée dont le contenu diffère de la sélection affichée est annoncée avant tout clic (V4 relecture H5)', async () => {
+    await requestThenReload();
+    const otherBlocks = [{ id: 'reference-history', title: 'Origines', payload: { paragraphs: ['Achat neuf'] }, assets: [] }, ...blocks];
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={otherBlocks} />);
+    await screen.findByText(/Publication demandée · non confirmée/);
+    expect(screen.getByRole('note').textContent).toBe('La demande conservée (1 contenus) diffère de la sélection actuelle (2 contenus) : « Reprendre la demande » publiera la demande conservée telle quelle, « Publier le mini-site » la sélection actuelle.');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Reprendre la demande' }));
+    await screen.findByText('Mini-site publié');
+    expect(api.publish.mock.calls[1][0]).toEqual(api.publish.mock.calls[0][0]);
+    expect(api.publish.mock.calls[1][0].blocks.map((block: { id: string }) => block.id)).toEqual(['condition-summary']);
+  });
+
+  it('une même sélection retrouvée n’annonce aucun écart', async () => {
+    await requestThenReload();
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText(/Publication demandée · non confirmée/);
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
+  it('une reprise de nettoyage aboutie côté serveur est confirmée au rechargement, bien que la révision n’ait pas bougé (V4 relecture H7)', async () => {
+    api.load.mockResolvedValue({ ...publishedState, cleanupPending: true, pendingCleanupCount: 1 });
+    api.revoke.mockRejectedValueOnce(timeout());
+    const view = render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    const resume = await screen.findByRole('button', { name: 'Reprendre la suppression des anciennes copies' });
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(resume);
+    await screen.findByRole('alert');
+    expect(readWebsiteRequestSession('cart_test')?.action).toBe('cleanup');
+    view.unmount();
+    // Le nettoyage a abouti entre-temps : même révision, plus rien en attente.
+    api.load.mockResolvedValue({ ...publishedState, cleanupPending: false });
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Mini-site publié');
+    expect(screen.queryByText(/non confirmée/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reprendre la demande' })).toBeNull();
+    expect(sessionStorage.getItem(KEY)).toBeNull();
+    expect(api.revoke).toHaveBeenCalledOnce();
+  });
+
+  it('une reprise de nettoyage aboutie côté serveur est constatée dès la relecture du même onglet (V4 relecture H6/H7)', async () => {
+    const changed = vi.fn();
+    api.load.mockResolvedValueOnce({ ...publishedState, cleanupPending: true, pendingCleanupCount: 1 }).mockResolvedValueOnce({ ...publishedState, cleanupPending: true, pendingCleanupCount: 1 }).mockResolvedValue({ ...publishedState, cleanupPending: false });
+    api.revoke.mockRejectedValueOnce(timeout());
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} onStateChanged={changed} />);
+    const resume = await screen.findByRole('button', { name: 'Reprendre la suppression des anciennes copies' });
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(resume);
+    const alert = await screen.findByText(/Le serveur a répondu entre-temps/);
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).not.toMatch(/Demande conservée/);
+    expect(screen.queryByText(/Suppression des anciennes copies incomplète/)).toBeNull();
+    expect(sessionStorage.getItem(KEY)).toBeNull();
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Reprendre la suppression des anciennes copies' })).toBeNull();
+  });
+
   it('une demande dépassée par le serveur est oubliée sans bruit', async () => {
     await requestThenReload();
     api.load.mockResolvedValue(publishedState);

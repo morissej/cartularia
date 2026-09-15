@@ -10,7 +10,7 @@ vi.mock('../../src/services/privateMedia.ts', () => ({
 vi.mock('../../src/services/publicMedia', () => ({ acquirePublicMediaObjectUrl: vi.fn() }));
 
 import { ProjectedPublicBlock } from '../../src/components/ProjectedPublicBlock.tsx';
-import { buildWebsiteDraft, websiteDraftPreview } from '../../src/domain/websiteDraft';
+import { buildWebsiteDraft, websiteDraftPreview, websiteDraftRequest } from '../../src/domain/websiteDraft';
 import { acquirePrivateMediaObjectUrl, acquirePrivatePresentationObjectUrl } from '../../src/services/privateMedia.ts';
 import { acquirePublicMediaObjectUrl } from '../../src/services/publicMedia';
 import type { Asset } from '../../src/types';
@@ -72,7 +72,10 @@ describe('aperçu local des médias téléversés (V4 point 1, D1 (a))', () => {
     expect(screen.queryByRole('link', { name: /Télécharger/ })).toBeNull();
     expect(container.querySelector('video')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Charger la vidéo' })).toBeNull();
-    expect(screen.getAllByText(/disponibles sur la page publiée/)).toHaveLength(2);
+    // V4 relecture H1 : la vidéo téléversée ne reçoit pas la promesse des images ; l'aperçu annonce le refus serveur.
+    expect(screen.getAllByText(/disponibles sur la page publiée/)).toHaveLength(1);
+    expect(within(container.querySelector('[data-public-block="media-motion"]')!).getByText(/Cette vidéo n’a pas de copie publique vérifiée connue de cet aperçu : le serveur refusera la publication/)).toBeTruthy();
+    expect(within(container.querySelector('[data-public-block="media-motion"]')!).queryByText(/disponibles sur la page publiée/)).toBeNull();
     fireEvent.click(slideshow.getByRole('button', { name: 'Ouvrir Vue' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(acquirePrivateMediaObjectUrl).not.toHaveBeenCalled();
@@ -104,6 +107,41 @@ describe('aperçu local des médias téléversés (V4 point 1, D1 (a))', () => {
     expect(screen.getByText(/copie publique est absente/)).toBeTruthy();
     expect(screen.queryByText(/n’est pas encore enregistré/)).toBeNull();
     expect(acquirePrivatePresentationObjectUrl).not.toHaveBeenCalled();
+    expect(acquirePrivateMediaObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it('une vidéo téléversée en aperçu annonce le refus serveur au lieu de promettre la lecture (H1)', () => {
+    // App.tsx pose derivativeStatus 'pending' à toute vidéo téléversée ; le serveur refuse derivative_not_ready sans copie transcodée.
+    const pendingVideo: Asset = { ...uploadedVideo, tags: [], derivativeStatus: 'pending' };
+    const [library] = previewBlocks([pendingVideo], ['media-library']);
+    expect(library.blockId).toBe('media-library');
+    expect(websiteDraftRequest(buildWebsiteDraft({ ...content, assets: [pendingVideo] }, ['media-library']))[0].assets).toEqual([{ assetId: 'video_01', binaryId: 'binary_02' }]);
+    const { container } = render(<ProjectedPublicBlock block={library} preview />);
+    const button = container.querySelector('.public-media-library button')!;
+    expect(button.hasAttribute('disabled')).toBe(true);
+    expect(button.getAttribute('title')).toMatch(/Cette vidéo n’a pas de copie publique vérifiée connue de cet aperçu : le serveur refusera la publication s’il n’en a pas produit/);
+    expect(screen.getByRole('status').textContent).toMatch(/le serveur refusera la publication/);
+    expect(screen.queryByText(/disponibles sur la page publiée/)).toBeNull();
+    expect(container.querySelector('video')).toBeNull();
+    expect(screen.queryByRole('link', { name: /Télécharger/ })).toBeNull();
+    expect(acquirePrivateMediaObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it('un bloc mixte n’ouvre la visionneuse que sur les médias du bundle : la navigation ne mène jamais à un binaire privé (F2 sécurité)', async () => {
+    vi.mocked(acquirePrivatePresentationObjectUrl).mockResolvedValue({ url: 'blob:variant', release: vi.fn() });
+    const bundle: Asset = { ...uploaded, id: 'bundle_01', name: 'Vue du bundle', url: '/assets/demo-watches/x/front.jpg', binaryId: undefined, cartularyId: undefined, tags: [] };
+    const [block] = previewBlocks([bundle, { ...uploaded, name: 'Vue téléversée', tags: [] }, { ...uploadedVideo, name: 'Film téléversé', tags: [] }], ['media-library']);
+    expect(block.assets).toHaveLength(3);
+    const { container } = render(<ProjectedPublicBlock block={block} preview />);
+    const buttons = Array.from(container.querySelectorAll('.public-media-library button'));
+    expect(buttons.map((button) => button.hasAttribute('disabled'))).toEqual([false, true, true]);
+    fireEvent.click(buttons[0]);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Vue du bundle' })).toBeTruthy();
+    expect(within(dialog).getByText('1 / 1')).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Média suivant' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Média précédent' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Charger la vidéo' })).toBeNull();
     expect(acquirePrivateMediaObjectUrl).not.toHaveBeenCalled();
   });
 

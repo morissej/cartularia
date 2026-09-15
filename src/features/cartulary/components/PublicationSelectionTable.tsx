@@ -57,7 +57,8 @@ export function PublicationSelectionTable({
       <header>
         <div><h2>{tx('Contenus par destination', 'Content by destination')}</h2></div>
       </header>
-      <div className="publication-summary__scroll" style={{ overflowX: 'auto' }} tabIndex={0} aria-label={tx('Contenus par destination, défilement horizontal possible', 'Content by destination, horizontal scrolling available')}>
+      {/* role="region" : un conteneur générique ne peut pas porter aria-label (ARIA 1.2) ; la région nommée est un arrêt de tabulation qui défile au clavier. */}
+      <div className="publication-summary__scroll" role="region" style={{ overflowX: 'auto' }} tabIndex={0} aria-label={tx('Contenus par destination, défilement horizontal possible', 'Content by destination, horizontal scrolling available')}>
         <table className="publication-summary publication-summary--editable">
           <caption className="sr-only">{tx('Choisir les contenus inclus dans chaque destination', 'Choose the content included in each destination')}</caption>
           <thead>
@@ -88,16 +89,19 @@ export function PublicationSelectionTable({
                         );
                       }
                       const included = state === 'included';
+                      // Le label sans texte étend la cible tactile à la cellule (44 px) ; le nom de la case reste porté par aria-labelledby.
                       return (
                         <td key={destination} className={included ? 'is-included' : 'is-excluded'}>
-                          <input
-                            {...aiBinding(destination, definition.id)}
-                            type="checkbox"
-                            checked={included}
-                            disabled={!canEdit}
-                            aria-labelledby={`${idPrefix}-row-${definition.id} ${idPrefix}-col-${destination}`}
-                            onChange={() => onToggle(destination, definition.id)}
-                          />
+                          <label className="publication-summary__cell">
+                            <input
+                              {...aiBinding(destination, definition.id)}
+                              type="checkbox"
+                              checked={included}
+                              disabled={!canEdit}
+                              aria-labelledby={`${idPrefix}-row-${definition.id} ${idPrefix}-col-${destination}`}
+                              onChange={() => onToggle(destination, definition.id)}
+                            />
+                          </label>
                         </td>
                       );
                     })}

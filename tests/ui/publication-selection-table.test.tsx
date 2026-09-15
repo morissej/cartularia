@@ -57,8 +57,15 @@ describe('table de sélection « Contenus par destination »', () => {
     for (const box of circleBoxes) expect(box.hasAttribute('data-ai-field')).toBe(false);
     expect(tables[0].parentElement?.getAttribute('style')).toContain('overflow-x: auto');
     expect(tables[0].parentElement?.getAttribute('aria-label')).toBe('Contenus par destination, défilement horizontal possible');
+    // V4 relecture A4/A10 : région nommée (aria-label interdit sur un conteneur générique), arrêt de tabulation conservé.
+    expect(tables[0].parentElement?.getAttribute('role')).toBe('region');
+    expect(tables[0].parentElement?.getAttribute('tabindex')).toBe('0');
     expect(tables[0].querySelector('caption')?.textContent).toBe('Choisir les contenus inclus dans chaque destination');
     expect(container.querySelector('[data-publication-selection="editable"]')).toBeTruthy();
+    // V4 relecture A8 : chaque case est enveloppée d'un label de cellule (cible tactile), sans texte : le nom reste celui d'aria-labelledby.
+    const cellLabels = container.querySelectorAll('label.publication-summary__cell');
+    expect(cellLabels).toHaveLength(57);
+    for (const label of Array.from(cellLabels)) { expect(label.textContent).toBe(''); expect(label.querySelector('input[type="checkbox"]')).toBeTruthy(); }
   });
 
   it('nomme chaque case par son contenu et sa destination', () => {
@@ -88,6 +95,8 @@ describe('table de sélection « Contenus par destination »', () => {
     expect(within(costBasisRow).getAllByRole('checkbox')).toHaveLength(1);
     expect(within(costBasisRow).getAllByText('Non proposé pour cette destination')).toHaveLength(2);
     expect(costBasisRow.querySelectorAll('td.is-unavailable')).toHaveLength(2);
+    // V4 relecture A10 : le tiret décoratif est masqué aux lecteurs d'écran dans chaque cellule non proposée.
+    for (const cell of Array.from(table.querySelectorAll('td.is-unavailable'))) expect(cell.querySelector('[aria-hidden="true"]')?.textContent).toBe('—');
     for (const privateTitle of ['Propriétaire', 'Transmission', 'Stockage']) {
       expect(within(table).queryByRole('rowheader', { name: privateTitle })).toBeNull();
     }
@@ -121,12 +130,22 @@ describe('table de sélection « Contenus par destination »', () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
     expect(onToggle).toHaveBeenCalledWith('website', 'media-hero');
     expect(onReplace).not.toHaveBeenCalled();
+    // V4 relecture F3 (M29) : chaque colonne transmet sa propre destination.
+    await user.click(screen.getByRole('checkbox', { name: 'Diaporama Rapport PDF' }));
+    expect(onToggle).toHaveBeenLastCalledWith('report', 'media-slideshow');
+    await user.click(screen.getByRole('checkbox', { name: 'Origines Le Cercle' }));
+    expect(onToggle).toHaveBeenLastCalledWith('community', 'reference-history');
+    expect(onToggle).toHaveBeenCalledTimes(3);
+    // Le label de cellule étend la cible : un clic sur le label bascule la case.
+    await user.click(screen.getByRole('checkbox', { name: 'Accueil de l’objet Mini-site' }).closest('label')!);
+    expect(onToggle).toHaveBeenLastCalledWith('website', 'cover-watch');
+    expect(onToggle).toHaveBeenCalledTimes(4);
 
     await user.click(screen.getByRole('button', { name: 'Tout sélectionner — Le Cercle' }));
     expect(onReplace).toHaveBeenCalledTimes(1);
     expect(onReplace.mock.calls[0][0]).toBe('community');
     expect(onReplace.mock.calls[0][1]([])).toEqual(publicationBlockIdsFor('community'));
-    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onToggle).toHaveBeenCalledTimes(4);
 
     rerender(<PublicationSelectionTable language="FR" selections={everything} canEdit onToggle={onToggle} onReplace={onReplace} />);
     await user.click(screen.getByRole('button', { name: 'Tout décocher — Le Cercle' }));

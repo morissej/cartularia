@@ -252,6 +252,9 @@ test('le panneau Preuves reçoit le mode lecture et la publication constatée de
   assert.match(appSource, /publishedWebsiteBlockIds=\{publishedWebsiteBlockIds\}/);
   // Décision (d) : le lien mini-site dérive uniquement de l'état constaté, jamais d'une constante.
   assert.match(appSource, /const publishedWebsiteUrl = websitePublished \? publicShareUrl : null;/);
+  // V4 relecture H4 : la source du « publié » (QR, résumé lecture) est la lecture de publications/{code}, remise à faux sur échec.
+  assert.match(appSource, /setWebsitePublished\(summary\?\.published === true\);/);
+  assert.match(appSource, /\.catch\(\(\) => \{ if \(active\) \{ setWebsitePublished\(false\); setPublishedWebsiteBlockIds\(null\); \} \}\);/);
   // V4 point 2 : code public réel, plus d'adresse dérivée du code, relecture du constat après chaque action du panneau.
   assert.match(auditPanelBlock, /publicShareCode=\{cartularyPublicCode\}/);
   assert.doesNotMatch(auditPanelBlock, /publicShareUrl=|seal\?\.supportCode/);
@@ -485,4 +488,54 @@ test('V4 point 1 : l’aperçu local rend la projection publique, sans bloc pers
   // D3 (a) : sélection démo du mini-site = les 8 blocs réellement publiés (constante partagée client / script Admin).
   assert.match(app, /if \(isDemoCartulary\) return \[\.\.\.DEMO_WEBSITE_BLOCK_IDS\];/);
   assert.match(readSource('../scripts/lib/demo-publication-command.mjs'), /export const DEFAULT_DEMO_WEBSITE_BLOCKS = DEMO_WEBSITE_BLOCK_IDS;/);
+});
+
+test('V4 relecture : correctifs d’honnêteté, de régression et d’accessibilité verrouillés à la source', () => {
+  const app = readSource('../src/App.tsx');
+  const css = readSource('../src/index.css');
+  const panel = readSource('../src/components/PublicWebsitePublicationPanel.tsx');
+  const projected = readSource('../src/components/ProjectedPublicBlock.tsx');
+  const summary = readSource('../src/features/cartulary/components/PublicationReadOnlySummary.tsx');
+  const table = readSource('../src/features/cartulary/components/PublicationSelectionTable.tsx');
+  const collectionSite = readSource('../src/components/CollectionWebsitePage.tsx');
+  // F3 (M43) : les quatre tranches sont passées à la table dans l'ordre des destinations, jamais croisées.
+  assert.match(app, /<PublicationSelectionTable language=\{language\} selections=\{\{ website: publishedBlocks, collection: collectionBlocks, community: communityBlocks, report: reportBlocks \}\} canEdit=\{canEdit\} onToggle=\{togglePublicationBlock\} onReplace=\{replacePublicationBlocks\} \/>/);
+  // F4 : « Supprimer toutes les données » oublie aussi la demande de mini-site conservée dans l'onglet, avant la redirection.
+  const deleteAll = app.slice(app.indexOf('const handleDeleteAllData'), app.indexOf('const toggleMediaTag'));
+  assert.ok(deleteAll.indexOf('await persistence.deleteAllData();') < deleteAll.indexOf('clearWebsiteRequestSession(mockCartulary.id);'), 'la demande est oubliée après la suppression du coffre');
+  assert.ok(deleteAll.indexOf('clearWebsiteRequestSession(mockCartulary.id);') < deleteAll.indexOf("window.location.replace('/?data-deleted=1');"), 'et avant la redirection');
+  // H10 : l'article 03 de l'éditeur porte la note D6 (a) à l'endroit où l'on bascule et copie l'adresse, nommée aperçu local.
+  const community = app.slice(app.indexOf('publication-scope--community">'), app.indexOf('publication-scope--report">'));
+  assert.match(community, /communityPublicationNote\(language\)/);
+  assert.match(community, /Adresse du Cercle \(aperçu local\)/);
+  assert.doesNotMatch(community, /Adresse du site Le Cercle/);
+  // H3 : l'aperçu propriétaire d'une Collection se nomme « Aperçu local » et lit l'état réel des Collections.
+  assert.match(collectionSite, /collectionWebsiteIsPublished\(entry\)/);
+  assert.match(collectionSite, /`Aperçu local · \$\{previewStatus\}` : 'Mini-site de Collection'/);
+  // H1 : une vidéo téléversée en aperçu ne reçoit jamais la promesse de lecture ; l'aperçu annonce le refus serveur.
+  assert.match(projected, /const privateVideoInPreview = \(asset: Asset\) => privateInPreview\(asset\) && asset\.type === 'video';/);
+  assert.match(projected, /le serveur refusera la publication s’il n’en a pas produit/);
+  // F2 (sécurité) : la visionneuse ne parcourt que les médias ouvrables ; un binaire privé en aperçu reste hors de sa navigation.
+  assert.match(projected, /<MediaViewerModal asset=\{selected\} assetCount=\{downloadableAssets\.length\}/);
+  assert.match(projected, /onMove=\{\(direction\) => setSelectedId\(downloadableAssets\[/);
+  assert.doesNotMatch(projected, /assetCount=\{assets\.length\}|setSelectedId\(assets\[/);
+  // H6/H7/F2 (régression) : demande conservée seulement tant que le serveur n'a pas répondu (révision, ou fin du nettoyage), oubliée en mémoire aussi.
+  assert.match(panel, /const requestSettled = \(entry: PendingRequest, latest: WebsitePublicationState\) => latest\.revision !== entry\.request\.expectedRevision\s*\|\| \(entry\.action === 'cleanup' && latest\.cleanupPending !== true\);/);
+  assert.match(panel, /if \(entry && !requestSettled\(entry, value\)\) \{ pending\.current = entry; setRetained\(entry\); \} else \{ pending\.current = null; clearWebsiteRequestSession\(cartularyId\); setRetained\(null\); \}/);
+  assert.match(panel, /if \(overtaken\) \{ forgetRequest\(\); onStateChanged\?\.\(latest\); \}/);
+  // A2/A3/F1 : aucun jeton nu du SDK ni de chaîne française hors tx dans le panneau bilingue.
+  assert.match(panel, /tx\('État de publication indisponible\. Connectez-vous avec le compte propriétaire puis réessayez\.'/);
+  assert.match(panel, /Le serveur n’a pas répondu dans le délai\./);
+  assert.match(panel, /réponse serveur non concluante \(erreur ou refus non détaillé\)/);
+  // A4/A6/A8 : régions nommées, cellule interdite distinguée en lecture, label de cellule comme cible tactile.
+  for (const source of [table, summary]) assert.match(source, /className="publication-summary__scroll" role="region"/);
+  assert.match(summary, /state === 'unavailable' \? 'is-unavailable' : 'is-excluded'/);
+  assert.match(table, /<label className="publication-summary__cell">\s*<input/);
+  // A1/A8/A9 (mise en page mobile) : piste bornée, libellés sr-only confinés au cadre défilant, cible 44 px, titre lié qui se replie.
+  assert.match(css, /\.publication-center \{ display: grid; grid-template-columns: minmax\(0, 1fr\); gap: var\(--s5\); \}/);
+  assert.match(css, /\.publication-summary__scroll \{ position: relative; overflow-x: auto;/);
+  assert.match(css, /\.publication-summary td\.is-unavailable \{ color: var\(--muted\); \}/);
+  assert.match(css, /\.publication-summary__cell \{ display: grid; place-items: center; min-height: 44px; cursor: pointer; \}/);
+  assert.match(css, /\.catalog-site__grid h3 a \{ display: inline; width: auto;/);
+  assert.match(css, /\.publication-summary thead th \{ position: sticky;/, 'l’en-tête collant est conservé');
 });

@@ -5,6 +5,7 @@ import { auth } from '../firebase.ts';
 import { buildCartularyHref } from '../features/registry/registryCatalog.ts';
 import {
   collectionLabelFromIdentifier,
+  collectionWebsiteIsPublished,
   type CollectionWebsiteItemProjection,
   type CollectionWebsitePublication,
   type RegistryCollectionDocument,
@@ -187,13 +188,25 @@ export const CollectionWebsitePage = () => {
     || publication?.registryId
     || (selection.publicationId ? selection.publicationId.split('--')[0] : null)
     || '';
+  // Aperçu propriétaire : l'en-tête dit l'état réel des Collections sélectionnées (statut, consentement, objets en ligne),
+  // lu dans leurs documents ; le public ne voit que la projection des objets sélectionnés d'une Collection publiée.
+  const previewStatus = (() => {
+    if (!selection.preview) return null;
+    const published = collections.filter((entry) => selection.collectionIds.includes(entry.id) && collectionWebsiteIsPublished(entry));
+    if (published.length === 0) return selection.collectionIds.length > 1 ? 'Collections non publiées' : 'Collection non publiée';
+    const online = new Set(published.flatMap((entry) => entry.publishedCartularyIds ?? [])).size;
+    const label = published.length < selection.collectionIds.length
+      ? `${published.length} Collection${published.length > 1 ? 's' : ''} publiée${published.length > 1 ? 's' : ''} sur ${selection.collectionIds.length}`
+      : published.length > 1 ? `${published.length} Collections publiées` : 'Collection publiée';
+    return `${label} (${online} objet${online > 1 ? 's' : ''} en ligne)`;
+  })();
 
   return (
     <div className="catalog-site">
       <header className="catalog-site__header">
         <BrandLogo href={selection.preview ? `/registry/${encodeURIComponent(activeRegistryId)}/collections` : '/'} />
         <div>
-          <span className="eyebrow">Mini-site de Collection</span>
+          <span className="eyebrow">{previewStatus ? `Aperçu local · ${previewStatus}` : 'Mini-site de Collection'}</span>
           <h1>{selectedCollections.map((entry) => entry.websiteTitle || entry.name).join(' · ')}</h1>
           <p>{selectedCollections.length > 1 ? `${selectedCollections.length} Collections sélectionnées` : selectedCollections[0]?.description || 'Une sélection d’objets publiée depuis Cartularia.'}</p>
         </div>

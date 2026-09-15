@@ -52,7 +52,7 @@ export const DEMO_EYEBROW = 'Démonstration · données fictives';
 export const DEMO_DISCLAIMER = 'Exemplaire, documents, historique et valeurs fictifs.';
 export const DEMO_AUDIT_ROLE = 'demo_seed';
 export const DEMO_DECISION_SOURCE = 'admin_demo_seed';
-// V4 D3 : même liste que la sélection démo du client (aperçu local démo = mini-site démo publié), valeur inchangée.
+// V4 D3 : même liste de blocs que la sélection démo du client (même sélection ; le contenu des blocs diffère : images fixes et un seul groupe ici), valeur inchangée.
 export const DEFAULT_DEMO_WEBSITE_BLOCKS = DEMO_WEBSITE_BLOCK_IDS;
 export const DEMO_DERIVATIVE_MAX_EDGE = 1600;
 export const DEMO_DERIVATIVE_WEBP_QUALITY = 82;

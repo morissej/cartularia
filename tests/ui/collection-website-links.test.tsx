@@ -174,6 +174,31 @@ describe('CollectionWebsitePage — l’aperçu propriétaire lit les statuts pu
     expect(linkHrefs().some((href) => href.includes('http://localhost:3000'))).toBe(false);
   });
 
+  it('l’aperçu propriétaire se nomme « Aperçu local » et dit l’état réel de la Collection (V4 relecture H3)', async () => {
+    window.history.replaceState(null, '', OWNER_PREVIEW);
+    fixture.user = { uid: 'owner' };
+    const { unmount } = render(<CollectionWebsitePage />);
+    await screen.findAllByRole('link', { name: /Ouvrir le Cartulaire/ });
+    expect(screen.getByText('Aperçu local · Collection non publiée')).toBeTruthy();
+    expect(screen.queryByText('Mini-site de Collection')).toBeNull();
+    unmount();
+
+    fixture.collections.mockResolvedValue([{ ...OWNER_COLLECTION, status: 'published', visibility: 'public', publicationConsent: true, publishedCartularyIds: ['cart_a'] }]);
+    render(<CollectionWebsitePage />);
+    await screen.findAllByRole('link', { name: /Ouvrir le Cartulaire/ });
+    // L'aperçu « et si » liste les objets de la Collection ; l'en-tête rappelle que le public n'en voit qu'un.
+    expect(screen.getByText('Aperçu local · Collection publiée (1 objet en ligne)')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: 'Objet B' })).toBeTruthy();
+  });
+
+  it('la page publique garde son en-tête « Mini-site de Collection », sans mention d’aperçu', async () => {
+    window.history.replaceState(null, '', PUBLIC_ADDRESS);
+    render(<CollectionWebsitePage />);
+    await screen.findAllByRole('link', { name: /Voir le mini-site/ });
+    expect(screen.getByText('Mini-site de Collection')).toBeTruthy();
+    expect(screen.queryByText(/Aperçu local/)).toBeNull();
+  });
+
   it('statuts indisponibles dans l’aperçu : page servie, mention explicite, jamais « Accès aux Collections refusé »', async () => {
     window.history.replaceState(null, '', OWNER_PREVIEW);
     fixture.user = { uid: 'owner' };

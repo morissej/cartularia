@@ -73,6 +73,16 @@ export function websiteDraftRequest(blocks: ReturnType<typeof buildWebsiteDraft>
   }));
 }
 
+/**
+ * Vidéos téléversées retenues par la sélection sans copie publique vérifiée connue du client : le serveur refuse toute
+ * la publication (derivative_not_ready) tant qu'il n'a pas produit de copie transcodée. Le client n'écrit jamais 'ready'
+ * lui-même (App.tsx pose 'pending' à tout téléversement vidéo) ; l'avertissement dit donc ce que l'aperçu sait, sans plus.
+ */
+export const websiteDraftVideosWithoutPublicCopy = (blocks: ReturnType<typeof buildWebsiteDraft>) => [...new Map(blocks
+  .flatMap((block) => block.assets)
+  .filter((asset) => asset.type === 'video' && Boolean(asset.binaryId) && asset.derivativeStatus !== 'ready')
+  .map((asset) => [asset.id, asset])).values()];
+
 export function websiteDraftPreview(blocks: ReturnType<typeof buildWebsiteDraft>): PreviewBlockProjection[] {
   return blocks.map((block) => ({ blockId: block.id, title: block.title, payload: block.payload, sourceRevision: 0,
     publicationStatus: 'published', contentHash: '', assets: block.assets.map((asset) => ({

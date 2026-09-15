@@ -151,6 +151,8 @@ import { DEMO_ACCOUNT, DEMO_WEBSITE_BLOCK_IDS } from './data/demoCartularies';
 import { loadPublicPublicationSummaries } from './services/projections';
 import { PublicationReadOnlySummary } from './features/cartulary/components/PublicationReadOnlySummary';
 import { PublicationSelectionTable } from './features/cartulary/components/PublicationSelectionTable';
+import { communityPublicationNote } from './features/cartulary/components/publicationSummaryModel';
+import { clearWebsiteRequestSession } from './services/websiteRequestSession';
 import {
   normalizeStorageCodeReferences,
   normalizeTransmissionCodeReferences,
@@ -473,7 +475,7 @@ const loadConditionEntries = (): ConditionEntry[] => (isDemoCartulary ? DEFAULT_
 }));
 
 const loadPublishedBlocks = (): PublishedBlockId[] => {
-  // V4 D3 : la sélection démo du mini-site vaut les 8 blocs réellement publiés (aperçu local démo = mini-site démo).
+  // V4 D3 : la sélection démo du mini-site vaut les 8 blocs réellement publiés (même sélection de blocs que le mini-site démo ; le contenu des blocs peut différer : bibliothèque à 18 médias ici contre 3 images publiées, six groupes de spécifications contre un).
   if (isDemoCartulary) return [...DEMO_WEBSITE_BLOCK_IDS];
   const stored = readStored<string[]>(
     'cartularia-published-blocks',
@@ -1572,12 +1574,9 @@ function App() {
 
   const handleDeleteAllData = async () => {
     if (isDemoCartulary) return; // défense en profondeur : le bouton n'est plus rendu en lecture seule
-    await journal.logEvent(
-      'PRIVATE_DATA_DELETION_REQUESTED',
-      'Propriétaire',
-      'Suppression explicite du coffre local et de la copie privée cloud du prototype.',
-    );
+    await journal.logEvent('PRIVATE_DATA_DELETION_REQUESTED', 'Propriétaire', 'Suppression explicite du coffre local et de la copie privée cloud du prototype.');
     await persistence.deleteAllData();
+    clearWebsiteRequestSession(mockCartulary.id); // la demande de mini-site conservée dans l'onglet (lot B) suit le coffre : rien ne survit à la suppression
     window.location.replace('/?data-deleted=1');
   };
 
@@ -3315,12 +3314,12 @@ function App() {
               {publicationCollectionError && <p className="publication-inline-error" role="alert">{publicationCollectionError}</p>}
               {collectionPublicationEnabled && publicationCollectionIds.length > 0 && collectionContext && (
                 <div className="publication-url-panel">
-                  <label><span>{tx('Mini-site des Collections sélectionnées', 'Selected Collections mini-site')}</span><input value={localCollectionWebsiteUrl} readOnly /></label>
+                  <label><span>{tx('Aperçu local des Collections sélectionnées', 'Local preview of the selected Collections')}</span><input value={localCollectionWebsiteUrl} readOnly /></label>
                   <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localCollectionWebsiteUrl, setCollectionUrlCopied)}>{collectionUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
-                  <a className="button button--primary" href={localCollectionWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder au mini-site', 'Open mini-site')}</a>
+                  <a className="button button--primary" href={localCollectionWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Ouvrir l’aperçu local', 'Open the local preview')}</a>
                 </div>
               )}
-              {collectionPublicationEnabled && publicationCollectionIds.length === 0 && <p className="publication-report-message" role="status">{tx('Sélectionnez au moins une Collection pour ouvrir son mini-site.', 'Select at least one Collection to open its mini-site.')}</p>}
+              {collectionPublicationEnabled && publicationCollectionIds.length === 0 && <p className="publication-report-message" role="status">{tx('Sélectionnez au moins une Collection pour ouvrir son aperçu local.', 'Select at least one Collection to open its local preview.')}</p>}
               <p className="publication-summary__detail">{tx('La Collection renvoie au mini-site de l’objet ; aucune sélection de contenus propre.', 'The Collection links to the object website; it has no content selection of its own.')}</p>
             </article>
 
@@ -3331,11 +3330,12 @@ function App() {
               </header>
               {communityPublicationEnabled && (
                 <div className="publication-url-panel">
-                  <label><span>{tx('Adresse du site Le Cercle', 'The Circle website address')}</span><input value={localCommunityWebsiteUrl} readOnly /></label>
+                  <label><span>{tx('Adresse du Cercle (aperçu local)', 'The Circle address (local preview)')}</span><input value={localCommunityWebsiteUrl} readOnly /></label>
                   <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localCommunityWebsiteUrl, setCommunityUrlCopied)}>{communityUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
                   <a className="button button--primary" href={localCommunityWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder au Cercle', 'Open The Circle')}</a>
                 </div>
               )}
+              <p className="publication-summary__detail">{communityPublicationNote(language)}</p>
             </article>
 
             <article className="publication-scope publication-scope--report">

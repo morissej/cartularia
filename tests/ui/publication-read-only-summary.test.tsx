@@ -147,6 +147,32 @@ describe('résumé de publication en lecture seule', () => {
     ]);
   });
 
+  it('distingue une cellule interdite par la politique d’une cellule décochée, avec le vocabulaire de l’éditeur (V4 relecture A6)', () => {
+    render(<PublicationReadOnlySummary language="FR" selections={everything} previewUrl={previewUrl} collectionName="Les cinq icônes" publishedWebsiteUrl={null} />);
+    const table = screen.getByRole('table');
+    const costBasisRow = within(table).getByRole('rowheader', { name: 'Prix de revient' }).closest('tr')!;
+    // Prix de revient : interdit pour Mini-site et Le Cercle, admis pour le rapport.
+    expect(Array.from(costBasisRow.querySelectorAll('td .sr-only')).map((node) => node.textContent)).toEqual(['Non proposé pour cette destination', 'Non proposé pour cette destination', 'Inclus']);
+    expect(Array.from(costBasisRow.querySelectorAll('td')).map((cell) => cell.className)).toEqual(['is-unavailable', 'is-unavailable', 'is-included']);
+    expect(within(table).queryAllByText('Exclu')).toHaveLength(0);
+    expect(within(table).getAllByText('Non proposé pour cette destination')).toHaveLength(12);
+    // Le conteneur défilant est une région nommée (aria-label interdit sur un conteneur générique), tabulable, avec le tiret masqué aux lecteurs d'écran.
+    const scroller = table.parentElement!;
+    expect(scroller.getAttribute('role')).toBe('region');
+    expect(scroller.getAttribute('tabindex')).toBe('0');
+    expect(scroller.getAttribute('aria-label')).toBe('Contenus par destination, défilement horizontal possible');
+    for (const cell of Array.from(table.querySelectorAll('td.is-unavailable'))) expect(cell.querySelector('[aria-hidden="true"]')?.textContent).toBe('—');
+  });
+
+  it('nomme « Exclu » une cellule admise mais décochée, et « Ouvrir le mini-site public » le lien publié', () => {
+    render(<PublicationReadOnlySummary language="FR" selections={{ website: [], collection: [], community: [], report: [] }} previewUrl={previewUrl} collectionName="Collection privée" publishedWebsiteUrl={publishedUrl} publishedWebsiteBlockIds={[]} />);
+    const table = screen.getByRole('table');
+    const heroRow = within(table).getByRole('rowheader', { name: 'Présentation principale' }).closest('tr')!;
+    expect(Array.from(heroRow.querySelectorAll('td .sr-only')).map((node) => node.textContent)).toEqual(['Exclu', 'Exclu', 'Exclu']);
+    expect(within(table).getAllByText('Exclu')).toHaveLength(14 + 20 + 23);
+    expect(screen.getByRole('link', { name: 'Ouvrir le mini-site public' }).getAttribute('href')).toBe(publishedUrl);
+  });
+
   it('traduit les en-têtes et les textes contextuels en anglais', () => {
     render(<PublicationReadOnlySummary language="EN" selections={everything} previewUrl={previewUrl} collectionName="The five icons" publishedWebsiteUrl={null} demonstration />);
     expect(columnHeaders(screen.getByRole('table'))).toEqual(['Content', 'Website', 'The Circle', 'PDF report']);
@@ -155,6 +181,7 @@ describe('résumé de publication en lecture seule', () => {
     expect(screen.getByRole('heading', { name: 'PDF report' })).toBeTruthy();
     expect(screen.getByRole('note').textContent).toContain('Read-only demonstration');
     expect(within(screen.getByRole('table')).getAllByText('Included')).toHaveLength(57);
+    expect(within(screen.getByRole('table')).getAllByText('Not offered for this destination')).toHaveLength(12);
     expect(screen.getByText(/remain private and appear in no destination/)).toBeTruthy();
     expect(screen.getByText(/Demonstration collection: The five icons — the Collection links to the object website; it has no content selection of its own\./)).toBeTruthy();
     expect(within(articleOf('Publish your object in The Circle')).getByText('Publication in The Circle is not available: no server command is connected; the selection serves the local preview.')).toBeTruthy();

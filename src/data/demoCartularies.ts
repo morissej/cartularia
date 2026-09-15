@@ -514,7 +514,9 @@ export const DEMO_SUBMARINER_CARTULARY_ID = DEMO_CARTULARIES[0].id;
 export const DEMO_SUBMARINER_PUBLIC_CODE = DEMO_CARTULARIES[0].publicCode;
 /**
  * Sélection démo du mini-site (V4 D3) : les 8 blocs réellement publiés par scripts/lib/demo-publication-command.mjs
- * (qui réexporte cette constante), pour que l'aperçu local démo montre exactement le mini-site démo en ligne.
+ * (qui réexporte cette constante), pour que l'aperçu local démo ouvre la même sélection de blocs que le mini-site démo
+ * en ligne. Le contenu des blocs n'est pas identique : l'aperçu montre la bibliothèque complète (18 médias) et les six
+ * groupes de spécifications, le mini-site publié 3 images et un seul groupe (limites de l'outil Admin, consignées).
  */
 export const DEMO_WEBSITE_BLOCK_IDS = Object.freeze([
   'cover-watch', 'media-hero', 'media-library', 'reference-history', 'reference-specs', 'reference-checks', 'condition-description', 'condition-summary',
