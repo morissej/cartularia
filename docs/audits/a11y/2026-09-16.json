@@ -1,0 +1,2141 @@
+{
+  "date": "2026-09-15T22:14:30.223Z",
+  "base": "http://127.0.0.1:57419",
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "axe": "4.13.0",
+  "tags": [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21aa",
+    "wcag22aa",
+    "best-practice"
+  ],
+  "scenes": [
+    {
+      "scene": "accueil",
+      "viewport": "mobile-390",
+      "url": "/",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        }
+      ],
+      "passes": 51,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "accueil-menu",
+      "viewport": "mobile-390",
+      "url": "/",
+      "ready": true,
+      "opened": true,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        }
+      ],
+      "passes": 51,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-cover",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"00 Accueil\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "h1 « Rolex Submariner »",
+          "ok": true,
+          "detail": "Rolex Submariner"
+        }
+      ],
+      "passes": 43,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-media",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#media",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"01 Médias\",\"visible\":true,\"scrollLeft\":0}"
+        }
+      ],
+      "passes": 43,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-reference",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#reference",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"02 La référence\",\"visible\":true,\"scrollLeft\":50}"
+        }
+      ],
+      "passes": 42,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-condition",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#condition",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"03 L’objet\",\"visible\":true,\"scrollLeft\":148}"
+        }
+      ],
+      "passes": 46,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-value",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#value",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "aria-required-children",
+          "impact": "critical",
+          "help": "Certains rôles ARIA doivent comporter des descendants directs spécifiques",
+          "nodes": [
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > .sensitivity-table__head[role=\"row\"]"
+              ],
+              "html": "<div class=\"sensitivity-table__head\" role=\"row\"><span>Coût \\ Prix</span><strong>9 800&nbsp;€</strong><strong>10 050&nbsp;€</strong><strong>10 300&nbsp;€</strong",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(2)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(3)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(4)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(5)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(6)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > .sensitivity-table__head[role=\"row\"]"
+              ],
+              "html": "<div class=\"sensitivity-table__head\" role=\"row\"><span>Coût \\ Prix</span><strong>9 800&nbsp;€</strong><strong>10 050&nbsp;€</strong><strong>10 300&nbsp;€</strong",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(2)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(3)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(4)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(5)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(6)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            }
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 12,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"04 Valorisation\",\"visible\":true,\"scrollLeft\":246}"
+        }
+      ],
+      "passes": 45,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-publication",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#publication",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"05 Publication\",\"visible\":true,\"scrollLeft\":286}"
+        }
+      ],
+      "passes": 44,
+      "incomplete": [
+        "color-contrast",
+        "th-has-data-cells"
+      ]
+    },
+    {
+      "scene": "demo-preuves",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "ready": true,
+      "opened": true,
+      "violations": [
+        {
+          "id": "aria-allowed-role",
+          "impact": "minor",
+          "help": "Le rôle ARIA doit être valide pour cet élément",
+          "nodes": [
+            {
+              "target": [
+                ".drawer-panel"
+              ],
+              "html": "<aside class=\"drawer-panel active\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"integrity-drawer-title\" data-focus-layer=\"true\" tabindex=\"-1\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Le rôle ARIA dialog n’est pas autorisé pour l’élément donné",
+              "allowedBy": "Tiroir Preuves : <aside role=\"dialog\"> (App.tsx:3391) ; constat minor, non bloquant ; balise à changer en V7 avec la hiérarchie des titres du tiroir."
+            }
+          ]
+        },
+        {
+          "id": "heading-order",
+          "impact": "moderate",
+          "help": "Les niveaux de titre doivent s’incrémenter d’un seul niveau à la fois",
+          "nodes": [
+            {
+              "target": [
+                "#persistence-title"
+              ],
+              "html": "<h4 id=\"persistence-title\" style=\"margin: 0px; font-family: var(--font-sans); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1e",
+              "summary": "Corriger l’un des éléments suivants : \n  Hiérarchie entre les titres invalide",
+              "allowedBy": "Tiroir Preuves : saut h2 → h4 (AuditPanel.tsx) ; hiérarchie du tiroir à revoir en V7 avec la refonte des preuves."
+            }
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 5,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"00 Accueil\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "h1 « Rolex Submariner »",
+          "ok": true,
+          "detail": "Rolex Submariner"
+        }
+      ],
+      "passes": 44,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-a-faire",
+      "viewport": "mobile-390",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "ready": true,
+      "opened": true,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"00 Accueil\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "h1 « Rolex Submariner »",
+          "ok": true,
+          "detail": "Rolex Submariner"
+        }
+      ],
+      "passes": 43,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "accessibilite",
+      "viewport": "mobile-390",
+      "url": "/accessibilite",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "conditions",
+      "viewport": "mobile-390",
+      "url": "/conditions",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "confidentialite",
+      "viewport": "mobile-390",
+      "url": "/confidentialite",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "service",
+      "viewport": "mobile-390",
+      "url": "/service",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "sign-in",
+      "viewport": "mobile-390",
+      "url": "/account/sign-in",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 38,
+      "incomplete": []
+    },
+    {
+      "scene": "not-found",
+      "viewport": "mobile-390",
+      "url": "/page-inexistante",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "390/390"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 26,
+      "incomplete": []
+    },
+    {
+      "scene": "accueil",
+      "viewport": "desktop-1440",
+      "url": "/",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        }
+      ],
+      "passes": 50,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "accueil-menu",
+      "viewport": "desktop-1440",
+      "url": "/",
+      "ready": true,
+      "opened": false,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [],
+      "skipped": "déclencheur absent à cette largeur"
+    },
+    {
+      "scene": "demo-cover",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"00 Accueil\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "h1 « Rolex Submariner »",
+          "ok": true,
+          "detail": "Rolex Submariner"
+        }
+      ],
+      "passes": 42,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-media",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#media",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"01 Médias\",\"visible\":true,\"scrollLeft\":0}"
+        }
+      ],
+      "passes": 42,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-reference",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#reference",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"02 La référence\",\"visible\":true,\"scrollLeft\":0}"
+        }
+      ],
+      "passes": 41,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-condition",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#condition",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"03 L’objet\",\"visible\":true,\"scrollLeft\":0}"
+        }
+      ],
+      "passes": 45,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-value",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#value",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "aria-required-children",
+          "impact": "critical",
+          "help": "Certains rôles ARIA doivent comporter des descendants directs spécifiques",
+          "nodes": [
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > .sensitivity-table__head[role=\"row\"]"
+              ],
+              "html": "<div class=\"sensitivity-table__head\" role=\"row\"><span>Coût \\ Prix</span><strong>9 800&nbsp;€</strong><strong>10 050&nbsp;€</strong><strong>10 300&nbsp;€</strong",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(2)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(3)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(4)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(5)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                "div:nth-child(1) > .sensitivity-table[role=\"table\"] > div[role=\"row\"]:nth-child(6)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > .sensitivity-table__head[role=\"row\"]"
+              ],
+              "html": "<div class=\"sensitivity-table__head\" role=\"row\"><span>Coût \\ Prix</span><strong>9 800&nbsp;€</strong><strong>10 050&nbsp;€</strong><strong>10 300&nbsp;€</strong",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(2)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(3)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(4)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(5)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            },
+            {
+              "target": [
+                ".sensitivity-table--irr > div[role=\"row\"]:nth-child(6)"
+              ],
+              "html": "<div role=\"row\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Les descendants ARIA requis sont manquants : cell, columnheader, gridcell, rowheader",
+              "allowedBy": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante."
+            }
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 12,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"04 Valorisation\",\"visible\":true,\"scrollLeft\":0}"
+        }
+      ],
+      "passes": 44,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-publication",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#publication",
+      "ready": true,
+      "opened": null,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"05 Publication\",\"visible\":true,\"scrollLeft\":0}"
+        }
+      ],
+      "passes": 43,
+      "incomplete": [
+        "color-contrast",
+        "th-has-data-cells"
+      ]
+    },
+    {
+      "scene": "demo-preuves",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "ready": true,
+      "opened": true,
+      "violations": [
+        {
+          "id": "aria-allowed-role",
+          "impact": "minor",
+          "help": "Le rôle ARIA doit être valide pour cet élément",
+          "nodes": [
+            {
+              "target": [
+                ".drawer-panel"
+              ],
+              "html": "<aside class=\"drawer-panel active\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"integrity-drawer-title\" data-focus-layer=\"true\" tabindex=\"-1\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Le rôle ARIA dialog n’est pas autorisé pour l’élément donné",
+              "allowedBy": "Tiroir Preuves : <aside role=\"dialog\"> (App.tsx:3391) ; constat minor, non bloquant ; balise à changer en V7 avec la hiérarchie des titres du tiroir."
+            }
+          ]
+        },
+        {
+          "id": "heading-order",
+          "impact": "moderate",
+          "help": "Les niveaux de titre doivent s’incrémenter d’un seul niveau à la fois",
+          "nodes": [
+            {
+              "target": [
+                "#persistence-title"
+              ],
+              "html": "<h4 id=\"persistence-title\" style=\"margin: 0px; font-family: var(--font-sans); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1e",
+              "summary": "Corriger l’un des éléments suivants : \n  Hiérarchie entre les titres invalide",
+              "allowedBy": "Tiroir Preuves : saut h2 → h4 (AuditPanel.tsx) ; hiérarchie du tiroir à revoir en V7 avec la refonte des preuves."
+            }
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                ".cartulary-access-notice > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-access-notice > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note)."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 5,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"00 Accueil\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "h1 « Rolex Submariner »",
+          "ok": true,
+          "detail": "Rolex Submariner"
+        }
+      ],
+      "passes": 43,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "demo-a-faire",
+      "viewport": "desktop-1440",
+      "url": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "ready": true,
+      "opened": true,
+      "violations": [
+        {
+          "id": "region",
+          "impact": "moderate",
+          "help": "Le contenu doit être localisé dans une région",
+          "nodes": [
+            {
+              "target": [
+                "aside > strong"
+              ],
+              "html": "<strong>Démonstration en lecture seule</strong>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                "aside > span"
+              ],
+              "html": "<span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05."
+            },
+            {
+              "target": [
+                ".cartulary-registry-return"
+              ],
+              "html": "<a class=\"cartulary-registry-return no-print\" href=\"/registry/reg_cartularia_demo/items\">",
+              "summary": "Corriger l’un des éléments suivants : \n  Contenu non imbriqué dans une région ARIA",
+              "allowedBy": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14)."
+            }
+          ]
+        }
+      ],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 3,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        },
+        {
+          "name": "lien d’évitement visible au focus",
+          "ok": true,
+          "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "onglet aria-current visible dans la piste",
+          "ok": true,
+          "detail": "{\"text\":\"00 Accueil\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "h1 « Rolex Submariner »",
+          "ok": true,
+          "detail": "Rolex Submariner"
+        }
+      ],
+      "passes": 42,
+      "incomplete": [
+        "color-contrast"
+      ]
+    },
+    {
+      "scene": "accessibilite",
+      "viewport": "desktop-1440",
+      "url": "/accessibilite",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "conditions",
+      "viewport": "desktop-1440",
+      "url": "/conditions",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "confidentialite",
+      "viewport": "desktop-1440",
+      "url": "/confidentialite",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "service",
+      "viewport": "desktop-1440",
+      "url": "/service",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 28,
+      "incomplete": []
+    },
+    {
+      "scene": "sign-in",
+      "viewport": "desktop-1440",
+      "url": "/account/sign-in",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 38,
+      "incomplete": []
+    },
+    {
+      "scene": "not-found",
+      "viewport": "desktop-1440",
+      "url": "/page-inexistante",
+      "ready": true,
+      "opened": null,
+      "violations": [],
+      "blocking": 0,
+      "allowed": 0,
+      "other": 0,
+      "checks": [
+        {
+          "name": "scrollWidth ≤ innerWidth",
+          "ok": true,
+          "detail": "1440/1440"
+        },
+        {
+          "name": "lang=\"fr\"",
+          "ok": true,
+          "detail": "fr"
+        },
+        {
+          "name": "0 .language-toggle",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "aucune graphie fautive de « mini-site »",
+          "ok": true,
+          "detail": "absente"
+        }
+      ],
+      "passes": 26,
+      "incomplete": []
+    }
+  ],
+  "summary": {
+    "blocking": 0,
+    "failedChecks": [],
+    "unusedAllowlist": []
+  }
+}

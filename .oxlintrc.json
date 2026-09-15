@@ -1,8 +1,30 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": ["react", "typescript", "oxc", "jsx-a11y"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    // V6 (D16 (a)) : accessibilité statique — huit règles à 0 constat sur la vague, en erreur (barrière lint → test:v3 → test:v6).
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/aria-proptypes": "error",
+    "jsx-a11y/aria-unsupported-elements": "error",
+    "jsx-a11y/role-has-required-aria-props": "error",
+    "jsx-a11y/role-supports-aria-props": "error",
+    "jsx-a11y/heading-has-content": "error",
+    "jsx-a11y/anchor-is-valid": "error",
+    "jsx-a11y/tabindex-no-positive": "error",
+    // Stylistique (div[role=table|row|dialog|status]) : désactivée (D16).
+    "jsx-a11y/prefer-tag-over-role": "off",
+    // Constats à trier en V7 (C10) : régions défilantes focalisables (tabIndex={0} sur role=group|table exigé par axe scrollable-region-focusable),
+    // overlays de modales fermés par Échap, faits éditables, prop `role` de PrivateMediaImage (« stage », « thumbnail » : jamais posée sur le DOM).
+    "jsx-a11y/aria-role": "off",
+    "jsx-a11y/alt-text": "off",
+    "jsx-a11y/click-events-have-key-events": "off",
+    "jsx-a11y/label-has-associated-control": "off",
+    "jsx-a11y/media-has-caption": "off",
+    "jsx-a11y/no-autofocus": "off",
+    "jsx-a11y/no-noninteractive-element-interactions": "off",
+    "jsx-a11y/no-noninteractive-tabindex": "off",
+    "jsx-a11y/no-static-element-interactions": "off"
   }
 }

@@ -946,3 +946,60 @@ test('V6 (V-D3, V-D4) : onglet actif révélé par crochet, piste avec indice de
   // D14 (b) : borne unique de la vague, valeur mesurée après intégration (A1 −4, A2 −2, A3 +2 sur 3 477).
   assert.ok(count(app, /\n/g) <= 3473, `App.tsx compte ${count(app, /\n/g)} lignes (plafond 3 473, comme wc -l)`);
 });
+
+// V6 — fusion (D15 (a) audit axe hors test:v6, D16 (a) jsx-a11y en lint, D17 (a) trois correctifs à coût nul ; F1 dédoublonnage des tests).
+test('V6 (fusion) : barrières test:v6 / audit:a11y / verify:v6, audit axe outillé et borné, jsx-a11y en erreur, contrastes locaux et carrousel nommé, une seule borne et une seule garde', () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const packageJson = JSON.parse(readSource('../package.json'));
+  // F1 : une seule définition de test:v6 (trois fichiers de source V6 ; le contrat et interface-state sont déjà dans test:v3, les vitest par glob) ; l'audit hors test:v6, dans verify:v6.
+  assert.equal(packageJson.scripts['test:v6'], 'npm run test:v5 && node --test tests/registry-public-mobile-contract.test.mjs tests/cartulary-headings.test.mjs tests/touch-targets-contract.test.mjs');
+  assert.equal(packageJson.scripts['audit:a11y'], 'VITE_USE_FIREBASE_EMULATORS=false npm run build && node scripts/audit-accessibility.mjs --serve dist');
+  assert.equal(packageJson.scripts['verify:v6'], 'npm run test:v6 && npm run audit:a11y');
+  // D15 (a) : axe-core, unique dépendance de la vague, version exacte.
+  assert.match(packageJson.devDependencies['axe-core'], /^\d+\.\d+\.\d+$/, 'version épinglée sans caret');
+  assert.equal(Object.keys(packageJson.dependencies).length, 13, 'aucune dépendance d’exécution ajoutée par V6');
+  // Pilote : Chrome installé (chemin CARTULARIA_CHROME), arrêt explicite « non exécuté » (code 2), réseau coupé hors 127.0.0.1, étiquettes WCAG, sortie datée.
+  const audit = readSource('../scripts/audit-accessibility.mjs');
+  assert.match(audit, /process\.env\.CARTULARIA_CHROME/);
+  assert.match(audit, /if \(!existsSync\(chromePath\)\) \{ console\.error\(`Audit non exécuté : Chrome introuvable[^\n]*process\.exit\(2\); \}/);
+  assert.match(audit, /'--host-resolver-rules=MAP \* ~NOTFOUND, EXCLUDE 127\.0\.0\.1'/);
+  assert.match(audit, /const TAGS = \['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'best-practice'\];/);
+  assert.match(audit, /const BLOCKING = new Set\(\['serious', 'critical'\]\);/);
+  assert.match(audit, /\.\/audit-accessibility\.allowlist\.json/);
+  for (const anchor of ['cover', 'media', 'reference', 'condition', 'value', 'publication']) assert.match(audit, new RegExp(`'${anchor}'`));
+  for (const route of ['/accessibilite', '/conditions', '/confidentialite', '/service', '/account/sign-in', '/page-inexistante']) assert.ok(audit.includes(route.startsWith('/account') || route.startsWith('/page') ? `'${route}'` : `'${route.slice(1)}'`), route);
+  for (const opener of ['.public-menu-trigger', '.page-tabs__audit', '.todo-trigger']) assert.match(audit, new RegExp(`open: '${opener.replace('.', '\\.')}'`));
+  assert.match(audit, /width: 390, height: 844, mobile: true/);
+  assert.match(audit, /width: 1440, height: 900, mobile: false/);
+  assert.match(audit, /docs\/audits\/a11y/);
+  // Liste d'exceptions : entrées datées avec motif et échéance, au moins les trois de D17 (a).
+  const allowlist = JSON.parse(readSource('../scripts/audit-accessibility.allowlist.json')).entries;
+  for (const entry of allowlist) {
+    assert.match(entry.since, /^\d{4}-\d{2}-\d{2}$/, entry.rule);
+    assert.ok(entry.reason.length > 20 && entry.until, entry.rule);
+  }
+  for (const rule of ['region', 'aria-required-children', 'heading-order']) assert.ok(allowlist.some((entry) => entry.rule === rule), rule);
+  // D16 (a) : plugin jsx-a11y, huit règles à 0 constat en erreur, prefer-tag-over-role désactivée (configuration JSONC : commentaires retirés avant lecture).
+  const oxlint = JSON.parse(readSource('../.oxlintrc.json').replace(/^\s*\/\/.*$/gm, ''));
+  assert.ok(oxlint.plugins.includes('jsx-a11y'));
+  for (const rule of ['aria-props', 'aria-proptypes', 'aria-unsupported-elements', 'role-has-required-aria-props', 'role-supports-aria-props', 'heading-has-content', 'anchor-is-valid', 'tabindex-no-positive']) {
+    assert.equal(oxlint.rules[`jsx-a11y/${rule}`], 'error', rule);
+  }
+  assert.equal(oxlint.rules['jsx-a11y/prefer-tag-over-role'], 'off');
+  // D17 (a) : deux contrastes locaux ≥ 4,5:1 sur --fill (le jeton --muted reste 4,24:1 : correction locale, jamais globale), carrousel nommé par un rôle.
+  const css = readSource('../src/index.css');
+  const variables = readSource('../src/styles/variables.css');
+  const luminance = (hex) => { const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(1 + offset, 3 + offset), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (light + 0.05) / (dark + 0.05); };
+  const fill = variables.match(/--fill: (#[0-9A-Fa-f]{6});/)[1];
+  const localColor = (pattern) => { const match = css.match(pattern); assert.ok(match, `règle à couleur locale attendue : ${pattern}`); return match[1]; };
+  const groupColor = localColor(/\n\.publication-summary__group th \{ background: var\(--fill\); color: (#[0-9A-Fa-f]{6}); font: 10px var\(--font-mono\); text-transform: uppercase; \}/);
+  const levelColor = localColor(/\n\.retained-value-card__levels > div span \{ color: (#[0-9A-Fa-f]{6}); font-size: 10px; \}/);
+  for (const color of [groupColor, levelColor]) assert.ok(contrast(color, fill) >= 4.5, `${color} sur ${fill} : ${contrast(color, fill).toFixed(2)}:1`);
+  assert.ok(contrast(variables.match(/--muted: (#[0-9A-Fa-f]{6});/)[1], fill) < 4.5, 'si --muted passe 4,5:1 sur --fill, les couleurs locales redeviennent le jeton');
+  assert.match(readSource('../src/components/MediaCarousel.tsx'), /<div className="media-carousel__thumbs" role="group" aria-label=\{language === 'FR' \? 'Choisir un média' : 'Choose media'\}>/);
+  // F1 : une seule borne d'App.tsx (ce fichier) et une seule assertion V6 du décalage 69 px (tests/touch-targets-contract.test.mjs, D13 (a)) ; le littéral V4 du popover reste au contrat.
+  const testFiles = readdirSync(join(root, 'tests')).filter((name) => /\.test\.mjs$/.test(name) && !/ 2\./.test(name));
+  assert.deepEqual(testFiles.filter((name) => readFileSync(join(root, 'tests', name), 'utf8').includes('plafond 3 ')), ['cartulary-presentation-contract.test.mjs']);
+  assert.deepEqual(testFiles.filter((name) => name !== 'cartulary-presentation-contract.test.mjs' && /69px/.test(readFileSync(join(root, 'tests', name), 'utf8'))), ['touch-targets-contract.test.mjs']);
+});

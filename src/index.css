@@ -522,7 +522,8 @@ img { display: block; max-width: 100%; }
 .publication-summary thead th:first-child { text-align: left; }
 .publication-summary tbody th { padding: var(--s2) var(--s3); text-align: left; font-weight: 500; border-bottom: 1px solid var(--rule); }
 .publication-summary tbody td { padding: var(--s2) var(--s3); text-align: center; border-bottom: 1px solid var(--rule); }
-.publication-summary__group th { background: var(--fill); color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; }
+/* V6 (D17 (a)) : --muted sur --fill = 4,24:1 à 10 px ; teinte locale #5F5B53 (même teinte, 5,3:1), le jeton reste inchangé. */
+.publication-summary__group th { background: var(--fill); color: #5F5B53; font: 10px var(--font-mono); text-transform: uppercase; }
 .publication-summary td.is-included { color: var(--mark); font-weight: 600; }
 .publication-summary td.is-excluded { color: var(--muted); }
 .publication-summary td.is-unavailable { color: var(--muted); }
@@ -2269,7 +2270,7 @@ textarea {
 .retained-value-card__levels label > span { display: grid; grid-template-columns: minmax(0, 1fr) 56px; }
 .retained-value-card__levels label > span > strong { display: grid; place-items: center; border: 1px solid var(--rule); border-left: 0; background: var(--fill); color: var(--ink); font-size: 9px; }
 .retained-value-card__levels > div { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3); border: 1px solid var(--rule); background: var(--fill); }
-.retained-value-card__levels > div span { color: var(--muted); font-size: 10px; }
+.retained-value-card__levels > div span { color: #5F5B53; font-size: 10px; } /* V6 (D17 (a)) : 4,24:1 → 5,3:1 sur --fill à 10 px, voir .publication-summary__group th */
 .retained-value-card__levels > div strong { font-family: var(--font-mono); font-size: 14px; }
 .ownership-valuation-note { grid-column: 1 / -1; margin-top: 0; }
 .retained-value-card--published { grid-template-columns: minmax(220px, 3fr) minmax(180px, 2fr) minmax(320px, 5fr); }

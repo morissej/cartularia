@@ -125,7 +125,7 @@ export function MediaCarousel({
       </div>
 
       {assets.length > 1 && (
-        <div className="media-carousel__thumbs" aria-label={language === 'FR' ? 'Choisir un média' : 'Choose media'}>
+        <div className="media-carousel__thumbs" role="group" aria-label={language === 'FR' ? 'Choisir un média' : 'Choose media'}>
           {assets.map((asset, index) => {
             const thumbnail = asset.posterUrl || asset.thumbnailUrl || asset.url;
             const videoPoster = asset.posterUrl || asset.thumbnailUrl;
