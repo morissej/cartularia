@@ -312,13 +312,13 @@ Attendu : IWC `PRESENTATION_REGENERATION_APPLIED`, `plannedItemThumbnail 'inline
 |---|---|
 | P4 IWC rejoué (code `9289ca8`) | `firestoreWrites 1`, `bundleSuperseded true` ; item : vignette inline (clés `assetId,dataUrl,height,kind,sha256,width`, 7 095 caractères, 160 × 240, `assetId` = primaire, identique au miroir de l'asset primaire), `thumbnailStatus 'ready'`, `updatedAt` 2026-09-08 inchangé ; plan rejoué : `already_current 45`, `plannedItemThumbnail 'inline'`, `existingThumbnailKind 'inline'`. |
 | P5 seed démo v3 | Premier essai refusé avant toute écriture (`ENOENT` : le dossier de sauvegarde doit exister ; dossier créé à côté de celui de V2, dans `Projet Cartularia/`). Second essai : sauvegarde `cartularia-demo-repair-20260915/demo-data-enrichment-v3-WE3k8K/backup.json` (format `cartularia-demo-repair-backup@1`, `before` = 5 items) ; `--expect-no-writes` : 0 écriture ; 5 items : vignette `bundle` (`spin-00.240.webp` Submariner, `main.240.webp` pour les quatre autres, 240 × 240, `assetId` = primaire, clés du contrat seulement, `thumbnailStatus` absent comme prévu) ; les 5 fichiers existent dans `dist/`. |
-| P6 Hosting | Build sur `9289ca8` sans émulateurs, `firebase deploy --only hosting` : 549 fichiers, 171 nouveaux, « Deploy complete ». Bundle `index-BBdpUbSz.js`. |
+| P6 Hosting | Build sur `9289ca8` sans émulateurs, `firebase deploy --only hosting` : 549 fichiers, 171 nouveaux, « Deploy complete ». Bundle `index-C6IFRBoI.js`. |
 
 ### 13.2 Mesures après (P7)
 
 Méthode : navigateur intégré, viewport émulé 1 280 × 800, onglet rechargé par page (`location.reload()`), compte de démonstration partagé pour le Registre démo ; `performance.getEntriesByType('resource')` pour le nombre de requêtes et la liste des ressources, taille transférée = `Content-Length` d'un `fetch` `no-store` de chaque ressource same-origin (brotli/gzip servis par Hosting), donc hors polices (`fonts.gstatic`, 198 ko avant, inchangées), Firestore et reCAPTCHA (taille non mesurable cross-origin, requêtes comptées). L'onglet du volet est masqué : les images `loading="lazy"` ne se chargent pas (leur poids est mesuré à part par `fetch`). Le « avant » du 14/09 (`v3/mesures-avant.md`) sommait `transferSize`, comparable pour les images, moins pour le JS (cache et compression) : la ligne JS est donnée à titre indicatif.
 
-| Page | Avant (14/09) | Après (15/09, `index-BBdpUbSz.js`) | Objectif |
+| Page | Avant (14/09) | Après (15/09, `index-C6IFRBoI.js`) | Objectif |
 |---|---|---|---|
 | Accueil démo `#cover` | 53 req., 1 066 ko ; 1 image `spin-00.jpg` 170 ko | 59 req. ; same-origin 403 ko (JS 43 scripts 337 ko, CSS 17 ko, images 48 ko dont couverture `spin-00.768.webp` 34 ko, logo 9 ko) ; 0 Storage ; 0 vue 360° ; + polices 198 ko cross-origin ≈ 600 ko | < 1 Mo : **atteint** |
 | Médias démo `#media` | 53 req., 1 065 ko ; 1 image 170 ko | 54 req. ; same-origin 430 ko ; 2 images 768 (`spin-00`, `main`, 34 ko chacune) ; 0 requête `spin-01…13` ; 0 Storage ; vidéo non montée avant action | 0 vue 360° avant « Ouvrir la séquence » : **atteint** |
