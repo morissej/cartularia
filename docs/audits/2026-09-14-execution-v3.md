@@ -303,3 +303,33 @@ GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mj
 GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/seed-demo-account.mjs --data-only --apply --allow-remote --backup-dir=/Users/jeromemorisseau/cartularia-demo-repair-20260915
 ```
 Attendu : IWC `PRESENTATION_REGENERATION_APPLIED`, `plannedItemThumbnail 'inline'`, `warnings` = [`bundle_superseded…`], `applied.summary.firestoreWrites = 1`, `bundleSuperseded true`, 0 écriture Storage (rejeu : 0) ; seed `applied: true`, 5 `update`, sauvegarde `demo-data-enrichment-v3-*/backup.json`. Puis vérification par l'assistant (item IWC inline sans `dataUrl` résiduelle, `--expect-no-writes`), P6 Hosting, P7 mesures.
+
+## 13. P4 réparé, P5 appliqué, P6 déployé, P7 mesuré (15 septembre)
+
+### 13.1 Vérifications (lecture seule)
+
+| Étape | Constat |
+|---|---|
+| P4 IWC rejoué (code `9289ca8`) | `firestoreWrites 1`, `bundleSuperseded true` ; item : vignette inline (clés `assetId,dataUrl,height,kind,sha256,width`, 7 095 caractères, 160 × 240, `assetId` = primaire, identique au miroir de l'asset primaire), `thumbnailStatus 'ready'`, `updatedAt` 2026-09-08 inchangé ; plan rejoué : `already_current 45`, `plannedItemThumbnail 'inline'`, `existingThumbnailKind 'inline'`. |
+| P5 seed démo v3 | Premier essai refusé avant toute écriture (`ENOENT` : le dossier de sauvegarde doit exister ; dossier créé à côté de celui de V2, dans `Projet Cartularia/`). Second essai : sauvegarde `cartularia-demo-repair-20260915/demo-data-enrichment-v3-WE3k8K/backup.json` (format `cartularia-demo-repair-backup@1`, `before` = 5 items) ; `--expect-no-writes` : 0 écriture ; 5 items : vignette `bundle` (`spin-00.240.webp` Submariner, `main.240.webp` pour les quatre autres, 240 × 240, `assetId` = primaire, clés du contrat seulement, `thumbnailStatus` absent comme prévu) ; les 5 fichiers existent dans `dist/`. |
+| P6 Hosting | Build sur `9289ca8` sans émulateurs, `firebase deploy --only hosting` : 549 fichiers, 171 nouveaux, « Deploy complete ». Bundle `index-BBdpUbSz.js`. |
+
+### 13.2 Mesures après (P7)
+
+Méthode : navigateur intégré, viewport émulé 1 280 × 800, onglet rechargé par page (`location.reload()`), compte de démonstration partagé pour le Registre démo ; `performance.getEntriesByType('resource')` pour le nombre de requêtes et la liste des ressources, taille transférée = `Content-Length` d'un `fetch` `no-store` de chaque ressource same-origin (brotli/gzip servis par Hosting), donc hors polices (`fonts.gstatic`, 198 ko avant, inchangées), Firestore et reCAPTCHA (taille non mesurable cross-origin, requêtes comptées). L'onglet du volet est masqué : les images `loading="lazy"` ne se chargent pas (leur poids est mesuré à part par `fetch`). Le « avant » du 14/09 (`v3/mesures-avant.md`) sommait `transferSize`, comparable pour les images, moins pour le JS (cache et compression) : la ligne JS est donnée à titre indicatif.
+
+| Page | Avant (14/09) | Après (15/09, `index-BBdpUbSz.js`) | Objectif |
+|---|---|---|---|
+| Accueil démo `#cover` | 53 req., 1 066 ko ; 1 image `spin-00.jpg` 170 ko | 59 req. ; same-origin 403 ko (JS 43 scripts 337 ko, CSS 17 ko, images 48 ko dont couverture `spin-00.768.webp` 34 ko, logo 9 ko) ; 0 Storage ; 0 vue 360° ; + polices 198 ko cross-origin ≈ 600 ko | < 1 Mo : **atteint** |
+| Médias démo `#media` | 53 req., 1 065 ko ; 1 image 170 ko | 54 req. ; same-origin 430 ko ; 2 images 768 (`spin-00`, `main`, 34 ko chacune) ; 0 requête `spin-01…13` ; 0 Storage ; vidéo non montée avant action | 0 vue 360° avant « Ouvrir la séquence » : **atteint** |
+| Catalogue démo `/registry/reg_cartularia_demo/items` | icônes seulement | 77 req. dont 27 canaux Listen Firestore ; same-origin 292 ko ; 5 cartes `[data-thumbnail-state="ready"]`, 5 `<img loading="lazy">` `*.240.webp` = 28 176 o cumulés (`cache-control: immutable`) ; 0 Storage ; 0 lecture d'assets | une vignette par carte, aucune requête assets/Storage : **atteint** |
+| Galerie démo `/registry/reg_cartularia_demo/gallery` | non mesurée | 60 req. dont 8 canaux Listen ; same-origin 302 ko + 28 ko de vignettes ≈ 330 ko ; 5 `ready` ; 0 Storage | < 500 ko : **atteint** (Registre démo) |
+| Galerie pilote `/registry/reg_collection_privee/gallery` (P-A3, session propriétaire) | non mesurée | **non mesurée** : session Chrome déconnectée (mot de passe requis, jamais saisi par l'assistant). Attendu : 0 Storage, 2 vignettes inline (Rolex 3 043 + IWC 7 095 caractères) dans le flux Listen. | à mesurer par Jérôme (§ 13.3) |
+| Cartulaire Rolex, page Médias, propriétaire (P-B2) | un original par vignette | **non mesurée** (idem). Attendu : uniquement `presentation-v3-240/480/768/1200.webp`, 0 `%2Foriginal` avant « Afficher l'original ». | à mesurer par Jérôme (§ 13.3) |
+
+Écart relevé sans conséquence : sur l'Accueil démo, la variante 240 de la couverture est aussi demandée (6 ko) avant la 768 ; le premier rendu se fait à largeur nulle (volet masqué) puis l'émulation 1 280 px resélectionne la 768. Sur un onglet visible dès le départ, seule la variante utile part.
+
+### 13.3 Reste (Jérôme)
+
+1. Mesures propriétaire (Chrome connecté, onglet neuf, DevTools Réseau « Disable cache ») : `/registry/reg_collection_privee/gallery` (« Transferred » total, filtre `firebasestorage` = 0 attendu, 2 vignettes visibles) ; Cartulaire Rolex page Médias (filtre `firebasestorage` : uniquement `presentation-v3-…webp`, 0 `%2Foriginal` ; puis « Afficher l'original » sur une image → 1 `%2Foriginal`). Me communiquer les totaux ou me laisser une session Chrome connectée.
+2. Recette V3.4 (§ 3 P8) puis purge de l'objet de test.
