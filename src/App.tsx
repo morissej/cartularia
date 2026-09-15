@@ -95,6 +95,7 @@ import { newId } from './utils/identifiers';
 import { digestFile } from './utils/fileDigest';
 import { buildImportedAssets } from './features/cartulary/media/importMediaFiles';
 import { EmptyMediaSlot } from './features/cartulary/components/EmptyMediaSlot';
+import { CartularyAccessNotice } from './features/cartulary/components/CartularyAccessNotice';
 import {
   BlockMarkers,
   ComparableTable,
@@ -2341,17 +2342,13 @@ function App() {
         language={language}
         setLanguage={setLanguage}
         followUp={followUp}
-        readOnly={isDemoCartulary}
+        readOnly={!canEdit}
+        demonstration={isDemoCartulary}
         returnHref={registryReturnHref}
       />
 
-      {isDemoCartulary && (
-        <aside className="cartulary-demo-notice no-print" role="note">
-          <ShieldCheck size={16} aria-hidden="true" />
-          <strong>Démonstration en lecture seule</strong>
-          <span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>
-        </aside>
-      )}
+      {/* V5 point 1 (2/2) : bandeau d'accès — démonstration, propriétaire hors session, chargement impossible ; rien pendant la résolution des droits. */}
+      <CartularyAccessNotice demonstration={isDemoCartulary} status={authoritative.status} language={language} />
 
       <a className="cartulary-registry-return no-print" href={registryReturnHref}>
         <ArrowLeft size={14} aria-hidden="true" />
@@ -2433,7 +2430,7 @@ function App() {
               </button>
             </section>
 
-            <CartularyTodoBoard followUp={followUp} language={language} readOnly={isDemoCartulary} />
+            <CartularyTodoBoard followUp={followUp} language={language} readOnly={!canEdit} demonstration={isDemoCartulary} />
 
             <span hidden {...aiFieldProps('cover.privacy.userAlias')}>{userAlias}</span>
             <span hidden {...aiFieldProps('cover.privacy.objectCode')}>{objectCode}</span>
@@ -3414,7 +3411,8 @@ function App() {
               persistence={persistence}
               onDeleteAllData={handleDeleteAllData}
               onJournalUpdate={() => setEventTrigger((previous) => previous + 1)}
-              readOnly={isDemoCartulary}
+              readOnly={!canEdit}
+              demonstration={isDemoCartulary}
               demoRegistryProofsHref={isDemoCartulary ? registryHref(DEMO_ACCOUNT.registryId, 'integrity') : null}
               publishedWebsiteUrl={publishedWebsiteUrl}
             />

@@ -236,7 +236,10 @@ test('le panneau Preuves reçoit le mode lecture et la publication constatée de
   const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const start = appSource.indexOf('<AuditPanel');
   const auditPanelBlock = appSource.slice(start, appSource.indexOf('/>', start));
-  assert.match(auditPanelBlock, /readOnly=\{isDemoCartulary\}/);
+  // V5 point 1 (2/2, I4) : la lecture suit le droit de gérer (canEdit) ; la démo ne fournit que les textes (ADR-026).
+  assert.match(auditPanelBlock, /readOnly=\{!canEdit\}/);
+  assert.match(auditPanelBlock, /demonstration=\{isDemoCartulary\}/);
+  assert.doesNotMatch(auditPanelBlock, /readOnly=\{isDemoCartulary\}/);
   assert.match(auditPanelBlock, /publishedWebsiteUrl=\{publishedWebsiteUrl\}/);
   assert.match(auditPanelBlock, /demoRegistryProofsHref=\{isDemoCartulary \?/);
   assert.match(appSource, /const handleDeleteAllData = async \(\) => \{\s*if \(isDemoCartulary\) return;/);
@@ -668,4 +671,76 @@ test('V5 point 1 : le mode lecture suit le droit de gérer, sans contrôle désa
   // Inchangés (verrous existants) : page 05 sur canManagePublication, gardes canEdit des commandes, sélection de publication.
   assert.match(app, /const canManagePublication = authoritative\.canManage;/);
   assert.equal((app.match(/if \(!canEdit\) return;/g) ?? []).length, 3);
+});
+
+// V5 — point 1 (V-D1, D5 (a)), commit 2/2 (I4) : structures communes et bandeau d'accès sur le droit de gérer.
+test('V5 point 1 (2/2) : barre À faire, tableau À faire, Preuves et visionneuse en lecture sur le droit de gérer ; bandeau d’accès pur', () => {
+  const app = readSource('../src/App.tsx');
+  // Les quatre structures communes basculent sur !canEdit ; la démo n'alimente que la prop texte `demonstration`.
+  for (const component of ['BarreDossier', 'CartularyTodoBoard', 'AuditPanel', 'MediaViewerModal']) {
+    const start = app.indexOf(`<${component}`);
+    assert.ok(start >= 0, `${component} absent d’App.tsx`);
+    const tag = app.slice(start, app.indexOf('/>', start));
+    assert.match(tag, /readOnly=\{!canEdit\}/, `${component} n’est pas en lecture sur !canEdit`);
+    assert.doesNotMatch(tag, /readOnly=\{isDemoCartulary\}/, `${component} encore en lecture sur la démo`);
+    if (component !== 'MediaViewerModal') assert.match(tag, /demonstration=\{isDemoCartulary\}/, `${component} sans prop texte demonstration`);
+  }
+  // Le seul readOnly={isDemoCartulary} restant est celui du panneau de publication, dans la branche éditeur (canManagePublication).
+  assert.equal((app.match(/readOnly=\{isDemoCartulary\}/g) ?? []).length, 1);
+  assert.match(app, /<PublicWebsitePublicationPanel[^\n]*readOnly=\{isDemoCartulary\}/);
+  // Bandeau d'accès : un composant pur remplace l'aside démo ; il lit le statut du hook autoritaire, jamais canManage.
+  assert.match(app, /<CartularyAccessNotice demonstration=\{isDemoCartulary\} status=\{authoritative\.status\} language=\{language\} \/>/);
+  assert.doesNotMatch(app, /isDemoCartulary && \(\s*<aside className="cartulary-(?:demo|access)-notice"/);
+  assert.doesNotMatch(app, /cartulary-demo-notice|cartulary-access-notice/);
+  const notice = readSource('../src/features/cartulary/components/CartularyAccessNotice.tsx');
+  assert.doesNotMatch(notice, /firebase|firestore|isDemoCartulary|canManage|<button|<input|<a |Mode de consultation|setAudience|AUDIENCE_STORAGE_KEY/i);
+  assert.match(notice, /export function CartularyAccessNotice\(/);
+  assert.match(notice, /className="cartulary-access-notice no-print" role="note"/);
+  for (const text of ['Démonstration en lecture seule', 'Read-only demonstration', 'Lecture seule', 'Connectez-vous avec le compte propriétaire pour modifier ce Cartulaire\\.', 'Sign in with the owner account to edit this Cartulary\\.', 'n’a pas pu être chargé depuis le serveur', 'could not be loaded from the server']) {
+    assert.match(notice, new RegExp(text), `texte du bandeau manquant : ${text}`);
+  }
+  assert.match(notice, /status === 'signed-out'/);
+  assert.match(notice, /status === 'denied' \|\| status === 'error' \|\| status === 'empty'/);
+  assert.match(notice, /if \(!notice\) return null;/, 'idle, loading et ready ne rendent rien (aucun clignotement pour le propriétaire)');
+  assert.match(readSource('../src/index.css'), /\.cartulary-access-notice \{/);
+  // M1 : en lecture, la barre et le tableau ne montrent ni pastille-bouton ni état de synchronisation (un lecteur ne synchronise rien).
+  const header = readSource('../src/components/BarreDossier.tsx');
+  const board = readSource('../src/components/CartularyTodoBoard.tsx');
+  for (const [name, source] of [['BarreDossier', header], ['CartularyTodoBoard', board]]) {
+    assert.doesNotMatch(source, /disabled=\{readOnly\}/, `${name} : contrôle grisé en lecture`);
+    assert.match(source, /\{!readOnly && (?:todoSyncError|syncError) && <p className="todo-sync-error" role="status">/, `${name} : syncError rendu en lecture`);
+    assert.match(source, /demonstration = false/, `${name} : prop demonstration absente`);
+    assert.match(source, /demonstration \? \(isFrench \? 'Démonstration en lecture seule' : 'Read-only demonstration'\) : \(isFrench \? 'Lecture seule' : 'Read-only'\)/, `${name} : mention de lecture sans parité`);
+    assert.match(source, /<span className="sr-only">\{todo\.status === 'completed' \? \(isFrench \? 'Terminée' : 'Completed'\) : \(isFrench \? 'Planifiée' : 'Planned'\)\}<\/span>/, `${name} : pastille de lecture sans texte`);
+  }
+  assert.match(header, /\{readOnly \? \(\s*<span className="todo-list__status">/);
+  assert.match(board, /todos\.map\(\(todo\) => readOnly \? \(/);
+  assert.match(board, /<time dateTime=\{todo\.dueAt \|\| undefined\}>/);
+  assert.match(board, /<span className="cover-todo-board__category">\{categoryLabel\(todo\.category\)\}<\/span>/);
+  // Preuves en lecture pour tout non-éditeur : textes contextuels sans mot « démonstration » hors démo, aucun message technique.
+  const panel = readSource('../src/components/AuditPanel.tsx');
+  assert.match(panel, /demonstration \? tx\(\s*'Démonstration en lecture seule\. Rien n’est enregistré dans ce navigateur/);
+  assert.match(panel, /Votre accès à ce Cartulaire est en lecture seule : aucune action propriétaire n’est disponible depuis cette vue\./);
+  assert.match(panel, /Your access to this Cartulary is read-only: no owner action is available from this view\./);
+  assert.match(panel, /La cession relève du compte propriétaire\./);
+  assert.match(panel, /demonstration \? tx\('Chaîne fictive de démonstration', 'Fictional demonstration chain'\) : tx\('Chaîne serveur', 'Server chain'\)/);
+  assert.match(panel, /<ReadOnlyProofs\s*language=\{language\}\s*demonstration=\{demonstration\}/);
+  assert.doesNotMatch(panel, /readOnly=\{isDemoCartulary\}/);
+  // M4 : la case des points à contrôler en lecture porte son état en texte pour le lecteur d'écran (aucun aria-label sur un span sans rôle).
+  assert.match(app, /<span className="control-check control-check--static"[^\n]*<span aria-hidden="true"[^\n]*<span className="sr-only">\{item\.checked \? tx\('Contrôlé', 'Checked'\) : tx\('À contrôler', 'To check'\)\}<\/span><\/span>/);
+  assert.doesNotMatch(app, /className="control-check[^\n]*aria-label=/);
+  // M6 (ADR-026) : dans la coque du lecteur, isDemoCartulary n'alimente que des props texte `demonstration`, des textes
+  // et des données de repli — jamais une structure ni un droit. Formes admises, comptées une à une.
+  const shell = app.slice(app.indexOf('<div className="app-shell"'), app.indexOf('<AuditPanel'));
+  const admitted = [
+    /demonstration=\{isDemoCartulary\}/g,
+    /<PublicWebsitePublicationPanel[^\n]*readOnly=\{isDemoCartulary\}/g,
+    /collectionName=\{isDemoCartulary \? DEMO_ACCOUNT\.collectionName : authoritative\.collectionName\}/g,
+    /\{isDemoCartulary \? tx\(/g,
+    // Hérité : aperçu local de l'adresse dédiée, dans la branche éditeur (canManagePublication, inaccessible en démo).
+    /\(externalPublicationEnabled \|\| isDemoCartulary\) && \(/g,
+  ];
+  const explained = admitted.reduce((sum, pattern) => sum + (shell.match(pattern) ?? []).length, 0);
+  assert.equal((shell.match(/isDemoCartulary/g) ?? []).length, explained, 'isDemoCartulary conditionne une structure ou un droit dans la coque du lecteur');
+  assert.equal((shell.match(/demonstration=\{isDemoCartulary\}/g) ?? []).length, 4, 'BarreDossier, CartularyAccessNotice, CartularyTodoBoard, PublicationReadOnlySummary');
 });

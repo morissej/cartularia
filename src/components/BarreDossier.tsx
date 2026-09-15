@@ -18,7 +18,10 @@ interface BarreDossierProps {
   language: 'FR' | 'EN';
   setLanguage: (lang: 'FR' | 'EN') => void;
   followUp: CartularyFollowUpController;
+  /** Lecture (V5 point 1) : aucun geste sur les tâches, pastilles en texte, aucun message de synchronisation. */
   readOnly?: boolean;
+  /** Texte seul (ADR-026) : la lecture est nommée « démonstration » ou simple « lecture seule ». */
+  demonstration?: boolean;
   /** Cible du logo, décidée par App.tsx via resolveRegistryReturn (une seule règle de retour). */
   returnHref?: string;
 }
@@ -31,6 +34,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
   setLanguage,
   followUp,
   readOnly = false,
+  demonstration = false,
   returnHref = '/registry',
 }) => {
   const { todos, syncError: todoSyncError, addTodo: addFollowUpTodo, updateTodo, removeTodo, restoreTodo } = followUp;
@@ -230,9 +234,10 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                   </select>
                 </form>}
 
-                {readOnly && <p className="demo-read-only-hint">{isFrench ? 'Démonstration en lecture seule' : 'Read-only demonstration'}</p>}
+                {readOnly && <p className="demo-read-only-hint">{demonstration ? (isFrench ? 'Démonstration en lecture seule' : 'Read-only demonstration') : (isFrench ? 'Lecture seule' : 'Read-only')}</p>}
 
-                {todoSyncError && <p className="todo-sync-error" role="status">{todoSyncError}</p>}
+                {/* Un lecteur ne synchronise rien : l'état de synchronisation n'est montré qu'à l'éditeur (V5 M1). */}
+                {!readOnly && todoSyncError && <p className="todo-sync-error" role="status">{todoSyncError}</p>}
 
                 {todos.length > 0 ? (
                   <ul className="todo-list">
@@ -252,10 +257,14 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                           </form>
                         ) : (
                           <>
-                            <button type="button" className="todo-list__status" disabled={readOnly} onClick={() => {
-                              const status = todo.status === 'completed' ? 'planned' : 'completed';
-                              updateTodo(todo.id, { status });
-                            }} aria-label={todo.status === 'completed' ? (isFrench ? 'Rouvrir le suivi' : 'Reopen follow-up') : (isFrench ? 'Marquer comme terminé' : 'Mark complete')}>{todo.status === 'completed' ? <Check size={14} /> : <Circle size={14} />}</button>
+                            {readOnly ? (
+                              <span className="todo-list__status"><span aria-hidden="true">{todo.status === 'completed' ? <Check size={14} /> : <Circle size={14} />}</span><span className="sr-only">{todo.status === 'completed' ? (isFrench ? 'Terminée' : 'Completed') : (isFrench ? 'Planifiée' : 'Planned')}</span></span>
+                            ) : (
+                              <button type="button" className="todo-list__status" onClick={() => {
+                                const status = todo.status === 'completed' ? 'planned' : 'completed';
+                                updateTodo(todo.id, { status });
+                              }} aria-label={todo.status === 'completed' ? (isFrench ? 'Rouvrir le suivi' : 'Reopen follow-up') : (isFrench ? 'Marquer comme terminé' : 'Mark complete')}>{todo.status === 'completed' ? <Check size={14} /> : <Circle size={14} />}</button>
+                            )}
                             <span className={todo.status === 'completed' ? 'is-completed' : undefined}>{todo.text}<small>{todo.dueAt || (isFrench ? 'Sans échéance' : 'No due date')}</small></span>
                             {!readOnly && <div className="todo-list__actions">
                               <input type="date" value={todo.dueAt} onChange={(event) => {

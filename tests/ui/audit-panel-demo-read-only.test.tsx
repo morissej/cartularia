@@ -2,9 +2,10 @@ import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Le panneau Preuves en lecture seule (démonstration) ne doit afficher aucun message technique
-// (« Connexion requise », « Connectez-vous… ») ni aucune action propriétaire (suppression,
-// export, migration), et ne doit observer ni la session ni la chaîne serveur.
+// Le panneau Preuves en lecture seule (démonstration, et depuis V5 point 1 tout lecteur sans droit de gérer :
+// propriétaire hors session, membre invité) ne doit afficher aucun message technique (« Connexion requise »,
+// « Connectez-vous… ») ni aucune action propriétaire (suppression, export, migration), et ne doit observer
+// ni la session ni la chaîne serveur ; la démo ne fournit que les textes (prop demonstration, ADR-026).
 // En mode propriétaire (V5 P-D1) : aucun tiroir « Simulation technique », export rangé avec le carnet
 // local, migration proposée seulement sous rupture, suppression isolée dans la dernière section.
 const mocks = vi.hoisted(() => ({
@@ -109,7 +110,7 @@ describe('panneau Preuves en lecture seule (démonstration)', () => {
   });
 
   it('n’affiche ni message de connexion ni action propriétaire, et n’observe rien', () => {
-    const { journal, persistence, onDeleteAllData } = renderPanel({ readOnly: true, demoRegistryProofsHref: '/registry/reg_cartularia_demo/integrity' });
+    const { journal, persistence, onDeleteAllData } = renderPanel({ readOnly: true, demonstration: true, demoRegistryProofsHref: '/registry/reg_cartularia_demo/integrity' });
 
     expect(screen.queryByText(TECHNICAL_MESSAGE)).toBeNull();
     expect(screen.queryByText(/Copie privée cloud|Private cloud copy/)).toBeNull();
@@ -137,7 +138,7 @@ describe('panneau Preuves en lecture seule (démonstration)', () => {
   });
 
   it('reste sans message technique en anglais', () => {
-    renderPanel({ readOnly: true, language: 'EN' });
+    renderPanel({ readOnly: true, demonstration: true, language: 'EN' });
     expect(screen.queryByText(TECHNICAL_MESSAGE)).toBeNull();
     expect(screen.getByText(/Read-only demonstration/)).toBeTruthy();
     expect(screen.getByText('Cartulary server proof')).toBeTruthy();
@@ -147,13 +148,63 @@ describe('panneau Preuves en lecture seule (démonstration)', () => {
 
   it('montre le code public et le QR seulement pour un mini-site réellement publié', async () => {
     const publishedWebsiteUrl = 'https://cartularia.test/watch-website?publicCode=DEMO-ROL-124060';
-    renderPanel({ readOnly: true, publishedWebsiteUrl });
+    renderPanel({ readOnly: true, demonstration: true, publishedWebsiteUrl });
 
     expect(screen.getByText('Code public du Cartulaire')).toBeTruthy();
     expect(screen.getByText('DEMO-ROL-124060')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Ouvrir le mini-site publié lié au QR code' }).getAttribute('href')).toBe(publishedWebsiteUrl);
     await waitFor(() => expect(screen.getByRole('img', { name: 'QR code vers le mini-site publié' }).getAttribute('src')).toBe('data:image/png;base64,x'));
     expect(screen.queryByText(TECHNICAL_MESSAGE)).toBeNull();
+  });
+});
+
+describe('panneau Preuves en lecture seule hors démonstration (V5 point 1 : propriétaire hors session, membre sans droit de gérer)', () => {
+  beforeEach(() => {
+    mocks.observeAuthoritativeCartularyIntegrity.mockImplementation(() => () => undefined);
+  });
+
+  it('nomme un accès en lecture sans « démonstration », sans bouton, sans lien Registre démo ni message technique', () => {
+    const { journal, persistence, onDeleteAllData } = renderPanel({ readOnly: true, demonstration: false, persistence: makePersistence(true) });
+
+    expect(screen.queryByText(TECHNICAL_MESSAGE)).toBeNull();
+    expect(screen.queryByText(/Démonstration|démonstration|demonstration/)).toBeNull();
+    expect(screen.queryByText(/Copie privée cloud|Private cloud copy/)).toBeNull();
+    expect(screen.queryByText(/Supprimer mes données|Delete my data|Suppression des données/)).toBeNull();
+    expect(screen.queryByText(/Carnet local de travail|Historique local conservé|Migrer/)).toBeNull();
+    expect(screen.queryByTestId('transfer-panel')).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+
+    expect(screen.getByRole('region', { name: 'Conservation des données' }).textContent).toContain('Votre accès à ce Cartulaire est en lecture seule : aucune action propriétaire n’est disponible depuis cette vue.');
+    expect(screen.getByRole('region', { name: 'Cession du Cartulaire' }).textContent).toContain('La cession relève du compte propriétaire.');
+    expect(screen.getByText('Preuve serveur du Cartulaire')).toBeTruthy();
+    expect(screen.getByText('Chaîne serveur')).toBeTruthy();
+    expect(screen.queryByText(/Chaîne fictive/)).toBeNull();
+    // Même en session ouverte (persistence.authenticated), la lecture n'observe ni la chaîne serveur ni le carnet local.
+    expect(mocks.observeAuthoritativeCartularyIntegrity).not.toHaveBeenCalled();
+    expect(onDeleteAllData).not.toHaveBeenCalled();
+    expect(persistence.deleteAllData).not.toHaveBeenCalled();
+    expect(journal.ready).not.toHaveBeenCalled();
+    expect(journal.reconcileSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('garde la parité anglaise des textes de lecture hors démonstration', () => {
+    renderPanel({ readOnly: true, language: 'EN' });
+    expect(screen.queryByText(TECHNICAL_MESSAGE)).toBeNull();
+    expect(screen.queryByText(/demonstration/i)).toBeNull();
+    expect(screen.getByText('Your access to this Cartulary is read-only: no owner action is available from this view.')).toBeTruthy();
+    expect(screen.getByText('Transfer is handled by the owner account.')).toBeTruthy();
+    expect(screen.getByText('Server chain')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('montre le code public et le QR d’un mini-site réellement publié, sans lien Registre démo', async () => {
+    const publishedWebsiteUrl = 'https://cartularia.test/watch-website?publicCode=DEMO-ROL-124060';
+    renderPanel({ readOnly: true, publishedWebsiteUrl });
+    expect(screen.getByText('Code public du Cartulaire')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('img', { name: 'QR code vers le mini-site publié' }).getAttribute('src')).toBe('data:image/png;base64,x'));
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([publishedWebsiteUrl]);
+    expect(screen.queryByText(/Démonstration|Registre démo/)).toBeNull();
   });
 });
 

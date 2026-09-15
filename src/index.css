@@ -182,7 +182,8 @@ img { display: block; max-width: 100%; }
   text-transform: uppercase;
 }
 
-.cartulary-demo-notice {
+/* Bandeau d'accès du lecteur (V5 point 1) : démonstration, propriétaire hors session, chargement impossible. */
+.cartulary-access-notice {
   display: flex;
   min-height: 40px;
   align-items: center;
@@ -196,7 +197,7 @@ img { display: block; max-width: 100%; }
   text-align: center;
 }
 
-.cartulary-demo-notice span,
+.cartulary-access-notice span,
 .demo-read-only-hint { color: var(--muted); }
 
 /* Panneau Preuves en lecture seule (démonstration) — ADR-026/028 : même structure, textes contextuels */
@@ -749,6 +750,10 @@ img { display: block; max-width: 100%; }
 .cover-todo-board__edit button,
 .cover-todo-board__undo button { display: inline-grid; min-width: 34px; min-height: 34px; place-items: center; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); cursor: pointer; }
 .cover-todo-board__status { border-radius: 50%; }
+/* Lecture (V5 point 1, M1) : pastille, échéance et nature en texte pur, alignées sur les colonnes d'édition. */
+.cover-todo-board__status--static { cursor: default; }
+.cover-todo-board__list > li > time,
+.cover-todo-board__list > li > .cover-todo-board__category { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; }
 .cover-todo-board__actions { display: flex; gap: var(--s1); }
 .cover-todo-board__edit { display: grid; grid-template-columns: minmax(0, 1fr) 34px 34px; gap: var(--s1); }
 .cover-todo-board__empty { padding: var(--s6); border: 1px dashed var(--rule); color: var(--muted); text-align: center; }
@@ -2887,7 +2892,8 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .cover-sheet__photo img { max-height: 540px; }
   .cover-todo-board__add { grid-template-columns: minmax(240px, 1fr) 160px; }
   .cover-todo-board__list > li { grid-template-columns: 34px minmax(180px, 1fr) 150px 72px; }
-  .cover-todo-board__list > li > select { grid-column: 2 / 4; }
+  .cover-todo-board__list > li > select,
+  .cover-todo-board__list > li > .cover-todo-board__category { grid-column: 2 / 4; }
   .transmission-list,
   .transmission-published-grid,
   .storage-list { grid-template-columns: 1fr; }
@@ -2970,7 +2976,9 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .cover-todo-board__add { grid-template-columns: 1fr; }
   .cover-todo-board__list > li { grid-template-columns: 34px minmax(0, 1fr) 72px; align-items: start; }
   .cover-todo-board__list > li > input,
-  .cover-todo-board__list > li > select { grid-column: 2 / 4; }
+  .cover-todo-board__list > li > select,
+  .cover-todo-board__list > li > time,
+  .cover-todo-board__list > li > .cover-todo-board__category { grid-column: 2 / 4; }
   .cover-todo-board__edit { grid-column: 2 / 4; }
   .cover-todo-board__undo { align-items: flex-start; flex-wrap: wrap; justify-content: flex-start; }
   .owner-card { padding: var(--s4); }

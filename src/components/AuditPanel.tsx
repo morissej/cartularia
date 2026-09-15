@@ -38,9 +38,12 @@ interface AuditPanelProps {
   onJournalUpdate: () => void;
   /**
    * Rendu « lecture » du panneau : aucune action propriétaire, aucune observation de session,
-   * aucun accès au carnet local (convention readOnly={isDemoCartulary} du lecteur unique).
+   * aucun accès au carnet local (convention readOnly={!canEdit} du lecteur unique, V5 point 1 :
+   * démonstration, propriétaire hors session, membre sans droit de gérer, droits en cours de résolution).
    */
   readOnly?: boolean;
+  /** Texte seul (ADR-026) : en lecture, les textes nomment la démonstration ou un simple accès en lecture. */
+  demonstration?: boolean;
   /** Lien vers la page Preuves du Registre de démonstration, affiché seulement en lecture seule. */
   demoRegistryProofsHref?: string | null;
   /**
@@ -75,6 +78,7 @@ const MUTED_PARAGRAPH_STYLE: React.CSSProperties = { margin: 0, color: 'var(--mu
 
 interface ReadOnlyProofsProps {
   language: 'FR' | 'EN';
+  demonstration: boolean;
   publicShareCode: string;
   publishedWebsiteUrl: string | null;
   demoRegistryProofsHref: string | null;
@@ -83,12 +87,14 @@ interface ReadOnlyProofsProps {
 }
 
 /**
- * Rendu « lecture » des Preuves pour un lecteur qui ne peut ni éditer ni publier (démonstration comprise) :
- * la structure reste celle du panneau propriétaire (conservation, cession, preuve serveur, partage),
- * seuls les textes sont contextuels. Aucun bouton d'action, aucune observation de session Firebase.
+ * Rendu « lecture » des Preuves pour un lecteur qui ne peut ni éditer ni publier (démonstration, propriétaire
+ * hors session, membre sans droit de gérer) : la structure reste celle du panneau propriétaire (conservation,
+ * cession, preuve serveur, partage), seuls les textes sont contextuels — `demonstration` ne change que les
+ * textes. Aucun bouton d'action, aucune observation de session Firebase, aucun message technique.
  */
 const ReadOnlyProofs: React.FC<ReadOnlyProofsProps> = ({
   language,
+  demonstration,
   publicShareCode,
   publishedWebsiteUrl,
   demoRegistryProofsHref,
@@ -101,9 +107,12 @@ const ReadOnlyProofs: React.FC<ReadOnlyProofsProps> = ({
       <section aria-labelledby="persistence-title" className="cartulary-demo-proofs-note" style={{ display: 'grid', gap: 'var(--s2)', borderBottom: '1px solid var(--rule)', paddingBottom: 'var(--s4)' }}>
         <h4 id="persistence-title" style={SECTION_TITLE_STYLE}>{tx('Conservation des données', 'Data preservation')}</h4>
         <p style={MUTED_PARAGRAPH_STYLE}>
-          {tx(
+          {demonstration ? tx(
             'Démonstration en lecture seule. Rien n’est enregistré dans ce navigateur ni synchronisé ; le compte de démonstration ne possède pas de copie privée.',
             'Read-only demonstration. Nothing is saved in this browser or synchronized; the demonstration account has no private copy.',
+          ) : tx(
+            'Votre accès à ce Cartulaire est en lecture seule : aucune action propriétaire n’est disponible depuis cette vue.',
+            'Your access to this Cartulary is read-only: no owner action is available from this view.',
           )}
         </p>
       </section>
@@ -111,9 +120,12 @@ const ReadOnlyProofs: React.FC<ReadOnlyProofsProps> = ({
       <section aria-labelledby="cartulary-transfer-title" className="cartulary-demo-proofs-note" style={{ display: 'grid', gap: 'var(--s2)', borderBottom: '1px solid var(--rule)', paddingBottom: 'var(--s4)' }}>
         <h4 id="cartulary-transfer-title" style={SECTION_TITLE_STYLE}>{tx('Cession du Cartulaire', 'Cartulary transfer')}</h4>
         <p style={MUTED_PARAGRAPH_STYLE}>
-          {tx(
+          {demonstration ? tx(
             'La cession n’est pas démontrée : elle exige le compte propriétaire et une confirmation humaine.',
             'Transfer is not demonstrated: it requires the owner account and a human confirmation.',
+          ) : tx(
+            'La cession relève du compte propriétaire.',
+            'Transfer is handled by the owner account.',
           )}
         </p>
       </section>
@@ -121,7 +133,7 @@ const ReadOnlyProofs: React.FC<ReadOnlyProofsProps> = ({
       <section aria-labelledby="server-proof-title" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s3)', border: '1px solid var(--ink)', background: 'var(--paper)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--s2)' }}>
           <h4 id="server-proof-title" style={SECTION_TITLE_STYLE}>{serverProofTitle}</h4>
-          <strong style={{ fontSize: '11px', textAlign: 'right' }}>{tx('Chaîne fictive de démonstration', 'Fictional demonstration chain')}</strong>
+          <strong style={{ fontSize: '11px', textAlign: 'right' }}>{demonstration ? tx('Chaîne fictive de démonstration', 'Fictional demonstration chain') : tx('Chaîne serveur', 'Server chain')}</strong>
         </div>
         <p style={{ ...MUTED_PARAGRAPH_STYLE, fontSize: '11px' }}>{serverProofDoctrine}</p>
         {demoRegistryProofsHref && (
@@ -156,6 +168,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   onDeleteAllData,
   onJournalUpdate,
   readOnly = false,
+  demonstration = false,
   demoRegistryProofsHref = null,
   publishedWebsiteUrl = null,
 }) => {
@@ -324,6 +337,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
     return (
       <ReadOnlyProofs
         language={language}
+        demonstration={demonstration}
         publicShareCode={publicShareCode}
         publishedWebsiteUrl={publishedWebsiteUrl}
         demoRegistryProofsHref={demoRegistryProofsHref}
