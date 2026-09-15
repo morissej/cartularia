@@ -1,3 +1,4 @@
+import { cartularyNeedsReview } from '../../../scripts/lib/cartulary-review-policy.mjs';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
 
 export type RegistryCatalogSort = 'updated-desc' | 'title-asc' | 'year-desc';
@@ -9,6 +10,8 @@ export interface RegistryCatalogFilters {
   patrimonialStatus: string;
   lifecycleStatus?: string;
   possessionStatus?: string;
+  /** Filtre « à revoir » (`?review=1`) : même prédicat que l'indicateur du tableau de bord (P-C5). */
+  needsReview?: boolean;
   sort: RegistryCatalogSort;
 }
 
@@ -42,6 +45,7 @@ export const filterAndSortRegistryItems = (
     if (filters.patrimonialStatus !== 'all' && item.patrimonialStatus !== filters.patrimonialStatus) return false;
     if (filters.lifecycleStatus && filters.lifecycleStatus !== 'all' && item.lifecycleStatus !== filters.lifecycleStatus) return false;
     if (filters.possessionStatus === 'sensitive' && !['lost', 'stolen', 'destroyed'].includes(item.possessionStatus)) return false;
+    if (filters.needsReview && !cartularyNeedsReview(item)) return false;
 
     const haystack = normalize([
       item.displayTitle,

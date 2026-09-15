@@ -309,6 +309,8 @@
 .registry-facts span { color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
 .registry-facts strong { font-family: var(--font-display); font-size: clamp(24px, 3vw, 38px); font-weight: 500; line-height: 1.08; }
 .registry-facts small { color: var(--muted); font-size: 11px; }
+/* Carte « À revoir » (P-C5) : le lien vers le catalogue filtré garde la couleur du sous-titre. */
+.registry-facts small a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
 .registry-wave-one-panel {
   display: grid;
@@ -1779,8 +1781,13 @@
 .registry-create-file em { grid-column: 1 / -1; overflow: hidden; color: var(--positive); font-family: var(--font-mono); font-size: 8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .registry-create-file-summary { margin: 0 var(--s4) var(--s4); color: var(--muted); font-family: var(--font-mono); font-size: 9px; }
 .registry-create-progress { display: grid; gap: var(--s2); padding: var(--s3) var(--s4); border: 1px solid var(--mark); background: color-mix(in srgb, var(--fill) 58%, var(--sheet)); }
-.registry-create-progress > div { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: var(--s2); font-size: 10px; }
-.registry-create-progress > div svg { width: 16px; }
+.registry-create-steps { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.registry-create-steps li { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: var(--s2); color: var(--muted); font-size: 10px; }
+.registry-create-steps li svg,
+.registry-create-steps li > span[aria-hidden] { width: 16px; height: 16px; }
+.registry-create-steps li[aria-current="step"] { color: var(--ink); font-weight: 600; }
+.registry-create-steps li[data-state="done"] svg { color: var(--positive); }
+.registry-create-steps li small { grid-column: 2; color: var(--muted); font-family: var(--font-mono); font-size: 8px; font-weight: 400; overflow-wrap: anywhere; }
 .registry-create-progress progress { width: 100%; height: 5px; border: 0; accent-color: var(--mark); }
 .registry-create-progress small { color: var(--muted); font-family: var(--font-mono); font-size: 8px; }
 .registry-create-error { padding: var(--s3) var(--s4); border: 1px solid var(--negative); color: var(--negative); font-size: 10px; }
@@ -1801,6 +1808,7 @@
 .registry-create-success__actions { display: flex; gap: var(--s2); }
 .registry-create-success__actions a { display: inline-flex; min-height: 42px; align-items: center; padding: 0 var(--s3); border: 1px solid var(--ink); color: var(--ink); font-size: 10px; font-weight: 600; text-decoration: none; }
 .registry-create-success__actions a:first-child { background: var(--ink); color: var(--paper); }
+.registry-create-success__duration { color: var(--muted); font-family: var(--font-mono); font-size: 9px; }
 
 /* Galerie du Registre ----------------------------------------------------- */
 .registry-gallery,

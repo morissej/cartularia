@@ -86,6 +86,20 @@ describe('corrections de l’audit du Registre', () => {
     fireEvent.change(screen.getByLabelText('Type d’objet'), { target: { value: 'car' } });
     const unload = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(unload); expect(unload.defaultPrevented).toBe(true);
   });
+  it('le filtre à revoir du catalogue applique le prédicat de l’indicateur et se retire', async () => {
+    window.history.replaceState(null, '', '/registry/reg_demo/items?review=1');
+    state.items = [item, { ...item, cartularyId: 'cart_done', displayTitle: 'Objet revu', completenessLevel: 'complete' }];
+    render(<RegistryItems registry={registry} />);
+    expect(await screen.findAllByRole('link', { name: /Ouvrir le Cartulaire/ })).toHaveLength(1);
+    expect(screen.getByText('Rolex essai')).toBeTruthy(); expect(screen.queryByText('Objet revu')).toBeNull();
+    expect(screen.getByText(/Filtre d’alerte : Cartulaires à revoir/)).toBeTruthy();
+    expect(screen.getByRole('note').textContent).toContain('posés à la création');
+    expect(window.location.search).toContain('review=1');
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer ce filtre' }));
+    await waitFor(() => expect(screen.getAllByRole('link', { name: /Ouvrir le Cartulaire/ })).toHaveLength(2));
+    expect(window.location.search).not.toContain('review'); expect(screen.queryByRole('note')).toBeNull();
+    expect(screen.queryByText(/Filtre d’alerte/)).toBeNull();
+  });
   it('exige confirmation et conserve un échec de révocation visible', async () => {
     state.revoke.mockRejectedValue(new Error('Service de révocation indisponible'));
     render(<RegistryAccessCenter registry={registry} canReadAccesses canManageAccesses />);

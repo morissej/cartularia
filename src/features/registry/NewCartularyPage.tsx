@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import {
   ArrowLeft,
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { OrganizationDocument, RegistryDocument } from '../../domain/foundations.ts';
 import { activeRegistryCollections, defaultActiveCollectionId } from '../../domain/collections.ts';
-import { SUPPORTED_CREATION_PROFILES, describeCreationMediaSummary, resumeOrCreateCartulary, type SupportedCreationAssetType, type CartularyCreationResult } from '../../domain/cartularyCreation.ts';
+import { CARTULARY_CREATION_DURATION_NOTE, SUPPORTED_CREATION_PROFILES, describeCreationMediaSummary, describeCreationProgress, resumeOrCreateCartulary, type SupportedCreationAssetType, type CartularyCreationResult, type CartularyCreationServerStatus } from '../../domain/cartularyCreation.ts';
 import { validateFileForUpload } from '../../security/fileValidation.ts';
 import {
   CartularyCreationFailedError,
@@ -33,16 +33,6 @@ const fileSize = (bytes: number) => {
   return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
 };
 
-const progressLabel = (progress: CartularyCreationProgress | null) => {
-  if (!progress) return '';
-  if (progress.phase === 'preparing') return 'Préparation du brouillon privé…';
-  if (progress.phase === 'hashing') return `Calcul de l’empreinte · ${progress.fileName}`;
-  if (progress.phase === 'uploading') return `Téléversement ${progress.completedFiles + 1}/${progress.totalFiles} · ${progress.fileName}`;
-  if (progress.phase === 'verifying') return `Vérification du fichier… · ${progress.fileName}`;
-  if (progress.phase === 'finalizing') return 'Enregistrement des métadonnées privées…';
-  return 'Création autoritaire et raccordement au Registre…';
-};
-
 export function NewCartularyPage({ user, organization, registry }: {
   user: User;
   organization: OrganizationDocument;
@@ -52,6 +42,10 @@ export function NewCartularyPage({ user, organization, registry }: {
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<CartularyCreationProgress | null>(null);
+  const [serverStatus, setServerStatus] = useState<CartularyCreationServerStatus | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [durationSeconds, setDurationSeconds] = useState<number | null>(null);
+  const startedAtRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createdCartularyId, setCreatedCartularyId] = useState<string | null>(null);
   const [pendingCreation, setPendingCreation] = useState<CartularyCreationResult | null>(null);
@@ -97,9 +91,15 @@ export function NewCartularyPage({ user, organization, registry }: {
     }
     return [...unique.values()].reduce((sum, file) => sum + file.size, 0);
   }, [coverFile, files]);
-  const progressPercent = progress && progress.totalBytes > 0
-    ? Math.min(100, Math.round((progress.uploadedBytes / progress.totalBytes) * 100))
-    : 0;
+  // Chronomètre hors région vivante : repart de zéro à chaque envoi (une reprise mesure le temps de la reprise).
+  useEffect(() => {
+    if (!submitting) return;
+    const startedAt = startedAtRef.current ?? Date.now();
+    setElapsedSeconds(0);
+    const interval = window.setInterval(() => setElapsedSeconds(Math.round((Date.now() - startedAt) / 1000)), 1_000);
+    return () => window.clearInterval(interval);
+  }, [submitting]);
+  const creationProgress = useMemo(() => describeCreationProgress(progress, serverStatus), [progress, serverStatus]);
 
   const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
   const numberOrNull = (value: string) => value.trim() ? Number(value) : null;
@@ -135,9 +135,13 @@ export function NewCartularyPage({ user, organization, registry }: {
     event.preventDefault();
     if (submitting || (!pendingCreation && (!coverFile || !form.brand.trim() || !form.model.trim() || !form.reference.trim() || !form.collectionId || collectionsState !== 'ready'))) return;
     if (!pendingCreation) setSubmittedIdentity({ title: `${form.brand.trim()} ${form.model.trim()}`, assetType });
+    const resumed = Boolean(pendingCreation);
+    startedAtRef.current = Date.now();
     setSubmitting(true);
     setError(null);
     setCreatedCartularyId(null);
+    setProgress(null);
+    setServerStatus(null);
     try {
       const result = await resumeOrCreateCartulary(pendingCreation, () => createCartulary({
         assetType,
@@ -169,7 +173,9 @@ export function NewCartularyPage({ user, organization, registry }: {
         },
       }));
       setPendingCreation(result);
-      await waitForCartularyCreation(result.cartularyId);
+      await waitForCartularyCreation(result.cartularyId, { onStatus: setServerStatus });
+      // Durée mesurée seulement pour une création menée d'un trait (première mesure honnête depuis V3) ; nulle en reprise.
+      setDurationSeconds(!resumed && startedAtRef.current ? Math.round((Date.now() - startedAtRef.current) / 1000) : null);
       setCreatedCartularyId(result.cartularyId);
     } catch (caught) {
       if (caught instanceof CartularyCreationFailedError) setPendingCreation(null);
@@ -189,6 +195,7 @@ export function NewCartularyPage({ user, organization, registry }: {
         <h1 id="registry-create-success-title">{submittedIdentity?.title}</h1>
         <p>Le Cartulaire privé a été créé et sa projection minimale a été ajoutée à {registry.name}. Les fichiers restent secrets.</p>
         {mediaNotes.map((note) => <p key={note} role="status" className="registry-create-success__media-note">{note}</p>)}
+        {durationSeconds !== null && <p className="registry-create-success__duration">Créé en {durationSeconds} s.</p>}
         <div className="registry-create-success__actions">
           <a href={buildCartularyHref(createdCartularyId, registryHref(registry.id, 'items'), submittedIdentity?.assetType || assetType)}>Ouvrir le Cartulaire</a>
           <a href={registryHref(registry.id, 'items')}>Voir le catalogue</a>
@@ -267,11 +274,23 @@ export function NewCartularyPage({ user, organization, registry }: {
         </section>
 
         </fieldset>
-        {progress && submitting && (
-          <section className="registry-create-progress" aria-live="polite">
-            <div><LoaderCircle className="registry-spinner" aria-hidden="true" /><span>{progressLabel(progress)}</span><strong>{progressPercent}%</strong></div>
-            <progress value={progressPercent} max="100">{progressPercent}%</progress>
-            <small>{fileSize(progress.uploadedBytes)} sur {fileSize(progress.totalBytes)} téléversés</small>
+        {submitting && (progress || serverStatus) && (
+          <section className="registry-create-progress">
+            {/* Région vivante = la liste seulement ; le chronomètre et les octets restent hors annonce. */}
+            <ol className="registry-create-steps" aria-label="Étapes de la création" aria-live="polite">
+              {creationProgress.steps.map((step) => (
+                <li key={step.id} data-state={step.state} aria-current={step.state === 'current' ? 'step' : undefined}>
+                  {step.state === 'current' ? <LoaderCircle className="registry-spinner" aria-hidden="true" /> : step.state === 'done' ? <CircleCheck aria-hidden="true" /> : <span aria-hidden="true" />}
+                  <span>{step.label}</span>
+                  {step.detail && <small>{step.detail}</small>}
+                </li>
+              ))}
+            </ol>
+            {/* Barre déterminée pendant la phase fichiers seulement ; indéterminée (sans value) ensuite, jamais « 100 % » en phase serveur. */}
+            {creationProgress.percent === null
+              ? <progress max="100" aria-label="Progression de la création" />
+              : <progress value={creationProgress.percent} max="100" aria-label="Progression du téléversement">{creationProgress.percent}%</progress>}
+            <small>{elapsedSeconds} s écoulées{progress && creationProgress.percent !== null ? ` · ${fileSize(progress.uploadedBytes)} sur ${fileSize(progress.totalBytes)} téléversés` : ` · ${CARTULARY_CREATION_DURATION_NOTE}`}</small>
           </section>
         )}
         {error && <p className="registry-create-error" role="alert">{error}</p>}

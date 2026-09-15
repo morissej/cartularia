@@ -55,3 +55,38 @@ test('V3 : la création référence les variantes de présentation dès la véri
   // Écran de succès : bilan honnête des médias.
   assert.match(page, /describeCreationMediaSummary\(pendingCreation\?\.media\)/);
 });
+
+test('V5 : le pipeline de création est borné par le serveur et la demande est écoutée', async () => {
+  const [service, functions, page] = await Promise.all([
+    readProjectFile('src/services/cartularyCreation.ts'),
+    readProjectFile('scripts/firebase-functions.mjs'),
+    readProjectFile('src/features/registry/NewCartularyPage.tsx'),
+  ]);
+  // Borne client ≤ maxInstances de verifyPrivateDraftUpload (concurrency 1 par instance) : aucune vérification retenue en file.
+  const clientBound = /export const MAXIMUM_CONCURRENT_CREATION_UPLOADS = (\d+);/.exec(service);
+  assert.ok(clientBound, 'borne client exportée');
+  const verifySlice = /export const verifyPrivateDraftUpload = onObjectFinalized\(\{([\s\S]*?)\}, async/.exec(functions);
+  assert.ok(verifySlice, 'tranche de configuration de verifyPrivateDraftUpload');
+  const maxInstances = /maxInstances: (\d+),/.exec(verifySlice[1]);
+  assert.ok(maxInstances, 'maxInstances lu dans le source serveur');
+  assert.match(verifySlice[1], /concurrency: 1,/);
+  assert.ok(Number(clientBound[1]) >= 1 && Number(clientBound[1]) <= Number(maxInstances[1]), `borne client ${clientBound[1]} ≤ maxInstances ${maxInstances[1]}`);
+  // Service : file bornée existante, écoute de la demande, plus aucun sondage.
+  assert.match(service, /runBoundedPreloadQueue\(\{/);
+  assert.match(service, /concurrency: MAXIMUM_CONCURRENT_CREATION_UPLOADS,/);
+  assert.match(service, /onSnapshot\(requestRef/);
+  assert.doesNotMatch(service, /getDoc\(/);
+  assert.match(service, /sha256Serialized\(file\)/, 'hachage sérialisé : un seul arrayBuffer() à la fois');
+  // Page : étapes du domaine, liste nommée, plus de pourcentage global ni de promesse de raccordement.
+  assert.match(page, /describeCreationProgress\(/);
+  assert.match(page, /aria-label="Étapes de la création"/);
+  assert.match(page, /CARTULARY_CREATION_DURATION_NOTE/);
+  assert.doesNotMatch(page, /Création autoritaire et raccordement/);
+  assert.doesNotMatch(page, /progressPercent/);
+  assert.match(page, /waitForCartularyCreation\(result\.cartularyId, \{ onStatus: setServerStatus \}\)/);
+  // Le mock à trois exports de tests/ui/registry-correction-loop.test.tsx reste suffisant.
+  const serviceImport = /import \{([^}]*)\} from '\.\.\/\.\.\/services\/cartularyCreation\.ts';/.exec(page);
+  assert.ok(serviceImport, 'import du service');
+  const valueImports = serviceImport[1].split(',').map((entry) => entry.trim()).filter((entry) => entry && !entry.startsWith('type '));
+  assert.deepEqual(valueImports.sort(), ['CartularyCreationFailedError', 'createCartulary', 'waitForCartularyCreation']);
+});

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { cartularyNeedsReview } from '../scripts/lib/cartulary-review-policy.mjs';
+import { buildRegistryAggregates } from '../src/features/registry/registryAggregates.ts';
 import {
   buildCartularyHref,
   DEFAULT_REGISTRY_CATALOG_FILTERS,
@@ -94,6 +96,22 @@ test('une collection secondaire retrouve aussi le Cartulaire sans casser la coll
     collectionId: 'col_travel',
   });
   assert.deepEqual(result.map(({ cartularyId }) => cartularyId), ['watch-multi-collection']);
+});
+
+test('le filtre à revoir du catalogue liste exactement ce que l’indicateur compte (P-C5)', () => {
+  const catalog = [...fixtures, item({ cartularyId: 'watch-complete', displayTitle: 'Montre revue', completenessLevel: 'complete' })];
+  const listed = filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, needsReview: true });
+  assert.deepEqual(listed.map(({ cartularyId }) => cartularyId), ['car-bentley-gt', 'iwc-flieger-utc', 'watch-geneve']);
+  assert.ok(listed.every(cartularyNeedsReview));
+  assert.equal(listed.length, buildRegistryAggregates(catalog).needsReviewCount, 'même prédicat que le tableau de bord');
+  assert.equal(filterAndSortRegistryItems(catalog, DEFAULT_REGISTRY_CATALOG_FILTERS).length, 4, 'sans le drapeau, tout le catalogue');
+  assert.equal(filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, needsReview: false }).length, 4);
+  // `?lifecycle=review` ne suffirait pas : l'IWC est `active` mais reste `imported_unreviewed`.
+  const byLifecycle = filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, lifecycleStatus: 'review' });
+  assert.deepEqual(byLifecycle.map(({ cartularyId }) => cartularyId), ['car-bentley-gt']);
+  // Le drapeau se combine aux autres facettes.
+  const combined = filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, needsReview: true, assetType: 'watch' });
+  assert.deepEqual(combined.map(({ cartularyId }) => cartularyId), ['iwc-flieger-utc', 'watch-geneve']);
 });
 
 test('les trois tris restent déterministes et ne modifient pas la source', () => {

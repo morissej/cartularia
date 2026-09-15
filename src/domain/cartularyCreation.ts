@@ -225,3 +225,72 @@ export const resumeOrCreateCartulary = async (
   pending: CartularyCreationResult | null,
   create: () => Promise<CartularyCreationResult>,
 ) => pending ?? create();
+
+/* Étapes affichées pendant la création (V5, P-B1) ------------------------------------------------ */
+
+export type CartularyCreationPhase = 'preparing' | 'hashing' | 'uploading' | 'verifying' | 'finalizing' | 'processing';
+/** Statuts de `cartularyCreateRequests/{id}` observés par le client avant `processed` ou `failed`. */
+export type CartularyCreationServerStatus = 'pending' | 'processing';
+
+export interface CartularyCreationProgressInput {
+  phase: CartularyCreationPhase;
+  /** Fichiers en vol (hachage, téléversement ou vérification), dans l'ordre d'entrée. */
+  activeFileNames: readonly string[];
+  completedFiles: number;
+  totalFiles: number;
+  uploadedBytes: number;
+  totalBytes: number;
+}
+
+export interface CartularyCreationStep {
+  id: 'files' | 'request' | 'creation';
+  label: string;
+  detail: string | null;
+  state: 'done' | 'current' | 'pending';
+}
+
+/**
+ * Seule mesure disponible : B1 (≈ 40 s pour 4-5 fichiers de 45 Ko, démarrage à froid compris, avant les
+ * variantes V3). Ordre de grandeur, jamais un compte à rebours ni un pourcentage ; à ajuster après la
+ * mesure de recette (`requestedAt` / `processedAt`, `verificationStartedAt` / `verifiedAt`).
+ */
+export const CARTULARY_CREATION_DURATION_NOTE = 'Ordre de grandeur : une à deux minutes pour quelques photos ; davantage pour des vidéos ou des documents volumineux.';
+
+const CREATION_STEP_LABELS: Record<CartularyCreationStep['id'], string> = {
+  files: 'Fichiers téléversés et vérifiés',
+  request: 'Demande de création envoyée',
+  creation: 'Cartulaire créé et projeté au Registre',
+};
+
+const describeActiveFiles = ({ completedFiles, totalFiles, activeFileNames }: CartularyCreationProgressInput) => {
+  const verified = `${completedFiles}/${totalFiles} ${completedFiles > 1 ? 'vérifiés' : 'vérifié'}`;
+  return activeFileNames.length > 0 ? `${verified} · en cours : ${activeFileNames.join(', ')}` : verified;
+};
+
+/**
+ * Trois étapes honnêtes : la barre n'est déterminée que pendant la phase fichiers (octets téléversés / total) ;
+ * dès `finalizing` et pendant toute la phase serveur elle est indéterminée (`percent === null`), jamais « 100 % ».
+ * `progress === null` ≡ phase `processing` (reprise : `createCartulary` n'est pas rappelé). Le client n'attend pas
+ * le raccordement au Registre : aucun libellé ne le promet.
+ */
+export const describeCreationProgress = (
+  progress: CartularyCreationProgressInput | null,
+  serverStatus: CartularyCreationServerStatus | null,
+): { steps: CartularyCreationStep[]; percent: number | null } => {
+  const phase: CartularyCreationPhase = progress?.phase ?? 'processing';
+  const step = (id: CartularyCreationStep['id'], state: CartularyCreationStep['state'], detail: string | null = null): CartularyCreationStep => ({ id, label: CREATION_STEP_LABELS[id], detail, state });
+  if (phase === 'preparing') {
+    return { steps: [step('files', 'current', 'Préparation du brouillon privé…'), step('request', 'pending'), step('creation', 'pending')], percent: 0 };
+  }
+  if (phase === 'hashing' || phase === 'uploading' || phase === 'verifying') {
+    const percent = progress && progress.totalBytes > 0 ? Math.min(100, Math.max(0, Math.round((progress.uploadedBytes / progress.totalBytes) * 100))) : 0;
+    return { steps: [step('files', 'current', progress ? describeActiveFiles(progress) : null), step('request', 'pending'), step('creation', 'pending')], percent };
+  }
+  if (phase === 'finalizing') {
+    return { steps: [step('files', 'done'), step('request', 'current', 'Enregistrement des métadonnées privées…'), step('creation', 'pending')], percent: null };
+  }
+  if (serverStatus === 'processing') {
+    return { steps: [step('files', 'done'), step('request', 'done'), step('creation', 'current', 'Création du Cartulaire et de sa projection au Registre…')], percent: null };
+  }
+  return { steps: [step('files', 'done'), step('request', 'current', 'En attente de prise en charge par le serveur…'), step('creation', 'pending')], percent: null };
+};

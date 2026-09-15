@@ -29,6 +29,7 @@ import {
   assetTypeLabel,
   completenessLabel,
   lifecycleLabel,
+  REVIEW_SIGNAL_EXPLANATION,
 } from './registryPresentation.ts';
 
 type OverviewLoadState = 'loading' | 'ready' | 'error';
@@ -150,7 +151,13 @@ export function RegistryOverview({ registry, organization, membership }: {
         <article className={summary.needsReviewCount > 0 ? 'registry-fact--attention' : undefined}>
           <span>À revoir</span>
           <strong>{loadState === 'ready' ? summary.needsReviewCount : '—'}</strong>
-          <small>{loadState === 'ready' && summary.needsReviewCount === 0 ? 'Aucun signal de revue' : 'Statut ou import à vérifier'}</small>
+          <small>
+            {loadState === 'ready' && summary.needsReviewCount === 0
+              ? 'Aucun signal de revue'
+              : loadState === 'ready'
+                ? <a href={`${registrySectionHref(registry.id, 'items')}?review=1`}>Voir les Cartulaires à revoir</a>
+                : 'Déclarations non encore revues'}
+          </small>
         </article>
       </section>
 
@@ -205,6 +212,7 @@ export function RegistryOverview({ registry, organization, membership }: {
               ))}
             </div>
             <p className="registry-dashboard-note">Quantité et niveau de revue des informations et pièces réunies dans chaque Cartulaire.</p>
+            {summary.needsReviewCount > 0 && <p className="registry-dashboard-note">{REVIEW_SIGNAL_EXPLANATION}</p>}
           </section>
 
           <section className="registry-dashboard-panel registry-dashboard-panel--attention">

@@ -174,3 +174,67 @@ test('V3 : le bilan des médias de création distingue images prêtes, images sa
     assert.doesNotMatch(note, /presentation-v2|private-derivatives|storagePath/, 'aucun chemin de stockage sur l’écran de succès');
   }
 });
+
+test('V5 : les étapes de création sont honnêtes (trois étapes, barre déterminée en phase fichiers seulement, jamais « 100 % » en phase serveur)', async () => {
+  const { CARTULARY_CREATION_DURATION_NOTE, describeCreationProgress } = await import('../src/domain/cartularyCreation.ts');
+  const input = (phase, overrides = {}) => ({ phase, activeFileNames: [], completedFiles: 0, totalFiles: 5, uploadedBytes: 0, totalBytes: 1000, ...overrides });
+  const states = (result) => result.steps.map((step) => step.state);
+  const labels = ['Fichiers téléversés et vérifiés', 'Demande de création envoyée', 'Cartulaire créé et projeté au Registre'];
+
+  // Ligne 1 : préparation.
+  const preparing = describeCreationProgress(input('preparing'), null);
+  assert.deepEqual(preparing.steps.map((step) => step.id), ['files', 'request', 'creation']);
+  assert.deepEqual(preparing.steps.map((step) => step.label), labels);
+  assert.deepEqual(states(preparing), ['current', 'pending', 'pending']);
+  assert.equal(preparing.steps[0].detail, 'Préparation du brouillon privé…');
+  assert.equal(preparing.percent, 0);
+
+  // Ligne 2 : phase fichiers, pourcentage sur les octets, détail « k/N vérifié(s) · en cours : A, B ».
+  for (const phase of ['hashing', 'uploading', 'verifying']) {
+    const files = describeCreationProgress(input(phase, { activeFileNames: ['a.jpg', 'b.pdf'], completedFiles: 2, uploadedBytes: 250 }), null);
+    assert.deepEqual(states(files), ['current', 'pending', 'pending'], phase);
+    assert.equal(files.steps[0].detail, '2/5 vérifiés · en cours : a.jpg, b.pdf', phase);
+    assert.equal(files.percent, 25, phase);
+  }
+  assert.equal(describeCreationProgress(input('uploading', { completedFiles: 1, activeFileNames: ['c.mov'] }), null).steps[0].detail, '1/5 vérifié · en cours : c.mov', 'singulier à 1');
+  assert.equal(describeCreationProgress(input('uploading', { completedFiles: 0, activeFileNames: ['c.mov'] }), null).steps[0].detail, '0/5 vérifié · en cours : c.mov', 'singulier à 0');
+  assert.equal(describeCreationProgress(input('verifying', { completedFiles: 5 }), null).steps[0].detail, '5/5 vérifiés', 'sans « en cours » quand aucun fichier n’est en vol');
+  assert.equal(describeCreationProgress(input('uploading', { uploadedBytes: 1000 }), null).percent, 100);
+  assert.equal(describeCreationProgress(input('uploading', { uploadedBytes: 1500 }), null).percent, 100, 'borné à 100');
+  assert.equal(describeCreationProgress(input('uploading', { uploadedBytes: -5 }), null).percent, 0, 'borné à 0');
+  assert.equal(describeCreationProgress(input('uploading', { uploadedBytes: 0, totalBytes: 0 }), null).percent, 0, '0 si totalBytes = 0');
+
+  // Ligne 3 : enregistrement des métadonnées.
+  const finalizing = describeCreationProgress(input('finalizing', { completedFiles: 5, uploadedBytes: 1000 }), null);
+  assert.deepEqual(states(finalizing), ['done', 'current', 'pending']);
+  assert.equal(finalizing.steps[1].detail, 'Enregistrement des métadonnées privées…');
+  assert.equal(finalizing.percent, null);
+
+  // Ligne 4 : demande envoyée, serveur pas encore saisi (statut absent ou pending) ; reprise (progress nul).
+  for (const [progress, status] of [[input('processing', { completedFiles: 5, uploadedBytes: 1000 }), null], [input('processing', { completedFiles: 5, uploadedBytes: 1000 }), 'pending'], [null, null], [null, 'pending']]) {
+    const waiting = describeCreationProgress(progress, status);
+    assert.deepEqual(states(waiting), ['done', 'current', 'pending'], JSON.stringify([progress?.phase, status]));
+    assert.equal(waiting.steps[1].detail, 'En attente de prise en charge par le serveur…');
+    assert.equal(waiting.percent, null, 'mutant : 100 en phase serveur');
+  }
+
+  // Ligne 5 : serveur en cours.
+  for (const progress of [input('processing', { completedFiles: 5, uploadedBytes: 1000 }), null]) {
+    const creating = describeCreationProgress(progress, 'processing');
+    assert.deepEqual(states(creating), ['done', 'done', 'current']);
+    assert.equal(creating.steps[2].detail, 'Création du Cartulaire et de sa projection au Registre…');
+    assert.equal(creating.percent, null);
+  }
+
+  // Aucun libellé ni détail ne promet un raccordement ni n'affiche « 100 ».
+  for (const [progress, status] of [[input('preparing'), null], [input('uploading', { uploadedBytes: 1000, activeFileNames: ['x.jpg'] }), null], [input('finalizing'), null], [input('processing'), 'pending'], [null, 'processing']]) {
+    for (const step of describeCreationProgress(progress, status).steps) {
+      assert.doesNotMatch(`${step.label} ${step.detail ?? ''}`, /raccordement|100/i);
+    }
+  }
+
+  // Estimation honnête : un ordre de grandeur, jamais un compte à rebours.
+  assert.match(CARTULARY_CREATION_DURATION_NOTE, /^Ordre de grandeur/);
+  assert.doesNotMatch(CARTULARY_CREATION_DURATION_NOTE, /\d\s*s\b/);
+  assert.doesNotMatch(CARTULARY_CREATION_DURATION_NOTE, /%/);
+});

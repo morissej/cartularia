@@ -40,6 +40,7 @@ import {
   labelFromIdentifier,
   LIFECYCLE_LABELS,
   POSSESSION_LABELS,
+  REVIEW_SIGNAL_EXPLANATION,
 } from './registryPresentation.ts';
 import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
 import { useRegistryCollections } from './useRegistryCollections.ts';
@@ -104,6 +105,8 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
   const [patrimonialStatus, setPatrimonialStatus] = useState(() => readInitialParameter('status', 'all'));
   const [lifecycleStatus, setLifecycleStatus] = useState(() => readInitialParameter('lifecycle', 'all'));
   const [possessionStatus, setPossessionStatus] = useState(() => readInitialParameter('possession', 'all'));
+  // `?review=1` : filtre « à revoir » du tableau de bord, même prédicat que son indicateur (P-C5).
+  const [needsReview, setNeedsReview] = useState(() => readInitialParameter('review', '') === '1');
   const [sort, setSort] = useState<RegistryCatalogSort>(() => {
     const candidate = readInitialParameter('sort', DEFAULT_REGISTRY_CATALOG_FILTERS.sort);
     return candidate === 'title-asc' || candidate === 'year-desc' ? candidate : 'updated-desc';
@@ -154,11 +157,12 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     if (patrimonialStatus !== 'all') params.set('status', patrimonialStatus);
     if (lifecycleStatus !== 'all') params.set('lifecycle', lifecycleStatus);
     if (possessionStatus !== 'all') params.set('possession', possessionStatus);
+    if (needsReview) params.set('review', '1');
     if (sort !== 'updated-desc') params.set('sort', sort);
     if (view !== 'grid') params.set('view', view);
     if (comparisonIds.length > 0) params.set('compare', comparisonIds.join(','));
     return params.toString();
-  }, [assetType, collectionId, comparisonIds, patrimonialStatus, lifecycleStatus, possessionStatus, query, sort, view]);
+  }, [assetType, collectionId, comparisonIds, patrimonialStatus, lifecycleStatus, needsReview, possessionStatus, query, sort, view]);
 
   useEffect(() => {
     const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
@@ -175,12 +179,12 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     assetType,
     collectionId,
     patrimonialStatus,
-    lifecycleStatus, possessionStatus,
+    lifecycleStatus, possessionStatus, needsReview,
     sort,
-  }), [assetType, collectionId, items, patrimonialStatus, lifecycleStatus, possessionStatus, query, sort]);
+  }), [assetType, collectionId, items, patrimonialStatus, lifecycleStatus, needsReview, possessionStatus, query, sort]);
   const assetTypes = useMemo(() => optionValues(items, 'assetType'), [items]);
   const collections = useMemo(() => [...new Set(items.flatMap(registryItemCollectionIds))].sort((left, right) => left.localeCompare(right, 'fr')), [items]);
-  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', patrimonialStatus !== 'all', lifecycleStatus !== 'all', possessionStatus !== 'all']
+  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', patrimonialStatus !== 'all', lifecycleStatus !== 'all', possessionStatus !== 'all', needsReview]
     .filter(Boolean).length;
   const returnTo = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
   const comparisonHref = buildRegistryComparisonHref(registry.id, comparisonIds, returnTo);
@@ -192,6 +196,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     setPatrimonialStatus('all');
     setLifecycleStatus('all');
     setPossessionStatus('all');
+    setNeedsReview(false);
     setSort('updated-desc');
   };
 
@@ -264,7 +269,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
       </RegistryFilterPanel>
 
       <div className="registry-results-heading">
-        {(lifecycleStatus !== 'all' || possessionStatus !== 'all') && <p>Filtre d’alerte : {lifecycleStatus !== 'all' ? (LIFECYCLE_LABELS[lifecycleStatus] || lifecycleStatus) : 'Perte, vol ou destruction'} <button type="button" onClick={() => { setLifecycleStatus('all'); setPossessionStatus('all'); }}>Retirer ce filtre</button></p>}
+        {(needsReview || lifecycleStatus !== 'all' || possessionStatus !== 'all') && <p>Filtre d’alerte : {needsReview ? 'Cartulaires à revoir' : lifecycleStatus !== 'all' ? (LIFECYCLE_LABELS[lifecycleStatus] || lifecycleStatus) : 'Perte, vol ou destruction'} <button type="button" onClick={() => { setLifecycleStatus('all'); setPossessionStatus('all'); setNeedsReview(false); }}>Retirer ce filtre</button></p>}
         <p aria-live="polite">
           <strong>{filteredItems.length}</strong> Cartulaire{filteredItems.length > 1 ? 's' : ''}
           {filteredItems.length !== items.length && <span> sur {items.length}</span>}
@@ -274,6 +279,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
           <button type="button" aria-label="Vue en liste" aria-pressed={view === 'list'} onClick={() => setView('list')}><List aria-hidden="true" /></button>
         </div>
       </div>
+      {needsReview && <p className="registry-dashboard-note" role="note">{REVIEW_SIGNAL_EXPLANATION}</p>}
 
       {comparisonIds.length > 0 && (
         <aside className="registry-comparison-tray" aria-live="polite">
