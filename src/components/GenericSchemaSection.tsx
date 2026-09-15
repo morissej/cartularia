@@ -12,10 +12,12 @@ export interface GenericSchemaSectionProps {
   edits: Record<string, unknown>;
   saving: boolean;
   onChange: (next: Record<string, unknown>) => void;
+  /** Badge d'état fourni par le parent (V5 point 4, lot B) : aucun libellé n'est décidé ici ; absent, aucun badge. */
+  statusLabel?: string | null;
 }
 
 /** Rendu d'une section pilotée par le schéma : lecture, puis saisie champ par champ en édition. */
-export const GenericSchemaSection = ({ section, schema, editing, edits, saving, onChange }: GenericSchemaSectionProps) => {
+export const GenericSchemaSection = ({ section, schema, editing, edits, saving, onChange, statusLabel = null }: GenericSchemaSectionProps) => {
   const fieldIsEditable = (field: VerticalSchemaField | undefined) => genericFieldGroupIsEditable(field, schema.fields);
   const rows = buildGenericFieldRows(section, schema);
   const repeatedFields = schema.fields.filter((field) => field.sectionId === section.schemaSectionId && field.cardinality === 'repeatable' && fieldIsEditable(field));
@@ -27,7 +29,7 @@ export const GenericSchemaSection = ({ section, schema, editing, edits, saving, 
     <section className="generic-section">
       <header>
         <div><h2>{schemaSectionLabel(section.schemaSectionId) === section.schemaSectionId ? section.title : schemaSectionLabel(section.schemaSectionId)}</h2></div>
-        <span className="generic-section__status">Déclarations à vérifier</span>
+        {statusLabel && <span className="generic-section__status">{statusLabel}</span>}
       </header>
       {rows.length ? (
         <dl className="generic-field-list">

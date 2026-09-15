@@ -7,12 +7,14 @@ import type { VerticalSchema } from '../../../schema/schemaTypes.ts';
 import {
   canEditGenericCartulary,
   canPublishGenericCartulary,
+  confirmCartularyReview,
   loadGenericCartularyAssets,
   saveGenericCartularyFields,
   saveGenericCartularyMedia,
   uploadGenericCartularyMedia,
   type GenericMediaMutation,
 } from '../../../services/genericCartulary';
+import type { CartularyReviewLevel } from '../../../../scripts/lib/cartulary-review-policy.mjs';
 import { loadRegistryCollections } from '../../../services/collections';
 import type { Asset } from '../../../types';
 import type { GenericFieldEdit } from './useGenericSectionEdits.ts';
@@ -35,6 +37,8 @@ export interface AuthoritativeCartularyState {
   refresh: () => void;
   reloadAssets: () => void;
   saveFields: (edits: GenericFieldEdit[]) => Promise<void>;
+  /** Revue du propriétaire (V5 point 4, lot B) : même motif que `saveFields`, l'enveloppe relue porte le nouvel état. */
+  confirmReview: (level: CartularyReviewLevel) => Promise<void>;
   saveMedia: (mutation: GenericMediaMutation) => Promise<void>;
   uploadMedia: (file: File, progress: (message: string) => void) => Promise<Asset>;
 }
@@ -134,6 +138,16 @@ export function useAuthoritativeCartulary(cartularyId: string | null, { enabled 
     setSnapshot(reloaded);
   }, [snapshot]);
 
+  const confirmReview = useCallback(async (level: CartularyReviewLevel) => {
+    if (!snapshot) throw new Error('Le Cartulaire n’est pas chargé.');
+    const uid = auth.currentUser?.uid;
+    await confirmCartularyReview(snapshot.envelope, { level });
+    const reloaded = await loadPrivateCartulary(snapshot.envelope.id);
+    if (uid !== auth.currentUser?.uid) throw new Error(SESSION_CHANGED);
+    if (!reloaded) throw new Error('La revue a été traitée, mais la relecture est indisponible. Rechargez le Cartulaire.');
+    setSnapshot(reloaded);
+  }, [snapshot]);
+
   const saveMedia = useCallback(async (mutation: GenericMediaMutation) => {
     if (!snapshot) throw new Error('Le Cartulaire n’est pas chargé.');
     const uid = auth.currentUser?.uid;
@@ -149,5 +163,5 @@ export function useAuthoritativeCartulary(cartularyId: string | null, { enabled 
     return uploadGenericCartularyMedia(snapshot.envelope, file, progress);
   }, [snapshot]);
 
-  return { status, snapshot, schema, assets, mediaError, refreshError, canManage, canPublish, collectionName, retry, refresh, reloadAssets, saveFields, saveMedia, uploadMedia };
+  return { status, snapshot, schema, assets, mediaError, refreshError, canManage, canPublish, collectionName, retry, refresh, reloadAssets, saveFields, confirmReview, saveMedia, uploadMedia };
 }

@@ -35,9 +35,10 @@ export const COMPLETENESS_LABELS: Record<string, string> = {
 /**
  * Explication du signal « à revoir » (P-C5) : une seule source pour le tableau de bord et le catalogue.
  * Chaque affirmation est vérifiée au source (création, projection, synchronisation) ; la deuxième phrase
- * ne sera réécrite qu'avec l'action « Marquer comme revu » (lot B), jamais avant.
+ * décrit l'action « Marquer comme revu » de la page Accueil du Cartulaire (lot B, `CartularyReviewStatus`),
+ * traitée par `syncCartularyToRegistry` : elle n'est vraie qu'avec la fonction redéployée.
  */
-export const REVIEW_SIGNAL_EXPLANATION = '« À vérifier » et « Données à vérifier » sont posés à la création de chaque Cartulaire : ses informations sont déclarées par le propriétaire ou importées de son dossier, et n’ont pas encore été revues. Aucune action de l’interface ne lève ce signal pour l’instant ; il ne bloque ni la consultation, ni l’édition, ni la publication, ni la cession.';
+export const REVIEW_SIGNAL_EXPLANATION = '« À vérifier » et « Données à vérifier » sont posés à la création de chaque Cartulaire : ses informations sont déclarées par le propriétaire ou importées de son dossier, et n’ont pas encore été revues. Le propriétaire éditeur le lève depuis la page Accueil de son Cartulaire (« Marquer comme revu ») ; il ne bloque ni la consultation, ni l’édition, ni la publication, ni la cession.';
 
 export const labelFromIdentifier = (value: string) => value
   .replace(/^col_/, '')

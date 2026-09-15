@@ -28,6 +28,7 @@ import {
 import { ACTIVE_CARTULARY_ID } from './domain/cartularyIds';
 import { useAuthoritativeCartulary } from './features/cartulary/state/useAuthoritativeCartulary';
 import { useGenericSectionEdits } from './features/cartulary/state/useGenericSectionEdits';
+import { useCartularyReview } from './features/cartulary/state/useCartularyReview'; import { CartularyReviewStatus } from './features/cartulary/components/CartularyReviewStatus';
 import { GenericSchemaPageSections } from './components/GenericSchemaPageSections';
 import type { VerticalSchema } from './schema/schemaTypes';
 import type { Asset, ComparableTransaction, MediaTag, Valuation } from './types';
@@ -650,7 +651,8 @@ function App() {
   const schema = authoritative.schema;
   const schemaHas = (sectionId: string) => !schema || schema.sections.includes(sectionId);
   const sectionEdits = useGenericSectionEdits({ schema: schema ?? EMPTY_SCHEMA, onSave: authoritative.saveFields, canManage: authoritative.canManage });
-  const genericPageProps = { sections: authoritative.snapshot?.sections, schema, edits: sectionEdits, canManage: authoritative.canManage };
+  const review = useCartularyReview({ envelope, canManage: authoritative.canManage, confirm: authoritative.confirmReview });
+  const genericPageProps = { sections: authoritative.snapshot?.sections, schema, edits: sectionEdits, canManage: authoritative.canManage, review: review.state };
   const watch = useMemo(() => envelope
     ? { ...mockCartulary.watchInstance, reference: { ...mockCartulary.watchInstance.reference, brand: envelope.makerName || mockCartulary.watchInstance.reference.brand, model: envelope.modelName || mockCartulary.watchInstance.reference.model, reference: envelope.referenceCode || mockCartulary.watchInstance.reference.reference } }
     : mockCartulary.watchInstance, [envelope]);
@@ -2430,6 +2432,7 @@ function App() {
               </button>
             </section>
 
+            <CartularyReviewStatus state={review.state} language={language} canManage={authoritative.canManage} busy={review.busy} notice={review.notice} error={review.error} onConfirm={review.confirm} onClearMessages={review.clearMessages} />
             <CartularyTodoBoard followUp={followUp} language={language} readOnly={!canEdit} demonstration={isDemoCartulary} />
 
             <span hidden {...aiFieldProps('cover.privacy.userAlias')}>{userAlias}</span>

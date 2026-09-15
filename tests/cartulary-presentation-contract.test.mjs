@@ -782,3 +782,65 @@ test('V5 relecture : catégories en texte dans la visionneuse, édition de tâch
   assert.match(presentation, /className="editable-fact" onClick=\{onActivate\} aria-label=\{value \? undefined : label\} title=\{language === 'FR' \? 'Cliquer pour modifier' : 'Click to edit'\}/);
   assert.equal((app.match(/<EditableFact [^\n]*language=\{language\} \/>/g) ?? []).length, 3);
 });
+
+test('V5 point 4 lot B (client) : revue du propriétaire sur la page Accueil, badge des sections dérivé de l’état réel, vocabulaire défini une seule fois', () => {
+  const app = readSource('../src/App.tsx');
+  // B10 : une seule occurrence, page Accueil (CoverPage), juste avant le tableau À faire, hors des blocs publiables ;
+  // bascule sur le droit de gérer reconnu par le serveur, jamais sur la démonstration (ADR-026, hook désactivé en démo).
+  const occurrences = app.match(/<CartularyReviewStatus\b/g) ?? [];
+  assert.equal(occurrences.length, 1);
+  const start = app.indexOf('<CartularyReviewStatus');
+  const reviewBlock = app.slice(start, app.indexOf('/>', start));
+  assert.match(reviewBlock, /canManage=\{authoritative\.canManage\}/);
+  assert.match(reviewBlock, /state=\{review\.state\}/);
+  assert.match(reviewBlock, /language=\{language\}/);
+  assert.match(reviewBlock, /busy=\{review\.busy\} notice=\{review\.notice\} error=\{review\.error\} onConfirm=\{review\.confirm\} onClearMessages=\{review\.clearMessages\}/);
+  assert.doesNotMatch(reviewBlock, /isDemoCartulary|canEdit/);
+  assert.doesNotMatch(app, /isDemoCartulary\s*(?:&&|\?)\s*\(?\s*<CartularyReviewStatus\b/);
+  const cover = app.slice(app.indexOf('<CoverPage'), app.indexOf('</CoverPage>'));
+  assert.ok(cover.includes('<CartularyReviewStatus'), 'le bloc est sur la page Accueil');
+  assert.ok(cover.indexOf('<CartularyReviewStatus') < cover.indexOf('<CartularyTodoBoard'), 'juste avant le tableau À faire');
+  const preceding = cover.slice(0, cover.indexOf('<CartularyReviewStatus'));
+  assert.ok(preceding.lastIndexOf('</section>') > preceding.lastIndexOf('publishable-block'), 'hors des blocs publiables : la dernière section publiable est refermée avant le bloc');
+  // Le hook est alimenté par l'enveloppe autoritaire et l'action du hook autoritaire ; l'état est transmis aux sections génériques.
+  assert.match(app, /const review = useCartularyReview\(\{ envelope, canManage: authoritative\.canManage, confirm: authoritative\.confirmReview \}\);/);
+  assert.match(app, /const genericPageProps = \{ [^\n]*review: review\.state \};/);
+  assert.equal((app.match(/journal\s*\.logEvent\(/g) ?? []).length, 5, 'aucune journalisation locale ajoutée');
+  // B8 : composant pur, confirmation en ligne dans un fieldset/legend, deux paliers, aucune modale.
+  const status = readSource('../src/features/cartulary/components/CartularyReviewStatus.tsx');
+  assert.doesNotMatch(status, /firebase|firestore|isDemoCartulary/i);
+  assert.match(status, /<fieldset disabled=\{busy\}>\s*<legend>/);
+  assert.equal((status.match(/type="radio"/g) ?? []).length, 2);
+  assert.match(status, /value="partial"[^\n]*\n[^\n]*value="complete"/);
+  assert.doesNotMatch(status, /role="dialog"|<dialog/);
+  for (const label of ['Marquer comme revu', 'Mettre à jour la revue', 'Revue partielle', 'Dossier complet', 'Confirmer la revue', 'Confirmation en cours…', 'Déclaré, non revu']) assert.ok(status.includes(label), label);
+  // B7 : le hook dérive l'état par la politique partagée et n'importe rien de distant.
+  const hook = readSource('../src/features/cartulary/state/useCartularyReview.ts');
+  assert.match(hook, /deriveCartularyReviewState/);
+  assert.doesNotMatch(hook, /firebase|firestore/i);
+  // B5/B6 : le service et le hook autoritaire réutilisent l'opération générique (clé, genre, décision) sans recopier de littéral.
+  const service = readSource('../src/services/genericCartulary.ts');
+  assert.match(service, /export async function confirmCartularyReview\(/);
+  assert.match(service, /saveGenericDraftState\(envelope, REVIEW_STATE_KEY, buildCartularyReviewDecision\(\{ baseRevision: envelope\.revision, level \}\)\)/);
+  assert.match(service, /key === REVIEW_STATE_KEY \? REVIEW_OPERATION_KIND : 'sections'/);
+  assert.match(readSource('../src/features/cartulary/state/useAuthoritativeCartulary.ts'), /confirmReview: \(level: CartularyReviewLevel\) => Promise<void>;/);
+  // B9 : le badge « Déclarations à vérifier » vient du parent (état réel) ; la section ne décide plus d'aucun libellé.
+  const section = readSource('../src/components/GenericSchemaSection.tsx');
+  assert.doesNotMatch(section, /Déclarations à vérifier/);
+  assert.match(section, /\{statusLabel && <span className="generic-section__status">\{statusLabel\}<\/span>\}/);
+  const pageSections = readSource('../src/components/GenericSchemaPageSections.tsx');
+  assert.match(pageSections, /const PENDING_REVIEW_SECTION_LABEL = 'Déclarations à vérifier';/);
+  assert.match(pageSections, /review\?\.kind === 'pending' \? PENDING_REVIEW_SECTION_LABEL : null/);
+  assert.match(pageSections, /statusLabel=\{statusLabel\}/);
+  // Serveur et outils lisent le même genre d'opération que le client.
+  for (const path of ['../scripts/lib/live-sync-command.mjs', '../scripts/lib/rolex-dossier-command.mjs']) {
+    assert.match(readSource(path), /import \{[^}]*\bREVIEW_OPERATION_KIND\b[^}]*\} from '\.\/cartulary-review-policy\.mjs'/, path);
+  }
+  // La clé de brouillon 'cartularia-review' n'est définie qu'une fois (politique partagée) dans src/ et scripts/lib.
+  const scriptsRoot = fileURLToPath(new URL('../scripts/lib/', import.meta.url));
+  const scriptSources = readdirSync(scriptsRoot).filter((name) => /\.mjs$/.test(name) && !/ 2\.mjs$/.test(name)).map((name) => join(scriptsRoot, name));
+  const definitions = [...walkSources(sourceRoot), ...scriptSources].filter((path) => readFileSync(path, 'utf8').includes("'cartularia-review'"));
+  assert.deepEqual(definitions.map((path) => relative(fileURLToPath(new URL('../', import.meta.url)), path).split(sep).join('/')), ['scripts/lib/cartulary-review-policy.mjs']);
+  // B11 : l'explication du Registre nomme l'action par le libellé exact du bouton.
+  assert.match(readSource('../src/features/registry/registryPresentation.ts'), /\(« Marquer comme revu »\)/);
+});

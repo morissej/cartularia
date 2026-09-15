@@ -760,6 +760,26 @@ img { display: block; max-width: 100%; }
 .cover-todo-board__undo { display: flex; align-items: center; justify-content: flex-end; gap: var(--s2); color: var(--muted); font-size: var(--text-sm); }
 .cover-todo-board__undo button:first-of-type { display: inline-flex; width: auto; padding: 0 var(--s3); gap: var(--s1); }
 
+/* Revue du propriétaire (V5 point 4, lot B) : bloc de statut de la page Accueil, confirmation en ligne à deux paliers. */
+.cartulary-review-status {
+  display: grid;
+  gap: var(--s4);
+  padding: var(--s5) var(--s6);
+  border: 1px solid var(--rule);
+  background: var(--sheet);
+}
+.cartulary-review-status__header { display: grid; gap: var(--s1); }
+.cartulary-review-status__header h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 400; }
+.cartulary-review-status__header p,
+.cartulary-review-status__note { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.cartulary-review-status__notice { margin: 0; color: var(--ink); font-size: var(--text-sm); }
+.cartulary-review-status__error { margin: 0; color: #8a2f26; font-size: var(--text-sm); }
+.cartulary-review-status__form { display: grid; gap: var(--s3); padding: var(--s4); background: var(--surface-secondary); }
+.cartulary-review-status__form fieldset { display: grid; gap: var(--s2); margin: 0; padding: 0; border: 0; min-width: 0; }
+.cartulary-review-status__form legend { padding: 0; margin-bottom: var(--s1); font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .04em; }
+.cartulary-review-status__form label { display: flex; align-items: center; gap: var(--s2); font-size: var(--text-sm); }
+.cartulary-review-status__actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
 .cover-sheet__identity {
   position: relative;
   display: grid;

@@ -5,6 +5,7 @@ import { presentationFromAssetDocument } from '../domain/presentationVariants.ts
 import type { Asset } from '../types';
 import { requestAuthoritativeCartularySync, waitForAuthoritativeSyncCycle } from '../persistence/cloudDraft.ts';
 import { uploadVerifiedCartularyMedia } from './cartularyCreation';
+import { buildCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY, type CartularyReviewLevel } from '../../scripts/lib/cartulary-review-policy.mjs';
 
 export interface GenericMediaMutation {
   changes: Array<{ id: string; name?: string; tags?: Asset['tags']; visibility?: Asset['visibility']; binaryId?: string }>;
@@ -73,6 +74,15 @@ export async function saveGenericCartularyFields(envelope: CartularyEnvelope, ed
   return saveGenericDraftState(envelope, 'cartularia-generic-sections', { version: 1, schemaId: envelope.schemaId, schemaVersion: envelope.schemaVersion, baseRevision: envelope.revision, edits });
 }
 
+/**
+ * Revue du propriétaire (V5 point 4, lot B) : une opération générique de plus, portée par la clé `cartularia-review`
+ * et le marqueur `kind: 'review'`. Même droit (`cartulary.edit`), même transaction sur la révision lue, même attente
+ * du cycle et même contrôle du jeton que les sections et les médias ; le serveur pose la date et lève le signal.
+ */
+export async function confirmCartularyReview(envelope: CartularyEnvelope, { level }: { level: CartularyReviewLevel }) {
+  return saveGenericDraftState(envelope, REVIEW_STATE_KEY, buildCartularyReviewDecision({ baseRevision: envelope.revision, level }));
+}
+
 async function saveGenericDraftState(envelope: CartularyEnvelope, key: string, value: unknown) {
   const { user, draftRef } = await ensureGenericPrivateDraft(envelope);
   const rootRef = doc(db, 'cartularies', envelope.id);
@@ -88,7 +98,7 @@ async function saveGenericDraftState(envelope: CartularyEnvelope, key: string, v
       value: JSON.stringify(value),
       deleted: false, revision: Number(state.data()?.revision || 0) + 1, clientUpdatedAt: Date.now(), updatedAt: serverTimestamp() });
     transaction.set(operationRef, { ownerUid: user.uid, cartularyId: envelope.id, key: 'cartularia-generic-operation',
-      value: JSON.stringify({ kind: key === 'cartularia-generic-media' ? 'media' : 'sections', token: operationToken }), deleted: false,
+      value: JSON.stringify({ kind: key === 'cartularia-generic-media' ? 'media' : key === REVIEW_STATE_KEY ? REVIEW_OPERATION_KIND : 'sections', token: operationToken }), deleted: false,
       revision: Number(state.data()?.revision || 0) + 1, clientUpdatedAt: Date.now(), updatedAt: serverTimestamp() });
   });
   let request = await requestAuthoritativeCartularySync({ uid: user.uid, cartularyId: envelope.id });

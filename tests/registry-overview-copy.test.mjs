@@ -45,11 +45,16 @@ test('la carte À revoir conduit au catalogue filtré et explique le signal (P-C
   assert.doesNotMatch(source, /isDemoCartulary|cart_demo_/);
 });
 
-test('l’explication du signal est unique, honnête au lot A, et partagée avec le catalogue', () => {
+test('l’explication du signal est unique, dit comment le lever depuis le lot B, et reste partagée avec le catalogue', () => {
   assert.match(REVIEW_SIGNAL_EXPLANATION, /posés à la création/);
-  assert.match(REVIEW_SIGNAL_EXPLANATION, /ne lève ce signal pour l’instant/, 'garde d’honnêteté du lot A, réécrite seulement avec « Marquer comme revu » (lot B)');
+  // B11 : la garde d'honnêteté du lot A (« ne lève ce signal pour l’instant ») est remplacée par l'action réelle,
+  // nommée comme le bouton de la page Accueil (CartularyReviewStatus) ; jamais « vérifié » : la revue n'est pas un sceau.
+  assert.match(REVIEW_SIGNAL_EXPLANATION, /Le propriétaire éditeur le lève depuis la page Accueil de son Cartulaire \(« Marquer comme revu »\)/);
+  assert.doesNotMatch(REVIEW_SIGNAL_EXPLANATION, /pour l’instant|Aucune action/);
   assert.match(REVIEW_SIGNAL_EXPLANATION, /ni la consultation, ni l’édition, ni la publication, ni la cession/);
-  assert.doesNotMatch(REVIEW_SIGNAL_EXPLANATION, /vérifié par|Marquer comme revu/);
+  assert.doesNotMatch(REVIEW_SIGNAL_EXPLANATION, /vérifié par/);
+  const reviewStatus = readFileSync(new URL('../src/features/cartulary/components/CartularyReviewStatus.tsx', import.meta.url), 'utf8');
+  assert.match(reviewStatus, /'Marquer comme revu'/, 'le libellé cité par l’explication est celui du bouton');
   assert.match(itemsSource, /needsReview && <p className="registry-dashboard-note" role="note">\{REVIEW_SIGNAL_EXPLANATION\}<\/p>/);
   assert.match(itemsSource, /readInitialParameter\('review', ''\) === '1'/);
   assert.match(itemsSource, /params\.set\('review', '1'\)/, 'le filtre survit au retour depuis un Cartulaire (returnTo)');
