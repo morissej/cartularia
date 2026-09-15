@@ -29,6 +29,7 @@ import {
   runRolexDossierCli,
   STALE_SYNC_REQUEST_MS,
 } from '../scripts/lib/rolex-dossier-command.mjs';
+import { buildCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY } from '../scripts/lib/cartulary-review-policy.mjs';
 import { createMemoryFirestore } from './helpers/memory-firestore.mjs';
 
 const REAL_UID = 'uid_proprietaire_reel_0001';
@@ -1116,6 +1117,32 @@ test('point 1 (tour 3) : édition générique en attente avec baseRevision péri
   await writeState(media, REAL_UID, 'cartularia-generic-operation', { kind: 'media', token: GENERIC_TOKEN });
   const mediaPlan = await planRolexDossier({ firestore: media });
   assert.deepEqual([mediaPlan.genericOperationPending.kind, mediaPlan.genericOperationPending.changeCount, mediaPlan.genericOperationPending.stale, mediaPlan.sync.reason], ['media', 1, true, 'generic_operation_stale']);
+});
+
+test('V5 lot B (§ 5.9) : un marqueur review en attente est décrit (kind review, draftKey cartularia-review), jamais déclaré invalide ; périmé, il bloque comme les autres genres', async () => {
+  const firestore = createMemoryFirestore();
+  await seedFoundations(firestore, [REAL_UID]);
+  await seedRootCreatedFromRegistry(firestore);
+  const rootRevision = firestore.dump()[ROOT_PATH].revision;
+  await writeState(firestore, REAL_UID, REVIEW_STATE_KEY, buildCartularyReviewDecision({ baseRevision: rootRevision, level: 'partial' }));
+  await writeState(firestore, REAL_UID, 'cartularia-generic-operation', { kind: REVIEW_OPERATION_KIND, token: GENERIC_TOKEN });
+  const before = firestore.dump();
+  const plan = await planRolexDossier({ firestore });
+  assert.deepEqual(plan.genericOperationPending, { valid: true, kind: 'review', draftKey: 'cartularia-review', baseRevision: rootRevision, rootRevision, stale: false, fieldIds: [], changeCount: null });
+  assert.notEqual(plan.sync.reason, 'generic_operation_invalid');
+  assert.notEqual(plan.sync.reason, 'generic_operation_stale');
+  const warning = plan.warnings.find((candidate) => candidate.code === 'generic_operation_pending');
+  assert.deepEqual([warning.kind, warning.valid, warning.stale, warning.blocking], ['review', true, false, false]);
+  assert.match(warning.message, /revue du propriétaire/);
+  assert.doesNotMatch(warning.message, /genre inconnu/);
+  assert.doesNotMatch(JSON.stringify(plan), /partial|human_confirmed/, 'le plan ne recopie pas la décision');
+  assert.deepEqual(firestore.dump(), before, 'le plan ne modifie rien');
+
+  // Décision périmée : même garde que media/sections (generic_operation_stale) avant toute écriture.
+  await writeState(firestore, REAL_UID, REVIEW_STATE_KEY, buildCartularyReviewDecision({ baseRevision: rootRevision - 1, level: 'complete' }), { revision: 2 });
+  const stale = await planRolexDossier({ firestore });
+  assert.deepEqual([stale.genericOperationPending.kind, stale.genericOperationPending.stale, stale.genericOperationPending.baseRevision, stale.sync], ['review', true, rootRevision - 1, { expected: 'blocked', reason: 'generic_operation_stale' }]);
+  await assert.rejects(applyRolexDossier({ firestore, plan: stale, ...applyOptions }), (error) => error.code === 'generic_operation_stale');
 });
 
 test('point 4 (tour 3) : racine sans liveStateDigest → first_authoritative_sync tant qu’une synchronisation est prévue ; absent après la première synchronisation et en mode create', async () => {

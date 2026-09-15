@@ -7,6 +7,7 @@ import { loadGenericSectionPatches } from './generic-sections-command.mjs';
 import { assertNewCollectionAssignments } from './collection-command.mjs';
 import { applyGenericMediaChanges } from './generic-media-command.mjs';
 import { assetPrivatePresentationFor, registryItemPresentationFields } from './registry-thumbnail.mjs';
+import { cartularyReviewRootPatch, parseCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY } from './cartulary-review-policy.mjs';
 
 const SYNC_RATE_LIMIT_PER_HOUR = 120;
 const ONE_HOUR_MS = 60 * 60 * 1_000;
@@ -64,18 +65,26 @@ const specificationValue = (groups, id, label) => {
 
 const visibility = (value) => ({ Secret: 'secret', Communauté: 'community', Tous: 'public' }[value] || 'secret');
 
-const createAuditEvent = ({ rootData, requestId, actorId, occurredAt, afterDigest }) => {
+const LIVE_STATE_SYNCED_ACTION = 'cartulary.live_state.synced';
+/** Événement d'audit d'une revue confirmée (lot B) : même chaîne, même révision, ressource = le Cartulaire lui-même. */
+export const REVIEW_CONFIRMED_ACTION = 'cartulary.review.confirmed';
+
+const createAuditEvent = ({
+  rootData, requestId, actorId, occurredAt, afterDigest,
+  action = LIVE_STATE_SYNCED_ACTION,
+  resource = { type: 'liveState', id: 'current' },
+}) => {
   const previousEventHash = rootData.integrityHead || ZERO_AUDIT_HASH;
   const sequence = Number(rootData.integritySequence || 0) + 1;
-  const eventId = `evt_${sha256Digest(`cartulary.live_state.synced:${requestId}`).slice(7, 31)}`;
+  const eventId = `evt_${sha256Digest(`${action}:${requestId}`).slice(7, 31)}`;
   const eventWithoutHash = {
     eventId,
     cartularyId: rootData.id,
     sequence,
     occurredAt,
     actor: { uid: actorId, role: 'legal_owner' },
-    action: 'cartulary.live_state.synced',
-    resource: { type: 'liveState', id: 'current' },
+    action,
+    resource,
     beforeDigest: previousEventHash,
     afterDigest,
     previousEventHash,
@@ -236,8 +245,12 @@ export const processCartularySyncRequest = async ({
   const operationMarker = stateValue(draft.states, 'cartularia-generic-operation');
   const genericOperation = typeof operationMarker === 'string' ? operationMarker : operationMarker?.kind;
   const genericOperationToken = typeof operationMarker === 'object' && operationMarker ? operationMarker.token : operationMarker ? sha256Digest(operationMarker) : null;
-  if ((genericOperation != null && !['media', 'sections'].includes(genericOperation)) || (operationMarker && typeof operationMarker === 'object' && (Object.keys(operationMarker).some((key) => !['kind', 'token'].includes(key)) || !/^[A-Za-z0-9_-]{8,160}$/.test(genericOperationToken || '')))) throw new LiveSyncCommandError('invalid_generic_operation', 'La demande de modification générique est invalide.');
+  if ((genericOperation != null && !['media', 'sections', REVIEW_OPERATION_KIND].includes(genericOperation)) || (operationMarker && typeof operationMarker === 'object' && (Object.keys(operationMarker).some((key) => !['kind', 'token'].includes(key)) || !/^[A-Za-z0-9_-]{8,160}$/.test(genericOperationToken || '')))) throw new LiveSyncCommandError('invalid_generic_operation', 'La demande de modification générique est invalide.');
   const pendingGenericOperation = Boolean(genericOperationToken && genericOperationToken !== rootData.lastGenericOperationToken);
+  // Revue du propriétaire (lot B) : décision relue et appliquée seulement tant que son jeton n'est pas consommé ;
+  // une CartularyReviewError (invalid_review, revision_conflict, review_not_allowed) remonte avec son code.
+  const reviewDraft = pendingGenericOperation && genericOperation === REVIEW_OPERATION_KIND ? stateValue(draft.states, REVIEW_STATE_KEY) : null;
+  const reviewPatch = reviewDraft ? cartularyReviewRootPatch({ root: rootData, decision: parseCartularyReviewDecision(reviewDraft), occurredAt }) : null;
   const genericDraft = operationMarker ? pendingGenericOperation && genericOperation === 'sections' ? stateValue(draft.states, 'cartularia-generic-sections') : null : stateValue(draft.states, 'cartularia-generic-sections');
   const genericEditDigest = genericDraft ? sha256Digest(genericDraft) : null;
   const sectionPatches = genericEditDigest && genericEditDigest !== rootData.genericEditDigest
@@ -387,7 +400,7 @@ export const processCartularySyncRequest = async ({
       modelName,
       referenceCode,
       manufactureYear,
-      lifecycleStatus: currentRootData.lifecycleStatus,
+      lifecycleStatus: reviewPatch?.lifecycleStatus ?? currentRootData.lifecycleStatus,
       possessionStatus: currentRootData.possessionStatus,
       patrimonialStatus,
       userAlias,
@@ -398,15 +411,19 @@ export const processCartularySyncRequest = async ({
       netValuation,
       netAfterTaxValuation,
       valuationCurrency,
-      completenessLevel: currentRootData.completenessLevel,
+      completenessLevel: reviewPatch?.completenessLevel ?? currentRootData.completenessLevel,
       primaryAssetId,
       sourceRevision: nextRevision,
       projectionStatus: 'active',
     };
     const contentHash = sha256Digest(projection);
-    const auditEvent = createAuditEvent({ rootData: currentRootData, requestId, actorId: ownerUid, occurredAt, afterDigest: draft.digest });
+    const auditEvent = createAuditEvent({
+      rootData: currentRootData, requestId, actorId: ownerUid, occurredAt, afterDigest: draft.digest,
+      ...(reviewPatch ? { action: REVIEW_CONFIRMED_ACTION, resource: { type: 'cartulary', id: cartularyId } } : {}),
+    });
 
     transaction.update(rootRef, {
+      ...(reviewPatch ?? {}),
       displayTitle: projection.displayTitle,
       makerName,
       modelName,

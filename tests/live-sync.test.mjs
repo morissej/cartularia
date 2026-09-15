@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { buildIwcImportBundle, IWC_CARTULARY_ID } from '../src/migrations/iwcImport.ts';
 import { importCartularyBundle } from '../scripts/lib/import-cartulary-command.mjs';
-import { processCartularySyncRequest } from '../scripts/lib/live-sync-command.mjs';
+import { processCartularySyncRequest, REVIEW_CONFIRMED_ACTION } from '../scripts/lib/live-sync-command.mjs';
+import { buildCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY } from '../scripts/lib/cartulary-review-policy.mjs';
 import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { sha256Digest } from '../scripts/lib/canonical-json.mjs';
 import { presentationVariantPath } from '../scripts/lib/presentation-variants.mjs';
@@ -214,6 +216,83 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
   const replay = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID });
   assert.equal(replay.outcome, 'no_change');
   assert.equal((await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data().revision, 2);
+});
+
+/** Revue du propriétaire (V5 lot B, § 5.7) : décision + marqueur dans le brouillon, puis demande de synchronisation. */
+const writeReviewAndRequest = async ({ level, token, baseRevision, revision = 1 }) => {
+  const draftPath = `privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}`;
+  await Promise.all([
+    firestore.doc(`${draftPath}/state/${REVIEW_STATE_KEY}`).set({ ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, key: REVIEW_STATE_KEY, value: JSON.stringify(buildCartularyReviewDecision({ baseRevision, level })), deleted: false, revision, clientUpdatedAt: 200 + revision }),
+    firestore.doc(`${draftPath}/state/cartularia-generic-operation`).set({ ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, key: 'cartularia-generic-operation', value: JSON.stringify({ kind: REVIEW_OPERATION_KIND, token }), deleted: false, revision, clientUpdatedAt: 200 + revision }),
+  ]);
+  await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
+    requestDocumentId: IWC_CARTULARY_ID, requestId: token, ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'private_draft_synchronized', status: 'pending',
+  });
+};
+
+test('revue du propriétaire : statut, palier et date serveur, projection et contentHash, événement dédié, rejeu no_change, conflit de révision, cycle inactif', async () => {
+  await writeDraftAndRequest('sync_test_review_000000000000001');
+  await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' });
+  const rootRef = firestore.doc(`cartularies/${IWC_CARTULARY_ID}`);
+  const itemRef = firestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`);
+  const before = (await rootRef.get()).data();
+  assert.deepEqual([before.revision, before.lifecycleStatus, before.completenessLevel, before.lastVerifiedAt], [2, 'review', 'imported_unreviewed', null]);
+
+  const token = 'op_review_partial_000000000001';
+  await writeReviewAndRequest({ level: 'partial', token, baseRevision: before.revision });
+  const result = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:03:00.000Z' });
+  assert.deepEqual([result.outcome, result.revision], ['updated', 3]);
+  const [root, item, audits] = await Promise.all([rootRef.get(), itemRef.get(), firestore.collection(`cartularies/${IWC_CARTULARY_ID}/auditEvents`).orderBy('sequence').get()]);
+  assert.deepEqual([root.data().lifecycleStatus, root.data().completenessLevel, root.data().lastVerifiedAt, root.data().lastGenericOperationToken], ['active', 'partial', '2026-08-16T08:03:00.000Z', token]);
+  assert.deepEqual([root.data().modelName, root.data().primaryAssetId, root.data().collectionId], [before.modelName, before.primaryAssetId, before.collectionId], 'la revue ne réécrit rien d’autre');
+  assert.deepEqual([item.data().lifecycleStatus, item.data().completenessLevel, item.data().sourceRevision], ['active', 'partial', 3], 'item recopié');
+  assert.equal('lastVerifiedAt' in item.data(), false, 'D3-a : la date reste hors projection');
+  assert.deepEqual(item.data().thumbnail, expectedLiveThumbnail(), 'aides de présentation conservées');
+  const { thumbnail: _thumbnail, primaryMediaKind: _kind, thumbnailStatus: _status, contentHash, generatedAt: _generatedAt, updatedAt: _updatedAt, ...projection } = item.data();
+  assert.equal(contentHash, sha256Digest(projection), 'contentHash = sha256Digest(projection) hors thumbnail/primaryMediaKind/thumbnailStatus/generatedAt/updatedAt');
+  const reviewEvent = audits.docs.at(-1).data();
+  assert.deepEqual([reviewEvent.action, reviewEvent.resource, reviewEvent.requestId], [REVIEW_CONFIRMED_ACTION, { type: 'cartulary', id: IWC_CARTULARY_ID }, token]);
+  assert.equal(reviewEvent.action, 'cartulary.review.confirmed');
+  assert.equal(reviewEvent.eventId, `evt_${sha256Digest(`cartulary.review.confirmed:${token}`).slice(7, 31)}`);
+  const verification = verifyAuditChain({ events: audits.docs.map((document) => document.data()), integrityHead: root.data().integrityHead, integritySequence: root.data().integritySequence });
+  assert.deepEqual([verification.valid, verification.eventCount], [true, 3], 'chaîne valide, eventCount +1');
+  assert.equal((await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).get()).data().auditEventId, reviewEvent.eventId);
+
+  // Rejeu du même brouillon : no_change, date inchangée.
+  await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
+    requestDocumentId: IWC_CARTULARY_ID, requestId: 'sync_test_review_000000000000002', ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'manual_retry', status: 'pending',
+  });
+  const replay = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:04:00.000Z' });
+  assert.equal(replay.outcome, 'no_change');
+  assert.deepEqual([(await rootRef.get()).data().revision, (await rootRef.get()).data().lastVerifiedAt], [3, '2026-08-16T08:03:00.000Z']);
+
+  // baseRevision périmée : rejet revision_conflict, racine intacte (comportement persistant jusqu'au rejeu, motif cartulary-create.test.mjs).
+  await writeReviewAndRequest({ level: 'complete', token: 'op_review_stale_00000000000003', baseRevision: 2, revision: 2 });
+  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:05:00.000Z' }), (error) => error.code === 'revision_conflict');
+  const intact = (await rootRef.get()).data();
+  assert.deepEqual([intact.revision, intact.completenessLevel, intact.lastVerifiedAt, intact.lastGenericOperationToken], [3, 'partial', '2026-08-16T08:03:00.000Z', token]);
+
+  // Opération sections ultérieure (catalogue watch@1.3.0 : champ cover.watch.model seul) : la date de revue ne bouge pas,
+  // l'événement redevient cartulary.live_state.synced — une édition générique n'est pas une revue.
+  const modelField = JSON.parse(readFileSync(new URL('../firebase/schema-catalog/watch/1.3.0.json', import.meta.url), 'utf8')).fields.find((field) => field.fieldId === 'cover.watch.model');
+  await firestore.doc(`schemaCatalog/watch/versions/1.3.0/sections/${modelField.sectionId}`).set({ id: modelField.sectionId });
+  await firestore.doc(`schemaCatalog/watch/versions/1.3.0/sections/${modelField.sectionId}/fields/${modelField.fieldId}`).set(JSON.parse(JSON.stringify(modelField)));
+  await firestore.doc(`privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}/state/cartularia-generic-sections`).set({ key: 'cartularia-generic-sections', value: JSON.stringify({ version: 1, schemaId: 'watch', schemaVersion: '1.3.0', baseRevision: 3, edits: [{ fieldId: 'cover.watch.model', value: 'Flieger UTC revue puis corrigée' }] }), deleted: false, revision: 1, clientUpdatedAt: 300 });
+  await firestore.doc(`privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}/state/cartularia-generic-operation`).set({ key: 'cartularia-generic-operation', value: JSON.stringify({ kind: 'sections', token: 'op_sections_after_review_00004' }), deleted: false, revision: 3, clientUpdatedAt: 301 });
+  await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({ requestDocumentId: IWC_CARTULARY_ID, requestId: 'op_sections_after_review_00004', ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'private_draft_synchronized', status: 'pending' });
+  const sections = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:06:00.000Z' });
+  assert.deepEqual([sections.outcome, sections.revision], ['updated', 4]);
+  const afterSections = (await rootRef.get()).data();
+  assert.deepEqual([afterSections.modelName, afterSections.lifecycleStatus, afterSections.completenessLevel, afterSections.lastVerifiedAt], ['Flieger UTC revue puis corrigée', 'active', 'partial', '2026-08-16T08:03:00.000Z'], 'opération sections ultérieure : lastVerifiedAt inchangé');
+  assert.equal((await firestore.collection(`cartularies/${IWC_CARTULARY_ID}/auditEvents`).orderBy('sequence').get()).docs.at(-1).data().action, 'cartulary.live_state.synced');
+
+  // Cycle inactif : la revue est refusée (review_not_allowed), racine intacte.
+  await rootRef.update({ lifecycleStatus: 'suspended' });
+  const suspended = (await rootRef.get()).data();
+  await writeReviewAndRequest({ level: 'complete', token: 'op_review_denied_0000000000005', baseRevision: suspended.revision, revision: 3 });
+  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:07:00.000Z' }), (error) => error.code === 'review_not_allowed');
+  const denied = (await rootRef.get()).data();
+  assert.deepEqual([denied.revision, denied.lifecycleStatus, denied.completenessLevel, denied.lastVerifiedAt], [suspended.revision, 'suspended', 'partial', '2026-08-16T08:03:00.000Z']);
 });
 
 test('une resynchronisation conserve le miroir et la vignette quand le manifeste ne porte plus de variantes', async () => {

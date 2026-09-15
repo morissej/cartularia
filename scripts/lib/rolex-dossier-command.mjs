@@ -13,6 +13,7 @@ import { verifyAuditChain } from './audit-verifier.mjs';
 import { canonicalize, sha256Digest } from './canonical-json.mjs';
 import { importCartularyBundle } from './import-cartulary-command.mjs';
 import { markCartularySyncRequestFailed, processCartularySyncRequest } from './live-sync-command.mjs';
+import { REVIEW_OPERATION_KIND, REVIEW_STATE_KEY } from './cartulary-review-policy.mjs';
 import { projectRegistryItem } from './projection-command.mjs';
 
 /**
@@ -183,7 +184,9 @@ const PUBLIC_CODE_STATE_KEY = 'cartularia-public-code';
 const EDITABLE_COPY_STATE_KEY = 'cartularia-editable-copy';
 /** Marqueur écrit par le lecteur unique avec chaque saisie générique (src/services/genericCartulary.ts l.76-88). */
 const GENERIC_OPERATION_STATE_KEY = 'cartularia-generic-operation';
-const GENERIC_DRAFT_STATE_KEYS = Object.freeze({ sections: 'cartularia-generic-sections', media: 'cartularia-generic-media' });
+const GENERIC_DRAFT_STATE_KEYS = Object.freeze({ sections: 'cartularia-generic-sections', media: 'cartularia-generic-media', [REVIEW_OPERATION_KIND]: REVIEW_STATE_KEY });
+/** Genres admis par processCartularySyncRequest (live-sync-command.mjs) : la revue du propriétaire (V5 lot B) s'ajoute aux médias et sections. */
+const GENERIC_OPERATION_KINDS = Object.freeze(['media', 'sections', REVIEW_OPERATION_KIND]);
 const GENERIC_OPERATION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{8,160}$/;
 const DRAFT_RETENTION_POLICY_VERSION = 'inactive-plus-2y-v1';
 const IN_FLIGHT_SYNC_STATUSES = new Set(['pending', 'processing']);
@@ -461,7 +464,7 @@ const describeGenericOperation = ({ existingStates, rootData }) => {
   if (marker === INVALID_JSON) return { valid: false, kind: null, draftKey: null, baseRevision: null, rootRevision: rootData.revision ?? null, stale: true, fieldIds: [], changeCount: null };
   const kind = typeof marker === 'string' ? marker : typeof marker === 'object' ? marker.kind ?? null : null;
   const token = typeof marker === 'object' && marker ? marker.token ?? null : sha256Digest(marker);
-  const valid = ['media', 'sections'].includes(kind) && (typeof marker !== 'object' || (Object.keys(marker).every((key) => ['kind', 'token'].includes(key)) && GENERIC_OPERATION_TOKEN_PATTERN.test(token || '')));
+  const valid = GENERIC_OPERATION_KINDS.includes(kind) && (typeof marker !== 'object' || (Object.keys(marker).every((key) => ['kind', 'token'].includes(key)) && GENERIC_OPERATION_TOKEN_PATTERN.test(token || '')));
   if (valid && token === rootData.lastGenericOperationToken) return null;
   const draftKey = GENERIC_DRAFT_STATE_KEYS[kind] ?? null;
   const draft = draftKey ? parseStoredValue(existingStates.get(draftKey) ?? null) : null;
@@ -731,7 +734,7 @@ export const planRolexDossier = async ({
   if (genericOperationPending) {
     const blocking = sync.expected === 'blocked' && sync.reason === genericBlockReason;
     const { valid, stale, kind, fieldIds, changeCount, baseRevision, rootRevision } = genericOperationPending;
-    const described = kind === 'sections' ? `sections génériques (${fieldIds.length ? fieldIds.join(', ') : 'aucun fieldId lisible'})` : kind === 'media' ? `médias génériques (${changeCount ?? 0} changement(s))` : 'genre inconnu';
+    const described = kind === 'sections' ? `sections génériques (${fieldIds.length ? fieldIds.join(', ') : 'aucun fieldId lisible'})` : kind === 'media' ? `médias génériques (${changeCount ?? 0} changement(s))` : kind === REVIEW_OPERATION_KIND ? 'revue du propriétaire' : 'genre inconnu';
     warnings.push({
       code: 'generic_operation_pending',
       kind,

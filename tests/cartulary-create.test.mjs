@@ -4,7 +4,8 @@ import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { processCartularyCreateRequest } from '../scripts/lib/create-cartulary-command.mjs';
-import { processCartularySyncRequest } from '../scripts/lib/live-sync-command.mjs';
+import { processCartularySyncRequest, REVIEW_CONFIRMED_ACTION } from '../scripts/lib/live-sync-command.mjs';
+import { buildCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY } from '../scripts/lib/cartulary-review-policy.mjs';
 import { CAR_SCHEMA_FIELDS } from '../src/schema/carSchema.ts';
 import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { presentationVariantPath } from '../scripts/lib/presentation-variants.mjs';
@@ -279,6 +280,31 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_generic_denied_0004', ownerUid, cartularyId, status: 'pending' });
   await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: cartularyId }), (error) => error.code === 'permission_denied');
   assert.equal((await rootRef.get()).data().modelName, 'Voiture corrigée');
+
+  // V5 lot B (§ 5.8) : revue « Dossier complet » par le propriétaire éditeur rétabli. Le marqueur review n'applique pas
+  // l'édition générique restée en brouillon (« Accès retiré ») ; l'item suit sans VIN ni uid.
+  await firestore.doc(`organizations/org_demo/memberships/${ownerUid}`).update({ roles: ['account_holder', 'legal_owner'], permissions: ['registry.read', 'cartulary.read', 'cartulary.edit', 'publication.manage'] });
+  const beforeReview = (await rootRef.get()).data();
+  assert.deepEqual([beforeReview.lifecycleStatus, beforeReview.completenessLevel, beforeReview.lastVerifiedAt], ['review', 'imported_unreviewed', null]);
+  const reviewToken = 'op_review_complete_car_0000001';
+  await firestore.doc(`${draftPath}/state/${REVIEW_STATE_KEY}`).set({ key: REVIEW_STATE_KEY, value: JSON.stringify(buildCartularyReviewDecision({ baseRevision: beforeReview.revision, level: 'complete' })), deleted: false, revision: 1, clientUpdatedAt: 40 });
+  await firestore.doc(`${draftPath}/state/cartularia-generic-operation`).set({ key: 'cartularia-generic-operation', value: JSON.stringify({ kind: REVIEW_OPERATION_KIND, token: reviewToken }), deleted: false, revision: 1, clientUpdatedAt: 41 });
+  await syncRef.set({ requestDocumentId: cartularyId, requestId: reviewToken, ownerUid, cartularyId, status: 'pending' });
+  const reviewed = await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId, occurredAt: '2026-08-16T09:30:00.000Z' });
+  assert.deepEqual([reviewed.outcome, reviewed.revision], ['updated', beforeReview.revision + 1]);
+  const afterReview = (await rootRef.get()).data();
+  const itemAfterReview = (await firestore.doc(`registries/reg_collection_privee/items/${cartularyId}`).get()).data();
+  assert.deepEqual([afterReview.lifecycleStatus, afterReview.completenessLevel, afterReview.lastVerifiedAt, afterReview.lastGenericOperationToken, afterReview.modelName], ['active', 'complete', '2026-08-16T09:30:00.000Z', reviewToken, 'Voiture corrigée']);
+  assert.deepEqual([itemAfterReview.lifecycleStatus, itemAfterReview.completenessLevel, itemAfterReview.sourceRevision], ['active', 'complete', afterReview.revision]);
+  assert.equal('lastVerifiedAt' in itemAfterReview, false);
+  assert.doesNotMatch(JSON.stringify(itemAfterReview), /VIN-HISTORIQUE|VIN-CORRIGE/, 'aucun numéro de série dans l’item après revue');
+  assert.equal(JSON.stringify(itemAfterReview).includes(ownerUid), false);
+  const reviewAudits = await rootRef.collection('auditEvents').orderBy('sequence').get();
+  assert.equal(reviewAudits.docs.at(-1).data().action, REVIEW_CONFIRMED_ACTION);
+  assert.equal(verifyAuditChain({ events: reviewAudits.docs.map((document) => document.data()), integrityHead: afterReview.integrityHead, integritySequence: afterReview.integritySequence }).valid, true);
+  await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_review_replay_car_0002', ownerUid, cartularyId, status: 'pending' });
+  assert.equal((await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
+  assert.equal((await rootRef.get()).data().lastVerifiedAt, '2026-08-16T09:30:00.000Z');
 });
 
 test('enrichissement média explicite : ajout vérifié, autorisation, retrait et rejeu sans résurrection', async () => {
