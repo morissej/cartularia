@@ -261,3 +261,12 @@ Barrière du 15 septembre (P1, locale puis émulateurs, JRE 21 `~/.cartularia/jr
 | `git diff --check` | propre |
 
 Fonctions en production relevées le jour même avant P2 : 20 (`functions:list`, les 16 du lot A + B et les 4 du lot C).
+
+Simulations distantes du 15 septembre (lecture seule, session CLI, après le commit `3f8c2c2` poussé sur `feat/lecteur-unique-adr-028-031`) :
+
+| Étape | Résultat de la simulation | Conséquence pour l’exécution |
+|---|---|---|
+| P3 Rolex | `PRESENTATION_REGENERATION_PLAN` : 44 assets, `counts.to_generate = 32`, `skipped = 12` (6 `not_image` : documents et vidéos ; 6 `not_accepted` : binaires jamais vérifiés ou rejetés, qui resteront « Aperçu en préparation » ou « Copie de présentation non produite »), `plannedItemThumbnail 'inline'`, `warnings` vide (brouillon actif, R3 satisfaite), `existingThumbnailKind null`, propriétaire = `wave1-owner`. | `--execute` attendu : `generated = 32`, `failed = 0`, `assetsMirrored = 32`, `itemThumbnail 'inline'`, `firestoreWrites = 33`. |
+| P4 IWC | `plannedItemThumbnail 'bundle'`, `bundle.bytes = 4 212`, `width 240 × height 160`, `assetId` = `primaryAssetId` ; mais aussi `counts.to_generate = 45` (25 photos privées + 20 binaires `seed_iwc_*`), `skipped = 2` (facture PDF, vidéo). Le titre « aucune écriture Storage » de P4 supposait qu’aucun binaire IWC ne serait classé `to_generate` : c’est faux, l’IWC pilote a 45 images privées acceptées sans variantes. | `--execute` attendu : 45 × 4 variantes écrites dans `private-derivatives/wave1-owner/cart_iwc_flieger_utc_2002/…`, `assetsMirrored = 45`, `itemThumbnail 'bundle'` (la vignette bundle prime : posée en dernier), `firestoreWrites = 46` ; rejeu : 0. Sans ces variantes, les photos privées IWC resteraient « Aperçu en préparation » après P6. |
+| P5 seed démo v3 | `mode dry-run`, `auth read-only / unchanged`, 5 `update` sur `registries/reg_cartularia_demo/items/*`, `applied false`. | Conforme à l’attendu (5 vignettes bundle). |
+| P6 build | `VITE_USE_FIREBASE_EMULATORS=false npm run build` : OK, 101 dérivés démo dans `dist/assets/demo-watches/derivatives`, 93 morceaux JS pour 1 799 ko au total (App 309 ko, Firestore 461 ko, index 210 ko). Déploiement Hosting différé jusqu’à P3–P5 : le client V3 n’a plus d’original de repli, il afficherait « Aperçu en préparation » sur les pilotes tant que les miroirs ne sont pas posés. | Déployer après P5. |
