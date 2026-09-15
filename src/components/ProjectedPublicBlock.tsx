@@ -1,15 +1,14 @@
 import type { PublicBlockProjection } from '../domain/projections';
 import { PrivateMediaImage } from './PrivateMediaImage.tsx';
 import { MediaDownloadLink } from './MediaDownloadLink.tsx';
-import { lazy, Suspense, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Asset } from '../types';
 import { MediaVideo } from './MediaVideo';
 import { MediaCarousel } from './MediaCarousel';
+import { SpinSequence } from './SpinSequence.tsx';
 import { MediaViewerModal } from '../features/cartulary/modals/CartularyModals';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { validPublicMediaPath } from '../utils/publicMediaReference';
-
-const Spin360 = lazy(() => import('./Spin360').then((module) => ({ default: module.Spin360 })));
 
 interface ProjectedPublicBlockProps {
   block: PublicBlockProjection;
@@ -51,7 +50,7 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
     <section className={`projected-public-block${isInteractive ? ' projected-public-block--interactive' : ''}`} data-public-block={block.blockId}>
       {!isInteractive && heroAsset && (
         <figure className="projected-public-block__media">
-          <PrivateMediaImage asset={heroAsset} alt={heading} language={language} sizes="(max-width: 720px) 100vw, 50vw" loading="lazy" decoding="async" />
+          <PrivateMediaImage asset={heroAsset} alt={heading} language={language} sizes="(max-width: 720px) 100vw, 50vw" loading="lazy" decoding="async" role="stage" />
           <figcaption><MediaDownloadLink media={heroAsset} language={language} compact /></figcaption>
         </figure>
       )}
@@ -59,9 +58,9 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
         <span className="eyebrow">{eyebrow}</span>
         <h2>{heading}</h2>
         {block.blockId === 'media-motion' && assets.filter((asset) => asset.type === 'video').map((asset) => <div key={asset.id}><MediaVideo asset={asset} language={language} /><MediaDownloadLink media={asset} language={language} compact /></div>)}
-        {block.blockId === 'media-spin' && assets.some((asset) => asset.type === 'image') && <Suspense fallback={<p role="status">Chargement des vues…</p>}><Spin360 images={assets.filter((asset) => asset.type === 'image')} posterImageUrl={assets[0].url} language={language} /></Suspense>}
+        {block.blockId === 'media-spin' && assets.some((asset) => asset.type === 'image') && <SpinSequence images={assets.filter((asset) => asset.type === 'image')} language={language} />}
         {block.blockId === 'media-slideshow' && <MediaCarousel assets={assets} language={language} onOpen={(asset) => setSelectedId(asset.id)} />}
-        {block.blockId === 'media-library' && <div className="media-library public-media-library">{assets.map((asset) => <article key={asset.id}><button type="button" onClick={() => setSelectedId(asset.id)}>{asset.type === 'image' && <PrivateMediaImage asset={asset} language={language} alt="" sizes="240px" />}<strong>{asset.name}</strong><small>{asset.mimeType || asset.type}</small></button><MediaDownloadLink media={asset} language={language} compact /></article>)}</div>}
+        {block.blockId === 'media-library' && <div className="media-library public-media-library">{assets.map((asset) => <article key={asset.id}><button type="button" onClick={() => setSelectedId(asset.id)}>{asset.type === 'image' && <PrivateMediaImage asset={asset} language={language} alt="" sizes="240px" role="thumbnail" />}<strong>{asset.name}</strong><small>{asset.mimeType || asset.type}</small></button><MediaDownloadLink media={asset} language={language} compact /></article>)}</div>}
         {block.blockId === 'media-spin' && assets.length > 0 && <details className="public-media-downloads"><summary>{language === 'FR' ? `Télécharger les vues (${assets.length})` : `Download views (${assets.length})`}</summary>{assets.map((asset, index) => <div key={asset.id} className="spin-downloads__row"><span>{language === 'FR' ? 'Vue' : 'View'} {index + 1}/{assets.length}</span><MediaDownloadLink media={asset} language={language} compact showName /></div>)}</details>}
         {block.assets.some((asset) => !asset.downloadUrl && !validPublicMediaPath(asset.storagePath)) && <p role="status">{language === 'FR' ? 'Une référence de copie publique est absente. Les originaux restent privés ; le propriétaire doit vérifier cette publication.' : 'A public copy reference is missing. Originals remain private; the owner needs to check this publication.'}</p>}
         {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}

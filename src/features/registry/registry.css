@@ -555,6 +555,29 @@
   letter-spacing: .08em;
   text-transform: uppercase;
 }
+.registry-item__visual[data-thumbnail-state] { flex-wrap: wrap; }
+.registry-item__thumbnail-state { width: 100%; color: var(--muted); font-size: 9px; }
+
+/* Vignette de couverture (item.thumbnail, 240 px) : remplit le visuel, badge du type en surimpression. */
+.registry-item__visual--with-thumbnail { position: relative; overflow: hidden; padding: 0; align-items: stretch; }
+.registry-item__thumbnail { display: block; width: 100%; height: 100%; object-fit: cover; }
+.registry-item__badge {
+  position: absolute;
+  bottom: var(--s2);
+  left: var(--s2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--sheet) 88%, transparent);
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.registry-item__badge svg { width: 14px; height: 14px; stroke-width: 1.4; }
 
 .registry-item__body { display: grid; align-content: start; gap: var(--s2); padding: var(--s4); }
 .registry-item__context { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); color: var(--muted); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
@@ -607,7 +630,9 @@
 
 .registry-item-grid--list .registry-item { grid-template-columns: 104px minmax(0, 1fr) minmax(210px, auto); grid-template-rows: auto; }
 .registry-item-grid--list .registry-item__visual { align-items: center; justify-content: center; border-right: 1px solid var(--rule); border-bottom: 0; }
-.registry-item-grid--list .registry-item__visual span { display: none; }
+.registry-item-grid--list .registry-item__visual span,
+.registry-item-grid--list .registry-item__thumbnail-state { display: none; }
+.registry-item-grid--list .registry-item__visual--with-thumbnail { min-height: 70px; padding: 0; }
 .registry-item-grid--list .registry-item__body { padding-block: var(--s3); }
 .registry-item-grid--list .registry-item__body h2 { margin-top: 2px; font-size: 22px; }
 .registry-item-grid--list .registry-item__body dl { display: none; }
@@ -1827,7 +1852,8 @@
 .registry-gallery-card { min-width: 0; border: 1px solid var(--rule); background: var(--sheet); }
 .registry-gallery-card__visual { position: relative; display: block; width: 100%; padding: 0; overflow: hidden; border: 0; border-bottom: 1px solid var(--rule); background: var(--fill); cursor: zoom-in; }
 .registry-gallery-card__visual::after { position: absolute; inset: 0; content: ''; background: linear-gradient(180deg, transparent 58%, rgb(0 0 0 / 45%)); pointer-events: none; }
-.registry-gallery-card__visual img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; transition: transform .4s ease; }
+/* Vignette 240 px (item.thumbnail) affichée à son propre rapport : jamais recadrée, jamais l'original. */
+.registry-gallery-card__visual img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; transition: transform .4s ease; }
 .registry-gallery-card__visual:hover img { transform: scale(1.025); }
 .registry-gallery-card__pending { display: grid; width: 100%; aspect-ratio: 4 / 5; place-content: center; justify-items: center; gap: var(--s2); color: var(--muted); font-family: var(--font-mono); font-size: 8px; letter-spacing: .05em; text-transform: uppercase; }
 .registry-gallery-card__pending svg { width: 24px; height: 24px; color: var(--mark); }
@@ -1886,6 +1912,12 @@
 .registry-lightbox__stage figure img { display: block; width: 100%; height: 100%; min-height: 280px; object-fit: contain; }
 .registry-lightbox__loading { display: grid; min-height: 280px; place-content: center; justify-items: center; gap: var(--s2); color: rgb(255 255 255 / 74%); font-size: 10px; }
 .registry-lightbox__loading svg { width: 28px; height: 28px; }
+.registry-lightbox__loading small { max-width: 420px; color: rgb(255 255 255 / 56%); font-size: 9px; text-align: center; }
+.registry-lightbox__loading button { min-height: 36px; margin-top: var(--s2); padding: 0 var(--s3); border: 1px solid rgb(255 255 255 / 40%); background: transparent; color: #fff; cursor: pointer; font-size: 9px; font-weight: 600; }
+.registry-lightbox__stage figure .media-load-error { display: grid; min-height: 280px; place-content: center; justify-items: center; gap: var(--s2); color: rgb(255 255 255 / 74%); font-size: 10px; text-align: center; }
+.registry-lightbox__stage figure .media-load-error button { min-height: 36px; padding: 0 var(--s3); border: 1px solid rgb(255 255 255 / 40%); background: transparent; color: #fff; cursor: pointer; font-size: 9px; font-weight: 600; }
+.registry-lightbox__thumbnails .media-load-error { display: grid; width: 100%; height: 100%; place-items: center; overflow: hidden; color: var(--muted); font-size: 7px; }
+.registry-lightbox__thumbnails .media-load-error button { display: none; }
 .registry-lightbox__stage figcaption { display: flex; width: 100%; min-height: 46px; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s2) var(--s3); background: rgb(0 0 0 / 38%); color: #fff; }
 .registry-lightbox__stage figcaption strong { font-size: 10px; }
 .registry-lightbox__stage figcaption span { color: rgb(255 255 255 / 68%); font-size: 9px; }

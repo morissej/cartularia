@@ -1,12 +1,12 @@
-import type { RegistryGalleryEntry, RegistryGallerySlide } from '../../domain/gallery.ts';
+import type { RegistryGalleryEntry } from '../../domain/gallery.ts';
 import { registryItemCollectionIds } from '../../domain/projections.ts';
 
+/** Filtres de la Galerie : l'item seul (aucune diapositive n'est lue avant l'ouverture de la visionneuse, K5). */
 export interface RegistryGalleryFilters {
   query: string;
   assetType: string;
   collectionId: string;
   makerName: string;
-  category: string;
 }
 
 export const DEFAULT_REGISTRY_GALLERY_FILTERS: RegistryGalleryFilters = {
@@ -14,20 +14,12 @@ export const DEFAULT_REGISTRY_GALLERY_FILTERS: RegistryGalleryFilters = {
   assetType: 'all',
   collectionId: 'all',
   makerName: 'all',
-  category: 'all',
 };
 
-const normalize = (value: string | null | undefined) => String(value ?? '')
+const normalize = (value: string | number | null | undefined) => String(value ?? '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
   .toLocaleLowerCase('fr');
-
-export const gallerySlidesForCategory = (
-  entry: RegistryGalleryEntry,
-  category: string,
-): RegistryGallerySlide[] => category === 'all'
-  ? entry.slides
-  : entry.slides.filter((slide) => slide.category === category);
 
 export const filterRegistryGallery = (
   entries: RegistryGalleryEntry[],
@@ -39,7 +31,6 @@ export const filterRegistryGallery = (
     if (filters.assetType !== 'all' && item.assetType !== filters.assetType) return false;
     if (filters.collectionId !== 'all' && !registryItemCollectionIds(item).includes(filters.collectionId)) return false;
     if (filters.makerName !== 'all' && item.makerName !== filters.makerName) return false;
-    if (filters.category !== 'all' && gallerySlidesForCategory(entry, filters.category).length === 0) return false;
     const haystack = normalize([
       item.displayTitle,
       item.makerName,

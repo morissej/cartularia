@@ -233,3 +233,189 @@ test('le panneau Preuves reçoit le mode lecture et la publication constatée de
   // Décision (d) : le lien mini-site dérive uniquement de l'état constaté, jamais d'une constante.
   assert.match(appSource, /const publishedWebsiteUrl = websitePublished \? publicShareUrl : null;/);
 });
+
+// V3 — contrat unique des dérivés (K4, K6, K9) : variantes de présentation, jamais de repli sur l'original, aucune branche démo.
+const readSource = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+
+test('V3 K6 : séquence 360° et grille d’impression chargées à la demande, dérivés du bundle par catalogue', () => {
+  const app = readSource('../src/App.tsx');
+  const block = app.slice(app.indexOf("case 'media-spin':"), app.indexOf("case 'media-library':"));
+  assert.match(block, /<SpinSequence images=\{spinAssets\} language=\{language\} \/>/);
+  assert.doesNotMatch(block, /<Spin360/);
+  assert.match(block, /\{forPrint && \(\s*<div className="report-slideshow-gallery">/);
+  assert.doesNotMatch(app, /import\('\.\/components\/Spin360\.tsx'\)/);
+  assert.equal((app.match(/fetchPriority="high"/g) ?? []).length, 2);
+  const derivatives = readSource('../src/media/presentationDerivatives.ts');
+  assert.doesNotMatch(derivatives, /\/assets\/IWC\//);
+  const spinSequence = readSource('../src/components/SpinSequence.tsx');
+  assert.match(spinSequence, /<PrivateMediaImage asset=\{poster\}[^>]*role="stage"/);
+  const reportItem = readSource('../src/components/ReportMediaItem.tsx');
+  assert.match(reportItem, /role=\{original \? 'original' : 'stage'\}/);
+});
+
+test('V3 K4 : App.tsx et PrivateMediaImage ne servent que des variantes ; l’original n’est jamais un repli', () => {
+  const app = readSource('../src/App.tsx');
+  const privateImage = readSource('../src/components/PrivateMediaImage.tsx');
+  const privateMedia = readSource('../src/services/privateMedia.ts');
+  const failure = readSource('../src/utils/mediaFailure.ts');
+  // App.tsx : aucune acquisition directe d'original, aucun rôle 'original' posé par le lecteur, aucune lecture de presentation-v2.
+  assert.doesNotMatch(app, /acquirePrivateMediaObjectUrl\(/);
+  assert.doesNotMatch(app, /role="original"/);
+  assert.doesNotMatch(app, /presentation-v2|getDownloadURL|private-derivatives/);
+  for (const role of ['thumbnail', 'stage']) assert.match(app, new RegExp(`<PrivateMediaImage[^>]*role="${role}"`));
+  // Modale : l'original ne s'affiche que sur action explicite, liée à la capacité reconnue par le serveur (tour 4, point 7) —
+  // jamais à une branche démo ni au seul droit d'édition local (un membre non propriétaire recevrait un « shared-unavailable »).
+  assert.match(app, /originalOnDemand=\{authoritative\.canManage\}/);
+  assert.doesNotMatch(app, /originalOnDemand=\{!?isDemoCartulary\}|originalOnDemand=\{canEdit\}/);
+  // PrivateMediaImage : un seul chemin vers l'original (rôle explicite) ; le rejet d'une variante mène à un état, pas à l'original.
+  assert.match(privateImage, /role\?: PrivateMediaImageRole;/);
+  assert.match(privateImage, /role = 'stage',/);
+  const resolve = privateImage.slice(privateImage.indexOf('const resolve = () => {'), privateImage.indexOf('if (eager || typeof IntersectionObserver'));
+  assert.equal((resolve.match(/acquirePrivateMediaObjectUrl\(/g) ?? []).length, 1);
+  assert.match(resolve, /role === 'original'\s*\?/);
+  const rejection = resolve.slice(resolve.indexOf('.catch('));
+  assert.doesNotMatch(rejection, /acquirePrivate|import\(/, 'le rejet d’une variante ne déclenche aucune acquisition');
+  assert.match(rejection, /const kind = mediaFailureKind\(error\);[^]*?setFailureKind\(kind\)/);
+  assert.match(privateImage, /data-media-failure=\{failureKind\}/);
+  // Deux états de dérivé distincts (décision (d)) : 'pending' (« Aperçu en préparation », reprise offerte) et
+  // 'unavailable' (« Copie de présentation non produite », échec définitif consigné : aucune reprise) ; jamais confondus.
+  assert.match(privateImage, /failureKind === 'derivative-pending' \? 'pending' : failureKind === 'derivative-failed' \|\| failureKind === 'shared-unavailable' \? 'unavailable' : null/);
+  assert.match(privateImage, /data-media-state=\{derivativeState \?\? 'error'\}/);
+  assert.match(privateImage, /derivativeState === 'unavailable' \? null :/);
+  assert.doesNotMatch(privateImage, /presentation-v2|getDownloadURL/);
+  // Service : les variantes se lisent par getBlob sous règles, jamais presentation-v2 ; l'état « Aperçu en préparation » existe.
+  // Section « variantes » du service : lecture du manifeste (état des dérivés), helper d'état, acquisition.
+  const presentation = privateMedia.slice(privateMedia.indexOf('const loadPresentationFromManifest'), privateMedia.indexOf('export const releasePrivateMediaObjectUrl'));
+  assert.match(presentation, /getBlob\(/);
+  assert.doesNotMatch(presentation, /getDownloadURL\(|acquirePrivateMediaObjectUrl\(/);
+  assert.doesNotMatch(privateMedia, /loadPrivateMediaObjectUrl/, 'export mort retiré : un seul chemin vers l’original, acquirePrivateMediaObjectUrl');
+  assert.match(presentation, /'derivative-pending'/);
+  assert.match(presentation, /'derivative-failed'/);
+  assert.match(presentation, /presentationDerivativeStateFromBinaryRecord\(/);
+  assert.match(failure, /'derivative-pending': \['Aperçu en préparation', 'Preview in preparation'\]/);
+  assert.match(failure, /'derivative-failed': \['Copie de présentation non produite', 'Presentation copy not produced'\]/);
+});
+
+test('V3 tour 4 : original du rapport à la préparation seulement, getDownloadURL réservé à l’original explicite, rôles explicites, thumbnailStatus', () => {
+  const app = readSource('../src/App.tsx');
+  const privateImage = readSource('../src/components/PrivateMediaImage.tsx');
+  const privateMedia = readSource('../src/services/privateMedia.ts');
+  const reportItem = readSource('../src/components/ReportMediaItem.tsx');
+  const projectedBlock = readSource('../src/components/ProjectedPublicBlock.tsx');
+  // Point 3 : le rapport est monté sous la préparation explicite ; ReportPrintImage est le seul à répondre « true » au signal
+  // d'absence de variante (il bascule alors sur l'original, par binaire) ; PrivateMediaImage n'acquiert jamais l'original de lui-même.
+  assert.match(app, /\{orderedReportBlocks\.length > 0 && reportPreparation\.active && \(\s*<div className="report-print-view"/);
+  assert.match(app, /renderWatchWebsiteBlock\(blockId, reportPreparation\.active\)/);
+  assert.match(reportItem, /onDerivativeUnavailable=\{\(\) => \{ setOriginalFor\(asset\.binaryId \?\? null\); return true; \}\}/);
+  assert.match(reportItem, /export function ReportPrintImage/);
+  const srcFiles = walkSources(sourceRoot);
+  const usersOf = (pattern) => srcFiles.filter((file) => pattern.test(readFileSync(file, 'utf8'))).map((file) => relativeSource(file)).sort();
+  const derivativeHandlerUsers = usersOf(/onDerivativeUnavailable/);
+  assert.deepEqual(derivativeHandlerUsers, ['src/components/PrivateMediaImage.tsx', 'src/components/ReportMediaItem.tsx'], 'le repli sur l’original n’existe que pour l’impression du rapport');
+  const rejection = privateImage.slice(privateImage.indexOf('.catch('), privateImage.indexOf('if (eager || typeof IntersectionObserver'));
+  assert.match(rejection, /derivativeHandlerRef\.current\?\.\(kind\) === true\) return;/);
+  assert.doesNotMatch(rejection, /acquirePrivate|import\(/);
+  // Les grilles imprimées d'App.tsx passent par ReportPrintImage / ReportMediaItem ; aucun rôle « original » dans App.tsx.
+  const spinPrint = app.slice(app.indexOf("case 'media-spin':"), app.indexOf("case 'media-slideshow':"));
+  assert.match(spinPrint, /forPrint \? <div className="report-slideshow-gallery__grid">\{spinAssets\.map\(\(asset\) => <figure key=\{asset\.id\}><ReportPrintImage /);
+  const libraryStart = app.indexOf("case 'media-library':");
+  const libraryEnd = app.indexOf("\n      case '", libraryStart + 1);
+  const library = app.slice(libraryStart, libraryEnd === -1 ? libraryStart + 6_000 : libraryEnd);
+  assert.match(library, /forPrint\s*\?\s*<ReportPrintImage /);
+  assert.match(library, /: <PrivateMediaImage asset=\{asset\} alt="" sizes="\(max-width: 720px\) 50vw, 33vw" role="thumbnail" \/>/);
+  assert.doesNotMatch(app, /role="original"|role=\{[^}]*'original'/);
+  // Point 4 : plus d'export mort ; getDownloadURL n'existe que pour l'original explicite (une seule occurrence, dans
+  // downloadPrivateStorageBlob, appelé une seule fois par acquirePrivateMediaObjectUrl) ; ailleurs dans src/, seul le
+  // rapatriement explicite d'un original cloud vers le coffre local (cloudDraft.ts, résolution de conflit) l'emploie.
+  assert.doesNotMatch(privateMedia, /loadPrivateStorageObjectUrl|ownerUidFromPrivateDraftStoragePath/);
+  assert.equal((privateMedia.match(/getDownloadURL\(/g) ?? []).length, 1);
+  assert.equal((privateMedia.match(/downloadPrivateStorageBlob\(/g) ?? []).length, 1, 'un seul appelant : l’original explicite');
+  const originalSection = privateMedia.slice(privateMedia.indexOf('export const acquirePrivateMediaObjectUrl'), privateMedia.indexOf('export interface PrivatePresentationRequest'));
+  assert.match(originalSection, /downloadPrivateStorageBlob\(record\.cloudStoragePath\)/);
+  assert.deepEqual(usersOf(/getDownloadURL/), ['src/persistence/cloudDraft.ts', 'src/services/privateMedia.ts']);
+  assert.deepEqual(usersOf(/loadPrivateStorageObjectUrl/), [], 'aucun appelant ne subsiste');
+  // Point 5 : aucun rôle implicite — chaque PrivateMediaImage d'App.tsx, de ProjectedPublicBlock.tsx et du lecteur
+  // générique nomme son rôle (la grille « Médias de l’objet » est une grille de vignettes : 240 px, jamais l'original).
+  const generic = readSource('../src/components/GenericCartularyView.tsx');
+  assert.match(generic, /<PrivateMediaImage asset=\{asset\} alt=\{asset\.name\} role="thumbnail" sizes="240px" \/>/);
+  for (const [name, source] of [['App.tsx', app], ['ProjectedPublicBlock.tsx', projectedBlock], ['GenericCartularyView.tsx', generic]]) {
+    const tags = source.match(/<PrivateMediaImage\b[^]*?\/>/g) ?? [];
+    assert.ok(tags.length > 0, `${name} : aucune balise trouvée`);
+    for (const tag of tags) assert.match(tag, /\srole=(?:"thumbnail"|"stage")/, `${name} : rôle implicite dans ${tag.slice(0, 80)}`);
+  }
+  assert.match(projectedBlock, /className="media-library public-media-library">[^]*?<PrivateMediaImage[^>]*sizes="240px" role="thumbnail"/);
+  // Point 2 : thumbnailStatus du serveur (K3 étendu) lu par le Registre, trois libellés honnêtes.
+  const thumbnail = readSource('../src/domain/registryThumbnail.ts');
+  assert.match(thumbnail, /export type RegistryItemThumbnailStatus = 'ready' \| 'pending' \| 'failed' \| 'none';/);
+  assert.match(thumbnail, /failed: 'Copie de présentation non produite'/);
+  assert.match(readSource('../src/domain/projections.ts'), /thumbnailStatus\?: RegistryItemThumbnailStatus \| null;/);
+  const registryThumbnailServer = readSource('../scripts/lib/registry-thumbnail.mjs');
+  assert.match(registryThumbnailServer, /export const registryThumbnailStatusFor/);
+  for (const file of ['../scripts/lib/live-sync-command.mjs', '../scripts/lib/projection-command.mjs']) assert.match(readSource(file), /primaryBinary/);
+  // Point 1 : un seul prédicat « binaire vérifié », défini une fois et réutilisé par les miroirs.
+  const variants = readSource('../scripts/lib/presentation-variants.mjs');
+  assert.equal((variants.match(/export const privateBinaryIsVerified/g) ?? []).length, 1);
+  assert.doesNotMatch(variants, /verificationStatus !== 'accepted'/);
+  assert.match(readSource('../scripts/lib/private-upload-command.mjs'), /export \{ PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS, privateBinaryIsVerified \};/);
+});
+
+test('V3 tour 5 : dans renderWatchWebsiteBlock, toute image imprimée passe par ReportPrintImage — jamais une PrivateMediaImage nue sous forPrint', () => {
+  const app = readSource('../src/App.tsx');
+  const start = app.indexOf('const renderWatchWebsiteBlock = (blockId: PublishedBlockId, forPrint = false) => {');
+  assert.ok(start > 0, 'renderWatchWebsiteBlock introuvable');
+  const end = app.indexOf('\n  };\n', start);
+  assert.ok(end > start);
+  const renderer = app.slice(start, end);
+  // Chaque <PrivateMediaImage …/> du rendu des blocs publiés est la branche NON imprimée d'un ternaire
+  // `forPrint ? <ReportPrintImage …/> : <PrivateMediaImage …/>` : sous reportPreparation.active, une image sans variante
+  // (pending/failed) charge son original par ReportPrintImage au lieu de rendre .media-load-error (rapport non imprimable).
+  const tags = [...renderer.matchAll(/<PrivateMediaImage\b[^]*?\/>/g)];
+  assert.ok(tags.length >= 4, `balises attendues sur couverture, hero, bibliothèque et documentation : ${tags.length}`);
+  for (const match of tags) {
+    const before = renderer.slice(Math.max(0, match.index - 800), match.index);
+    assert.match(before, /(?<![!\w])forPrint\s*\?\s*<ReportPrintImage\b[^]*?\/>\s*:\s*$/, `PrivateMediaImage nue dans une branche imprimable : ${match[0].slice(0, 90)}`);
+  }
+  assert.doesNotMatch(renderer, /eager=\{forPrint\}/, 'une image imprimée ne se contente jamais de eager={forPrint}');
+  // Les trois blocs relevés au tour 5 (PUBLISHED_BLOCK_IDS, donc imprimés) : couverture, hero Médias, documentation.
+  const blockOf = (id) => {
+    const from = renderer.indexOf(`case '${id}':`);
+    assert.ok(from >= 0, `${id} introuvable`);
+    const to = renderer.indexOf("\n      case '", from + 1);
+    return renderer.slice(from, to === -1 ? undefined : to);
+  };
+  for (const id of ['cover-watch', 'media-hero', 'condition-documentation', 'media-library']) {
+    const block = blockOf(id);
+    assert.match(block, /(?<![!\w])forPrint\s*\?\s*<ReportPrintImage\b[^]*?language=\{language\}/, `${id} : ReportPrintImage absent de la branche imprimée`);
+    assert.equal((block.match(/<ReportPrintImage\b/g) ?? []).length, 1, `${id} : une seule image imprimée`);
+    assert.equal((block.match(/<PrivateMediaImage\b/g) ?? []).length, 1, `${id} : une seule image de lecture`);
+  }
+  assert.equal((renderer.match(/<ReportPrintImage\b/g) ?? []).length, 5, 'couverture, hero, séquence 360°, bibliothèque, documentation');
+  // Le rapport reste le seul lieu de ReportPrintImage dans App.tsx : le module de lecture (pages) ne l’emploie pas.
+  assert.equal((app.match(/<ReportPrintImage\b/g) ?? []).length, 5);
+});
+
+test('V3.4 : original à la demande dans la visionneuse, variantes seules dans Spin360', () => {
+  const modals = readSource('../src/features/cartulary/modals/CartularyModals.tsx');
+  const spin = readSource('../src/components/Spin360.tsx');
+  assert.match(modals, /role=\{showOriginal \? 'original' : 'stage'\}/);
+  assert.match(modals, /originalOnDemand = true,/);
+  assert.match(modals, /Afficher l’original/);
+  assert.doesNotMatch(spin, /acquirePrivateMediaObjectUrl/);
+  assert.match(spin, /acquirePrivatePresentationObjectUrl\(\{[^}]*role: 'stage'/);
+  assert.match(spin, /useMediaSource\(currentImage \|\| \{ url: posterImageUrl \}, true, \{ role: 'stage' \}\)/);
+});
+
+test('V3 K5 : Galerie et Catalogue lisent la vignette de l’item, sans lecture d’assets ni Storage au chargement', () => {
+  const galleryService = readSource('../src/services/registryGallery.ts');
+  const gallery = readSource('../src/features/registry/RegistryGallery.tsx');
+  const items = readSource('../src/features/registry/RegistryItems.tsx');
+  assert.doesNotMatch(galleryService, /\/assets\/IWC\/|loadPrivateStorageObjectUrl|isIwcCartulary/);
+  assert.doesNotMatch(galleryService, /\b(?:setDoc|updateDoc|runTransaction|addDoc|writeBatch)\(/);
+  assert.match(gallery, /Photos privées non accessibles avec ce compte/);
+  assert.doesNotMatch(gallery, /role="original"/);
+  assert.match(items, /data-thumbnail-state/);
+  const thumbnail = readSource('../src/domain/registryThumbnail.ts');
+  assert.match(thumbnail, /Vignette en préparation/);
+  assert.match(thumbnail, /Aucune vignette disponible/);
+  assert.doesNotMatch(thumbnail, /Accès restreint/);
+});

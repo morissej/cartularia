@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { RegistryDocument } from '../../domain/foundations.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
+import { normalizeRegistryThumbnail, REGISTRY_THUMBNAIL_STATE_LABELS, registryThumbnailSrc, registryThumbnailState } from '../../domain/registryThumbnail.ts';
 import { loadPublicPublicationStatuses, loadScopedRegistryItems, observeRegistryItems } from '../../services/projections.ts';
 import {
   buildRegistryComparisonHref,
@@ -54,6 +55,33 @@ const AssetIcon = ({ assetType }: { assetType: string }) => {
   if (assetType === 'art') return <Palette aria-hidden="true" />;
   if (assetType === 'real_estate') return <Landmark aria-hidden="true" />;
   return <Package aria-hidden="true" />;
+};
+
+/**
+ * Visuel de carte (contrat V3, K5) : vignette depuis `item.thumbnail` seulement (0 lecture d'assets, 0 Storage) ;
+ * sans vignette, icône du type et état honnête (« Vignette en préparation » pour une couverture image connue,
+ * « Aucune vignette disponible » pour une couverture vidéo, document ou de nature inconnue).
+ */
+const ItemVisual = ({ item }: { item: RegistryItemProjection }) => {
+  const label = ASSET_TYPE_LABELS[item.assetType] || labelFromIdentifier(item.assetType);
+  const thumbnail = normalizeRegistryThumbnail(item.thumbnail);
+  const thumbnailSrc = registryThumbnailSrc(item.thumbnail);
+  const state = registryThumbnailState(item);
+  if (state === 'ready') {
+    return (
+      <div className={`registry-item__visual registry-item__visual--${item.assetType} registry-item__visual--with-thumbnail`} data-thumbnail-state="ready">
+        {thumbnail && thumbnailSrc && <img className="registry-item__thumbnail" src={thumbnailSrc} alt="" width={thumbnail.width} height={thumbnail.height} loading="lazy" decoding="async" />}
+        <span className="registry-item__badge"><AssetIcon assetType={item.assetType} />{label}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`registry-item__visual registry-item__visual--${item.assetType}`} data-thumbnail-state={state}>
+      <AssetIcon assetType={item.assetType} />
+      <span>{label}</span>
+      {state !== 'none' && <small className="registry-item__thumbnail-state">{REGISTRY_THUMBNAIL_STATE_LABELS[state]}</small>}
+    </div>
+  );
 };
 
 const optionValues = (items: RegistryItemProjection[], field: 'assetType' | 'collectionId') =>
@@ -290,10 +318,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
         <div className={`registry-item-grid registry-item-grid--${view}`}>
           {filteredItems.map((item) => (
             <article className={`registry-item${comparisonIds.includes(item.cartularyId) ? ' registry-item--selected' : ''}`} key={item.cartularyId}>
-              <div className={`registry-item__visual registry-item__visual--${item.assetType}`}>
-                <AssetIcon assetType={item.assetType} />
-                <span>{ASSET_TYPE_LABELS[item.assetType] || labelFromIdentifier(item.assetType)}</span>
-              </div>
+              <ItemVisual item={item} />
               <div className="registry-item__body">
                 <div className="registry-item__context">
                   <span><Building2 aria-hidden="true" />{collectionName(item.collectionId)}</span>

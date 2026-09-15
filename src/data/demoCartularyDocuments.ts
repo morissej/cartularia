@@ -2,6 +2,7 @@ import type { RegistryAccessProjection } from '../domain/access.ts';
 import { CARTULARY_MODEL_VERSION, type CartularyEnvelope, type CartularySectionDocument, type ProvenancedValue } from '../domain/cartulary.ts';
 import type { CartularyReminderDocument, FollowUpCategory, FollowUpSourceStatus } from '../domain/followUp.ts';
 import type { RegistryItemProjection } from '../domain/projections.ts';
+import { presentationBundleThumbnailFor } from '../media/presentationDerivatives.ts';
 import { DEMO_ACCOUNT, buildDemoCartularyAssets, demoCartularyContentById, type DemoCartularyDefinition } from './demoCartularies.ts';
 
 export const DEMO_ASSERTED_AT = '2026-08-22T08:00:00.000Z';
@@ -251,10 +252,35 @@ export const buildDemoCartularyEnvelope = (
   deletedAt: null,
 });
 
+/**
+ * Vignette de projection Registre (contrat unique K3, kind 'bundle') : la plus petite variante WebP
+ * du catalogue statique pour la photo principale. Lue par la Galerie et le Catalogue sans aucune
+ * lecture d'actif ni de Storage ; posée par le seed complet et par la migration v3 (--data-only).
+ */
+export interface DemoRegistryItemThumbnail {
+  kind: 'bundle';
+  path: string;
+  width: number;
+  height: number;
+  assetId: string;
+  sha256: string;
+}
+
+export const buildDemoRegistryThumbnail = (cartulary: DemoCartularyDefinition): DemoRegistryItemThumbnail => {
+  const primary = buildDemoCartularyAssets(cartulary).find((asset) => asset.tags?.includes('main-photo'));
+  if (!primary) throw new Error(`Photo principale absente pour ${cartulary.id}.`);
+  const thumbnail = presentationBundleThumbnailFor(primary.url);
+  if (!thumbnail) throw new Error(`Dérivé statique absent du catalogue pour ${primary.url} : lancez node scripts/generate-presentation-derivatives.mjs.`);
+  // Contrat K3 : l’empreinte d’une vignette d’item est préfixée (`sha256:<64 hex>`), le catalogue généré la porte nue.
+  return { kind: 'bundle', path: thumbnail.path, width: thumbnail.width, height: thumbnail.height, assetId: primary.id, sha256: `sha256:${thumbnail.sha256}` };
+};
+
+export type DemoRegistryItemDocument = RegistryItemProjection & { thumbnail: DemoRegistryItemThumbnail };
+
 export const buildDemoRegistryItem = (
   cartulary: DemoCartularyDefinition,
   contentHash: string,
-): RegistryItemProjection => ({
+): DemoRegistryItemDocument => ({
   cartularyId: cartulary.id,
   organizationId: DEMO_ACCOUNT.organizationId,
   registryId: DEMO_ACCOUNT.registryId,
@@ -282,6 +308,7 @@ export const buildDemoRegistryItem = (
   sourceRevision: 1,
   projectionStatus: 'active',
   contentHash,
+  thumbnail: buildDemoRegistryThumbnail(cartulary),
 });
 
 /**

@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync, statSync } from 'node:fs';
 import test from 'node:test';
+import { validRegistryThumbnail } from '../scripts/lib/presentation-variants.mjs';
+import { normalizeRegistryThumbnail } from '../src/domain/registryThumbnail.ts';
+import sharp from 'sharp';
 import {
-  DEMO_REVIEWED_AT, buildDemoAccessDocuments, buildDemoAssetDocuments, buildDemoCartularyEnvelope, buildDemoCartularySections, buildDemoRegistryItem, buildDemoReminderDocuments, demoValuationAmounts,
+  DEMO_REVIEWED_AT, buildDemoAccessDocuments, buildDemoAssetDocuments, buildDemoCartularyEnvelope, buildDemoCartularySections, buildDemoRegistryItem, buildDemoRegistryThumbnail, buildDemoReminderDocuments, demoValuationAmounts,
 } from '../src/data/demoCartularyDocuments.ts';
+import { presentationImageSetFor } from '../src/media/presentationDerivatives.ts';
 import { buildDemoAccessProjections } from '../scripts/lib/demo-data-repair.mjs';
 import { buildDemoCartularyAssets, DEMO_ACCOUNT, DEMO_CARTULARIES, DEMO_SUBMARINER_CARTULARY_ID, DEMO_SUBMARINER_PUBLIC_CODE, demoCartularyContentById } from '../src/data/demoCartularies.ts';
 import { buildCartularyHref } from '../src/features/registry/registryCatalog.ts';
@@ -32,6 +37,53 @@ test('la Galerie et le Registre démo utilisent les médias et montants du Cartu
   assert.equal(DEMO_ACCOUNT.collectionName, 'Les cinq icônes');
   assert.match(seedScript, /name: DEMO_ACCOUNT\.collectionName/);
   assert.match(seedScript, /description: DEMO_ACCOUNT\.collectionDescription/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// V3 — vignettes de bundle (contrat unique K3/K8) : chaque projection démo porte `thumbnail`
+// kind 'bundle', entrée exacte du catalogue statique, sans lecture d'actif ni de Storage.
+test('chaque projection démo porte une vignette de bundle issue du catalogue (kind bundle, ≤ 240 px, empreinte du fichier servi)', async () => {
+  const THUMBNAIL_KEYS = ['kind', 'path', 'width', 'height', 'assetId', 'sha256'];
+  for (const cartulary of DEMO_CARTULARIES) {
+    const item = buildDemoRegistryItem(cartulary, 'sha256:test');
+    const thumbnail = item.thumbnail;
+    assert.deepEqual(Object.keys(thumbnail).sort(), [...THUMBNAIL_KEYS].sort());
+    assert.equal(thumbnail.kind, 'bundle');
+    assert.equal(thumbnail.assetId, item.primaryAssetId);
+    assert.match(thumbnail.path, new RegExp(`^/assets/demo-watches/derivatives/${cartulary.mediaSlug}/[a-z0-9-]+\\.240\\.webp$`));
+    assert.ok(thumbnail.width <= 240 && thumbnail.height <= 240 && thumbnail.width > 0 && thumbnail.height > 0);
+    const file = new URL(`../public${thumbnail.path}`, import.meta.url);
+    const bytes = readFileSync(file);
+    assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, thumbnail.sha256, `${thumbnail.path} : empreinte préfixée du fichier servi (contrat K3)`);
+    assert.ok(validRegistryThumbnail(thumbnail), `${thumbnail.path} : vignette d’item valide côté serveur`);
+    assert.ok(normalizeRegistryThumbnail(thumbnail), `${thumbnail.path} : vignette d’item acceptée côté client`);
+    assert.ok(statSync(file).size < 12_000, `${thumbnail.path} : vignette légère`);
+    const metadata = await sharp(bytes).metadata();
+    assert.deepEqual([metadata.format, metadata.width, metadata.height], ['webp', thumbnail.width, thumbnail.height]);
+    assert.deepEqual(buildDemoRegistryThumbnail(cartulary), thumbnail, 'vignette déterministe');
+    // Rien d'autre que des chemins de fichiers : ni marque ni identifiant d'objet hors du chemin.
+    assert.doesNotMatch(JSON.stringify({ ...thumbnail, path: '', assetId: '' }), /demo|rolex|breguet|tudor|audemars|jaeger/i);
+  }
+  // Le seed complet écrit la projection avec sa vignette ; la migration v3 la pose sur l'existant.
+  assert.match(seedScript, /\.\.\.buildDemoRegistryItem\(cartulary, contentDigest\)/);
+});
+
+test('toutes les images de démonstration sont cataloguées : jamais un JPEG original pour une vignette', () => {
+  for (const cartulary of DEMO_CARTULARIES) {
+    for (const asset of buildDemoCartularyAssets(cartulary)) {
+      if (asset.type === 'image') {
+        const picture = presentationImageSetFor(asset.url);
+        assert.ok(picture, `${asset.url} hors catalogue`);
+        assert.ok(picture.webpSrcSet.includes('.240.webp 240w'), asset.url);
+        assert.ok(picture.width >= 1024 && picture.height >= 1024, `${asset.url} : dimensions intrinsèques`);
+        if (asset.thumbnailUrl) assert.ok(presentationImageSetFor(asset.thumbnailUrl), `${asset.thumbnailUrl} hors catalogue`);
+      }
+      if (asset.type === 'video') assert.ok(presentationImageSetFor(asset.posterUrl), `${asset.posterUrl} : affiche vidéo hors catalogue`);
+    }
+    for (const document of buildDemoAssetDocuments(cartulary)) {
+      if (document.mediaKind === 'image') assert.ok(presentationImageSetFor(document.presentationDerivative.url), `${document.presentationDerivative.url} : Galerie sans dérivé`);
+    }
+  }
 });
 
 test('le seed complet garde sa double garde : options analysées en amont puis refus explicite hors émulateurs', () => {

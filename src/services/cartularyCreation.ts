@@ -16,6 +16,7 @@ import {
   SUPPORTED_CREATION_PROFILES,
   buildCreationSpecificationGroups,
   slugifyCartularyLabel,
+  summarizeCreationMedia,
   type CartularyCreationProfile,
   type SupportedCreationAssetType,
   type CartularyCreationMediaAsset,
@@ -175,7 +176,9 @@ export const uploadVerifiedCartularyMedia = async ({ user, cartularyId, file, in
     category: inspection.kind === 'document' ? 'documentation' : 'ensemble', visibility: 'Secret', fileSize: fileSizeLabel(file.size),
     derivativeStatus: verification.derivativeStatus,
     capturedAt: verification.capturedAt || (Number.isFinite(file.lastModified) && file.lastModified > 0 ? new Date(file.lastModified).toISOString() : new Date().toISOString()),
-    timestampSource: verification.timestampSource || 'file.lastModified' };
+    timestampSource: verification.timestampSource || 'file.lastModified',
+    // Référence figée des variantes v3 (K4) : le lecteur les affiche sans relire le manifeste ; jamais l'original.
+    ...(verification.privatePresentation ? { privatePresentation: verification.privatePresentation } : {}) };
 };
 
 export const createCartulary = async ({
@@ -289,7 +292,7 @@ export const createCartulary = async ({
     updatedAt: serverTimestamp(),
   });
   emit('processing', null);
-  return { cartularyId, requestId, publicCode, uploadedFileCount: allFiles.length, uploadedBytes: totalBytes };
+  return { cartularyId, requestId, publicCode, uploadedFileCount: allFiles.length, uploadedBytes: totalBytes, media: summarizeCreationMedia(mediaAssets) };
 };
 
 /** Compatibility for callers explicitly creating a watch. */

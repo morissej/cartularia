@@ -67,7 +67,7 @@ export function MediaCarousel({
           ) : current.type === 'video' ? (
             <MediaVideo asset={current} language={language} controls={false} muted />
           ) : (
-            <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} sizes="(max-width: 720px) 100vw, 900px" eager />
+            <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} sizes="(max-width: 720px) 100vw, 900px" eager role="stage" />
           )}
           {current.type === 'video' && (
             <span className="media-carousel__play" aria-hidden="true">
@@ -140,8 +140,9 @@ export function MediaCarousel({
                   : asset.type === 'video'
                     ? videoPoster
                       ? <PresentationImage src={videoPoster} alt="" sizes="70px" loading="lazy" decoding="async" />
-                      : <span className="media-carousel__thumb-placeholder" aria-hidden="true" />
-                    : <PrivateMediaImage asset={asset} sourceOverride={thumbnail} alt="" sizes="70px" />}
+                      // Vidéo sans dérivé (aucun transcodage en production) : état honnête, jamais « Accès restreint » (P-D3).
+                      : <span className="media-carousel__thumb-placeholder" role="img" aria-label={language === 'FR' ? 'Aucune vignette disponible' : 'No thumbnail available'} title={language === 'FR' ? 'Aucune vignette disponible' : 'No thumbnail available'} />
+                    : <PrivateMediaImage asset={asset} sourceOverride={thumbnail} alt="" sizes="70px" role="thumbnail" />}
                 {asset.type === 'video' && <Play size={11} fill="currentColor" aria-hidden="true" />}
               </button>
             );

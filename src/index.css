@@ -3856,3 +3856,16 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .public-media-library { grid-template-columns: minmax(0, 1fr); }
   .public-media-downloads > div { align-items: start; }
 }
+
+/* V3 — dérivés de présentation (contrat K4/K6) : états honnêtes « Aperçu en préparation » / « Aucune vignette disponible »,
+   vidéo et original privés à la demande, séquence 360° en place. Aucune règle propre à la démonstration. */
+.media-derivative-pending { color: var(--muted); }
+.media-derivative-pending button { color: var(--ink); }
+.media-modal__visual > span.media-load-error { position: static; display: flex; width: min(100%, 460px); height: auto; min-height: 120px; background: var(--fill); color: var(--ink); }
+.media-load-prompt--poster { position: relative; display: grid; width: 100%; height: 100%; min-height: 200px; padding: 0; place-items: center; overflow: hidden; background: #111; color: var(--sheet); }
+.media-load-prompt--poster picture,
+.media-load-prompt--poster img { width: 100%; height: 100%; object-fit: contain; }
+.media-load-prompt--poster p { margin: 0; padding: var(--s4); color: var(--sheet); font: 13px/1.5 var(--font-sans); text-align: center; }
+.media-modal__original { align-self: start; }
+.spin-sequence { width: 100%; }
+.spin-sequence > .media-empty { min-height: 260px; display: grid; place-items: center; }

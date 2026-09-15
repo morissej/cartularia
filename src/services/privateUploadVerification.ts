@@ -1,5 +1,10 @@
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.ts';
+import {
+  presentationFromBinaryRecord,
+  restrictPresentationToIdentity,
+  type PrivatePresentation,
+} from '../domain/presentationVariants.ts';
 
 export interface PrivateUploadVerificationResult {
   detectedMimeType: string;
@@ -7,7 +12,28 @@ export interface PrivateUploadVerificationResult {
   capturedAt: string | null;
   timestampSource: 'exif.DateTimeOriginal' | 'exif.CreateDate' | null;
   derivativeStatus: 'ready' | 'pending' | 'not-required';
+  /** Version serveur de la vérification (`private-upload@x.y.z`), informative. */
+  verificationVersion: string | null;
+  /**
+   * Variantes de présentation privées (contrat V3, K2/K4) lues dans le manifeste accepté :
+   * `presentationDerivative.variants` restreintes à ce propriétaire/objet/binaire, sans la vignette inline
+   * (elle vit dans les miroirs Admin : assets.privatePresentation et items.thumbnail, K3).
+   * `null` quand le serveur n'en a produit aucune (vidéo, PDF, échec sharp) : l'aperçu reste « en préparation ».
+   */
+  privatePresentation: PrivatePresentation | null;
 }
+
+/**
+ * Référence figée posée dans `cartularia-media-assets-v3` dès la création : variantes seulement, jamais la
+ * vignette inline (≤ 24 000 caractères par asset, inutile au client et coûteuse dans l'état du brouillon).
+ */
+export const presentationReferenceFromManifest = (
+  data: unknown,
+  { uid, cartularyId, binaryId }: { uid: string; cartularyId: string; binaryId: string },
+): PrivatePresentation | null => {
+  const presentation = restrictPresentationToIdentity(presentationFromBinaryRecord(data, binaryId), uid, cartularyId, binaryId);
+  return presentation ? { ...presentation, thumbnail: null } : null;
+};
 
 export const waitForPrivateUploadVerification = ({
   uid,
@@ -56,6 +82,8 @@ export const waitForPrivateUploadVerification = ({
       derivativeStatus: data.derivativeStatus === 'ready'
         ? 'ready'
         : data.derivativeStatus === 'pending_transcode' ? 'pending' : 'not-required',
+      verificationVersion: typeof data.verificationVersion === 'string' ? data.verificationVersion : null,
+      privatePresentation: presentationReferenceFromManifest(data, { uid, cartularyId, binaryId }),
     });
   }, (error) => finish(undefined, error));
 });

@@ -7,6 +7,9 @@ import { buildIwcImportBundle, IWC_CARTULARY_ID } from '../src/migrations/iwcImp
 import { importCartularyBundle } from '../scripts/lib/import-cartulary-command.mjs';
 import { processCartularySyncRequest } from '../scripts/lib/live-sync-command.mjs';
 import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
+import { sha256Digest } from '../scripts/lib/canonical-json.mjs';
+import { presentationVariantPath } from '../scripts/lib/presentation-variants.mjs';
+import { registryItemAuditText } from '../scripts/lib/registry-thumbnail.mjs';
 
 const projectId = 'cartularia-live-sync-test';
 const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
@@ -42,6 +45,19 @@ const seedFoundations = async () => {
     occurredAt: '2026-08-16T08:01:00.000Z',
   });
 };
+
+// Variantes v3 du binaire vérifié (contrat K2) : chemins du propriétaire wave1-owner, vignette inline issue de la variante 240.
+const LIVE_THUMBNAIL_DATA_URL = `data:image/webp;base64,${Buffer.from('live-webp-240-fixture').toString('base64')}`;
+const liveVariant = (width, height) => ({
+  width, height, storagePath: presentationVariantPath('wave1-owner', IWC_CARTULARY_ID, 'media-binary-live-0001', width),
+  sha256: `sha256:${String(width).padStart(4, '0').repeat(16)}`, size: 1_000 + width, mimeType: 'image/webp',
+});
+const livePresentationDerivative = () => ({
+  storagePath: `private-derivatives/wave1-owner/${IWC_CARTULARY_ID}/media-binary-live-0001/presentation-v2.webp`, mimeType: 'image/webp',
+  variantsVersion: 'presentation-v3', variantsFailure: null, variants: [liveVariant(240, 160), liveVariant(480, 320)],
+  thumbnail: { dataUrl: LIVE_THUMBNAIL_DATA_URL, width: 240, height: 160, sha256: liveVariant(240, 160).sha256 },
+});
+const expectedLiveThumbnail = () => ({ kind: 'inline', dataUrl: LIVE_THUMBNAIL_DATA_URL, width: 240, height: 160, assetId: 'asset-live-photo', sha256: liveVariant(240, 160).sha256 });
 
 const writeDraftAndRequest = async (requestId) => {
   const draftPath = `privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}`;
@@ -82,7 +98,8 @@ const writeDraftAndRequest = async (requestId) => {
       deleted: false, revision: 1, fileName: 'live.jpg', mimeType: 'image/jpeg', size: 128,
       sha256: `sha256:${'a'.repeat(64)}`, kind: 'media',
       storagePath: `private-drafts/wave1-owner/${IWC_CARTULARY_ID}/media-binary-live-0001/${'a'.repeat(64)}/original`,
-      clientUpdatedAt: 11, uploadStatus: 'ready',
+      clientUpdatedAt: 11, uploadStatus: 'ready', verificationStatus: 'accepted',
+      presentationDerivative: livePresentationDerivative(),
     }),
     firestore.doc(`${draftPath}/binaries/owner-document-live-0001`).set({
       ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, binaryId: 'owner-document-live-0001',
@@ -162,6 +179,18 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
   assert.equal(reminder.data().title, 'Renouveler assurance');
   assert.equal(asset.data().processingState, 'ready');
   assert.match(asset.data().storagePath, /^private-drafts\/wave1-owner\//);
+  // Contrat K3 : miroir des variantes sur l'asset, vignette inline sur l'item (hors contentHash), sans mot interdit.
+  assert.equal(asset.data().privatePresentation.version, 'presentation-v3');
+  assert.equal(asset.data().privatePresentation.binaryId, 'media-binary-live-0001');
+  assert.deepEqual(asset.data().privatePresentation.variants.map((variant) => variant.storagePath), [liveVariant(240, 160).storagePath, liveVariant(480, 320).storagePath]);
+  assert.deepEqual(item.data().thumbnail, expectedLiveThumbnail());
+  assert.equal(item.data().primaryMediaKind, 'image');
+  assert.equal(item.data().thumbnailStatus, 'ready');
+  const { thumbnail: _thumbnail, primaryMediaKind: _kind, thumbnailStatus: _status, contentHash, generatedAt: _generatedAt, updatedAt: _updatedAt, ...projection } = item.data();
+  assert.equal(contentHash, sha256Digest(projection), 'thumbnail, primaryMediaKind et thumbnailStatus hors contentHash');
+  const itemText = registryItemAuditText(item.data()).toLowerCase();
+  for (const forbidden of ['serial', 'owner', 'acquisition', 'storage', 'address']) assert.equal(itemText.includes(forbidden), false, forbidden);
+  assert.equal(JSON.stringify(item.data()).includes('private-derivatives'), false);
   assert.equal(personalState.exists, false);
   assert.equal(ownerDocument.exists, false);
   const synchronizedStateKeys = (await firestore.collection(`cartularies/${IWC_CARTULARY_ID}/liveState`).get()).docs.map((document) => document.id);
@@ -185,6 +214,29 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
   const replay = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID });
   assert.equal(replay.outcome, 'no_change');
   assert.equal((await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data().revision, 2);
+});
+
+test('une resynchronisation conserve le miroir et la vignette quand le manifeste ne porte plus de variantes', async () => {
+  await writeDraftAndRequest('sync_test_live_0000000000000030');
+  await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' });
+  const draftPath = `privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}`;
+  const itemRef = firestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`);
+  const assetRef = firestore.doc(`cartularies/${IWC_CARTULARY_ID}/assets/asset-live-photo`);
+  const mirrorBefore = (await assetRef.get()).data().privatePresentation;
+  // Manifeste ramené à l'état antérieur à V3 (copie v2 seule) : le miroir et la vignette déjà posés survivent (K3).
+  await firestore.doc(`${draftPath}/binaries/media-binary-live-0001`).update({ presentationDerivative: { storagePath: `private-derivatives/wave1-owner/${IWC_CARTULARY_ID}/media-binary-live-0001/presentation-v2.webp`, mimeType: 'image/webp' } });
+  await firestore.doc(`${draftPath}/state/cartularia-user-alias`).set({ key: 'cartularia-user-alias', value: JSON.stringify('Alias raccordé'), deleted: false, revision: 1, clientUpdatedAt: 30 });
+  await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
+    requestDocumentId: IWC_CARTULARY_ID, requestId: 'sync_test_live_0000000000000031', ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'manual_retry', status: 'pending',
+  });
+  const result = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:03:00.000Z' });
+  assert.equal(result.outcome, 'updated');
+  const item = (await itemRef.get()).data();
+  assert.equal(item.userAlias, 'Alias raccordé');
+  assert.deepEqual(item.thumbnail, expectedLiveThumbnail());
+  assert.equal(item.primaryMediaKind, 'image');
+  assert.equal(item.thumbnailStatus, 'ready');
+  assert.deepEqual((await assetRef.get()).data().privatePresentation, mirrorBefore);
 });
 
 test('deux exécutions concurrentes ne produisent qu’une seule révision utile', async () => {

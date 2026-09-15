@@ -7,6 +7,7 @@ import { processCartularyCreateRequest } from '../scripts/lib/create-cartulary-c
 import { processCartularySyncRequest } from '../scripts/lib/live-sync-command.mjs';
 import { CAR_SCHEMA_FIELDS } from '../src/schema/carSchema.ts';
 import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
+import { presentationVariantPath } from '../scripts/lib/presentation-variants.mjs';
 
 const projectId = 'cartularia-create-test';
 const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
@@ -15,6 +16,18 @@ const ownerUid = 'wave1-owner';
 const cartularyId = 'cart_rolex_gmt_master_test0001';
 const requestId = 'create_0123456789abcdef0123456789ab';
 const draftPath = `privateDrafts/${ownerUid}/cartularies/${cartularyId}`;
+// Variantes v3 du binaire de couverture (contrat K2) : posées avant la création, recopiées sur l'asset et l'item (K3).
+const COVER_THUMBNAIL_DATA_URL = `data:image/webp;base64,${Buffer.from('create-webp-240-fixture').toString('base64')}`;
+const coverVariant = (width, height) => ({
+  width, height, storagePath: presentationVariantPath(ownerUid, cartularyId, 'bin_rolex_cover_0000000001', width),
+  sha256: `sha256:${String(width).padStart(4, '0').repeat(16)}`, size: 2_000 + width, mimeType: 'image/webp',
+});
+const coverPresentationDerivative = () => ({
+  storagePath: `private-derivatives/${ownerUid}/${cartularyId}/bin_rolex_cover_0000000001/presentation-v2.webp`, mimeType: 'image/webp',
+  variantsVersion: 'presentation-v3', variantsFailure: null, variants: [coverVariant(240, 160), coverVariant(480, 320), coverVariant(768, 512)],
+  thumbnail: { dataUrl: COVER_THUMBNAIL_DATA_URL, width: 240, height: 160, sha256: coverVariant(240, 160).sha256 },
+});
+const expectedCoverThumbnail = () => ({ kind: 'inline', dataUrl: COVER_THUMBNAIL_DATA_URL, width: 240, height: 160, assetId: 'asset_rolex_cover', sha256: coverVariant(240, 160).sha256 });
 
 let testEnvironment;
 let adminApp;
@@ -102,7 +115,8 @@ const seed = async () => {
       fileName: 'L1210082.jpg', mimeType: 'image/jpeg', size: 3456789,
       sha256: `sha256:${'a'.repeat(64)}`, kind: 'media',
       storagePath: `private-drafts/${ownerUid}/${cartularyId}/bin_rolex_cover_0000000001/${'a'.repeat(64)}/original`,
-      uploadStatus: 'ready', clientUpdatedAt: 10,
+      uploadStatus: 'ready', clientUpdatedAt: 10, verificationStatus: 'accepted',
+      presentationDerivative: coverPresentationDerivative(),
     }),
     firestore.doc(`cartularyCreateRequests/${cartularyId}`).set({
       requestDocumentId: cartularyId,
@@ -163,6 +177,14 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
   assert.equal(projectionAfterCreate.data().userAlias, null);
   assert.equal(projectionAfterCreate.data().objectCode, 'ROL-TEST01');
   assert.equal('storageCodeNames' in projectionAfterCreate.data(), false);
+  // Contrat K3 dès la création : miroir des variantes sur l'asset, vignette inline sur l'item de la projection minimale.
+  assert.equal(assetAfterCreate.data().privatePresentation.version, 'presentation-v3');
+  assert.equal(assetAfterCreate.data().privatePresentation.binaryId, 'bin_rolex_cover_0000000001');
+  assert.equal(assetAfterCreate.data().privatePresentation.variants.length, 3);
+  assert.deepEqual(projectionAfterCreate.data().thumbnail, expectedCoverThumbnail());
+  assert.equal(projectionAfterCreate.data().primaryMediaKind, 'image');
+  assert.equal(projectionAfterCreate.data().thumbnailStatus, 'ready');
+  assert.equal(JSON.stringify(projectionAfterCreate.data()).includes(ownerUid), false);
   assert.equal(requestAfterCreate.data().status, 'processed');
   assert.equal(syncRequest.data().status, 'pending');
 
@@ -185,6 +207,10 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
   assert.equal(asset.data().processingState, 'ready');
   assert.match(asset.data().storagePath, /^private-drafts\/wave1-owner\//);
   assert.equal(registry.data().itemCount, 1);
+  assert.equal(asset.data().privatePresentation.binaryId, 'bin_rolex_cover_0000000001');
+  assert.deepEqual(projection.data().thumbnail, expectedCoverThumbnail());
+  assert.equal(projection.data().primaryMediaKind, 'image');
+  assert.equal(projection.data().thumbnailStatus, 'ready');
 });
 
 test('une demande déjà traitée est ignorée sans créer de doublon', async () => {
@@ -276,6 +302,12 @@ test('enrichissement média explicite : ajout vérifié, autorisation, retrait e
   await syncMutation({ changes: [{ id: 'asset_added', binaryId: 'bin_added_verified', name: 'Nouvelle photo', tags: ['main-photo'] }], removeIds: [] }, 'sync_media_add_001');
   assert.equal((await rootRef.collection('assets').doc('asset_added').get()).data().visibility, 'secret');
   assert.equal((await rootRef.get()).data().primaryAssetId, 'asset_added');
+  // Nouvelle couverture sans variantes : aucune vignette héritée de l'ancienne (jamais de faux état), nature connue.
+  const itemAfterAdd = (await firestore.doc(`registries/reg_collection_privee/items/${cartularyId}`).get()).data();
+  assert.equal(itemAfterAdd.thumbnail, null);
+  assert.equal(itemAfterAdd.primaryMediaKind, 'image');
+  assert.equal(itemAfterAdd.thumbnailStatus, 'pending', 'K3 étendu : couverture image sans variante, sans échec consigné');
+  assert.equal((await rootRef.collection('assets').doc('asset_added').get()).data().privatePresentation, null);
   assert.equal((await rootRef.collection('assets').doc('asset_rolex_cover').get()).data().projectionStatus, 'active');
   await syncMutation({ changes: [{ id: 'asset_added', visibility: 'Tous' }], confirmedPublicIds: ['asset_added'], removeIds: [] }, 'sync_media_authorize_002');
   const authorized = (await rootRef.collection('assets').doc('asset_added').get()).data();

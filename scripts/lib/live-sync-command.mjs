@@ -6,6 +6,7 @@ import { privateBinaryIsVerified } from './private-upload-command.mjs';
 import { loadGenericSectionPatches } from './generic-sections-command.mjs';
 import { assertNewCollectionAssignments } from './collection-command.mjs';
 import { applyGenericMediaChanges } from './generic-media-command.mjs';
+import { assetPrivatePresentationFor, registryItemPresentationFields } from './registry-thumbnail.mjs';
 
 const SYNC_RATE_LIMIT_PER_HOUR = 120;
 const ONE_HOUR_MS = 60 * 60 * 1_000;
@@ -142,7 +143,7 @@ const loadDraft = async (firestore, ownerUid, cartularyId) => {
   return { draftRef, states, binaries, digest };
 };
 
-const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organizationId }) => {
+const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organizationId, ownerUid }) => {
   const trustedBinary = privateBinaryIsVerified(binary) ? binary : null;
   const storagePath = trustedBinary && typeof trustedBinary.storagePath === 'string'
     ? trustedBinary.storagePath
@@ -150,6 +151,13 @@ const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organiz
   const sha256 = trustedBinary && /^sha256:[a-f0-9]{64}$/.test(trustedBinary.sha256 || '')
     ? trustedBinary.sha256
     : existing?.sha256 || null;
+  const binaryId = typeof asset.binaryId === 'string' ? asset.binaryId : existing?.binaryId || null;
+  // Miroir des variantes v3 (contrat K3) : manifeste vérifié du binaire, sinon miroir existant du même binaire.
+  const privatePresentation = assetPrivatePresentationFor({
+    binary: trustedBinary,
+    identity: { uid: ownerUid, cartularyId, binaryId },
+    existing,
+  });
   return {
     id: asset.id,
     cartularyId,
@@ -161,7 +169,8 @@ const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organiz
     sizeBytes: Number.isInteger(trustedBinary?.size) ? trustedBinary.size : existing?.sizeBytes || null,
     sha256,
     storagePath,
-    binaryId: typeof asset.binaryId === 'string' ? asset.binaryId : existing?.binaryId || null,
+    binaryId,
+    privatePresentation,
     capturedAt: typeof asset.capturedAt === 'string' ? asset.capturedAt : null,
     timestampSource: typeof asset.timestampSource === 'string' ? asset.timestampSource : null,
     tags: Array.isArray(asset.tags) ? asset.tags.filter((tag) => typeof tag === 'string') : [],
@@ -314,7 +323,12 @@ export const processCartularySyncRequest = async ({
     digest: draft.digest,
     cartularyId,
     organizationId: rootData.organizationId,
+    ownerUid,
   }));
+  // Asset primaire tel qu'il sera écrit (ou tel qu'il existe quand les médias ne changent pas) : source de la vignette.
+  const primaryAsset = primaryAssetId
+    ? assetPatches.find((patch) => patch.id === primaryAssetId) ?? existingAssets.get(primaryAssetId) ?? null
+    : null;
 
   const registryRef = firestore.doc(`registries/${rootData.registryId}`);
   const registryItemRef = registryRef.collection('items').doc(cartularyId);
@@ -455,8 +469,17 @@ export const processCartularySyncRequest = async ({
     for (const [reminderId, existing] of existingReminders) {
       if (Array.isArray(followUps) && existing.liveSyncManaged === true && !activeReminderIds.has(reminderId)) transaction.delete(rootRef.collection('reminders').doc(reminderId));
     }
+    // Vignette, nature et état de la couverture : frères de la projection, hors contentHash, jamais effacés par une
+    // réécriture (K3 étendu) ; thumbnailStatus lit le manifeste du binaire primaire (échec définitif → 'failed').
+    const presentationFields = registryItemPresentationFields({
+      primaryAssetId,
+      primaryAsset,
+      existingItem: registryItem.exists ? registryItem.data() : null,
+      primaryBinary: typeof primaryAsset?.binaryId === 'string' ? draft.binaries.get(primaryAsset.binaryId) ?? null : null,
+    });
     transaction.set(registryItemRef, {
       ...projection,
+      ...presentationFields,
       contentHash,
       generatedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),

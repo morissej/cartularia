@@ -314,6 +314,9 @@ export const verifyPrivateDraftUpload = onObjectFinalized({
   memory: '1GiB',
   timeoutSeconds: 540,
   maxInstances: 2,
+  // Variantes v3 + copie principale décodées par sharp dans la même instance (mesure locale 24 MP : pic 326 Mo) :
+  // un original à la fois par instance, jamais de multiplication du pic par la concurrence par défaut.
+  concurrency: 1,
   retry: false,
 }, async (event) => {
   const result = await processPrivateDraftUpload({ firestore, storage, object: event.data });

@@ -222,6 +222,43 @@ test('un dérivé nettoyé est lisible par son seul propriétaire et jamais insc
   await assertFails(ownerStorage.ref(derivativePath).putString('faux dérivé'));
 });
 
+test('une variante v3 avec extension est lisible par son propriétaire seulement si derivativeId == nom de fichier complet (C1/G7)', async () => {
+  // Contrat V3 : private-derivatives/{uid}/{cartularyId}/{binaryId}/presentation-v3-480.webp, métadonnée derivativeId = 'presentation-v3-480.webp'.
+  const variantPath = 'private-derivatives/owner-a/cart-a/draft-binary-a1/presentation-v3-480.webp';
+  const mismatchedPath = 'private-derivatives/owner-a/cart-a/draft-binary-a1/presentation-v2.webp';
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await context.storage(bucketUrl).ref(variantPath).putString('variante v3', 'raw', {
+      contentType: 'image/webp',
+      customMetadata: {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        binaryId: 'draft-binary-a1',
+        derivativeId: 'presentation-v3-480.webp',
+        metadataStripped: 'true',
+        firebaseStorageDownloadTokens: '',
+      },
+    });
+    // Défaut historique : presentation-v2.webp écrit avec derivativeId 'presentation-v2' (sans extension) → illisible sous ces règles.
+    await context.storage(bucketUrl).ref(mismatchedPath).putString('copie v2', 'raw', {
+      contentType: 'image/webp',
+      customMetadata: {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        binaryId: 'draft-binary-a1',
+        derivativeId: 'presentation-v2',
+        metadataStripped: 'true',
+      },
+    });
+  });
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  const outsiderStorage = testEnvironment.authenticatedContext('owner-b').storage(bucketUrl);
+  await assertSucceeds(ownerStorage.ref(variantPath).getMetadata());
+  await assertFails(outsiderStorage.ref(variantPath).getMetadata());
+  await assertFails(testEnvironment.unauthenticatedContext().storage(bucketUrl).ref(variantPath).getMetadata());
+  await assertFails(ownerStorage.ref(mismatchedPath).getMetadata());
+  await assertFails(ownerStorage.ref(variantPath).putString('faux dérivé'));
+});
+
 test('un autre compte et un visiteur ne peuvent ni lire ni écrire le brouillon privé', async () => {
   const outsiderStorage = testEnvironment.authenticatedContext('owner-b').storage(bucketUrl);
   const anonymousStorage = testEnvironment.unauthenticatedContext().storage(bucketUrl);

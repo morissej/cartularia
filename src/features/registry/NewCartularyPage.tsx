@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type { OrganizationDocument, RegistryDocument } from '../../domain/foundations.ts';
 import { activeRegistryCollections, defaultActiveCollectionId } from '../../domain/collections.ts';
-import { SUPPORTED_CREATION_PROFILES, resumeOrCreateCartulary, type SupportedCreationAssetType, type CartularyCreationResult } from '../../domain/cartularyCreation.ts';
+import { SUPPORTED_CREATION_PROFILES, describeCreationMediaSummary, resumeOrCreateCartulary, type SupportedCreationAssetType, type CartularyCreationResult } from '../../domain/cartularyCreation.ts';
 import { validateFileForUpload } from '../../security/fileValidation.ts';
 import {
   CartularyCreationFailedError,
@@ -180,12 +180,15 @@ export function NewCartularyPage({ user, organization, registry }: {
   };
 
   if (createdCartularyId) {
+    // Bilan honnête des médias (V3, K4) : aucune promesse d'aperçu qui n'existe pas encore.
+    const mediaNotes = describeCreationMediaSummary(pendingCreation?.media);
     return (
       <section className="registry-create-success" aria-labelledby="registry-create-success-title">
         <CircleCheck aria-hidden="true" />
         <p className="registry-kicker">Cartulaire créé</p>
         <h1 id="registry-create-success-title">{submittedIdentity?.title}</h1>
         <p>Le Cartulaire privé a été créé et sa projection minimale a été ajoutée à {registry.name}. Les fichiers restent secrets.</p>
+        {mediaNotes.map((note) => <p key={note} role="status" className="registry-create-success__media-note">{note}</p>)}
         <div className="registry-create-success__actions">
           <a href={buildCartularyHref(createdCartularyId, registryHref(registry.id, 'items'), submittedIdentity?.assetType || assetType)}>Ouvrir le Cartulaire</a>
           <a href={registryHref(registry.id, 'items')}>Voir le catalogue</a>

@@ -146,3 +146,31 @@ test('sans profil de création, l’identité se relit dans la fiche de spécifi
   const partial = creationProfileFromSpecificationGroups([{ id: 'basic', title: 'x', items: [{ id: 'brand', label: 'Marque', value: 'Tudor' }, { id: 'year', label: 'Année', value: 'inconnue' }] }], base);
   assert.deepEqual([partial.brand, partial.model, partial.reference, partial.manufactureYear], ['Tudor', 'Dossier à compléter', 'À documenter', null]);
 });
+
+test('V3 : le bilan des médias de création distingue images prêtes, images sans aperçu, vidéos à la demande et documents', async () => {
+  const { summarizeCreationMedia, describeCreationMediaSummary } = await import('../src/domain/cartularyCreation.ts');
+  const variant = (width) => ({ width, height: width, storagePath: `private-derivatives/owner_bilan/cart_bilan_v3/bin_bilan/presentation-v3-${width}.webp`, sha256: `sha256:${'d'.repeat(64)}`, size: 100, mimeType: 'image/webp' });
+  const ready = { type: 'image', privatePresentation: { binaryId: 'bin_bilan', version: 'presentation-v3', variants: [variant(240), variant(480)], thumbnail: null } };
+  const summary = summarizeCreationMedia([
+    ready,
+    { type: 'image' },
+    { type: 'image', privatePresentation: { binaryId: 'bin_vide', version: 'presentation-v3', variants: [], thumbnail: null } },
+    { type: 'video' },
+    { type: 'video' },
+    { type: 'document' },
+  ]);
+  assert.deepEqual(summary, { total: 6, imagesReady: 1, imagesPending: 2, videosOnDemand: 2, documents: 1 });
+  const notes = describeCreationMediaSummary(summary);
+  assert.equal(notes.length, 2);
+  assert.match(notes[0], /^2 photos sans aperçu pour l’instant/);
+  assert.match(notes[0], /Aperçu en préparation/);
+  assert.match(notes[0], /l’original reste consultable sur demande/);
+  assert.equal(notes[1], '2 vidéos resteront consultables à la demande (copie de présentation non produite).');
+  assert.deepEqual(describeCreationMediaSummary(summarizeCreationMedia([ready, { type: 'document' }])), [], 'rien à annoncer quand tout est prêt');
+  assert.deepEqual(describeCreationMediaSummary(summarizeCreationMedia([{ type: 'video' }])), ['1 vidéo restera consultable à la demande (copie de présentation non produite).']);
+  assert.deepEqual(describeCreationMediaSummary(undefined), [], 'une reprise antérieure à V3 n’annonce rien');
+  for (const note of notes) {
+    assert.doesNotMatch(note, /Accès restreint/, 'P-D3 : jamais « Accès restreint » pour un dérivé absent');
+    assert.doesNotMatch(note, /presentation-v2|private-derivatives|storagePath/, 'aucun chemin de stockage sur l’écran de succès');
+  }
+});

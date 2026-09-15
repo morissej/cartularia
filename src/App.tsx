@@ -41,7 +41,8 @@ import { MediaVideo } from './components/MediaVideo';
 import { PublicWebsitePublicationPanel } from './components/PublicWebsitePublicationPanel';
 import { buildWebsiteDraft, websiteDraftPreview, websiteDraftRequest } from './domain/websiteDraft';
 import { WebsiteDraftWarnings } from './components/WebsiteDraftWarnings';
-import { ReportMediaItem } from './components/ReportMediaItem';
+import { ReportMediaItem, ReportPrintImage } from './components/ReportMediaItem';
+import { SpinSequence } from './components/SpinSequence.tsx';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
 import { computeHash, IntegrityJournal, isRfc3161Receipt } from './utils/integrityJournal';
 import { downloadTextPdf } from './utils/pdfExport';
@@ -180,7 +181,6 @@ import {
   type DatedCashFlow,
 } from './domain/valuationPerformance';
 
-const Spin360 = lazy(() => import('./components/Spin360.tsx').then((module) => ({ default: module.Spin360 })));
 const AuditPanel = lazy(() => import('./components/AuditPanel.tsx').then((module) => ({ default: module.AuditPanel })));
 
 interface PublicationIntent {
@@ -2225,7 +2225,9 @@ function App() {
             </div>
             <div className="cover-sheet__photo">
               {mainPhoto
-                ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager />
+                ? forPrint
+                  ? <ReportPrintImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" language={language} />
+                  : <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager role="stage" />
                 : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
             </div>
           </section>
@@ -2294,7 +2296,9 @@ function App() {
       case 'media-hero':
         return (
           <section className="watch-website__hero">
-            {mainPhoto && <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" eager />}
+            {mainPhoto && (forPrint
+              ? <ReportPrintImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" language={language} />
+              : <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" eager role="stage" />)}
             <div>
               <span className="eyebrow">{watch.reference.reference}</span>
               <h2>{watch.reference.brand}<br />{watch.reference.model}</h2>
@@ -2325,8 +2329,8 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Séquence 3D', '3D sequence')} title={tx('Revue à 360°', '360° review')} />
-            {forPrint ? <div className="report-slideshow-gallery__grid">{spinAssets.map((asset) => <figure key={asset.id}><PrivateMediaImage asset={asset} alt={asset.name} eager /><figcaption>{asset.name}</figcaption></figure>)}{spinAssets.length === 0 && <p>{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}</div> : spinAssets.length > 0
-              ? <><Suspense fallback={<div className="media-empty" role="status">{tx('Chargement de la séquence 360°…', 'Loading 360° sequence…')}</div>}><Spin360 images={spinAssets} posterImageUrl={spinAssets[0].url} language={language} /></Suspense><details className="spin-downloads no-print"><summary>{tx(`Télécharger les vues (${spinAssets.length})`, `Download views (${spinAssets.length})`)}</summary><div>{spinAssets.map((asset, index) => <div key={asset.id}>{tx(`Vue ${index + 1}`, `View ${index + 1}`)} · <MediaDownloadLink media={asset} language={language} compact showName className="spin-downloads__link" /></div>)}</div></details></>
+            {forPrint ? <div className="report-slideshow-gallery__grid">{spinAssets.map((asset) => <figure key={asset.id}><ReportPrintImage asset={asset} alt={asset.name} language={language} /><figcaption>{asset.name}</figcaption></figure>)}{spinAssets.length === 0 && <p>{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}</div> : spinAssets.length > 0
+              ? <><SpinSequence images={spinAssets} language={language} /><details className="spin-downloads no-print"><summary>{tx(`Télécharger les vues (${spinAssets.length})`, `Download views (${spinAssets.length})`)}</summary><div>{spinAssets.map((asset, index) => <div key={asset.id}>{tx(`Vue ${index + 1}`, `View ${index + 1}`)} · <MediaDownloadLink media={asset} language={language} compact showName className="spin-downloads__link" /></div>)}</div></details></>
               : <p className="watch-website__empty">{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}
           </section>
         );
@@ -2334,11 +2338,13 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Présentation', 'Presentation')} title={tx('Diaporama', 'Slideshow')} />
-            <div className="report-slideshow-gallery">
-              <div className="report-slideshow-gallery__grid">
-                {presentationAssets.map((asset) => <ReportMediaItem key={asset.id} asset={asset} language={language} />)}
+            {forPrint && (
+              <div className="report-slideshow-gallery">
+                <div className="report-slideshow-gallery__grid">
+                  {presentationAssets.map((asset) => <ReportMediaItem key={asset.id} asset={asset} language={language} />)}
+                </div>
               </div>
-            </div>
+            )}
             {!forPrint && <div className="media-carousel-wrapper">
               <MediaCarousel assets={presentationAssets} language={language} onOpen={(asset) => window.open(asset.url, '_blank', 'noopener,noreferrer')} />
             </div>}
@@ -2356,7 +2362,9 @@ function App() {
                       ? <FileText size={28} />
                       : asset.type === 'video'
                         ? <><Video size={28} /><small>VIDEO</small></>
-                        : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" eager={forPrint} />}
+                        : forPrint
+                          ? <ReportPrintImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" language={language} />
+                          : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" role="thumbnail" />}
                   </span>
                   <strong>{asset.name}</strong>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
@@ -2443,7 +2451,9 @@ function App() {
                     ? <FileText size={28} />
                     : asset.type === 'video'
                       ? <Video size={28} />
-                      : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" eager={forPrint} />}</span>
+                      : forPrint
+                        ? <ReportPrintImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" language={language} />
+                        : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" role="thumbnail" />}</span>
                   <strong>{asset.name}</strong><small>{asset.tags.includes('documentation') ? 'Documentation' : tx('Accessoires', 'Accessories')}</small>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
                   <span className="documentation-media__download no-print"><Download size={13} aria-hidden="true" />{tx('Télécharger', 'Download')}</span>
@@ -2734,7 +2744,7 @@ function App() {
                 aria-label={tx('Agrandir la photo principale', 'Enlarge main photo')}
               >
                 {mainPhoto
-                  ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager />
+                  ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager fetchPriority="high" role="stage" />
                   : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
               </button>
             </section>
@@ -2759,7 +2769,7 @@ function App() {
               >
                 {mainPhoto ? (
                   <span className="watch-hero__image-visual">
-                    <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 38vw" eager />
+                    <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 38vw" eager fetchPriority="high" role="stage" />
                   </span>
                 ) : (
                   <span className="watch-hero__image-visual empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>
@@ -2798,7 +2808,7 @@ function App() {
               <SectionTitle eyebrow={tx('03 · Séquence 3D', '03 · 3D sequence')} title={tx('Revue à 360°', '360° review')} publish={publishProps('media-spin')} />
               {spinAssets.length > 0 ? (
                 <button type="button" className="spin-callout" onClick={() => setIsSpinOpen(true)}>
-                  <PrivateMediaImage asset={spinAssets[0]} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} sizes="(max-width: 720px) 100vw, 1200px" />
+                  <PrivateMediaImage asset={spinAssets[0]} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} sizes="(max-width: 720px) 100vw, 1200px" role="stage" />
                   <span className="spin-callout__icon"><RotateCw size={23} /></span>
                   <span><strong>{spinAssets.length} {tx('vues ordonnées', 'ordered views')}</strong></span>
                 </button>
@@ -2825,7 +2835,7 @@ function App() {
                           ) : asset.type === 'video' ? (
                             <><Video size={28} /><small>VIDEO</small></>
                           ) : (
-                            <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" />
+                            <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" role="thumbnail" />
                           )}
                         </span>
                         <strong {...aiFieldProps('media.assets[].name', asset.id)}>{asset.name}</strong>
@@ -3186,7 +3196,7 @@ function App() {
                                 ? <FileText size={28} aria-hidden="true" />
                                 : asset.type === 'video'
                                   ? <Video size={28} aria-hidden="true" />
-                                : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" />}
+                                : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" role="thumbnail" />}
                               {asset.type === 'video' && <Play size={13} fill="currentColor" aria-hidden="true" />}
                             </span>
                             <strong>{asset.name}</strong>
@@ -3886,6 +3896,7 @@ function App() {
         onChangeVisibility={(id, visibility) => { if (!canEdit) return; setMediaAssets((current) => current.map((asset) => asset.id === id ? { ...asset, visibility } : asset)); }}
         onDelete={deleteMediaAsset}
         readOnly={isDemoCartulary}
+        originalOnDemand={authoritative.canManage}
       />}
 
       {pendingDeletion && <DeletionDialog

@@ -3,6 +3,7 @@ import { importCartularyBundle } from './import-cartulary-command.mjs';
 import { projectRegistryItem } from './projection-command.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
 import { privateBinaryIsVerified } from './private-upload-command.mjs';
+import { assetPresentationMirror } from './presentation-variants.mjs';
 import { CREATION_PROFILE_DEFINITIONS, mappedSchemaSections, materializeCreationSections } from './creation-profile-map.mjs';
 
 const CREATE_RATE_LIMIT_PER_DAY = 12;
@@ -200,6 +201,8 @@ export const buildCreationBundle = ({ requestData, profile, media, schemaVersion
       sha256: null,
       storagePath: asset.storagePath,
       binaryId: asset.binaryId,
+      // Miroir des variantes v3 du binaire vérifié (contrat K3) : posé dès la création, avant la projection de l'item.
+      privatePresentation: asset.privatePresentation ?? null,
       capturedAt: typeof asset.capturedAt === 'string' ? asset.capturedAt : null,
       timestampSource: typeof asset.timestampSource === 'string' ? asset.timestampSource : null,
       tags: Array.isArray(asset.tags) ? asset.tags.filter((tag) => typeof tag === 'string') : [],
@@ -288,7 +291,11 @@ const loadCreationDraft = async (firestore, requestData) => {
     ) {
       throw new CreateCartularyCommandError('draft_not_ready', `Chemin Storage privé invalide pour ${asset.binaryId}.`);
     }
-    return { ...asset, storagePath: binary.storagePath };
+    return {
+      ...asset,
+      storagePath: binary.storagePath,
+      privatePresentation: assetPresentationMirror(binary, { uid: requestData.ownerUid, cartularyId: requestData.cartularyId, binaryId: asset.binaryId }),
+    };
   });
   return { profile, media: mediaWithStoragePaths };
 };

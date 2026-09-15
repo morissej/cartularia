@@ -1,0 +1,1066 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "source": "audemars-piguet-royal-oak/full-set.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 445071,
+      "sourceSha256": "489cd08bec1400be25d5780f8c2c119d7ba29ed1ab91c6c50439f8cd6aaee7f9",
+      "derivatives": [
+        {
+          "file": "audemars-piguet-royal-oak/full-set.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4058,
+          "sha256": "a23f8c06c3e62d7a041d5412a889a1ac5098ff04698c78ad8e0b43c7f0a93162"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/full-set.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 13826,
+          "sha256": "c9d87fc3166e053df8d45e92be302abc04b25ba8cc3ee10305f60c7be162007c"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/full-set.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 33484,
+          "sha256": "5f1268763a3386ed99fc892ece2e2860da3e98544fa614f77eabdd3c36c77af8"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/full-set.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 74110,
+          "sha256": "a3269c0137285ed2dab8c1c21e775cb61c9c92adae106242fed1c1cb0d410a88"
+        }
+      ]
+    },
+    {
+      "source": "audemars-piguet-royal-oak/main.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 361344,
+      "sourceSha256": "b97264f0f95bbe10246a3d030f63f2d5fd09cb63a2ac08dbcbc0270f6aed0774",
+      "derivatives": [
+        {
+          "file": "audemars-piguet-royal-oak/main.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5464,
+          "sha256": "fd2576083facfc92d11f5f89ce898433b4eca8167413aece6fde6725dbc9174c"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/main.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 18430,
+          "sha256": "7a2c22760bc6dd33bda014d36bbdffcdc2404f69ca9a4a41321c39f7f9005f8a"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/main.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 38808,
+          "sha256": "b307327f535e309238debff045987329eb0ea7b4c96ae5f5ad874f7a2e797996"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/main.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 74866,
+          "sha256": "b9730de0a740193e68ebd581c756ad9e5e6320cda42b43e139e842f5782fa7bd"
+        }
+      ]
+    },
+    {
+      "source": "audemars-piguet-royal-oak/rear.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 362331,
+      "sourceSha256": "037132a6528cbed2e32eb829b663518b1ed1e98d1df8ce222f610783b36b5515",
+      "derivatives": [
+        {
+          "file": "audemars-piguet-royal-oak/rear.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6518,
+          "sha256": "fc798f2dfe8991b42115fa356fb5e3bf552dbe3cb5e97263e4aa226bbcfbfeaa"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/rear.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 19894,
+          "sha256": "98da153e28db3e5ae0ef45d626cb004bfed56bf54b6d600e83c1a13c7da2f0a2"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/rear.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 38722,
+          "sha256": "80a03ed0a538c9c1ab48a6858395a3d3b300474a6e2bc9d17be5ac0ec6646521"
+        },
+        {
+          "file": "audemars-piguet-royal-oak/rear.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 68756,
+          "sha256": "170f2be88d5f4c2ac40a9195352b72f97a2647115e7adda91ff40512e02d0bef"
+        }
+      ]
+    },
+    {
+      "source": "breguet-classique/full-set.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 552189,
+      "sourceSha256": "1b7e8af3472d9b4b2dae48ad241a5d0b86968696cbf5a54a456a59a7f1b6b7f3",
+      "derivatives": [
+        {
+          "file": "breguet-classique/full-set.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6112,
+          "sha256": "6aa3fe2df430a512a75e499ed76ca6935f7a7cbf3fad05c6ba5b14f7218e462c"
+        },
+        {
+          "file": "breguet-classique/full-set.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 19842,
+          "sha256": "4a4d31af32f832b23eb702a41023a56796152f3e9584baf4347f5c4a8e59e514"
+        },
+        {
+          "file": "breguet-classique/full-set.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 51526,
+          "sha256": "0e1b2f9e293c37ee4ead87249fcd2c94b3fc9662e616e5306e55fa503e148a5f"
+        },
+        {
+          "file": "breguet-classique/full-set.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 117278,
+          "sha256": "9cf8c008e9274b0099b61ecbc5c1fad6737d13e65154fea533e7173e3c0f3612"
+        }
+      ]
+    },
+    {
+      "source": "breguet-classique/main.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 321869,
+      "sourceSha256": "d7b0dc25bd2796fe95e0ab706f5fe4662b246db27f324e5e7493c661bee47280",
+      "derivatives": [
+        {
+          "file": "breguet-classique/main.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4632,
+          "sha256": "118b253afdd20b80f9eebdd8b79866df07bf84800e792f4b7a32f45a0f6875d0"
+        },
+        {
+          "file": "breguet-classique/main.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 16696,
+          "sha256": "bcb1364cc7c5637acbae9a0f469863740f2b2a1acabdfd31c1884f5d57faecfc"
+        },
+        {
+          "file": "breguet-classique/main.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 34778,
+          "sha256": "b2974c752c36dee684d9d66f07d8186c691acf7ed540fc6a3431eadede4469ec"
+        },
+        {
+          "file": "breguet-classique/main.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 66208,
+          "sha256": "be45179090fc924ec12ad3833853aff3b34280e3131fc3e0db01556bacc0b482"
+        }
+      ]
+    },
+    {
+      "source": "breguet-classique/rear.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 340584,
+      "sourceSha256": "43efafcafa3b6754cfac28bf08404b27d15c68af207fa92910006b28f0b044d3",
+      "derivatives": [
+        {
+          "file": "breguet-classique/rear.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5314,
+          "sha256": "5353b19a4a4ba7226e994e8839bd81222271677d68c515294fc0ee204bcd53a1"
+        },
+        {
+          "file": "breguet-classique/rear.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 17624,
+          "sha256": "3afbdb49b53482b7d07fa51ffb0b1df6d798a96857eaccfd2a4b853ba208d505"
+        },
+        {
+          "file": "breguet-classique/rear.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 36180,
+          "sha256": "ac9a3dde9d337cc0fa298c4048df5ca58139d70d8a7bc6758720ce67071b507e"
+        },
+        {
+          "file": "breguet-classique/rear.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 64150,
+          "sha256": "975794301a8b41333edbeaf762641ea9487d35c69509b057631eaca63c8d56df"
+        }
+      ]
+    },
+    {
+      "source": "jaeger-lecoultre-reverso/full-set.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 541216,
+      "sourceSha256": "9ea3bdfb3d494db4f829b0ed6b0bcbd277cd0d3d822269471d85e103a78931cb",
+      "derivatives": [
+        {
+          "file": "jaeger-lecoultre-reverso/full-set.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6578,
+          "sha256": "fa0223d469a3db20437a1247539a0decb38b56eef39d231031805d17be1abd68"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/full-set.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 21058,
+          "sha256": "019f8037201d51352367b0adbc7edbe5878bdf7ed3865a97f9e93c5a47d15f76"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/full-set.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 49104,
+          "sha256": "17276e6384ce927fa720ffc42c42e5902186c3101137a88018cc9bcbbd6da57b"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/full-set.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 106152,
+          "sha256": "f6daa7c9990c4085dae3dea570ebec74cecb87602efb49c54bee1743997a3ce9"
+        }
+      ]
+    },
+    {
+      "source": "jaeger-lecoultre-reverso/main.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 346005,
+      "sourceSha256": "2bb2f7add08ef71ead8ce02b7a0563ca3e8811d59a3f328358b168dcc6bba066",
+      "derivatives": [
+        {
+          "file": "jaeger-lecoultre-reverso/main.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5180,
+          "sha256": "59fcdf38a4f36c5d6e70d2ef72dd16dded41fb122bffffd65c00e8e189663bb9"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/main.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 17000,
+          "sha256": "57ce903e99b7e641e50a678d5ea57c5f7815bec21a558b2d9526db377430cc35"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/main.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 36226,
+          "sha256": "ea597e39715f1a8c2c3c4a47bfee376d33a44ca2f2dc5a96a71552efde73fee4"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/main.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 70626,
+          "sha256": "6c744a2abdc0483fb3ae5177d55ce87f02b4e8166953f794ce027a019424d589"
+        }
+      ]
+    },
+    {
+      "source": "jaeger-lecoultre-reverso/rear.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 391334,
+      "sourceSha256": "5af67e7d48186a890f4f28d6fa9d3e5b6307100ed3677ee6924dff05f5b10bb0",
+      "derivatives": [
+        {
+          "file": "jaeger-lecoultre-reverso/rear.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4994,
+          "sha256": "916c9f65a8fa4f258d06aaf0d28aff86a1fcd0fe63e8d85a13fc61e9f2229124"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/rear.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 16952,
+          "sha256": "e99da49be7b73c0a9e4ae1378c7cf63a25a864c750cdf23ac69ba0d8fe30ea1e"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/rear.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 39504,
+          "sha256": "2b62e34000ae6989c83da49b36e3eb66bc438f261a8d483566b2768c81c53fc9"
+        },
+        {
+          "file": "jaeger-lecoultre-reverso/rear.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 79646,
+          "sha256": "4ff593685364a5df96fb6e19bae61206b97000bf428d256063c6f0493d5f21ba"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/full-set.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 456636,
+      "sourceSha256": "f246d1993db8b52a8018ef7e6c66b4a6a5a6f35f565d286de466d2cf4ac904d2",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/full-set.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5100,
+          "sha256": "a22c2fcc94d7fc800c2910d0ab8f2a7d50a39095f910efa7a562d8cbddaba492"
+        },
+        {
+          "file": "rolex-submariner/full-set.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 15900,
+          "sha256": "c00469791fc10f8489771797bf79a8cf1e42a4c502339af252346e7d4caf0227"
+        },
+        {
+          "file": "rolex-submariner/full-set.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 37202,
+          "sha256": "4e9ada03c0c2150587190f654e13ccf257a97de680a7989906f6b02bd5687398"
+        },
+        {
+          "file": "rolex-submariner/full-set.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 82652,
+          "sha256": "5cbc32dea289030c9b4eae34f607de0d712cd41923858270bcca68f77ee69d59"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/main.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 174087,
+      "sourceSha256": "27aa70e6046e0ad4fa5a89826603716c3a34cf4d7aadbe7a86e93db4e322de9d",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/main.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6248,
+          "sha256": "2364111f5a6c5ad80abf671a3219f918b56771bbe7ac17c4a0d74ed1c21dc0ef"
+        },
+        {
+          "file": "rolex-submariner/main.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 17536,
+          "sha256": "3472b6aaa4ea19ebacdc2b0f67429969e9bc99e1689601bd2020e4ae8d0347f3"
+        },
+        {
+          "file": "rolex-submariner/main.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 34170,
+          "sha256": "9a8c41eea3712839d1de5260a544e865b4859f69a6fece16956e9a790105cc3c"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/rear.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 170886,
+      "sourceSha256": "0f9a38afac90bd9e55120139e2f2eae323f5682e3f584554fd46b524325013b0",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/rear.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4832,
+          "sha256": "edf706cd56d6eafbbdc4928bfd0d35b5f1f0dd3f1cc3eb6d2d5536031f4d9971"
+        },
+        {
+          "file": "rolex-submariner/rear.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 13192,
+          "sha256": "d11fe095bc75f90d98a65b71d7e7721fd93633c0639b20d8017c49b4f0395ac9"
+        },
+        {
+          "file": "rolex-submariner/rear.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 27298,
+          "sha256": "b5863a3e5ebc6c5479bcd193708ac31c6d3e5817fe145cddefa473c4d63678b2"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-00.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 174087,
+      "sourceSha256": "27aa70e6046e0ad4fa5a89826603716c3a34cf4d7aadbe7a86e93db4e322de9d",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-00.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6248,
+          "sha256": "2364111f5a6c5ad80abf671a3219f918b56771bbe7ac17c4a0d74ed1c21dc0ef"
+        },
+        {
+          "file": "rolex-submariner/spin-00.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 17536,
+          "sha256": "3472b6aaa4ea19ebacdc2b0f67429969e9bc99e1689601bd2020e4ae8d0347f3"
+        },
+        {
+          "file": "rolex-submariner/spin-00.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 34170,
+          "sha256": "9a8c41eea3712839d1de5260a544e865b4859f69a6fece16956e9a790105cc3c"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-01.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 174956,
+      "sourceSha256": "5c518f99d43da49c90b43cc02d75c7bdadf0229840fea608ab8d512647115b89",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-01.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5970,
+          "sha256": "c17db0a524eff814f7e32b6b2195cc6de06638dad4e474ce76c802f26095ab3e"
+        },
+        {
+          "file": "rolex-submariner/spin-01.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 16842,
+          "sha256": "cbb1cf38520ce7e7948a9b6cd29bb73e81a5fb36342ca8df1588f37e591a0342"
+        },
+        {
+          "file": "rolex-submariner/spin-01.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 33164,
+          "sha256": "719196013d363c20cdab660b30409f4c947ef640d28714deeb62452cc70b0d5f"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-02.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 160469,
+      "sourceSha256": "8334cacd58bb2c0305914ce49d1270224d2d45826f1279576d98c01068cab0eb",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-02.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6142,
+          "sha256": "14bdcf3902cac6a7aee4b257aa2944b4ac78d4fd9644212ca80af23a0ed34e1d"
+        },
+        {
+          "file": "rolex-submariner/spin-02.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 17400,
+          "sha256": "74ad85ca74dcb1a05430a757011041b8876cab790aab65d0b42e4d518e6d3a0b"
+        },
+        {
+          "file": "rolex-submariner/spin-02.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 33532,
+          "sha256": "137c29fc9de3e4636f9da894b3bfe2f46a65b756f2fa70b3726a9e3462f9039a"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-03.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 171073,
+      "sourceSha256": "626331c114424be879c15058cea1ceb40e00698bdd1f06b01fe0f222f48bef0e",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-03.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6050,
+          "sha256": "3850217be3e8a4a6fccba97f011453d44f3b5e406934f932a0cca29387995bf2"
+        },
+        {
+          "file": "rolex-submariner/spin-03.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 16858,
+          "sha256": "bc0e508b6372fd10c4bb5c16cf70bfcb880ca925dc54f889011fb03dc6a8b422"
+        },
+        {
+          "file": "rolex-submariner/spin-03.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 33154,
+          "sha256": "37c4aed3df6b79f090a18bb75478f3ea9107c72f554aa5e43a5333cd4feb9664"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-04.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 157733,
+      "sourceSha256": "14a45ffaa4369a65d55e696b8e8c00ca712fe45ed2be7de9091f5664c44dded1",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-04.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4534,
+          "sha256": "d69853181b4255456abaf63247086d0160aa0534610bef51702cde358ba0b5ee"
+        },
+        {
+          "file": "rolex-submariner/spin-04.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 13136,
+          "sha256": "2c6d1c747879dd4eba2ea99adacbe4718336b98b887cc07eefd5f9e0f4a50e8d"
+        },
+        {
+          "file": "rolex-submariner/spin-04.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 26998,
+          "sha256": "390854d4a8a96249713af5d537351aae97572ab879afe7a0a21637fa65c7be44"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-05.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 175256,
+      "sourceSha256": "2fdb392cc6576b731c08fcc01dfbdc039a9a89e5fd348601311850320171f6d9",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-05.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5284,
+          "sha256": "1bd573faf62383e13684bf5ee630ed57c8edfa8f54352008e44056a46ea00215"
+        },
+        {
+          "file": "rolex-submariner/spin-05.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 14740,
+          "sha256": "c9c0b60689b3a863a94dcee497297540164f5fd763189965e1a83dc459927c24"
+        },
+        {
+          "file": "rolex-submariner/spin-05.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 29980,
+          "sha256": "5a335a2a6751d122612aaa395e0c3ada749a10ec3ee011cc6452f61f79628689"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-06.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 163320,
+      "sourceSha256": "89bbb97bcbde18c164b9ed3ea377a94c654af7c8552fe4a70d4ce499de0e522c",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-06.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4682,
+          "sha256": "f2e0652c7a2d6c6e5b6d6ef6af6e448c0dfb13955b2e8574dd09ae193f9d3a89"
+        },
+        {
+          "file": "rolex-submariner/spin-06.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 12804,
+          "sha256": "a594cc00cb7d0cce62b4efbf7e751ae5f793d4ad3213cad21909580d8962f1fd"
+        },
+        {
+          "file": "rolex-submariner/spin-06.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 26112,
+          "sha256": "696a3289fa5a8491f2a8c6b3a2940acc7bf93b19839c81e1b31ae7125d348a92"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-07.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 170886,
+      "sourceSha256": "0f9a38afac90bd9e55120139e2f2eae323f5682e3f584554fd46b524325013b0",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-07.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4832,
+          "sha256": "edf706cd56d6eafbbdc4928bfd0d35b5f1f0dd3f1cc3eb6d2d5536031f4d9971"
+        },
+        {
+          "file": "rolex-submariner/spin-07.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 13192,
+          "sha256": "d11fe095bc75f90d98a65b71d7e7721fd93633c0639b20d8017c49b4f0395ac9"
+        },
+        {
+          "file": "rolex-submariner/spin-07.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 27298,
+          "sha256": "b5863a3e5ebc6c5479bcd193708ac31c6d3e5817fe145cddefa473c4d63678b2"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-08.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 183107,
+      "sourceSha256": "d16ea1b6b13018ba6037913adc34500bf4321c476cc09805e1ba26efa532b3e4",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-08.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5284,
+          "sha256": "33d4f061d2ce0242b2967e858e62eb245e01b76bcdd838376c539f8d86aa119a"
+        },
+        {
+          "file": "rolex-submariner/spin-08.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 14834,
+          "sha256": "9d0032b7d9d242fac0c3e3e223c9bb95a77d2b0682354bfd6456a71b326f5673"
+        },
+        {
+          "file": "rolex-submariner/spin-08.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 30400,
+          "sha256": "856029942bd6f70069dda2a4823d6eadddf496b817d6c9ca61c0134c096c952e"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-09.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 168013,
+      "sourceSha256": "0928e0b99de58087138e3b9cb64fbfd0306f683e98d9914c021a0910944c9cb5",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-09.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4542,
+          "sha256": "88b4f3f7b34ca6cd4e24b8052b5de4359f59d1f893246f08747425560a7d05cd"
+        },
+        {
+          "file": "rolex-submariner/spin-09.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 13270,
+          "sha256": "ddaa72fa781207cb4c3009e09bdc904f7d811c8324212edf272f34705bfa787b"
+        },
+        {
+          "file": "rolex-submariner/spin-09.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 27618,
+          "sha256": "0e2202bafc49e3e4237fc850a1246c89a7ac9802bf21f55804a2208e8436d02e"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-10.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 168626,
+      "sourceSha256": "9d217fe1241ef2a1b4ade77c5789c37c366dd4fb122db3fcb2eb9df0d6bd7fb1",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-10.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 4576,
+          "sha256": "4a4bf243e26155558cb313684ae076d3ca16932b27a4c76000ced53fb658b307"
+        },
+        {
+          "file": "rolex-submariner/spin-10.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 13196,
+          "sha256": "71b303b8ff45c8adcdbb3e18ebdabc4850ff6b0a9dfc532a4c8c187811aebf45"
+        },
+        {
+          "file": "rolex-submariner/spin-10.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 26670,
+          "sha256": "72ac461cf66a69a55230ef23d83f48f5245206a7f1c1b2c10ca492a261434e70"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-11.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 171142,
+      "sourceSha256": "8166b2df2188bb1287730b4e8434db9ddd73cacbe9f238735ae97abc47936ee5",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-11.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5992,
+          "sha256": "491b235febd86c5c7d95e86f9685cedfb66e5905dc6630168ec0b8324801cf79"
+        },
+        {
+          "file": "rolex-submariner/spin-11.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 16722,
+          "sha256": "c1ece015b514f1d866fd5115e908e3c28c121a8078ec45007e07448453717aaf"
+        },
+        {
+          "file": "rolex-submariner/spin-11.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 32810,
+          "sha256": "9caa3b6c4f719dc1b4c3fcf31f0b403604eabc48c7a05ec8deedc2cca04d066b"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-12.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 160549,
+      "sourceSha256": "3f1f874b48273e41e25f048ee5247cdfd02c844f1218d0127e9fad01eb51f21d",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-12.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6142,
+          "sha256": "8a094147e1ca1dfa94cb0cd86ee36411cf79a086808b77cfe4b5f61664bbed93"
+        },
+        {
+          "file": "rolex-submariner/spin-12.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 17130,
+          "sha256": "0fea69a33004c91c76b9222fb069c38ed222993a1ec3aa3d22419dc4e2a47bdf"
+        },
+        {
+          "file": "rolex-submariner/spin-12.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 33102,
+          "sha256": "171172da83f360a85c2fe7c7b186445b4e213aa3e93e8374c3b45c2a8d959257"
+        }
+      ]
+    },
+    {
+      "source": "rolex-submariner/spin-13.jpg",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "sourceBytes": 175072,
+      "sourceSha256": "5a8e4bef53a19b8941d994e8152e9e4e44f1d345d200af85dffa2786b42753f5",
+      "derivatives": [
+        {
+          "file": "rolex-submariner/spin-13.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 5956,
+          "sha256": "95ae89ffcdd88ce8fc0e61042e31f0622e29f488b175664ac45496d624e7da14"
+        },
+        {
+          "file": "rolex-submariner/spin-13.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 16544,
+          "sha256": "7f18aa4c23c89583f42ec1d1d33a91d3ecd98fc324e58187613dceb833e2b047"
+        },
+        {
+          "file": "rolex-submariner/spin-13.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 32762,
+          "sha256": "6d98cadd6234e05bc995de7340d95c56fd9de915bb2bfac844b58d084b5e536d"
+        }
+      ]
+    },
+    {
+      "source": "tudor-black-bay-chrono/full-set.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 506008,
+      "sourceSha256": "d46d2b0fc5f305627d030a74dcf2842ab72ea49bff7cf78b66f00937486a54df",
+      "derivatives": [
+        {
+          "file": "tudor-black-bay-chrono/full-set.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6066,
+          "sha256": "fe44847dd62af062490e027386e4a28ced3fa22f36e17c2a22d3d5f0110ad3e5"
+        },
+        {
+          "file": "tudor-black-bay-chrono/full-set.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 20174,
+          "sha256": "39acf5108b015a21f76a06688d1a294bc31227e54e88315d10583e30df0b6cbd"
+        },
+        {
+          "file": "tudor-black-bay-chrono/full-set.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 47710,
+          "sha256": "1db4c22c99c7895a1255ae7584e9acf08c59c35e00ab1b5fbdd285dd35250968"
+        },
+        {
+          "file": "tudor-black-bay-chrono/full-set.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 107682,
+          "sha256": "84f6111084a4ffd4234393348fb419be0ef1478e78d93e7d530d654aa4971bae"
+        }
+      ]
+    },
+    {
+      "source": "tudor-black-bay-chrono/main.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 366819,
+      "sourceSha256": "fb9099a3d74904a77181b1c4818a7fd43ca60488ee86af546e4e8930c48f0986",
+      "derivatives": [
+        {
+          "file": "tudor-black-bay-chrono/main.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6652,
+          "sha256": "adfadefae25b28cb65f1bb5de3b47c20913d1f8ad543f31183fd55a67637f751"
+        },
+        {
+          "file": "tudor-black-bay-chrono/main.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 20992,
+          "sha256": "65be06ee0ec4959683be33f489de99d18e92b7a88187588c9ca5cb6be3311915"
+        },
+        {
+          "file": "tudor-black-bay-chrono/main.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 43926,
+          "sha256": "b505d462ea1834874fc75703a3b82044375609739781e69277a098aadd74e3d1"
+        },
+        {
+          "file": "tudor-black-bay-chrono/main.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 79564,
+          "sha256": "630145b0706dc5030bd6dfe62a89b927af6c947d2d05cd0b8c2b41fe7d5717f4"
+        }
+      ]
+    },
+    {
+      "source": "tudor-black-bay-chrono/rear.jpg",
+      "sourceWidth": 1400,
+      "sourceHeight": 1400,
+      "sourceBytes": 371722,
+      "sourceSha256": "447e6cf6d384a663cfdcfba2a195d74dd4ec9b4fd9a96f3979aa295c1da9ad01",
+      "derivatives": [
+        {
+          "file": "tudor-black-bay-chrono/rear.240.webp",
+          "format": "webp",
+          "width": 240,
+          "height": 240,
+          "bytes": 6114,
+          "sha256": "c4c4810ce9b68f29f665bf47fc09ffb471b98e39a575a679b1abb9f360cd227b"
+        },
+        {
+          "file": "tudor-black-bay-chrono/rear.480.webp",
+          "format": "webp",
+          "width": 480,
+          "height": 480,
+          "bytes": 18768,
+          "sha256": "c56e9bb0b1abd8ec5ad4e5c6ff9dd21005044e8aad3224a44d7d303522fd11c7"
+        },
+        {
+          "file": "tudor-black-bay-chrono/rear.768.webp",
+          "format": "webp",
+          "width": 768,
+          "height": 768,
+          "bytes": 38502,
+          "sha256": "56c69eb869b849fe1b60a9d82c9b42637e84b15e5829b37dca67df966a1abc8e"
+        },
+        {
+          "file": "tudor-black-bay-chrono/rear.1200.webp",
+          "format": "webp",
+          "width": 1200,
+          "height": 1200,
+          "bytes": 68890,
+          "sha256": "264f4e9f8768ae696b5ae808ccf942de9347cc4f699e2210ae27d72df0c92149"
+        }
+      ]
+    }
+  ]
+}

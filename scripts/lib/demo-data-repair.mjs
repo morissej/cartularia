@@ -11,11 +11,16 @@ import { SCHEMA_CONTRACT_DIGEST_VERSION, schemaContractDigest, verifySchemaCatal
 
 // Migrations additives de la voie `--data-only`, dans l'ordre de la chaîne d'audit :
 //   v1 (6 septembre 2026) : Galerie, codes objet, coût de revient, nets, nom de Collection ;
-//   v2 (13 septembre 2026) : dossiers « Complet » revus, rappels de Suivi et projections d'Accès.
+//   v2 (13 septembre 2026) : dossiers « Complet » revus, rappels de Suivi et projections d'Accès ;
+//   v3 (14 septembre 2026) : vignette de bundle (`thumbnail`, kind 'bundle') sur les projections
+//      registries/{r}/items — champ de présentation hors contentHash (contrat unique V3, K3) :
+//      cinq mises à jour d'item, aucun événement d'audit, aucune écriture de racine ni d'actif.
 // La v2 accepte ensuite les événements publication.published / publication.revoked signés
-// par le seed démo (décision V2 (a)) : le seed reste rejouable après la publication réelle.
+// par le seed démo (décision V2 (a)) : le seed reste rejouable après la publication réelle ; la
+// v3 s'applique de même avant ou après une publication.
 export const DEMO_REPAIR_VERSION = 'demo-data-repair-v1';
 export const DEMO_ENRICHMENT_VERSION = 'demo-data-enrichment-v2';
+export const DEMO_THUMBNAIL_VERSION = 'demo-data-enrichment-v3';
 export const DEMO_PURPOSE = 'public_read_only_demo';
 const SCHEMA_PATH = 'schemaCatalog/watch/versions/1.6.0';
 const ORG_PATH = `organizations/${DEMO_ACCOUNT.organizationId}`;
@@ -269,9 +274,9 @@ export function buildDemoRepairPlan(state, user, schema, occurredAt) {
     const item = docData(state, itemPath);
     const migrations = [];
 
-    // v1 : Galerie, codes, montants. Complétude et révision de projection ne lui appartiennent pas.
+    // v1 : Galerie, codes, montants. Complétude, révision de projection et vignette (v3) ne lui appartiennent pas.
     const rootPatchV1 = differences(root, Object.fromEntries(ROOT_FIELDS.map((key) => [key, expectedRoot[key]])));
-    const desiredItemV1 = { ...buildDemoRegistryItem(cartulary, item.contentHash), completenessLevel: item.completenessLevel, sourceRevision: item.sourceRevision };
+    const { thumbnail: desiredThumbnail, ...desiredItemV1 } = { ...buildDemoRegistryItem(cartulary, item.contentHash), completenessLevel: item.completenessLevel, sourceRevision: item.sourceRevision };
     const itemPatchV1 = differences(item, desiredItemV1);
     const assetChanges = buildDemoAssetDocuments(cartulary).flatMap((asset) => {
       const path = `${rootPath}/assets/${asset.id}`;
@@ -302,13 +307,16 @@ export function buildDemoRepairPlan(state, user, schema, occurredAt) {
         digest: sha256Digest({ enrichmentVersion: DEMO_ENRICHMENT_VERSION, schemaDigest, cartularyId: cartulary.id, rootPatch: rootPatchV2, itemPatch: itemPatchV2, reminders }),
       });
     }
-    if (!migrations.length) continue;
+    // v3 : vignette de bundle sur la projection seule (présentation hors contentHash) ; aucune
+    // chaîne d'audit prolongée, aucune racine touchée : rejouable avant ou après une publication.
+    const itemPatchV3 = differences(item, { thumbnail: desiredThumbnail });
+    if (!migrations.length && !hasEntries(itemPatchV3)) continue;
 
     // Chaque migration prolonge la chaîne ; racine et projection reçoivent une seule mise à jour fusionnée.
     let previous = root.integrityHead;
     let sequence = root.integritySequence;
     const rootUpdate = {};
-    const itemUpdate = {};
+    const itemUpdate = { ...itemPatchV3 };
     const eventChanges = [];
     for (const migration of migrations) {
       sequence += 1;
@@ -326,7 +334,7 @@ export function buildDemoRepairPlan(state, user, schema, occurredAt) {
       previous = hash;
     }
     changes.push(...assetChanges,
-      { path: rootPath, operation: 'update', data: rootUpdate },
+      ...(hasEntries(rootUpdate) ? [{ path: rootPath, operation: 'update', data: rootUpdate }] : []),
       { path: itemPath, operation: 'update', data: itemUpdate },
       ...eventChanges, ...reminderChanges,
     );
@@ -338,7 +346,7 @@ export function buildDemoRepairPlan(state, user, schema, occurredAt) {
     if (!state.documents[path]) changes.push({ path, operation: 'create', data: access, stamps: ['generatedAt', 'updatedAt'] });
   }
   requireValue(changes.length < 450, 'lot trop volumineux pour une transaction bornée.');
-  return { repairVersion: DEMO_REPAIR_VERSION, enrichmentVersion: DEMO_ENRICHMENT_VERSION, schemaDigest, uid: user.uid, occurredAt, changes };
+  return { repairVersion: DEMO_REPAIR_VERSION, enrichmentVersion: DEMO_ENRICHMENT_VERSION, thumbnailVersion: DEMO_THUMBNAIL_VERSION, schemaDigest, uid: user.uid, occurredAt, changes };
 }
 
 export async function readDemoRepairState(firestore, reader, uid, schema) {
@@ -377,9 +385,9 @@ export const demoRepairFingerprint = (state) => sha256Digest(encodeBackupValue(s
 
 export function saveDemoRepairBackup(directory, projectId, state, plan) {
   requireValue(isAbsolute(directory), 'répertoire de sauvegarde absolu requis.');
-  const backupDirectory = mkdtempSync(join(realpathSync(directory), `${DEMO_ENRICHMENT_VERSION}-`));
+  const backupDirectory = mkdtempSync(join(realpathSync(directory), `${DEMO_THUMBNAIL_VERSION}-`));
   const payload = {
-    format: 'cartularia-demo-repair-backup@1', projectId, repairVersion: DEMO_REPAIR_VERSION, enrichmentVersion: DEMO_ENRICHMENT_VERSION,
+    format: 'cartularia-demo-repair-backup@1', projectId, repairVersion: DEMO_REPAIR_VERSION, enrichmentVersion: DEMO_ENRICHMENT_VERSION, thumbnailVersion: DEMO_THUMBNAIL_VERSION,
     stateFingerprint: demoRepairFingerprint(state),
     // Include absent targets so rollback knows precisely which creations to undo.
     before: plan.changes.map(({ path }) => ({ path, existed: Boolean(state.documents[path]), document: state.documents[path] ? encodeBackupValue(state.documents[path]) : null })),

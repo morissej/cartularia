@@ -3,13 +3,14 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import ts from 'typescript';
 
-const [app, modals, registry, carousel, privateImage, privateMedia] = await Promise.all([
+const [app, modals, registry, carousel, privateImage, privateMedia, spinSequence] = await Promise.all([
   readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/features/cartulary/modals/CartularyModals.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/features/registry/RegistryApp.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/MediaCarousel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/PrivateMediaImage.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/privateMedia.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/SpinSequence.tsx', import.meta.url), 'utf8'),
 ]);
 
 test('les surfaces lourdes restent des frontières dynamiques ciblées', () => {
@@ -29,7 +30,10 @@ test('les surfaces lourdes restent des frontières dynamiques ciblées', () => {
       assert.ok(!staticImports.has(module), `${module} ne doit pas être aussi importé statiquement`);
     }
   };
-  assertLazyBoundary(app, ['./components/AuditPanel.tsx', './components/Spin360.tsx']);
+  assertLazyBoundary(app, ['./components/AuditPanel.tsx']);
+  // V3 (K6, G1) : la séquence 360° en place ne charge le visualiseur qu'à l'ouverture ; App.tsx ne l'importe plus.
+  assertLazyBoundary(spinSequence, ['./Spin360.tsx']);
+  assert.doesNotMatch(app, /components\/Spin360\.tsx/);
   assertLazyBoundary(modals, ['../../../components/Spin360.tsx']);
   assertLazyBoundary(registry, ['RegistryItems', 'RegistryCollections', 'RegistryComparison', 'RegistryAdministration', 'RegistryAccessCenter', 'RegistryFollowUp', 'RegistryGallery', 'RegistryIntegrity', 'NewCartularyPage'].map((component) => `./${component}.tsx`));
 });
@@ -39,10 +43,19 @@ test('le carrousel ne recrée plus les actifs uniquement pour changer leur sourc
   assert.match(carousel, /sourceOverride=\{poster\}/);
   assert.match(carousel, /sourceOverride=\{thumbnail\}/);
   assert.match(privateImage, /acquirePrivateMediaObjectUrl/);
+  // V3 (K4) : l'original n'est acquis que sur rôle explicite ; les vignettes et la scène passent par les variantes.
+  assert.equal((privateImage.match(/acquirePrivateMediaObjectUrl\(/g) ?? []).length, 1);
+  assert.match(privateImage, /role === 'original'\s*\?\s*import\('\.\.\/services\/privateMedia\.ts'\)\.then\(\(\{ acquirePrivateMediaObjectUrl \}\)/);
+  assert.match(privateImage, /acquirePrivatePresentationObjectUrl\(\{ binaryId: asset\.binaryId!, cartularyId: asset\.cartularyId, asset: \{ privatePresentation: presentationRef\.current \}, role \}\)/);
+  assert.match(carousel, /role="thumbnail"/);
+  assert.match(carousel, /role="stage"/);
 });
 
 test('le cache média est borné et les URL de Galerie sont libérables', () => {
   assert.match(privateMedia, /MAXIMUM_IDLE_OBJECT_URLS = 24/);
   assert.match(privateMedia, /releasePrivateMediaObjectUrl/);
   assert.match(privateMedia, /objectUrlCache\.clear\(\)/);
+  // V3 (K4) : un seul cache de baux partagé entre l'original et les variantes de présentation.
+  assert.equal((privateMedia.match(/new ObjectUrlLeaseCache\(/g) ?? []).length, 1);
+  assert.match(privateMedia, /export const acquirePrivatePresentationObjectUrl/);
 });

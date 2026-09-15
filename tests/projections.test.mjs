@@ -24,6 +24,8 @@ import {
   recordProjectionApproval,
   revokePublicPublication,
 } from '../scripts/lib/projection-command.mjs';
+import { presentationVariantPath } from '../scripts/lib/presentation-variants.mjs';
+import { registryItemAuditText } from '../scripts/lib/registry-thumbnail.mjs';
 
 const projectId = 'cartularia-wave3-test';
 const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
@@ -185,7 +187,8 @@ test('le Registre reçoit une projection privée minimale et isolée', async () 
     occurredAt: '2026-08-14T10:00:00.000Z',
   });
   const item = await adminFirestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`).get();
-  const itemText = JSON.stringify(item.data()).toLowerCase();
+  // G7 : la base64 de la vignette inline est exclue du contrôle de sous-chaînes (elle peut contenir « owner » par hasard).
+  const itemText = registryItemAuditText(item.data()).toLowerCase();
   const ownerFirestore = testEnvironment.authenticatedContext('wave1-owner').firestore();
   const outsiderFirestore = testEnvironment.authenticatedContext('wave1-outsider').firestore();
 
@@ -198,6 +201,51 @@ test('le Registre reçoit une projection privée minimale et isolée', async () 
   await assertSucceeds(getDoc(doc(ownerFirestore, 'registries', 'reg_collection_privee', 'items', IWC_CARTULARY_ID)));
   await assertSucceeds(getDocs(collection(ownerFirestore, 'registries', 'reg_collection_privee', 'items')));
   await assertFails(getDoc(doc(outsiderFirestore, 'registries', 'reg_collection_privee', 'items', IWC_CARTULARY_ID)));
+  assert.equal(item.data().thumbnail, null);
+  assert.equal(item.data().primaryMediaKind, 'image');
+  assert.equal(item.data().thumbnailStatus, 'pending', 'K3 étendu : image sans miroir ni échec consigné');
+});
+
+test('la projection recopie la vignette de l’asset primaire et conserve une vignette posée par ailleurs', async () => {
+  const assetRef = adminFirestore.doc(`cartularies/${IWC_CARTULARY_ID}/assets/ref-front`);
+  const itemRef = adminFirestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`);
+  const digest = `sha256:${'0240'.repeat(16)}`;
+  const dataUrl = `data:image/webp;base64,${Buffer.from('projection-webp-240-fixture').toString('base64')}`;
+  await assetRef.set({
+    binaryId: 'bin_ref_front_v3',
+    privatePresentation: {
+      binaryId: 'bin_ref_front_v3', version: 'presentation-v3',
+      variants: [{ width: 240, height: 160, storagePath: presentationVariantPath(IWC_IMPORT_ACTOR_ID, IWC_CARTULARY_ID, 'bin_ref_front_v3', 240), sha256: digest, size: 1_240, mimeType: 'image/webp' }],
+      thumbnail: { dataUrl, width: 240, height: 160, sha256: digest },
+    },
+  }, { merge: true });
+  await projectRegistryItem({
+    firestore: adminFirestore, cartularyId: IWC_CARTULARY_ID, actorId: IWC_IMPORT_ACTOR_ID,
+    requestId: 'wave3-registry-projection-thumbnail-v1', expectedRevision: 1, occurredAt: '2026-08-14T10:00:00.000Z',
+  });
+  const projected = (await itemRef.get()).data();
+  assert.deepEqual(projected.thumbnail, { kind: 'inline', dataUrl, width: 240, height: 160, assetId: 'ref-front', sha256: digest });
+  assert.equal(projected.primaryMediaKind, 'image');
+  assert.equal(projected.thumbnailStatus, 'ready');
+  const projectedText = registryItemAuditText(projected).toLowerCase();
+  for (const forbidden of ['serial', 'owner', 'acquisition', 'storage', 'address']) assert.equal(projectedText.includes(forbidden), false, forbidden);
+  assert.equal(JSON.stringify(projected).includes('private-derivatives'), false);
+
+  // Vignette du bundle posée par le script de rattrapage (IWC) : une reprojection sans miroir sur l'asset la conserve.
+  const bundle = { kind: 'bundle', path: '/assets/IWC/derivatives/Focus Shift White Front.240.webp', width: 240, height: 160, assetId: 'ref-front', sha256: `sha256:${'b'.repeat(64)}` };
+  await assetRef.set({ privatePresentation: null }, { merge: true });
+  await itemRef.set({ thumbnail: bundle }, { merge: true });
+  await projectRegistryItem({
+    firestore: adminFirestore, cartularyId: IWC_CARTULARY_ID, actorId: IWC_IMPORT_ACTOR_ID,
+    requestId: 'wave3-registry-projection-thumbnail-v2', expectedRevision: 2, occurredAt: '2026-08-14T10:01:00.000Z',
+  });
+  const reprojected = (await itemRef.get()).data();
+  assert.deepEqual(reprojected.thumbnail, bundle);
+  assert.equal(reprojected.thumbnailStatus, 'ready', 'vignette conservée → statut recalculé, jamais perdu');
+  assert.equal(reprojected.sourceRevision, 3);
+  const ownerFirestore = testEnvironment.authenticatedContext('wave1-owner').firestore();
+  const readBack = await assertSucceeds(getDoc(doc(ownerFirestore, 'registries', 'reg_collection_privee', 'items', IWC_CARTULARY_ID)));
+  assert.equal(readBack.data().thumbnail.kind, 'bundle');
 });
 
 test('quatre blocs W et un dérivé séparé sont publics, idempotents et scellés', async () => {

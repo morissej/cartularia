@@ -4,6 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { validRegistryThumbnail } from '../scripts/lib/presentation-variants.mjs';
+import { normalizeRegistryThumbnail } from '../src/domain/registryThumbnail.ts';
 import { Timestamp } from 'firebase-admin/firestore';
 import { DEMO_ACCOUNT, DEMO_CARTULARIES } from '../src/data/demoCartularies.ts';
 import {
@@ -13,7 +15,7 @@ import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { CANONICALIZATION_VERSION, sha256Digest } from '../scripts/lib/canonical-json.mjs';
 import { SCHEMA_CONTRACT_DIGEST_VERSION, schemaContractDigest } from '../scripts/lib/schema-catalog-files.mjs';
 import {
-  DEMO_ENRICHMENT_VERSION, DEMO_REPAIR_VERSION, assertDemoRepairScope, buildDemoAccessProjections, buildDemoRepairPlan, decodeBackupValue, demoRepairOptions,
+  DEMO_ENRICHMENT_VERSION, DEMO_REPAIR_VERSION, DEMO_THUMBNAIL_VERSION, assertDemoRepairScope, buildDemoAccessProjections, buildDemoRepairPlan, decodeBackupValue, demoRepairOptions,
   encodeBackupValue, enrichmentEventId, resolveExistingDemoUser, runDemoDataRepair, saveDemoRepairBackup,
 } from '../scripts/lib/demo-data-repair.mjs';
 
@@ -78,6 +80,7 @@ function fixture() {
     item.costBasis = cartulary.purchasePrice;
     item.primaryAssetId = null;
     item.completenessLevel = 'imported_unreviewed';
+    delete item.thumbnail;
     put(`${registryPath}/items/${cartulary.id}`, { ...item, generatedAt: time });
     state.queries[`${rootPath}/assets`] = [];
     state.queries[`${rootPath}/reminders`] = [];
@@ -104,7 +107,8 @@ function productionFixture() {
     put(`${rootPath}/auditEvents/${eventId}`, { ...event, occurredAt: Timestamp.fromDate(new Date(occurredAt)), occurredAtIso: occurredAt, hash });
     state.queries[`${rootPath}/auditEvents`].push(`${rootPath}/auditEvents/${eventId}`);
     put(rootPath, { ...buildDemoCartularyEnvelope(cartulary, user.uid, hash), schemaDigest, revision: 2, integritySequence: 2, completenessLevel: 'imported_unreviewed', lastVerifiedAt: null, demo: true, demoDisclaimer: 'Exemplaire, documents, historique et valeurs fictifs.', createdAt: time, updatedAt: time });
-    put(`${registryPath}/items/${cartulary.id}`, { ...buildDemoRegistryItem(cartulary, digest), completenessLevel: 'imported_unreviewed', sourceRevision: 2, generatedAt: time, updatedAt: time });
+    const { thumbnail: _thumbnail, ...itemV1 } = buildDemoRegistryItem(cartulary, digest);
+    put(`${registryPath}/items/${cartulary.id}`, { ...itemV1, completenessLevel: 'imported_unreviewed', sourceRevision: 2, generatedAt: time, updatedAt: time });
     for (const asset of assets) put(`${rootPath}/assets/${asset.id}`, { ...asset, createdAt: time, updatedAt: time });
     state.queries[`${rootPath}/assets`] = assets.map((asset) => `${rootPath}/assets/${asset.id}`).sort();
   }
@@ -212,6 +216,7 @@ test('le plan répare Galerie/codes/coût de revient/net sans remplacer Auth, dr
     assert.equal(item.costBasis, demoValuationAmounts(cartulary).costBasis);
     assert.equal(item.netValuation, demoValuationAmounts(cartulary).netValuation);
     assert.ok(state.documents[`cartularies/${cartulary.id}/assets/${item.primaryAssetId}`].data.presentationDerivative.url.startsWith('/assets/demo-watches/'));
+    assert.deepEqual(item.thumbnail, buildDemoRegistryItem(cartulary, item.contentHash).thumbnail, 'v3 posée dans la même mise à jour d’item');
   }
   assert.equal(state.documents[collectionPath].data.name, 'Les cinq icônes');
   assert.equal(assertDemoRepairScope(state, user, schema), schemaDigest);
@@ -383,7 +388,7 @@ test('v2 sur la production réparée : exactement 24 opérations, événement 3 
     assert.equal(rootUpdate.lastVerifiedAt, DEMO_REVIEWED_AT);
     assert.equal(rootUpdate.revision, 3);
     assert.equal(rootUpdate.integritySequence, 3);
-    assert.deepEqual(itemUpdate, { completenessLevel: 'complete', sourceRevision: 3, contentHash: event.afterDigest });
+    assert.deepEqual(itemUpdate, { thumbnail: buildDemoRegistryItem(cartulary, 'x').thumbnail, completenessLevel: 'complete', sourceRevision: 3, contentHash: event.afterDigest });
     assert.equal(event.sequence, 3);
     assert.equal(event.action, 'cartulary.demo.enriched');
     assert.deepEqual(event.actor, { uid: user.uid, role: 'demo_data_enrichment' });
@@ -558,4 +563,93 @@ test('--expect-no-writes : refus fermé tant que des écritures restent, succès
   const quiet = await runDemoDataRepair({ firestore: fakeFirestore(state), readAuth, registryEmail: user.email, schema, options: { apply: false, expectNoWrites: true, projectId: 'test-demo' } });
   assert.deepEqual(quiet.writes, []);
   assert.equal(quiet.applied, false);
+});
+
+// ------------------------------------------------------------------------------------------------
+// V3 — vignette de bundle sur les projections (contrat unique K3/K8) : cinq mises à jour d'item,
+// aucun événement d'audit, aucune racine ni actif touchés, rejouable avant ou après publication.
+// ------------------------------------------------------------------------------------------------
+
+const enrichedProduction = () => { const s = productionFixture(); applyPlan(s, buildDemoRepairPlan(s, user, schema, enrichedAt).changes); return s; };
+const withoutThumbnails = (state) => { for (const { id } of DEMO_CARTULARIES) delete state.documents[`${registryPath}/items/${id}`].data.thumbnail; return state; };
+
+test('v3 sur la production enrichie et publiée : exactement cinq écritures item { thumbnail }, sans audit, racine ni actif', () => {
+  assert.equal(DEMO_THUMBNAIL_VERSION, 'demo-data-enrichment-v3');
+  const state = withoutThumbnails(enrichedProduction());
+  appendPublicationEvent(state, submariner, 'publication.published');
+  const before = clone(state);
+  const plan = buildDemoRepairPlan(state, user, schema, enrichedAt);
+  assert.deepEqual(state, before);
+  assert.equal(plan.thumbnailVersion, DEMO_THUMBNAIL_VERSION);
+  assert.equal(plan.changes.length, 5);
+  for (const cartulary of DEMO_CARTULARIES) {
+    const change = plan.changes.find(({ path }) => path === `${registryPath}/items/${cartulary.id}`);
+    assert.equal(change.operation, 'update');
+    assert.deepEqual(change.data, { thumbnail: buildDemoRegistryItem(cartulary, 'x').thumbnail });
+    assert.equal(change.data.thumbnail.kind, 'bundle');
+    assert.ok(validRegistryThumbnail(change.data.thumbnail), 'vignette v3 valide pour le serveur (empreinte préfixée)');
+    assert.ok(normalizeRegistryThumbnail(change.data.thumbnail), 'vignette v3 acceptée par le client');
+    assert.match(change.data.thumbnail.path, /^\/assets\/demo-watches\/derivatives\/.+\.240\.webp$/);
+    assert.equal(change.data.thumbnail.assetId, state.documents[`${registryPath}/items/${cartulary.id}`].data.primaryAssetId);
+  }
+  assert.ok(plan.changes.every(({ path }) => !/auditEvents|\/assets\/|^cartularies\/[^/]+$/.test(path)), 'ni audit, ni actif, ni racine');
+  applyPlan(state, plan.changes);
+  for (const cartulary of DEMO_CARTULARIES) {
+    const item = state.documents[`${registryPath}/items/${cartulary.id}`].data;
+    assert.equal(item.sourceRevision, 3, 'révision de projection inchangée');
+    assert.equal(item.contentHash, before.documents[`${registryPath}/items/${cartulary.id}`].data.contentHash, 'vignette hors contentHash');
+  }
+  const root = state.documents[`cartularies/${submariner.id}`].data;
+  assert.equal(root.revision, 4);
+  assert.equal(root.publicationStatus, 'published');
+  assert.equal(verifyAuditChain({ events: auditEventsOf(state, submariner.id), integrityHead: root.integrityHead, integritySequence: root.integritySequence }).valid, true);
+  assert.equal(assertDemoRepairScope(state, user, schema), schemaDigest);
+  assert.deepEqual(buildDemoRepairPlan(state, user, schema, enrichedAt).changes, [], 'seconde simulation : zéro écriture');
+});
+
+test('v3 : une vignette altérée, incomplète ou d’un autre genre est refusée avant toute écriture ; une vignette absente n’est pas une dérive', () => {
+  const itemPath = `${registryPath}/items/${submariner.id}`;
+  const expected = buildDemoRegistryItem(submariner, 'x').thumbnail;
+  const cases = [
+    [/non fictive|non reconnue/, (s) => { s.documents[itemPath].data.thumbnail = { ...expected, path: '/assets/private/real-object.240.webp' }; }],
+    [/non fictive|non reconnue/, (s) => { s.documents[itemPath].data.thumbnail = { ...expected, sha256: 'f'.repeat(64) }; }],
+    [/non fictive|non reconnue/, (s) => { s.documents[itemPath].data.thumbnail = { kind: 'inline', dataUrl: 'data:image/webp;base64,AA==', width: 240, height: 240, assetId: expected.assetId, sha256: expected.sha256 }; }],
+    [/non fictive|non reconnue/, (s) => { const { sha256: _sha, ...partial } = expected; s.documents[itemPath].data.thumbnail = partial; }],
+  ];
+  for (const [pattern, mutate] of cases) {
+    const state = enrichedProduction();
+    mutate(state);
+    assert.throws(() => buildDemoRepairPlan(state, user, schema, enrichedAt), pattern);
+  }
+  const state = enrichedProduction();
+  delete state.documents[itemPath].data.thumbnail;
+  assert.doesNotThrow(() => assertDemoRepairScope(state, user, schema));
+  assert.deepEqual(buildDemoRepairPlan(state, user, schema, enrichedAt).changes.map(({ path, data }) => [path, Object.keys(data)]), [[itemPath, ['thumbnail']]]);
+});
+
+test('v3 appliquée en une transaction : horodatage serveur updatedAt seul, sauvegarde versionnée, --expect-no-writes ensuite', async () => {
+  const state = withoutThumbnails(enrichedProduction());
+  const firestore = fakeFirestore(state);
+  const readAuth = { getUserByEmail: async () => authUser };
+  await assert.rejects(runDemoDataRepair({ firestore: fakeFirestore(clone(state)), readAuth, registryEmail: user.email, schema, options: { apply: false, expectNoWrites: true, projectId: 'test-demo' } }), /--expect-no-writes/);
+  const directory = mkdtempSync(join(tmpdir(), 'cartularia-demo-v3-'));
+  try {
+    const applied = await runDemoDataRepair({ firestore, readAuth, registryEmail: user.email, schema, options: { apply: true, projectId: 'test-demo', backupDirectory: directory } });
+    assert.equal(applied.applied, true);
+    assert.equal(applied.writes.length, 5);
+    assert.ok(applied.writes.every(({ path, operation }) => path.startsWith(`${registryPath}/items/`) && operation === 'update'));
+    const backup = JSON.parse(readFileSync(applied.backup.path, 'utf8'));
+    assert.equal(backup.thumbnailVersion, DEMO_THUMBNAIL_VERSION);
+    assert.ok(applied.backup.path.includes(DEMO_THUMBNAIL_VERSION));
+    assert.equal(backup.before.length, 5);
+    assert.ok(backup.before.every(({ existed, document }) => existed === true && document !== null), 'les cinq items existaient : restauration possible');
+    const isServerStamp = (value) => value && value.constructor?.name === 'ServerTimestampTransform';
+    for (const { data } of firestore.activity.committed) {
+      assert.deepEqual(Object.keys(data).sort(), ['thumbnail', 'updatedAt']);
+      assert.ok(isServerStamp(data.updatedAt));
+    }
+    applyPlan(state, firestore.activity.committed.map(({ path, data }) => ({ path, data: { thumbnail: data.thumbnail } })));
+    const quiet = await runDemoDataRepair({ firestore: fakeFirestore(state), readAuth, registryEmail: user.email, schema, options: { apply: false, expectNoWrites: true, projectId: 'test-demo' } });
+    assert.deepEqual(quiet.writes, []);
+  } finally { rmSync(directory, { recursive: true }); }
 });

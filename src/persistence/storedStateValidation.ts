@@ -1,3 +1,5 @@
+import { normalizePrivatePresentation } from '../domain/presentationVariants.ts';
+
 export interface StoredStateReader {
   getItem(key: string): string | null;
 }
@@ -118,6 +120,11 @@ const stringRecord: Normalizer = (value, fallback) => {
   return Object.fromEntries(Object.entries(source).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
 };
 
+/** Référence figée d'un miroir privatePresentation : conservée si valide, retirée sinon (jamais un chemin arbitraire). */
+const optionalPrivatePresentation: Normalizer = (value, fallback) => (
+  normalizePrivatePresentation(value) ?? normalizePrivatePresentation(fallback) ?? undefined
+);
+
 const optionalBinaryFields = {
   id: optionalString,
   name: stringValue,
@@ -163,6 +170,7 @@ const normalizedMediaObject = identifiedObject({
   cloudStoragePath: optionalString,
   derivativeStatus: optionalString,
   sourceSection: optionalEnumValue(['reference-report']),
+  privatePresentation: optionalPrivatePresentation,
 });
 
 const mediaAsset: Normalizer = (value, fallback) => {

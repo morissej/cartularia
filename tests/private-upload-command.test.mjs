@@ -123,3 +123,25 @@ test('seuls les anciens fichiers de transition ou les fichiers acceptés sont ut
     uploadStatus: 'pending_upload',
   }), false);
 });
+
+test('une image produit aussi les variantes v3 (derivativeId = nom de fichier complet) et une vignette inline issue de la 240', async () => {
+  const original = await sharp({ create: { width: 900, height: 600, channels: 3, background: '#8a6d3b' } }).jpeg().toBuffer();
+  await withFile('objet.jpg', original, async (path) => {
+    const inspection = await inspectTrustedUpload({ path, fileName: 'objet.jpg', declaredMimeType: 'image/jpeg', expectedDigest: digestOf(original), expectedSize: original.length });
+    assert.deepEqual(inspection.variants.map((variant) => variant.derivativeId), ['presentation-v3-240.webp', 'presentation-v3-480.webp', 'presentation-v3-768.webp']);
+    for (const variant of inspection.variants) {
+      assert.equal(variant.derivativeId, `presentation-v3-${variant.nominalWidth}.webp`, 'le derivativeId doit être le dernier segment du chemin (storage.rules)');
+      assert.ok(variant.width <= 900);
+      assert.equal((await sharp(variant.bytes).metadata()).format, 'webp');
+    }
+    assert.equal(inspection.derivative.width, 900, 'copie principale ≤ 2400 inchangée');
+    assert.equal(inspection.thumbnail.sha256, inspection.variants[0].sha256);
+    assert.ok(inspection.thumbnail.dataUrl.length <= 24_000);
+  });
+  const pdf = Buffer.from('%PDF-1.7\n1 0 obj <<>> endobj\n%%EOF');
+  await withFile('note.pdf', pdf, async (path) => {
+    const inspection = await inspectTrustedUpload({ path, fileName: 'note.pdf', declaredMimeType: 'application/pdf', expectedDigest: digestOf(pdf), expectedSize: pdf.length });
+    assert.deepEqual(inspection.variants, [], 'aucune variante image pour un document');
+    assert.equal(inspection.thumbnail, null);
+  });
+});

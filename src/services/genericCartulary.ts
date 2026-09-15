@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase.ts';
 import type { CartularyEnvelope } from '../domain/cartulary.ts';
+import { presentationFromAssetDocument } from '../domain/presentationVariants.ts';
 import type { Asset } from '../types';
 import { requestAuthoritativeCartularySync, waitForAuthoritativeSyncCycle } from '../persistence/cloudDraft.ts';
 import { uploadVerifiedCartularyMedia } from './cartularyCreation';
@@ -29,11 +30,14 @@ export async function loadGenericCartularyAssets(cartularyId: string): Promise<A
   return snapshot.docs.flatMap((document) => {
     const asset = document.data();
     if (asset.projectionStatus === 'withdrawn' || !['image', 'video', 'document'].includes(asset.mediaKind)) return [];
+    // presentationDerivative.url reste réservé aux chemins same-origin des démos ; les objets privés portent privatePresentation (V3).
     const url = typeof asset.presentationDerivative?.url === 'string' && asset.presentationDerivative.url.startsWith('/assets/') ? asset.presentationDerivative.url : '';
+    const privatePresentation = presentationFromAssetDocument(asset);
     return [{ id: document.id, cartularyId, name: asset.displayName || document.id,
       type: asset.mediaKind, url, thumbnailUrl: url || undefined, hash: asset.sha256 || '',
       status: 'Archived', visibility: asset.requestedVisibility === 'public' ? 'Tous' : asset.requestedVisibility === 'community' ? 'Communauté' : 'Secret', tags: Array.isArray(asset.tags) ? asset.tags : [],
       binaryId: typeof asset.binaryId === 'string' ? asset.binaryId : undefined,
+      ...(privatePresentation && privatePresentation.binaryId === asset.binaryId ? { privatePresentation } : {}),
       mimeType: asset.mimeDeclared || undefined, originalFileName: asset.originalFileName || undefined,
       capturedAt: typeof asset.capturedAt === 'string' ? asset.capturedAt : undefined,
     } as Asset];

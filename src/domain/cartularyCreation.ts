@@ -1,4 +1,5 @@
 import { CREATION_PROFILE_DEFINITIONS, type CreationProfileDefinition } from '../../scripts/lib/creation-profile-map.mjs';
+import type { PrivatePresentation } from './presentationVariants.ts';
 
 export const CARTULARY_CREATION_PROFILE_VERSION = '1.0.0';
 
@@ -158,7 +159,55 @@ export interface CartularyCreationMediaAsset {
   derivativeStatus: 'not-required' | 'pending' | 'ready';
   capturedAt: string;
   timestampSource: 'file.lastModified' | 'exif.DateTimeOriginal' | 'exif.CreateDate';
+  /**
+   * Référence figée des variantes de présentation privées (contrat V3, K2/K4), posée dans
+   * `cartularia-media-assets-v3` dès la fin de la vérification : le lecteur affiche ces variantes sans
+   * relire le manifeste ; l'original n'est chargé que sur action explicite. Absente quand le serveur n'a
+   * produit aucune variante (vidéo, PDF, échec) — l'aperçu est alors « en préparation », jamais l'original.
+   * Si le chemin devient périmé (régénération), le service relit le manifeste une fois (G12).
+   */
+  privatePresentation?: PrivatePresentation;
 }
+
+/** Bilan honnête des médias téléversés, affiché sur l'écran de succès (décision V2 (d) : jamais de faux état). */
+export interface CartularyCreationMediaSummary {
+  total: number;
+  /** Images dont les variantes de présentation sont prêtes (affichage immédiat, sans l'original). */
+  imagesReady: number;
+  /** Images acceptées sans variante : « Aperçu en préparation » jusqu'au passage nocturne (G5). */
+  imagesPending: number;
+  /** Vidéos sans copie de présentation (aucun transcodeur en production) : lisibles à la demande seulement. */
+  videosOnDemand: number;
+  documents: number;
+}
+
+export const summarizeCreationMedia = (assets: readonly Pick<CartularyCreationMediaAsset, 'type' | 'privatePresentation'>[]): CartularyCreationMediaSummary => assets.reduce<CartularyCreationMediaSummary>((summary, asset) => {
+  summary.total += 1;
+  if (asset.type === 'image') {
+    if (asset.privatePresentation && asset.privatePresentation.variants.length > 0) summary.imagesReady += 1;
+    else summary.imagesPending += 1;
+  } else if (asset.type === 'video') summary.videosOnDemand += 1;
+  else summary.documents += 1;
+  return summary;
+}, { total: 0, imagesReady: 0, imagesPending: 0, videosOnDemand: 0, documents: 0 });
+
+const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count > 1 ? pluralForm : singular}`;
+
+/**
+ * Phrases de l'écran de succès : seules les situations qui changent ce que le propriétaire verra sont
+ * annoncées (aucune phrase quand tout est prêt). Le libellé ne promet jamais un dérivé qui n'existe pas.
+ */
+export const describeCreationMediaSummary = (summary: CartularyCreationMediaSummary | null | undefined): string[] => {
+  if (!summary) return [];
+  const notes: string[] = [];
+  if (summary.imagesPending > 0) {
+    notes.push(`${plural(summary.imagesPending, 'photo', 'photos')} sans aperçu pour l’instant : « Aperçu en préparation » dans le Cartulaire jusqu’à la production de la copie de présentation ; l’original reste consultable sur demande.`);
+  }
+  if (summary.videosOnDemand > 0) {
+    notes.push(`${plural(summary.videosOnDemand, 'vidéo restera consultable', 'vidéos resteront consultables')} à la demande (copie de présentation non produite).`);
+  }
+  return notes;
+};
 
 export interface CartularyCreationResult {
   cartularyId: string;
@@ -166,6 +215,8 @@ export interface CartularyCreationResult {
   publicCode: string;
   uploadedFileCount: number;
   uploadedBytes: number;
+  /** Absent pour une reprise antérieure à V3 : l'écran de succès n'annonce alors rien. */
+  media?: CartularyCreationMediaSummary;
 }
 
 export const CARTULARY_CREATION_TIMEOUT_MESSAGE = 'La création peut encore aboutir. Vérifiez le catalogue avant de recommencer ; ce bouton reprendra la même demande sans téléverser à nouveau les fichiers.';

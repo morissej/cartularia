@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { CANONICALIZATION_VERSION, canonicalize, sha256Digest } from './canonical-json.mjs';
 import { findPrivatePublicKeyToken, findPrivatePublicTextToken } from './public-text-policy.mjs';
+import { registryItemPresentationFields } from './registry-thumbnail.mjs';
 
 const ZERO_HASH = `sha256:${'0'.repeat(64)}`;
 
@@ -269,11 +270,19 @@ export const projectRegistryItem = async ({
       `organizations/${rootData.organizationId}/memberships/${actorId}`,
     );
     const itemRef = registryRef.collection('items').doc(cartularyId);
-    const [registry, membership, item] = await Promise.all([
+    const primaryAssetId = typeof rootData.primaryAssetId === 'string' && rootData.primaryAssetId ? rootData.primaryAssetId : null;
+    const [registry, membership, item, primaryAsset] = await Promise.all([
       transaction.get(registryRef),
       transaction.get(membershipRef),
       transaction.get(itemRef),
+      primaryAssetId ? transaction.get(rootRef.collection('assets').doc(primaryAssetId)) : null,
     ]);
+    // Manifeste du binaire primaire (lecture avant toute écriture de la transaction) : thumbnailStatus 'failed' quand
+    // la copie de présentation ne sera pas produite (K3 étendu) ; absent ou illisible → jamais un échec.
+    const primaryBinaryId = primaryAsset?.exists && typeof primaryAsset.data()?.binaryId === 'string' ? primaryAsset.data().binaryId : null;
+    const primaryBinary = primaryBinaryId && typeof rootData.accountHolderId === 'string' && rootData.accountHolderId
+      ? await transaction.get(firestore.doc(`privateDrafts/${rootData.accountHolderId}/cartularies/${cartularyId}/binaries/${primaryBinaryId}`))
+      : null;
     assertPublisher(membership, rootData, actorId);
     if (!registry.exists || registry.data().organizationId !== rootData.organizationId) {
       throw new ProjectionCommandError('registry_not_ready', 'Registre absent ou hors tenant.');
@@ -321,8 +330,16 @@ export const projectRegistryItem = async ({
       resource: { type: 'registryItem', id: cartularyId },
       afterDigest,
     });
+    // Vignette, nature et état de la couverture (contrat K3 étendu) : depuis l'asset primaire, sinon conservées ; hors afterDigest.
+    const presentationFields = registryItemPresentationFields({
+      primaryAssetId,
+      primaryAsset: primaryAsset?.exists ? primaryAsset.data() : null,
+      existingItem: item.exists ? item.data() : null,
+      primaryBinary: primaryBinary?.exists ? primaryBinary.data() : null,
+    });
     transaction.set(itemRef, {
       ...projection,
+      ...presentationFields,
       sourceRevision: nextRevision,
       contentHash: afterDigest,
       generatedAt: FieldValue.serverTimestamp(),

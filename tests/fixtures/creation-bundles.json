@@ -455,7 +455,8 @@
         "sourceRefs": [
           "source_owner_creation"
         ],
-        "accessPolicyVersion": "wave2-deny-all"
+        "accessPolicyVersion": "wave2-deny-all",
+        "privatePresentation": null
       }
     ],
     "spinSets": [],
@@ -972,7 +973,8 @@
         "sourceRefs": [
           "source_owner_creation"
         ],
-        "accessPolicyVersion": "wave2-deny-all"
+        "accessPolicyVersion": "wave2-deny-all",
+        "privatePresentation": null
       }
     ],
     "spinSets": [],
@@ -1212,7 +1214,8 @@
         "sourceRefs": [
           "source_owner_creation"
         ],
-        "accessPolicyVersion": "wave2-deny-all"
+        "accessPolicyVersion": "wave2-deny-all",
+        "privatePresentation": null
       }
     ],
     "spinSets": [],
@@ -1651,7 +1654,8 @@
         "sourceRefs": [
           "source_owner_creation"
         ],
-        "accessPolicyVersion": "wave2-deny-all"
+        "accessPolicyVersion": "wave2-deny-all",
+        "privatePresentation": null
       }
     ],
     "spinSets": [],
@@ -1911,7 +1915,8 @@
         "sourceRefs": [
           "source_owner_creation"
         ],
-        "accessPolicyVersion": "wave2-deny-all"
+        "accessPolicyVersion": "wave2-deny-all",
+        "privatePresentation": null
       }
     ],
     "spinSets": [],
