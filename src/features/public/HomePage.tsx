@@ -321,7 +321,7 @@ export function HomePage() {
         </div>
       </header>
 
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
         {/* HERO SECTION */}
         <section className="public-hero" aria-labelledby="home-title">
           <div className="public-hero__copy">
@@ -357,7 +357,7 @@ export function HomePage() {
           </div>
 
           {/* HERO INTERACTIVE DEMO PREVIEW */}
-          <div className="public-hero__product" aria-label="Aperçu interactif d'un Cartulaire">
+          <div className="public-hero__product" role="group" aria-label="Aperçu interactif d'un Cartulaire">
             <div className="public-product-window">
               <header>
                 <span />
@@ -369,17 +369,20 @@ export function HomePage() {
               <div className="public-product-window__body">
                 <aside aria-label="Onglets du dossier">
                   <BrandLogo href="/" variant="symbol" decorative />
-                  {HERO_DEMO_TABS.map((tab, idx) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      className={`public-tab-btn ${activeTab === idx ? 'is-active' : ''}`}
-                      onClick={() => setActiveTab(idx)}
-                      aria-pressed={activeTab === idx}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                  {/* Enveloppe interne : en mobile, c'est elle qui défile et porte le fondu d'indice (le fond et la bordure de l'aside restent intacts). */}
+                  <div className="public-product-window__tabs">
+                    {HERO_DEMO_TABS.map((tab, idx) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={`public-tab-btn ${activeTab === idx ? 'is-active' : ''}`}
+                        onClick={() => setActiveTab(idx)}
+                        aria-pressed={activeTab === idx}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
                 </aside>
 
                 <article>

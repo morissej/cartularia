@@ -248,6 +248,42 @@ function RegistrySignIn({ demoRequested = false }: { demoRequested?: boolean }) 
   );
 }
 
+/**
+ * Libellé d'une action de la barre supérieure : le libellé long reste dans l'arbre d'accessibilité sur toutes les
+ * fenêtres (masqué visuellement en mobile, jamais `display: none`) ; le libellé court, affiché en mobile, est
+ * `aria-hidden`. Le nom accessible est donc stable (« Se déconnecter », « Site d’accueil », …) en bureau comme en mobile.
+ */
+function TopbarLabel({ long, short }: { long: string; short: string }) {
+  return (
+    <span className="registry-topbar__label">
+      <span className="registry-topbar__label-long">{long}</span>
+      <span className="registry-topbar__label-short" aria-hidden="true">{short}</span>
+    </span>
+  );
+}
+
+/** Actions de la barre supérieure du Registre (Sécurité, Accueil, Déconnexion) : un seul lien vers le site d'accueil. */
+function RegistryTopbarActions({ securityHref, onSignOut }: { securityHref?: string; onSignOut: () => void }) {
+  return (
+    <div className="registry-topbar__actions">
+      {securityHref && (
+        <a className="registry-home-link" href={securityHref}>
+          <KeyRound aria-hidden="true" size={14} />
+          <TopbarLabel long="Sécurité et kit de secours" short="Sécurité" />
+        </a>
+      )}
+      <a className="registry-home-link" href="/" title="Retourner au site d’accueil Cartularia">
+        <Home aria-hidden="true" size={14} />
+        <TopbarLabel long="Site d’accueil" short="Accueil" />
+      </a>
+      <button type="button" className="registry-signout" onClick={onSignOut}>
+        <LogOut aria-hidden="true" />
+        <TopbarLabel long="Se déconnecter" short="Déconnexion" />
+      </button>
+    </div>
+  );
+}
+
 function RegistryChooser({ choices, user, onRegistryClick }: {
   choices: RegistryChoice[];
   user: User;
@@ -263,14 +299,10 @@ function RegistryChooser({ choices, user, onRegistryClick }: {
       <header className="registry-topbar registry-topbar--chooser">
         <div className="registry-brand"><BrandLogo href="/registry" /></div>
         <div className="registry-account-controls">
-          {choices.some((choice) => choice.registry.id !== DEMO_ACCOUNT.registryId) && <a className="registry-home-link" href="/account/security"><KeyRound aria-hidden="true" size={14} /><span>Sécurité et kit de secours</span></a>}
-          <a className="registry-home-link" href="/" title="Retourner au site d’accueil Cartularia">
-            <Home aria-hidden="true" size={14} />
-            <span>Site d’accueil</span>
-          </a>
-          <button type="button" className="registry-signout" onClick={handleSignOut}>
-            <LogOut aria-hidden="true" /> Se déconnecter
-          </button>
+          <RegistryTopbarActions
+            securityHref={choices.some((choice) => choice.registry.id !== DEMO_ACCOUNT.registryId) ? '/account/security' : undefined}
+            onSignOut={handleSignOut}
+          />
         </div>
       </header>
       <main className="registry-chooser">
@@ -360,11 +392,10 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
           <strong>{registry.name}</strong>
         </div>
         <div className="registry-account-controls">
-          {registry.id !== DEMO_ACCOUNT.registryId && <a className="registry-home-link" href={`/account/security?returnTo=${encodeURIComponent(registryHref(registry.id))}`}><KeyRound aria-hidden="true" size={14} /><span>Sécurité et kit de secours</span></a>}
-          <a className="registry-home-link" href="/" title="Retourner au site d’accueil Cartularia">
-            <Home aria-hidden="true" size={14} />
-            <span>Site d’accueil</span>
-          </a>
+          <RegistryTopbarActions
+            securityHref={registry.id !== DEMO_ACCOUNT.registryId ? `/account/security?returnTo=${encodeURIComponent(registryHref(registry.id))}` : undefined}
+            onSignOut={() => { if (confirmUnsavedNavigation()) void signOutOfCartularia(); }}
+          />
           {choices.length > 1 && (
             <label className="registry-context-select">
               <span>Contexte</span>
@@ -381,9 +412,6 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
             <UserRound aria-hidden="true" />
             <span><strong>{registryAccountLabel(user)}</strong><small>Compte authentifié</small></span>
           </div>
-          <button type="button" className="registry-signout registry-signout--account" onClick={() => { if (confirmUnsavedNavigation()) void signOutOfCartularia(); }}>
-            <LogOut aria-hidden="true" /> Se déconnecter
-          </button>
         </div>
       </header>
 

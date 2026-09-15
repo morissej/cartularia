@@ -81,6 +81,9 @@
   gap: var(--s3);
 }
 
+.registry-topbar__actions { display: flex; align-items: center; gap: var(--s3); }
+.registry-topbar__label-short { display: none; }
+
 .registry-context-select { display: grid; gap: 2px; }
 .registry-context-select select {
   max-width: 280px;
@@ -147,31 +150,6 @@
 
 .registry-home-link:hover { border-color: var(--mark); color: var(--mark); }
 .registry-home-link svg { width: 14px; height: 14px; }
-
-.registry-sidebar__home {
-  margin-top: auto;
-  padding: var(--s3) var(--s4);
-  border-top: 1px solid var(--rule);
-}
-
-.registry-sidebar__home-btn {
-  display: flex;
-  min-height: 38px;
-  align-items: center;
-  gap: var(--s2);
-  padding: 0 var(--s3);
-  border: 1px solid var(--rule);
-  background: var(--sheet);
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: border-color var(--transition), color var(--transition);
-}
-
-.registry-sidebar__home-btn:hover { border-color: var(--mark); color: var(--mark); }
-.registry-sidebar__home-btn svg { width: 14px; height: 14px; color: var(--muted); }
-.registry-sidebar__home-btn:hover svg { color: var(--mark); }
 
 .registry-layout {
   display: grid;
@@ -1608,18 +1586,26 @@
 
 @media (max-width: 720px) {
   .registry-access-create { grid-template-columns: 1fr; }
-  .registry-topbar { position: static; min-height: auto; grid-template-columns: 1fr auto; gap: var(--s3); padding: var(--s3) var(--s4); }
-  .registry-brand { width: 140px; }
-  .registry-product-label { grid-row: 2; grid-column: 1 / -1; padding: var(--s2) 0 0; border-top: 1px solid var(--rule); border-left: 0; }
+  /* Topbar compactée (V6, V-D5) : logo | actions sur la première rangée, « Registre · nom » sur une ligne, sélecteur de contexte pleine largeur. */
+  .registry-topbar { position: static; min-height: auto; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "brand actions" "label label" "context context"; row-gap: 0; column-gap: var(--s3); padding: var(--s3) var(--s4); }
+  .registry-brand { grid-area: brand; width: 128px; align-self: center; }
+  .registry-product-label { grid-area: label; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: var(--s2); margin-top: var(--s2); padding: 0; border: 0; }
+  .registry-product-label span::after { content: ' ·' / ''; }
   .registry-account-controls { display: contents; }
-  .registry-context-select { grid-row: 3; grid-column: 1 / -1; }
-  .registry-context-select select { width: 100%; max-width: none; }
-  .registry-signout--account { grid-row: 1; grid-column: 2; }
+  .registry-topbar__actions { grid-area: actions; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
+  .registry-home-link, .registry-signout { display: grid; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 2px; min-width: 56px; min-height: var(--control-size); padding: 4px 6px; font-size: 9px; letter-spacing: .02em; }
+  .registry-home-link svg, .registry-signout svg { width: 16px; height: 16px; }
+  /* Libellé long conservé dans l'arbre d'accessibilité (motif sr-only, jamais display: none) ; libellé court affiché. */
+  .registry-topbar__label-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .registry-topbar__label-short { display: inline; }
+  .registry-context-select { grid-area: context; margin-top: var(--s2); }
+  .registry-context-select select { width: 100%; max-width: none; min-height: var(--control-size); }
   .registry-layout { display: block; }
-  .registry-sidebar { position: sticky; top: 0; z-index: 90; display: block; border-right: 0; border-bottom: 1px solid var(--rule); }
+  /* Barre de navigation statique (V6, D7) : 9 entrées en 3 × 3, aucune orpheline ; navigateRegistry ramène en haut à chaque section. */
+  .registry-sidebar { position: static; display: block; border-right: 0; border-bottom: 1px solid var(--rule); }
   .registry-sidebar__context, .registry-sidebar__security { display: none; }
-  .registry-sidebar nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0; }
-  .registry-sidebar nav a { min-height: 66px; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 4px; padding: 6px 4px; text-align: center; border-bottom: 2px solid transparent; border-left: 0; }
+  .registry-sidebar nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0; }
+  .registry-sidebar nav a { min-height: 56px; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 4px; padding: 6px 4px; text-align: center; border-bottom: 2px solid transparent; border-left: 0; }
   .registry-sidebar nav a span { font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
   .registry-sidebar nav a[aria-current='page'] { border-bottom-color: var(--mark); border-left: 0; }
   .registry-main { padding: var(--s5) var(--s4); }

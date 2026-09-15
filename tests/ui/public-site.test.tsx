@@ -27,6 +27,21 @@ describe('HomePage Public Site UX & Content', () => {
     expect(screen.getByText(/À contrôler à l’import/i)).toBeTruthy();
   });
 
+  it('V6 — expose la maquette comme un groupe nommé, ses six onglets dans une enveloppe défilante, et un main focalisable', () => {
+    render(<HomePage />);
+
+    // `aria-label` sur un `div` sans rôle n'est pas exposé : le rôle `group` porte le nom.
+    expect(screen.getByRole('group', { name: /Aperçu interactif d'un Cartulaire/ })).toBeTruthy();
+    // L'enveloppe interne (et non l'aside) contient les six onglets : en mobile, c'est elle qui défile et porte le fondu.
+    const tabsAside = screen.getByRole('complementary', { name: 'Onglets du dossier' });
+    const wrapper = tabsAside.querySelector('.public-product-window__tabs');
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.querySelectorAll('button.public-tab-btn').length).toBe(6);
+    expect(tabsAside.querySelectorAll(':scope > button.public-tab-btn').length).toBe(0);
+    // Le lien d'évitement cible `main`, qui doit pouvoir recevoir le focus programmatique.
+    expect(screen.getByRole('main').getAttribute('tabindex')).toBe('-1');
+  });
+
   it('présente les deux portes d’entrée fondamentales (Assurance et Transmission)', () => {
     render(<HomePage />);
 
