@@ -5,6 +5,9 @@
  * (tests/helpers/memory-firestore.mjs) : chaîne d'audit réelle (import + synchronisations), projection et
  * `contentHash` réels, quota et transaction réels. Le cas émulateur équivalent vit dans tests/live-sync.test.mjs
  * (`npm run test:live-sync`) ; celui-ci verrouille la logique sans dépendre de Java.
+ * Relecture du lot B : la demande porte un `requestId` de forme production (`sync_…`, src/persistence/cloudDraft.ts),
+ * distinct du jeton d'opération (UUID côté client) — l'événement d'audit dérive de la demande, jamais du jeton (F3) ;
+ * chaque condition d'`assertOwnerEditor` est verrouillée séparément (F2).
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -62,11 +65,16 @@ const projectionOf = (record) => {
   const { thumbnail: _thumbnail, primaryMediaKind: _kind, thumbnailStatus: _status, contentHash, generatedAt: _generatedAt, updatedAt: _updatedAt, ...projection } = record;
   return { contentHash, projection };
 };
+/** Identifiant de demande de forme production (cloudDraft.ts : `sync_<ts36>_<16 hex>`, motif des règles `^sync_[a-z0-9_]{16,96}$`). */
+let requestClock = 0;
+const nextRequestId = () => `sync_${(requestClock += 1).toString(36).padStart(8, '0')}_${'0123456789abcdef'}`;
 /** Le lecteur unique écrit la décision et le marqueur dans la même transaction (genericCartulary.ts, B5) puis demande la synchronisation. */
-const writeReview = async (firestore, { level, token, baseRevision = root(firestore).revision, revision = 1, decision = buildCartularyReviewDecision({ baseRevision, level }) }) => {
+const writeReview = async (firestore, { level, token, requestId = nextRequestId(), baseRevision = root(firestore).revision, revision = 1, decision = buildCartularyReviewDecision({ baseRevision, level }) }) => {
+  assert.notEqual(requestId, token, 'la demande et le jeton sont deux identifiants distincts, comme en production');
   await writeState(firestore, REVIEW_STATE_KEY, decision, { revision });
   await writeState(firestore, 'cartularia-generic-operation', { kind: REVIEW_OPERATION_KIND, token }, { revision });
-  await requestSync(firestore, token);
+  await requestSync(firestore, requestId);
+  return requestId;
 };
 const rejectsWithCode = (promise, code, name = 'CartularyReviewError') => assert.rejects(promise, (error) => {
   assert.equal(error.name, name);
@@ -107,8 +115,8 @@ test('revue partielle : racine active/partial datée par le serveur, projection 
 
   // Une affectation de Collection héritée déposée en même temps que la revue n'est pas réappliquée (genericContext).
   await writeState(firestore, 'cartularia-collection-id', 'col_after_review');
-  const token = 'op_review_partial_000000000001';
-  await writeReview(firestore, { level: 'partial', token });
+  const token = 'e7a4c1d2-3b5f-4a6e-9c8d-0f1e2d3c4b5a';
+  const requestId = await writeReview(firestore, { level: 'partial', token });
   const result = await sync(firestore, REVIEW_AT);
   assert.deepEqual([result.status, result.outcome, result.revision], ['processed', 'updated', 3]);
 
@@ -132,13 +140,15 @@ test('revue partielle : racine active/partial datée par le serveur, projection 
   assert.equal(contentHash, result.contentHash);
   assert.equal(JSON.stringify(projected).includes(OWNER), false, 'aucun uid dans l’item');
 
-  // Chaîne d'audit : un événement dédié, ressource = le Cartulaire, eventId dérivé de l'action et de la demande.
+  // Chaîne d'audit : un événement dédié, ressource = le Cartulaire, eventId dérivé de l'action et de la demande — jamais du jeton.
   const events = await auditEvents(firestore);
   const reviewEvent = events.at(-1);
   assert.equal(REVIEW_CONFIRMED_ACTION, 'cartulary.review.confirmed');
-  assert.deepEqual([reviewEvent.action, reviewEvent.resource, reviewEvent.sequence, reviewEvent.requestId], [REVIEW_CONFIRMED_ACTION, { type: 'cartulary', id: ID }, 3, token]);
+  assert.deepEqual([reviewEvent.action, reviewEvent.resource, reviewEvent.sequence, reviewEvent.requestId], [REVIEW_CONFIRMED_ACTION, { type: 'cartulary', id: ID }, 3, requestId]);
   assert.deepEqual(reviewEvent.actor, { uid: OWNER, role: 'legal_owner' });
-  assert.equal(reviewEvent.eventId, `evt_${sha256Digest(`${REVIEW_CONFIRMED_ACTION}:${token}`).slice(7, 31)}`);
+  assert.equal(reviewEvent.eventId, `evt_${sha256Digest(`${REVIEW_CONFIRMED_ACTION}:${requestId}`).slice(7, 31)}`);
+  assert.notEqual(reviewEvent.eventId, `evt_${sha256Digest(`${REVIEW_CONFIRMED_ACTION}:${token}`).slice(7, 31)}`, 'la graine est la demande, pas le jeton');
+  assert.equal(JSON.stringify(reviewEvent).includes(token), false, 'le jeton d’opération n’entre pas dans la chaîne de preuves');
   assert.equal(reviewEvent.occurredAtIso, REVIEW_AT);
   assert.equal(reviewEvent.afterDigest, after.liveStateDigest);
   const chain = await chainOf(firestore);
@@ -157,7 +167,7 @@ test('revue partielle : racine active/partial datée par le serveur, projection 
 
   // « Mettre à jour la revue » : nouveau jeton, palier complet, date mise à jour, statut toujours actif.
   const secondToken = 'op_review_complete_00000000002';
-  await writeReview(firestore, { level: 'complete', token: secondToken, revision: 2 });
+  await writeReview(firestore, { level: 'complete', token: secondToken, requestId: 'sync_review_update_0000000000004', revision: 2 });
   const updated = await sync(firestore, SECOND_REVIEW_AT);
   assert.deepEqual([updated.outcome, updated.revision], ['updated', 4]);
   assert.deepEqual([root(firestore).lifecycleStatus, root(firestore).completenessLevel, root(firestore).lastVerifiedAt, root(firestore).lastGenericOperationToken], ['active', 'complete', SECOND_REVIEW_AT, secondToken]);
@@ -183,12 +193,12 @@ test('une décision périmée est refusée en revision_conflict : racine et Regi
   await sync(firestore, FIRST_SYNC_AT);
   const before = firestore.dump();
   const token = 'op_review_stale_0000000000000009';
-  await writeReview(firestore, { level: 'partial', token, baseRevision: before[ROOT_PATH].revision - 1 });
+  const requestId = await writeReview(firestore, { level: 'partial', token, baseRevision: before[ROOT_PATH].revision - 1 });
   await rejectsWithCode(sync(firestore, REVIEW_AT), 'revision_conflict');
   assert.deepEqual(root(firestore), before[ROOT_PATH], 'racine intacte');
   assert.deepEqual(item(firestore), before[ITEM_PATH], 'projection intacte');
   assert.equal((await chainOf(firestore)).eventCount, 2);
-  await markCartularySyncRequestFailed({ firestore, requestDocumentId: ID, requestId: token, error: new CartularyReviewError('revision_conflict', 'périmée') });
+  await markCartularySyncRequestFailed({ firestore, requestDocumentId: ID, requestId, error: new CartularyReviewError('revision_conflict', 'périmée') });
   assert.deepEqual([firestore.dump()[REQUEST_PATH].status, firestore.dump()[REQUEST_PATH].errorCode], ['failed', 'revision_conflict']);
   // Rejouée avec la révision courante, la même décision passe : le conflit n'est pas persistant au-delà du rejeu.
   await writeReview(firestore, { level: 'partial', token: 'op_review_retry_000000000000010', revision: 2 });
@@ -207,6 +217,32 @@ test('un Cartulaire suspendu, cédé ou archivé refuse la revue (review_not_all
     assert.equal(firestore.dump()[ITEM_PATH], undefined, `${lifecycleStatus} : aucune projection écrite`);
     assert.equal((await chainOf(firestore)).eventCount, 1, lifecycleStatus);
   }
+});
+
+test('assertOwnerEditor verrouille chaque condition séparément : sans legal_owner, sans cartulary.edit, suspendu, Registre hors périmètre ou autre uid → permission_denied sans rien écrire', async () => {
+  const membershipPath = `organizations/org_demo/memberships/${OWNER}`;
+  const variants = {
+    'sans legal_owner': { roles: ['account_holder'] },
+    'sans cartulary.edit': { permissions: ['registry.read', 'cartulary.read', 'publication.manage'] },
+    'adhésion suspendue': { status: 'suspended' },
+    'Registre hors périmètre': { scopes: { registryIds: ['reg_autre'] } },
+    'autre uid': { uid: 'wave1-other' },
+  };
+  for (const [label, patch] of Object.entries(variants)) {
+    const firestore = await seed();
+    await firestore.doc(membershipPath).set(patch, { merge: true });
+    const before = firestore.dump();
+    await writeReview(firestore, { level: 'complete', token: `op_review_denied_${Object.keys(variants).indexOf(label)}_00000001` });
+    await rejectsWithCode(sync(firestore, REVIEW_AT), 'permission_denied', 'LiveSyncCommandError');
+    assert.deepEqual(root(firestore), before[ROOT_PATH], `${label} : racine intacte`);
+    assert.equal(firestore.dump()[ITEM_PATH], undefined, `${label} : aucune projection écrite`);
+    assert.equal((await chainOf(firestore)).eventCount, 1, `${label} : aucun événement`);
+    assert.equal(firestore.dump()[`${ROOT_PATH}/liveState/${REVIEW_STATE_KEY}`], undefined, `${label} : décision non recopiée`);
+  }
+  // Témoin : l'adhésion intacte accepte la même revue.
+  const firestore = await seed();
+  await writeReview(firestore, { level: 'complete', token: 'op_review_granted_0000000000001' });
+  assert.deepEqual([(await sync(firestore, REVIEW_AT)).outcome, root(firestore).completenessLevel], ['updated', 'complete']);
 });
 
 test('une décision hors contrat est refusée en invalid_review ; un genre inconnu reste invalid_generic_operation', async () => {

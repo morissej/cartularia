@@ -77,6 +77,26 @@ describe('useCartularyReview', () => {
     expect(confirm).toHaveBeenCalledTimes(2);
   });
 
+  it('échec puis succès : l’alerte précédente est effacée au départ du second essai, la notice seule subsiste (B7, exclusivité)', async () => {
+    const confirm = vi.fn<(level: 'partial' | 'complete') => Promise<void>>()
+      .mockRejectedValueOnce(new Error('Le Cartulaire a changé. Rechargez les données avant de confirmer la revue.'));
+    const { result } = renderHook(() => useCartularyReview({ envelope: envelope(), canManage: true, confirm }));
+    await act(() => result.current.confirm('partial'));
+    expect(result.current.error).toBe('Le Cartulaire a changé. Rechargez les données avant de confirmer la revue.');
+    let release: () => void = () => {};
+    confirm.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    let pending: Promise<void> = Promise.resolve();
+    act(() => { pending = result.current.confirm('partial'); });
+    expect(result.current.busy).toBe(true);
+    expect(result.current.error, 'l’alerte est effacée dès le départ du second essai, pas seulement à son issue').toBe('');
+    await act(async () => { release(); await pending; });
+    expect([result.current.error, result.current.notice, result.current.busy]).toEqual(['', 'Revue confirmée dans le Cartulaire et son Registre.', false]);
+    // Et symétriquement : un échec après un succès efface la notice.
+    confirm.mockRejectedValueOnce('permission-denied');
+    await act(() => result.current.confirm('complete'));
+    expect([result.current.notice, result.current.error]).toEqual(['', 'La revue n’a pas pu être confirmée. L’état affiché est conservé.']);
+  });
+
   it('un rejet sans message reçoit un texte de repli non technique', async () => {
     const confirm = vi.fn().mockRejectedValue('permission-denied');
     const { result } = renderHook(() => useCartularyReview({ envelope: envelope(), canManage: true, confirm }));

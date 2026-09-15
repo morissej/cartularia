@@ -218,15 +218,19 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
   assert.equal((await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data().revision, 2);
 });
 
-/** Revue du propriétaire (V5 lot B, § 5.7) : décision + marqueur dans le brouillon, puis demande de synchronisation. */
-const writeReviewAndRequest = async ({ level, token, baseRevision, revision = 1 }) => {
+/**
+ * Revue du propriétaire (V5 lot B, § 5.7) : décision + marqueur dans le brouillon, puis demande de synchronisation.
+ * Relecture du lot B (F3) : `requestId` de forme production (`sync_…`, cloudDraft.ts), distinct du jeton d'opération (UUID client).
+ */
+const writeReviewAndRequest = async ({ level, token, requestId, baseRevision, revision = 1 }) => {
+  assert.notEqual(requestId, token, 'la demande et le jeton sont deux identifiants distincts, comme en production');
   const draftPath = `privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}`;
   await Promise.all([
     firestore.doc(`${draftPath}/state/${REVIEW_STATE_KEY}`).set({ ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, key: REVIEW_STATE_KEY, value: JSON.stringify(buildCartularyReviewDecision({ baseRevision, level })), deleted: false, revision, clientUpdatedAt: 200 + revision }),
     firestore.doc(`${draftPath}/state/cartularia-generic-operation`).set({ ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, key: 'cartularia-generic-operation', value: JSON.stringify({ kind: REVIEW_OPERATION_KIND, token }), deleted: false, revision, clientUpdatedAt: 200 + revision }),
   ]);
   await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
-    requestDocumentId: IWC_CARTULARY_ID, requestId: token, ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'private_draft_synchronized', status: 'pending',
+    requestDocumentId: IWC_CARTULARY_ID, requestId, ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'private_draft_synchronized', status: 'pending',
   });
 };
 
@@ -238,8 +242,9 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   const before = (await rootRef.get()).data();
   assert.deepEqual([before.revision, before.lifecycleStatus, before.completenessLevel, before.lastVerifiedAt], [2, 'review', 'imported_unreviewed', null]);
 
-  const token = 'op_review_partial_000000000001';
-  await writeReviewAndRequest({ level: 'partial', token, baseRevision: before.revision });
+  const token = 'e7a4c1d2-3b5f-4a6e-9c8d-0f1e2d3c4b5a';
+  const requestId = 'sync_test_review_000000000000010';
+  await writeReviewAndRequest({ level: 'partial', token, requestId, baseRevision: before.revision });
   const result = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:03:00.000Z' });
   assert.deepEqual([result.outcome, result.revision], ['updated', 3]);
   const [root, item, audits] = await Promise.all([rootRef.get(), itemRef.get(), firestore.collection(`cartularies/${IWC_CARTULARY_ID}/auditEvents`).orderBy('sequence').get()]);
@@ -251,9 +256,10 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   const { thumbnail: _thumbnail, primaryMediaKind: _kind, thumbnailStatus: _status, contentHash, generatedAt: _generatedAt, updatedAt: _updatedAt, ...projection } = item.data();
   assert.equal(contentHash, sha256Digest(projection), 'contentHash = sha256Digest(projection) hors thumbnail/primaryMediaKind/thumbnailStatus/generatedAt/updatedAt');
   const reviewEvent = audits.docs.at(-1).data();
-  assert.deepEqual([reviewEvent.action, reviewEvent.resource, reviewEvent.requestId], [REVIEW_CONFIRMED_ACTION, { type: 'cartulary', id: IWC_CARTULARY_ID }, token]);
+  assert.deepEqual([reviewEvent.action, reviewEvent.resource, reviewEvent.requestId], [REVIEW_CONFIRMED_ACTION, { type: 'cartulary', id: IWC_CARTULARY_ID }, requestId]);
   assert.equal(reviewEvent.action, 'cartulary.review.confirmed');
-  assert.equal(reviewEvent.eventId, `evt_${sha256Digest(`cartulary.review.confirmed:${token}`).slice(7, 31)}`);
+  assert.equal(reviewEvent.eventId, `evt_${sha256Digest(`cartulary.review.confirmed:${requestId}`).slice(7, 31)}`, 'graine = action:requestId, jamais le jeton');
+  assert.equal(JSON.stringify(reviewEvent).includes(token), false, 'le jeton d’opération n’entre pas dans la chaîne de preuves');
   const verification = verifyAuditChain({ events: audits.docs.map((document) => document.data()), integrityHead: root.data().integrityHead, integritySequence: root.data().integritySequence });
   assert.deepEqual([verification.valid, verification.eventCount], [true, 3], 'chaîne valide, eventCount +1');
   assert.equal((await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).get()).data().auditEventId, reviewEvent.eventId);
@@ -267,7 +273,7 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   assert.deepEqual([(await rootRef.get()).data().revision, (await rootRef.get()).data().lastVerifiedAt], [3, '2026-08-16T08:03:00.000Z']);
 
   // baseRevision périmée : rejet revision_conflict, racine intacte (comportement persistant jusqu'au rejeu, motif cartulary-create.test.mjs).
-  await writeReviewAndRequest({ level: 'complete', token: 'op_review_stale_00000000000003', baseRevision: 2, revision: 2 });
+  await writeReviewAndRequest({ level: 'complete', token: 'op_review_stale_00000000000003', requestId: 'sync_test_review_000000000000011', baseRevision: 2, revision: 2 });
   await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:05:00.000Z' }), (error) => error.code === 'revision_conflict');
   const intact = (await rootRef.get()).data();
   assert.deepEqual([intact.revision, intact.completenessLevel, intact.lastVerifiedAt, intact.lastGenericOperationToken], [3, 'partial', '2026-08-16T08:03:00.000Z', token]);
@@ -289,7 +295,7 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   // Cycle inactif : la revue est refusée (review_not_allowed), racine intacte.
   await rootRef.update({ lifecycleStatus: 'suspended' });
   const suspended = (await rootRef.get()).data();
-  await writeReviewAndRequest({ level: 'complete', token: 'op_review_denied_0000000000005', baseRevision: suspended.revision, revision: 3 });
+  await writeReviewAndRequest({ level: 'complete', token: 'op_review_denied_0000000000005', requestId: 'sync_test_review_000000000000012', baseRevision: suspended.revision, revision: 3 });
   await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:07:00.000Z' }), (error) => error.code === 'review_not_allowed');
   const denied = (await rootRef.get()).data();
   assert.deepEqual([denied.revision, denied.lifecycleStatus, denied.completenessLevel, denied.lastVerifiedAt], [suspended.revision, 'suspended', 'partial', '2026-08-16T08:03:00.000Z']);

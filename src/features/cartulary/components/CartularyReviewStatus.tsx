@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { CartularyReviewLevel, CartularyReviewState } from '../../../../scripts/lib/cartulary-review-policy.mjs';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
 import { formatLocalDate } from '../../../utils/formatting.ts';
@@ -11,6 +11,9 @@ import { formatLocalDate } from '../../../utils/formatting.ts';
  * - `reviewed` : « Revu par le propriétaire le … · Partiel | Complet », et « Mettre à jour la revue » (rejouable).
  * La confirmation est en ligne (deux paliers, D2 (b)), jamais une modale ; elle est datée par le serveur.
  * « Revu par le propriétaire » n'est jamais « vérifié » : aucun sceau, aucune preuve de champ n'est touché.
+ * Relecture du lot B : la confirmation ouverte ne survit ni à la perte de l'enveloppe ni à celle du droit (CL-2) ; le
+ * focus suit le formulaire — radio cochée à l'ouverture, bouton d'ouverture au retour (Annuler, Échap, succès), motif
+ * `SpecificationAddForm` (A2, WCAG 2.4.3) (CL-1).
  */
 export interface CartularyReviewStatusProps {
   state: CartularyReviewState | null;
@@ -27,8 +30,20 @@ export function CartularyReviewStatus({ state, language, canManage, busy, notice
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState<CartularyReviewLevel>('partial');
   const id = useId();
+  const sectionRef = useRef<HTMLElement>(null);
+  const actionAllowed = Boolean(canManage && state?.actionable);
+  // À la fermeture, le bouton d'ouverture reprend sa place dans le même hôte : le focus lui revient après le rendu (rAF),
+  // jamais sur <body>.
+  const focusTrigger = () => {
+    const host = sectionRef.current;
+    window.requestAnimationFrame(() => host?.querySelector<HTMLElement>('.cartulary-review-status__actions button')?.focus());
+  };
   // La confirmation en ligne se referme sur le succès (message de statut) ; sur échec, elle reste ouverte avec l'alerte.
-  useEffect(() => { if (notice) setOpen(false); }, [notice]);
+  // `open` est lu au moment où la notice arrive (dépendance volontairement limitée à `notice`, motif App.tsx).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (notice && open) { setOpen(false); focusTrigger(); } }, [notice]);
+  // Sans enveloppe (session fermée) ou sans droit, la confirmation ouverte ne survit pas : elle ne se réaffiche jamais sans clic.
+  useEffect(() => { if (!state || !actionAllowed) setOpen(false); }, [state, actionAllowed]);
   if (!state) return null;
 
   const tx = (french: string, english: string) => language === 'FR' ? french : english;
@@ -45,14 +60,14 @@ export function CartularyReviewStatus({ state, language, canManage, busy, notice
   const detail = state.kind === 'pending'
     ? tx('Les informations et pièces sont celles déclarées par le propriétaire.', 'The information and documents are those declared by the owner.')
     : tx('La date et le palier de cette revue sont inscrits dans la chaîne de preuves du Cartulaire.', 'The date and level of this review are recorded in the Cartulary’s chain of evidence.');
-  const actionAllowed = canManage && state.actionable;
 
   const openForm = () => { onClearMessages(); setLevel('partial'); setOpen(true); };
-  const cancel = () => { onClearMessages(); setOpen(false); };
+  const cancel = () => { onClearMessages(); setOpen(false); focusTrigger(); };
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!busy) void onConfirm(level); };
+  const escape = (event: KeyboardEvent<HTMLFormElement>) => { if (event.key !== 'Escape' || busy) return; event.preventDefault(); cancel(); };
 
   return (
-    <section className="cartulary-review-status" aria-labelledby={`${id}-eyebrow`} data-review-state={state.kind}>
+    <section ref={sectionRef} className="cartulary-review-status" aria-labelledby={`${id}-eyebrow`} data-review-state={state.kind}>
       <header className="cartulary-review-status__header">
         <span className="eyebrow" id={`${id}-eyebrow`}>{tx('Revue du propriétaire', 'Owner review')}</span>
         <h2>{title}</h2>
@@ -68,10 +83,10 @@ export function CartularyReviewStatus({ state, language, canManage, busy, notice
         </div>
       )}
       {actionAllowed && open && (
-        <form className="cartulary-review-status__form" onSubmit={submit}>
+        <form className="cartulary-review-status__form" onSubmit={submit} onKeyDown={escape}>
           <fieldset disabled={busy}>
             <legend>{tx('Portée de la revue', 'Scope of the review')}</legend>
-            <label><input type="radio" name={`${id}-level`} value="partial" checked={level === 'partial'} onChange={() => setLevel('partial')} />{tx('Revue partielle', 'Partial review')}</label>
+            <label><input type="radio" name={`${id}-level`} value="partial" autoFocus checked={level === 'partial'} onChange={() => setLevel('partial')} />{tx('Revue partielle', 'Partial review')}</label>
             <label><input type="radio" name={`${id}-level`} value="complete" checked={level === 'complete'} onChange={() => setLevel('complete')} />{tx('Dossier complet', 'Complete record')}</label>
           </fieldset>
           <p className="cartulary-review-status__note">{tx('Cette confirmation est datée par le serveur et inscrite dans la chaîne de preuves du Cartulaire. Elle atteste votre relecture, pas une vérification par un tiers.', 'This confirmation is dated by the server and recorded in the Cartulary’s chain of evidence. It attests your own re-reading, not a third-party check.')}</p>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CartularyReviewStatus, type CartularyReviewStatusProps } from '../../src/features/cartulary/components/CartularyReviewStatus.tsx';
 
@@ -6,6 +6,8 @@ import { CartularyReviewStatus, type CartularyReviewStatusProps } from '../../sr
  * V5 point 4 (P-C5, lot B, § 5.10) : le bloc « Revue du propriétaire » est un composant pur. Il ne rend rien sans
  * enveloppe, nomme l'état sans jamais dire « vérifié », n'offre l'action qu'au propriétaire éditeur sur un cycle
  * admis, confirme en ligne (deux paliers dans un fieldset, « Revue partielle » par défaut) et reflète busy/erreur/notice.
+ * Relecture du lot B : focus suivi (CL-1, WCAG 2.4.3), confirmation refermée sans enveloppe ou sans droit (CL-2),
+ * palier remis à « partiel » à chaque ouverture, « Complet » et « date indisponible » nommés (CL-5 : C7, C15, C18).
  */
 
 const PENDING = { kind: 'pending', actionable: true } as const;
@@ -95,6 +97,8 @@ describe('CartularyReviewStatus', () => {
     expect(screen.getByRole('button', { name: 'Confirmation en cours…' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Annuler' }).hasAttribute('disabled')).toBe(true);
     expect((screen.getByRole('group', { name: 'Portée de la revue' }) as HTMLFieldSetElement).disabled).toBe(true);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Annuler' }), { key: 'Escape' });
+    expect(screen.getByRole('group', { name: 'Portée de la revue' })).toBeTruthy();
     rerender({ busy: false, error: 'Le Cartulaire a changé. Rechargez les données avant de confirmer la revue.' });
     expect(screen.getByRole('alert').textContent).toBe('Le Cartulaire a changé. Rechargez les données avant de confirmer la revue.');
     expect(screen.getByRole('button', { name: 'Confirmer la revue' })).toBeTruthy();
@@ -115,6 +119,87 @@ describe('CartularyReviewStatus', () => {
       expect(container.textContent).not.toMatch(/vérifié/i);
       unmount();
     }
+  });
+
+  it('le focus suit la confirmation : radio cochée à l’ouverture, bouton d’ouverture après « Annuler », Échap et le succès (WCAG 2.4.3)', async () => {
+    const onClearMessages = vi.fn();
+    const { rerender } = renderStatus({ state: PENDING, canManage: true, onClearMessages });
+    const open = screen.getByRole('button', { name: 'Marquer comme revu' });
+    open.focus();
+    fireEvent.click(open);
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Revue partielle' }));
+    // « Annuler » : le formulaire est démonté, le bouton d'ouverture reprend le focus (rAF), jamais <body>.
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('radio')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Marquer comme revu' })));
+    // Échap referme de la même façon (messages effacés, aucun appel de confirmation).
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme revu' }));
+    fireEvent.keyDown(screen.getByRole('radio', { name: 'Dossier complet' }), { key: 'Escape' });
+    expect(screen.queryByRole('group', { name: 'Portée de la revue' })).toBeNull();
+    expect(onClearMessages).toHaveBeenCalledTimes(4);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Marquer comme revu' })));
+    // Succès : la notice referme la confirmation et le focus revient sur « Mettre à jour la revue ».
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme revu' }));
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Revue partielle' }));
+    rerender({ state: REVIEWED, notice: 'Revue confirmée dans le Cartulaire et son Registre.' });
+    expect(screen.queryByRole('radio')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mettre à jour la revue' })));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it('une notice reçue sans confirmation ouverte ne déplace pas le focus (retour sur la page Accueil après un succès)', async () => {
+    renderStatus({ state: REVIEWED, canManage: true, notice: 'Revue confirmée dans le Cartulaire et son Registre.' });
+    expect(screen.getByRole('status')).toBeTruthy();
+    await new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined)));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('la confirmation ouverte ne survit ni à la perte de l’enveloppe (session fermée puis rouverte) ni à celle du droit de gérer', () => {
+    const { rerender, container } = renderStatus({ state: PENDING, canManage: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme revu' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Dossier complet' }));
+    rerender({ state: null });
+    expect(container.innerHTML).toBe('');
+    rerender({ state: PENDING });
+    expect(screen.queryByRole('group', { name: 'Portée de la revue' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Marquer comme revu' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme revu' }));
+    expect((screen.getByRole('radio', { name: 'Revue partielle' }) as HTMLInputElement).checked).toBe(true);
+    rerender({ canManage: false });
+    expect(container.querySelector('button, input')).toBeNull();
+    rerender({ canManage: true });
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Marquer comme revu' })).toBeTruthy();
+    // Un cycle devenu inactif referme aussi ; sur échec (enveloppe inchangée), elle reste ouverte.
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme revu' }));
+    rerender({ error: 'Le Cartulaire a changé. Rechargez les données avant de confirmer la revue.' });
+    expect(screen.getByRole('group', { name: 'Portée de la revue' })).toBeTruthy();
+    rerender({ state: { kind: 'pending', actionable: false } });
+    rerender({ state: PENDING });
+    expect(screen.queryByRole('radio')).toBeNull();
+  });
+
+  it('après « Annuler », la réouverture repart sur « Revue partielle » : le palier choisi n’est pas conservé', () => {
+    renderStatus({ state: PENDING, canManage: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme revu' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Dossier complet' }));
+    expect((screen.getByRole('radio', { name: 'Dossier complet' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme revu' }));
+    expect((screen.getByRole('radio', { name: 'Revue partielle' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: 'Dossier complet' }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('nomme le palier « Complet » et, sur une date illisible, « date indisponible » — jamais « à vérifier »', () => {
+    const { rerender } = renderStatus({ state: { ...REVIEWED, level: 'complete' }, canManage: true });
+    const region = () => screen.getByRole('region', { name: /Revue du propriétaire|Owner review/ }).textContent ?? '';
+    expect(region()).toMatch(/Revu par le propriétaire le \d{2}\/\d{2}\/\d{4} · Complet/);
+    rerender({ state: { ...REVIEWED, reviewedAt: 'not-a-date' } });
+    expect(region()).toContain('Revu par le propriétaire le date indisponible · Partiel');
+    expect(region()).not.toMatch(/à vérifier/i);
+    rerender({ state: { ...REVIEWED, reviewedAt: 'not-a-date', level: 'complete' }, language: 'EN' });
+    expect(region()).toContain('Reviewed by the owner on date unavailable · Complete');
+    expect(region()).not.toMatch(/to be checked|verified/i);
   });
 
   it('garde la parité anglaise de chaque texte', () => {

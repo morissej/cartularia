@@ -289,7 +289,8 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   const reviewToken = 'op_review_complete_car_0000001';
   await firestore.doc(`${draftPath}/state/${REVIEW_STATE_KEY}`).set({ key: REVIEW_STATE_KEY, value: JSON.stringify(buildCartularyReviewDecision({ baseRevision: beforeReview.revision, level: 'complete' })), deleted: false, revision: 1, clientUpdatedAt: 40 });
   await firestore.doc(`${draftPath}/state/cartularia-generic-operation`).set({ key: 'cartularia-generic-operation', value: JSON.stringify({ kind: REVIEW_OPERATION_KIND, token: reviewToken }), deleted: false, revision: 1, clientUpdatedAt: 41 });
-  await syncRef.set({ requestDocumentId: cartularyId, requestId: reviewToken, ownerUid, cartularyId, status: 'pending' });
+  // Relecture du lot B (F3) : la demande porte son propre identifiant (forme production `sync_…`), distinct du jeton.
+  await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_review_complete_car_0001', ownerUid, cartularyId, status: 'pending' });
   const reviewed = await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId, occurredAt: '2026-08-16T09:30:00.000Z' });
   assert.deepEqual([reviewed.outcome, reviewed.revision], ['updated', beforeReview.revision + 1]);
   const afterReview = (await rootRef.get()).data();
@@ -301,6 +302,8 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   assert.equal(JSON.stringify(itemAfterReview).includes(ownerUid), false);
   const reviewAudits = await rootRef.collection('auditEvents').orderBy('sequence').get();
   assert.equal(reviewAudits.docs.at(-1).data().action, REVIEW_CONFIRMED_ACTION);
+  assert.equal(reviewAudits.docs.at(-1).data().requestId, 'sync_review_complete_car_0001');
+  assert.equal(JSON.stringify(reviewAudits.docs.at(-1).data()).includes(reviewToken), false, 'le jeton d’opération n’entre pas dans la chaîne de preuves');
   assert.equal(verifyAuditChain({ events: reviewAudits.docs.map((document) => document.data()), integrityHead: afterReview.integrityHead, integritySequence: afterReview.integritySequence }).valid, true);
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_review_replay_car_0002', ownerUid, cartularyId, status: 'pending' });
   assert.equal((await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
