@@ -900,13 +900,16 @@ test('V6 (V-D3, V-D4) : onglet actif révélé par crochet, piste avec indice de
   const block = (source, opener) => source.slice(source.indexOf(opener), source.indexOf('}', source.indexOf(opener)));
   const count = (source, pattern) => (source.match(pattern) ?? []).length;
   // V-D3 (D4 (b)) : le crochet vise l'onglet courant de la piste seule (coque et mini-site partagent la classe, branches exclusives),
-  // défile horizontalement sans déplacer la fenêtre, tolère jsdom ; appelé une fois, juste après l'état de page, avant tout retour anticipé.
+  // défile horizontalement sans déplacer la fenêtre, tolère jsdom ; appelé une fois, sous l'état de chargement de la projection, avant tout retour
+  // anticipé. Relecture V6 (REG-1) : `null` tant que la porte du mini-site est fermée (la piste n'existe pas encore), la page ensuite — l'effet,
+  // qui ne dépend que de son argument, rejoue à l'ouverture de la porte (test tests/ui/reveal-active-tab.test.tsx).
   assert.match(hook, /querySelector<HTMLElement>\('\.page-tabs__inner \[aria-current="page"\]'\)/, 'le crochet vise l’onglet courant de la piste');
   assert.match(hook, /scrollIntoView\?\.\(\{ inline: 'center', block: 'nearest' \}\)/, 'défilement horizontal seul (block: nearest), tolérant à jsdom');
   assert.doesNotMatch(hook, /behavior:/, 'défilement immédiat : neutre pour prefers-reduced-motion');
   assert.match(app, /^import \{ useRevealActiveTab \} from '\.\/hooks\/useRevealActiveTab';$/m);
   assert.equal(count(app, /useRevealActiveTab\(/g), 1, 'un seul appel du crochet');
-  assert.match(app, /useState<CartularyPage>\(pageFromHash\);\n  useRevealActiveTab\(activePage\);/, 'le crochet suit activePage, immédiatement après l’état de page');
+  assert.match(app, /isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed,\n  \)\);\n  useRevealActiveTab\(isWatchWebsite && publicProjectionLoading \? null : activePage\);/, 'le crochet suit activePage une fois la porte de projection levée, immédiatement après cet état');
+  assert.ok(app.indexOf('useRevealActiveTab(') < app.indexOf('if (isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed && (publicProjectionLoading || !publicProjection)) {'), 'appel avant la porte de chargement (ordre des crochets stable)');
   assert.equal(count(app, /className="container page-tabs__inner"/g), 2, 'la piste porte la même classe dans la coque et le mini-site : une seule cible pour le crochet');
   assert.equal(count(app, /aria-current=\{[^}]+\? 'page' : undefined\}/g), 2, 'chaque onglet actif porte aria-current="page"');
   assert.doesNotMatch(app, /key=\{page\.id\} id=\{page\.id\}/, 'aucune ancre générique sur les onglets (variante (a) écartée)');
@@ -916,6 +919,9 @@ test('V6 (V-D3, V-D4) : onglet actif révélé par crochet, piste avec indice de
   assert.match(track, /overflow-x: auto;/, 'la piste d’onglets reste un conteneur défilant');
   assert.match(track, /background-attachment: local, local, scroll, scroll;/, 'ombres de défilement : deux caches liés au contenu, deux ombres fixées aux bords');
   assert.match(track, /background-size: 48px 100%, 48px 100%, 24px 100%, 24px 100%;/);
+  // Relecture V6 (REG-3) : sans no-repeat les couches se tuilent en bandes de 48 px ; des caches transparents laisseraient les ombres peintes quand la piste tient (1 280 px).
+  assert.match(track, /background-repeat: no-repeat;/, 'couches de fond peintes une seule fois');
+  assert.match(track, /linear-gradient\(to right, var\(--paper\) 50%, rgb\(244 242 237 \/ 0\)\),\n    linear-gradient\(to left, var\(--paper\) 50%, rgb\(244 242 237 \/ 0\)\) 100% 0,/, 'caches opaques couleur papier, transparents vers le contenu');
   const tabs = block(css, '.page-tabs {');
   assert.match(tabs, /\n  background: var\(--paper\);\n/, 'fond opaque des onglets : le titre ne transparaît plus sous la barre collante');
   assert.doesNotMatch(tabs, /color-mix/);
@@ -931,12 +937,17 @@ test('V6 (V-D3, V-D4) : onglet actif révélé par crochet, piste avec indice de
   const card = block(mobile, '.market-chart-card {');
   assert.match(card, /^\.market-chart-card \{\n    overflow-x: auto;/, 'la carte « Évolution du marché » est un conteneur défilant sur mobile');
   assert.match(card, /background-attachment: local, local, scroll, scroll;/, 'ombres de défilement sur la carte');
+  assert.match(card, /background-repeat: no-repeat;/, 'relecture V6 (REG-3) : couches de la carte peintes une seule fois');
   assert.match(card, /\n    background-color: var\(--sheet\);\n/, 'le raccourci background ne retire pas le fond blanc de la carte');
   assert.doesNotMatch(card, /scroll-behavior|scrollLeft/, 'position initiale : début de l’historique, CSS seul');
   assert.match(mobile, /\n  \.market-bars \{ height: 220px; min-width: max-content; \}\n/, 'l’axe s’étend sous toutes les barres');
   assert.doesNotMatch(css.slice(0, mobileStart), /\.market-chart-card \{[^}]*overflow-x/, 'bureau et tablette inchangés');
   assert.match(css, /\n\.sensitivity-table \{ overflow-x: auto;/);
   assert.match(css, /\n\.expense-table \{ overflow-x: auto; \}\n/);
+  // Relecture V6 (F3) : la carte des comparables est un élément de grille sans taille minimale automatique — à 844 × 390 (téléphone en paysage) et
+  // 768 (tablette), le document faisait 999 px pour la fenêtre ; le tableau de 965 px défile dans .comparables-table (déjà overflow-x: auto).
+  assert.match(css, /\n\.comparable-group \{ min-width: 0; border: 1px solid var\(--rule\); background: var\(--sheet\); \}\n/, 'règle de base : valable en paysage, tablette et 1 024-1 063 px');
+  assert.match(css, /\n\.comparables-table \{ overflow-x: auto; \}\n/);
   // Accessibilité : régions défilantes focalisables et nommées, aria-label porté par un rôle, contour de focus visible.
   assert.equal(count(app, /<div className="market-bars" role="group" tabIndex=\{0\} aria-label=\{tx\('Évolution des évaluations médianes', 'Median valuation trend'\)\}>/g), 2, 'graphique nommé et focalisable dans le lecteur et le mini-site');
   assert.doesNotMatch(app, /<div className="market-bars" aria-label/, 'plus d’aria-label sur un div sans rôle');
@@ -1002,4 +1013,72 @@ test('V6 (fusion) : barrières test:v6 / audit:a11y / verify:v6, audit axe outil
   const testFiles = readdirSync(join(root, 'tests')).filter((name) => /\.test\.mjs$/.test(name) && !/ 2\./.test(name));
   assert.deepEqual(testFiles.filter((name) => readFileSync(join(root, 'tests', name), 'utf8').includes('plafond 3 ')), ['cartulary-presentation-contract.test.mjs']);
   assert.deepEqual(testFiles.filter((name) => name !== 'cartulary-presentation-contract.test.mjs' && /69px/.test(readFileSync(join(root, 'tests', name), 'utf8'))), ['touch-targets-contract.test.mjs']);
+});
+
+// V6 — relecture (constats confirmés par deux relecteurs, corrigés dans le même commit) : F1 mesures (débordement mesuré contre clientWidth),
+// F2 mesures / F1 outillage (canal incomplete d'axe compté et listé, contraste des surfaces à dégradé figé ici puisque axe ne les mesure plus),
+// F2 outillage (identité de scène par le titre, page rendue, déclencheur présent hors saut prévu), F4 outillage (relevé stable au jour près),
+// F7 mesures (retour en haut de page immédiat sous prefers-reduced-motion). Les décisions D15 (a) et D17 (a) restent la définition de « sans erreur ».
+test('V6 relecture : audit axe mesuré contre clientWidth, nœuds à vérifier comptés, scènes identifiées par leur titre, relevé stable, contrastes des onglets et du graphique figés, retour en haut de page immédiat sous prefers-reduced-motion', () => {
+  const audit = readSource('../scripts/audit-accessibility.mjs');
+  // F1 : en émulation mobile, innerWidth suit la largeur du contenu (jusqu'à × 4) ; seul documentElement.clientWidth reste la largeur émulée.
+  assert.match(audit, /clientWidth: document\.documentElement\.clientWidth, scrollWidth: document\.documentElement\.scrollWidth, title: document\.title,/);
+  assert.match(audit, /name: 'scrollWidth ≤ clientWidth', ok: values\.scrollWidth <= values\.clientWidth,/);
+  assert.doesNotMatch(audit, /values\.innerWidth|\{ innerWidth,|scrollWidth ≤ innerWidth'/, 'plus aucune assertion sur innerWidth');
+  assert.match(audit, /width: 390, height: 844, mobile: true/, 'l’émulation mobile est conservée (tactile, échelle 3)');
+  // F2 / F1 outillage : canal incomplete demandé à axe, nœuds comptés par scène et par règle, colonne et section dans le résumé, aria-prohibited-attr jamais « à vérifier ».
+  assert.match(audit, /resultTypes: \['violations', 'incomplete'\]/);
+  assert.match(audit, /incomplete: r\.incomplete\.map\(\(i\) => \(\{ id: i\.id, impact: i\.impact, nodes: i\.nodes\.length, target: i\.nodes\[0\]\?\.target\.join\(' '\),/);
+  assert.match(audit, /entry\.toReview = results\.incomplete\.reduce\(\(sum, rule\) => sum \+ rule\.nodes, 0\);/);
+  assert.match(audit, /const toReviewTotal = report\.scenes\.reduce\(\(sum, scene\) => sum \+ scene\.toReview, 0\);/);
+  assert.match(audit, /\| À vérifier \(incomplete\) \| Assertions en échec \|/);
+  assert.match(audit, /'## Nœuds à vérifier', '', \.\.\.\(toReview\.length \? toReview : \['Aucun\.'\]\)/);
+  assert.match(audit, /const NEVER_INCOMPLETE = new Set\(\['aria-prohibited-attr'\]\);/);
+  assert.match(audit, /name: 'aucun nœud à vérifier sur aria-prohibited-attr', ok: neverIncomplete\.length === 0,/);
+  assert.match(audit, /blockingTotal === 0 && failedChecks\.length === 0 \? 0 : 1/, 'D15 (a) : le canal incomplete ne change pas le code de sortie');
+  // F2 outillage : chaque scène porte son titre attendu, la page doit être rendue, un déclencheur absent n'est toléré que sur la fenêtre prévue.
+  assert.match(audit, /name: 'titre attendu', ok: values\.title === scene\.title, detail: values\.title/);
+  assert.match(audit, /name: 'page rendue \(ni écran d’erreur ni attente épuisée\)', ok: ready,/);
+  assert.match(audit, /const DEMO_TITLE = 'Cartulaire Rolex Submariner · Cartularia';/);
+  assert.match(audit, /title: 'Page introuvable · Cartularia'/);
+  assert.match(audit, /title: 'Connexion · Cartularia'/);
+  for (const title of ['Accessibilité', 'Conditions d’utilisation du pilote', 'Confidentialité et données', 'Disponibilité et limites']) assert.ok(audit.includes(`'${title}'`), title);
+  assert.equal((audit.match(/openAbsentOn: 'desktop-1440'/g) ?? []).length, 1, 'un seul saut prévu : le menu mobile de l’accueil à 1 440');
+  assert.match(audit, /if \(scene\.openAbsentOn === viewport\.name\) entry\.skipped = /);
+  assert.match(audit, /else entry\.checks\.push\(\{ name: `déclencheur \$\{scene\.open\} présent`, ok: false,/);
+  // F4 outillage : ni heure ni port dans le relevé — deux exécutions du même jour sur le même build produisent le même fichier.
+  assert.match(audit, /const report = \{ date: day, chrome: chromePath, axe:/);
+  assert.doesNotMatch(audit, /date: new Date\(\)\.toISOString\(\)|\{ date: day, base|base, chrome/);
+  const survey = JSON.parse(readSource('../docs/audits/a11y/2026-09-16.json'));
+  assert.match(survey.date, /^\d{4}-\d{2}-\d{2}$/, 'date au jour près');
+  assert.equal(survey.base, undefined, 'port éphémère absent du relevé');
+  assert.equal(typeof survey.summary.toReview, 'number');
+  assert.ok(survey.scenes.every((scene) => scene.skipped || (Array.isArray(scene.incomplete) && scene.checks.some((check) => check.name === 'titre attendu' && check.ok))), 'relevé produit par ce script : titres vérifiés, nœuds à vérifier détaillés');
+  // F2 mesures : les dégradés d'indice (piste, carte du graphique) rendent le contraste indéterminé pour axe ; on fige ici les couleurs au repos sur le fond de base
+  // (le pire cas sous les 24 px d'ombre, 3,46:1 pour --muted, ne concerne que du contenu coupé au bord).
+  const css = readSource('../src/index.css');
+  const variables = readSource('../src/styles/variables.css');
+  const token = (name) => variables.match(new RegExp(`--${name}: (#[0-9A-Fa-f]{6});`))[1];
+  const luminance = (hex) => { const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(1 + offset, 3 + offset), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (light + 0.05) / (dark + 0.05); };
+  assert.match(css, /\n\.page-tabs button \{\n(?:(?!\n\}).)*\n  background: transparent;\n/s, 'les onglets héritent la couleur du texte (--ink) et laissent voir le fond papier de la barre');
+  assert.doesNotMatch(css.slice(css.indexOf('\n.page-tabs button {'), css.indexOf('\n}', css.indexOf('\n.page-tabs button {'))), /\n  color:/, 'aucune couleur propre : --ink hérité');
+  assert.match(css, /\n\.page-tabs button > span \{\n  margin-right: var\(--s2\);\n  color: var\(--muted\);\n/, 'numéros d’onglets en --muted');
+  assert.match(css, /\n\.market-bars time \{ color: var\(--muted\); \}\n/, 'dates du graphique en --muted');
+  assert.match(css.slice(css.indexOf('@media (max-width: 767px) {')), /\.market-chart-card \{\n    overflow-x: auto;\n    background:\n      linear-gradient\(to right, var\(--sheet\) 50%/, 'fond de base blanc (--sheet) sous les dégradés de la carte');
+  for (const [text, background, label] of [[token('ink'), token('paper'), 'libellés d’onglets sur --paper'], [token('muted'), token('paper'), 'numéros d’onglets sur --paper'], [token('muted'), token('sheet'), 'dates du graphique sur --sheet']]) {
+    assert.ok(contrast(text, background) >= 4.5, `${label} : ${contrast(text, background).toFixed(2)}:1`);
+  }
+  // F7 mesures : un `behavior: 'smooth'` explicite ignore `scroll-behavior: auto !important` de la feuille ; la préférence est lue à chaque retour en haut de page.
+  const state = readSource('../src/utils/interfaceState.ts');
+  assert.match(state, /export const pageScrollBehavior = \(view: \{ matchMedia\?: \(query: string\) => \{ matches: boolean \} \} = window\): ScrollBehavior =>\n  view\.matchMedia\?\.\('\(prefers-reduced-motion: reduce\)'\)\?\.matches \? 'instant' : 'smooth';/);
+  for (const path of ['../src/App.tsx', '../src/components/GenericCartularyView.tsx']) {
+    const source = readSource(path);
+    assert.doesNotMatch(source, /behavior: 'smooth'/, `${path} : plus de défilement lisse imposé`);
+    assert.match(source, /window\.scrollTo\(\{ top: 0, behavior: pageScrollBehavior\(\) \}\)/, path);
+    assert.match(source, /import \{[^}]*\bpageScrollBehavior\b[^}]*\} from '\.{1,2}\/utils\/interfaceState(?:\.ts)?';/, path);
+  }
+  assert.equal((readSource('../src/App.tsx').match(/pageScrollBehavior\(\)/g) ?? []).length, 2, 'même onglet (retour en haut) et changement de page');
+  assert.match(readSource('../src/features/registry/RegistryApp.tsx'), /window\.scrollTo\(\{ top: 0, behavior: 'instant' \}\);/, 'le Registre reste immédiat (D7, contrat registre)');
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\n  \*, \*::before, \*::after \{ scroll-behavior: auto !important;/, 'la feuille couvre toujours les défilements `auto`');
 });

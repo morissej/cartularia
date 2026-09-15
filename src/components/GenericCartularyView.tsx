@@ -7,7 +7,7 @@ import {
   COMMON_CARTULARY_STRUCTURE,
   cartularyPageDefinitions,
 } from '../features/cartulary/presentation/cartularyPresentationContract.ts';
-import { cartularyPageFromHash, type CartularyPage } from '../utils/interfaceState.ts';
+import { cartularyPageFromHash, pageScrollBehavior, type CartularyPage } from '../utils/interfaceState.ts';
 import { BrandLogo } from './BrandLogo';
 import './generic-cartulary.css';
 import type { Asset } from '../types';
@@ -101,7 +101,7 @@ export const GenericCartularyView = ({ snapshot, schema, returnHref, collectionN
     sectionEdits.reset(); sectionEdits.clearMessages(); setPublicationError('');
     window.location.hash = page;
     setActivePage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: pageScrollBehavior() });
   };
   const publicationDraft = useMemo(() => buildWebsiteDraft({ brand: snapshot.envelope.makerName, model: snapshot.envelope.modelName, reference: snapshot.envelope.referenceCode || '', assets: assets.filter((asset) => selectedMediaIds.includes(asset.id)),
     specifications: snapshot.sections.map((section) => ({ title: schemaSectionLabel(section.schemaSectionId), items: buildGenericFieldRows(section, schema)

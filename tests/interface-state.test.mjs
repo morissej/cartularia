@@ -7,6 +7,7 @@ import {
   applicationRouteFromPathname,
   cartularyPageFromHash,
   normalizeInterfaceLanguage,
+  pageScrollBehavior,
 } from '../src/utils/interfaceState.ts';
 import {
   cartularyIdFromLocation,
@@ -78,4 +79,12 @@ test('les préférences persistées invalides utilisent des valeurs sûres', () 
   assert.equal(normalizeInterfaceLanguage('DE'), 'FR');
   // V6 (V-D9, G2) : bascule masquée, la langue de l'interface du Cartulaire est FR ; une clé résiduelle « EN » n'est plus relue.
   assert.equal(DEFAULT_INTERFACE_LANGUAGE, 'FR');
+});
+
+test('V6 relecture (F7) : le retour en haut de page est immédiat sous prefers-reduced-motion, lisse sinon, et tolère un environnement sans matchMedia', () => {
+  const queries = [];
+  assert.equal(pageScrollBehavior({ matchMedia: (query) => { queries.push(query); return { matches: true }; } }), 'instant');
+  assert.equal(pageScrollBehavior({ matchMedia: () => ({ matches: false }) }), 'smooth');
+  assert.equal(pageScrollBehavior({}), 'smooth', 'jsdom (tests/ui) n’implémente pas matchMedia');
+  assert.deepEqual(queries, ['(prefers-reduced-motion: reduce)']);
 });

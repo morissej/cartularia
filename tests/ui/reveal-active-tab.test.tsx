@@ -44,6 +44,25 @@ describe('useRevealActiveTab (V6 V-D3)', () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
+  it('rejoue quand la porte de chargement se lève (mini-site : `null` pendant la projection, puis la page) alors que la piste n’existait pas au montage', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    // App.tsx (relecture V6, REG-1) : `useRevealActiveTab(isWatchWebsite && publicProjectionLoading ? null : activePage)` — la piste est rendue
+    // seulement après la promesse de projection, sans que la page change : l'argument passe de null à la page et l'effet rejoue.
+    const { rerender } = renderHook(({ page }) => useRevealActiveTab(page), { initialProps: { page: null as string | null } });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    mountTabs('value');
+    rerender({ page: 'value' });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById('tab-value'));
+    // Contre-épreuve : la même valeur avant et après la porte (ancien appel `useRevealActiveTab(activePage)`) ne rejouerait pas.
+    document.body.innerHTML = '';
+    const gated = renderHook(({ page }) => useRevealActiveTab(page), { initialProps: { page: 'value' } });
+    mountTabs('value');
+    gated.rerender({ page: 'value' });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
   it('reste inerte sans piste (chargement) et sans scrollIntoView (jsdom nu)', () => {
     expect(Element.prototype.scrollIntoView).toBeUndefined();
     expect(() => renderHook(() => useRevealActiveTab('value'))).not.toThrow();

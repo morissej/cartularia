@@ -77,6 +77,8 @@ test('V-D5 — topbar du Registre mobile : zones nommées, trois actions 44 px s
   const productLabel = ruleBody(registryMobile, '.registry-product-label');
   assert.match(productLabel, /grid-area: label/);
   assert.match(productLabel, /grid-template-columns: auto minmax\(0, 1fr\)/);
+  // Relecture V6 (REG-3) : point médian décoratif entre marque et modèle, texte alternatif vide — jamais lu « point médian » (mesuré : aucun nœud AX).
+  assert.match(ruleBody(registryMobile, '.registry-product-label span::after'), /content: ' ·' \/ '';/);
   // L'ancien placement manuel de la déconnexion a disparu avec le groupe d'actions.
   assert.doesNotMatch(registryCss, /registry-signout--account/);
   assert.doesNotMatch(registryApp, /registry-signout--account/);
@@ -111,6 +113,11 @@ test('V-D5 — DOM de la coque : un composant d’actions partagé, un seul lien
   assert.match(shell, /<BrandLogo href=\{registryHref\(registry\.id\)\} \/>/);
   assert.doesNotMatch(registryCss, /registry-sidebar__home/);
   assert.doesNotMatch(registryApp, /registry-sidebar__home/);
+  // Relecture V6 (REG-2) : trois comportements V5 déplacés par la refonte, jamais verrouillés (fragments courts) — lien Sécurité rendu seulement
+  // s'il est fourni, absent du Registre démo, déconnexion sous la garde des modifications non enregistrées.
+  assert.match(actions, /\{securityHref && \(/, 'lien Sécurité conditionnel');
+  assert.match(shell, /securityHref=\{registry\.id !== DEMO_ACCOUNT\.registryId \? `\/account\/security\?returnTo=/, 'pas de lien Sécurité sur le Registre démo');
+  assert.match(shell, /onSignOut=\{\(\) => \{ if \(confirmUnsavedNavigation\(\)\) void signOutOfCartularia\(\); \}\}/, 'déconnexion gardée');
 });
 
 test('V-D6 — accueil mobile : bandeau court conservé, onglets de la maquette défilants avec fondu d’indice', () => {

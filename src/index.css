@@ -2280,7 +2280,8 @@ textarea {
 
 .comparable-groups { display: grid; gap: var(--s5); }
 
-.comparable-group { border: 1px solid var(--rule); background: var(--sheet); }
+/* V6 relecture (F3) : élément de grille sans taille minimale automatique — la carte suit son conteneur (document 844/844 en paysage, 768/768 en tablette au lieu de 999) et le tableau de 965 px défile dans .comparables-table. */
+.comparable-group { min-width: 0; border: 1px solid var(--rule); background: var(--sheet); }
 
 .comparable-group__heading {
   display: flex;

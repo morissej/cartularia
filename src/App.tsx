@@ -78,6 +78,7 @@ import {
   INTERFACE_LANGUAGE_STORAGE_KEY,
   adjacentCartularyPage,
   cartularyPageFromHash,
+  pageScrollBehavior,
   type CartularyPage,
 } from './utils/interfaceState';
 import { useDialogFocus } from './hooks/useDialogFocus';
@@ -671,7 +672,6 @@ function App() {
   // tout autre lecteur (démonstration comprise, hook autoritaire désactivé) reçoit le rendu lecture des quatre structures.
   const canManagePublication = authoritative.canManage;
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
-  useRevealActiveTab(activePage);
   const [eventTrigger, setEventTrigger] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSpinOpen, setIsSpinOpen] = useState(false);
@@ -854,6 +854,7 @@ function App() {
   const [publicProjectionLoading, setPublicProjectionLoading] = useState(Boolean(
     isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed,
   ));
+  useRevealActiveTab(isWatchWebsite && publicProjectionLoading ? null : activePage); // V6 relecture (REG-1) : rejoue quand la porte du mini-site se lève, la piste n'existant qu'après
   const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
   // Vrai quand la publication est absente ou révoquée : état définitif, sans bouton « Réessayer ».
   const [publicProjectionAbsent, setPublicProjectionAbsent] = useState(false);
@@ -1494,14 +1495,11 @@ function App() {
     .filter((page) => page.blockIds.length > 0), [orderedReportBlocks, pages, publicationPageNumberByBlock]);
 
   const navigateTo = (page: CartularyPage) => {
-    if (activePage === page) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
+    if (activePage === page) { window.scrollTo({ top: 0, behavior: pageScrollBehavior() }); return; }
     sectionEdits.reset(); sectionEdits.clearMessages();
     setActivePage(page);
     window.location.hash = page;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: pageScrollBehavior() }); // V6 relecture (F7) : immédiat sous prefers-reduced-motion
   };
 
   const reportPreparation = useReportPreparation(JSON.stringify([orderedReportBlocks, reportProofState.contentDigest]));

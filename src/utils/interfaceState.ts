@@ -9,6 +9,14 @@ export const normalizeInterfaceLanguage = (value: unknown): InterfaceLanguage =>
 /** V6 (V-D9) : langue de l'interface du Cartulaire tant que la bascule FR/EN est masquée (traduction partielle). */
 export const DEFAULT_INTERFACE_LANGUAGE: InterfaceLanguage = 'FR';
 
+/**
+ * V6 relecture (F7) : retour en haut de page au changement d'onglet. Un `behavior: 'smooth'` explicite ignore la feuille
+ * (`scroll-behavior: auto !important` sous prefers-reduced-motion ne gouverne que `auto`, CSSOM View) : la préférence est lue
+ * à chaque appel ; jsdom, sans `matchMedia`, obtient `smooth`.
+ */
+export const pageScrollBehavior = (view: { matchMedia?: (query: string) => { matches: boolean } } = window): ScrollBehavior =>
+  view.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'instant' : 'smooth';
+
 export const cartularyPageFromHash = (hash: string): CartularyPage => {
   const candidate = hash.replace(/^#/, '');
   return CARTULARY_PAGE_IDS.includes(candidate as CartularyPage) ? candidate as CartularyPage : 'cover';

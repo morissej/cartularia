@@ -1,6 +1,5 @@
 {
-  "date": "2026-09-15T22:14:30.223Z",
-  "base": "http://127.0.0.1:57419",
+  "date": "2026-09-16",
   "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "axe": "4.13.0",
   "tags": [
@@ -21,9 +20,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 30,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 30,
+          "target": ".public-hero__copy > .public-kicker",
+          "reason": "La couleur d’arrière plan de l’élément n’a pu être déterminée à cause d’un pseudo-élément"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -46,12 +65,14 @@
           "name": "lien d’évitement visible au focus",
           "ok": true,
           "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 51,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 51
     },
     {
       "scene": "accueil-menu",
@@ -63,9 +84,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 30,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 30,
+          "target": ".public-hero__copy > .public-kicker",
+          "reason": "La couleur d’arrière plan de l’élément n’a pu être déterminée à cause d’un pseudo-élément"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -88,12 +129,14 @@
           "name": "lien d’évitement visible au focus",
           "ok": true,
           "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":47.1}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 51,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 51
     },
     {
       "scene": "demo-cover",
@@ -137,9 +180,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 13,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 13,
+          "target": ".is-active",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -172,12 +235,14 @@
           "name": "h1 « Rolex Submariner »",
           "ok": true,
           "detail": "Rolex Submariner"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 43,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 43
     },
     {
       "scene": "demo-media",
@@ -221,9 +286,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 17,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 17,
+          "target": ".page-tabs__inner > button:nth-child(1)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -251,12 +336,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"01 Médias\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 43,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 43
     },
     {
       "scene": "demo-reference",
@@ -300,9 +387,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 21,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 21,
+          "target": ".page-tabs__inner > button:nth-child(1)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -330,12 +437,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"02 La référence\",\"visible\":true,\"scrollLeft\":50}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 42,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 42
     },
     {
       "scene": "demo-condition",
@@ -379,9 +488,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 10,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 10,
+          "target": ".page-tabs__inner > button:nth-child(2)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -409,12 +538,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"03 L’objet\",\"visible\":true,\"scrollLeft\":148}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 46,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 46
     },
     {
       "scene": "demo-value",
@@ -561,9 +692,29 @@
       "blocking": 0,
       "allowed": 12,
       "other": 3,
+      "toReview": 20,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 20,
+          "target": "button:nth-child(3)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -591,12 +742,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"04 Valorisation\",\"visible\":true,\"scrollLeft\":246}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 45,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 45
     },
     {
       "scene": "demo-publication",
@@ -640,9 +793,36 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 60,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 59,
+          "target": "button:nth-child(3)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        },
+        {
+          "id": "th-has-data-cells",
+          "impact": "serious",
+          "nodes": 1,
+          "target": "table",
+          "reason": "Les cellules de données sont absentes ou vides"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -670,13 +850,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"05 Publication\",\"visible\":true,\"scrollLeft\":286}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 44,
-      "incomplete": [
-        "color-contrast",
-        "th-has-data-cells"
-      ]
+      "passes": 44
     },
     {
       "scene": "demo-preuves",
@@ -750,9 +931,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 5,
+      "toReview": 8,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 8,
+          "target": ".is-active",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -785,12 +986,14 @@
           "name": "h1 « Rolex Submariner »",
           "ok": true,
           "detail": "Rolex Submariner"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 44,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 44
     },
     {
       "scene": "demo-a-faire",
@@ -834,9 +1037,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 13,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 13,
+          "target": "button[aria-current=\"page\"]",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -869,12 +1092,14 @@
           "name": "h1 « Rolex Submariner »",
           "ok": true,
           "detail": "Rolex Submariner"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 43,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 43
     },
     {
       "scene": "accessibilite",
@@ -886,9 +1111,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Accessibilité · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -906,10 +1143,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "conditions",
@@ -921,9 +1162,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Conditions d’utilisation du pilote · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -941,10 +1194,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "confidentialite",
@@ -956,9 +1213,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Confidentialité et données · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -976,10 +1245,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "service",
@@ -991,9 +1264,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Disponibilité et limites · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -1011,10 +1296,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "sign-in",
@@ -1026,9 +1315,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Connexion · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -1046,10 +1347,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 38,
-      "incomplete": []
+      "passes": 38
     },
     {
       "scene": "not-found",
@@ -1061,9 +1366,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Page introuvable · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "390/390"
         },
@@ -1081,10 +1398,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 26,
-      "incomplete": []
+      "passes": 26
     },
     {
       "scene": "accueil",
@@ -1096,9 +1417,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 30,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 30,
+          "target": ".public-hero__copy > .public-kicker",
+          "reason": "La couleur d’arrière plan de l’élément n’a pu être déterminée à cause d’un pseudo-élément"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1121,12 +1462,14 @@
           "name": "lien d’évitement visible au focus",
           "ok": true,
           "detail": "{\"focused\":true,\"color\":\"rgb(255, 255, 255)\",\"background\":\"rgb(26, 24, 21)\",\"top\":8,\"height\":48.8}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 50,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 50
     },
     {
       "scene": "accueil-menu",
@@ -1138,8 +1481,10 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [],
-      "skipped": "déclencheur absent à cette largeur"
+      "skipped": "déclencheur absent à cette largeur (prévu)"
     },
     {
       "scene": "demo-cover",
@@ -1183,9 +1528,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 13,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 13,
+          "target": ".is-active",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1218,12 +1583,14 @@
           "name": "h1 « Rolex Submariner »",
           "ok": true,
           "detail": "Rolex Submariner"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 42,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 42
     },
     {
       "scene": "demo-media",
@@ -1267,9 +1634,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 15,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 15,
+          "target": ".page-tabs__inner > button:nth-child(1)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1297,12 +1684,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"01 Médias\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 42,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 42
     },
     {
       "scene": "demo-reference",
@@ -1346,9 +1735,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 19,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 19,
+          "target": ".page-tabs__inner > button:nth-child(1)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1376,12 +1785,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"02 La référence\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 41,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 41
     },
     {
       "scene": "demo-condition",
@@ -1425,9 +1836,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 16,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 16,
+          "target": ".page-tabs__inner > button:nth-child(1)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1455,12 +1886,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"03 L’objet\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 45,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 45
     },
     {
       "scene": "demo-value",
@@ -1607,9 +2040,29 @@
       "blocking": 0,
       "allowed": 12,
       "other": 3,
+      "toReview": 13,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 13,
+          "target": ".page-tabs__inner > button:nth-child(1)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1637,12 +2090,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"04 Valorisation\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 44,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 44
     },
     {
       "scene": "demo-publication",
@@ -1686,9 +2141,36 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 65,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 64,
+          "target": ".page-tabs__inner > button:nth-child(1)",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        },
+        {
+          "id": "th-has-data-cells",
+          "impact": "serious",
+          "nodes": 1,
+          "target": "table",
+          "reason": "Les cellules de données sont absentes ou vides"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1716,13 +2198,14 @@
           "name": "onglet aria-current visible dans la piste",
           "ok": true,
           "detail": "{\"text\":\"05 Publication\",\"visible\":true,\"scrollLeft\":0}"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 43,
-      "incomplete": [
-        "color-contrast",
-        "th-has-data-cells"
-      ]
+      "passes": 43
     },
     {
       "scene": "demo-preuves",
@@ -1796,9 +2279,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 5,
+      "toReview": 13,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 13,
+          "target": ".is-active",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1831,12 +2334,14 @@
           "name": "h1 « Rolex Submariner »",
           "ok": true,
           "detail": "Rolex Submariner"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 43,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 43
     },
     {
       "scene": "demo-a-faire",
@@ -1880,9 +2385,29 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
+      "toReview": 13,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodes": 13,
+          "target": "button[aria-current=\"page\"]",
+          "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
+        }
+      ],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Cartulaire Rolex Submariner · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1915,12 +2440,14 @@
           "name": "h1 « Rolex Submariner »",
           "ok": true,
           "detail": "Rolex Submariner"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 42,
-      "incomplete": [
-        "color-contrast"
-      ]
+      "passes": 42
     },
     {
       "scene": "accessibilite",
@@ -1932,9 +2459,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Accessibilité · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1952,10 +2491,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "conditions",
@@ -1967,9 +2510,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Conditions d’utilisation du pilote · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -1987,10 +2542,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "confidentialite",
@@ -2002,9 +2561,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Confidentialité et données · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -2022,10 +2593,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "service",
@@ -2037,9 +2612,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Disponibilité et limites · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -2057,10 +2644,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 28,
-      "incomplete": []
+      "passes": 28
     },
     {
       "scene": "sign-in",
@@ -2072,9 +2663,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Connexion · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -2092,10 +2695,14 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 38,
-      "incomplete": []
+      "passes": 38
     },
     {
       "scene": "not-found",
@@ -2107,9 +2714,21 @@
       "blocking": 0,
       "allowed": 0,
       "other": 0,
+      "toReview": 0,
+      "incomplete": [],
       "checks": [
         {
-          "name": "scrollWidth ≤ innerWidth",
+          "name": "page rendue (ni écran d’erreur ni attente épuisée)",
+          "ok": true,
+          "detail": "rendue"
+        },
+        {
+          "name": "titre attendu",
+          "ok": true,
+          "detail": "Page introuvable · Cartularia"
+        },
+        {
+          "name": "scrollWidth ≤ clientWidth",
           "ok": true,
           "detail": "1440/1440"
         },
@@ -2127,14 +2746,19 @@
           "name": "aucune graphie fautive de « mini-site »",
           "ok": true,
           "detail": "absente"
+        },
+        {
+          "name": "aucun nœud à vérifier sur aria-prohibited-attr",
+          "ok": true,
+          "detail": "aucun"
         }
       ],
-      "passes": 26,
-      "incomplete": []
+      "passes": 26
     }
   ],
   "summary": {
     "blocking": 0,
+    "toReview": 419,
     "failedChecks": [],
     "unusedAllowlist": []
   }
