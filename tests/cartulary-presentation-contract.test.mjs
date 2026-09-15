@@ -539,3 +539,71 @@ test('V4 relecture : correctifs d’honnêteté, de régression et d’accessibi
   assert.match(css, /\.catalog-site__grid h3 a \{ display: inline; width: auto;/);
   assert.match(css, /\.publication-summary thead th \{ position: sticky;/, 'l’en-tête collant est conservé');
 });
+
+// V5 — points 5 et 6 (P-D1 Preuves, P-D2 À faire, P-D3 Médias) : blocs fournis par les lots socle S6, S5, S4, posés au commit I1.
+test('V5 P-D1 : les outils d’essai du carnet n’ont aucun appelant hors integrityJournal.ts ; export avec le carnet, migration sous rupture seule, suppression en dernière section', () => {
+  const offenders = walkSources(sourceRoot)
+    .filter((path) => relativeSource(path) !== 'src/utils/integrityJournal.ts' && /simulateTampering|createLocalTestTimestamp/.test(readFileSync(path, 'utf8')))
+    .map(relativeSource);
+  assert.deepEqual(offenders, []);
+  const panel = readSource('../src/components/AuditPanel.tsx');
+  assert.doesNotMatch(panel, /Simulation technique|Technical Simulation|Falsifier|fixture locale|showTechnicalSim|sensitiveActionError/);
+  // Ordre des sections propriétaires : Conservation → Cession → Preuve serveur → Carnet local (Horodater puis Exporter) → Historique (Migrer) → Suppression.
+  const order = ['Conservation des données', '<CartularyTransferPanel', 'aria-labelledby="server-proof-title"', 'Carnet local de travail', 'Horodater le carnet local', 'Exporter le carnet local', 'Historique local conservé', 'Migrer la chaîne rompue', 'Suppression des données', 'Supprimer mes données'];
+  const owner = panel.slice(panel.indexOf('if (readOnly) {'));
+  const positions = order.map((needle) => owner.indexOf(needle));
+  assert.ok(positions.every((position) => position >= 0), `repères manquants : ${order.filter((_, index) => positions[index] < 0).join(', ')}`);
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'ordre des sections du panneau propriétaire');
+  // Section dédiée nommée (rôle region), erreurs distinctes, migration rendue seulement sous rupture.
+  assert.match(panel, /<section aria-labelledby="deletion-title"/);
+  assert.match(panel, /\{!integrityStatus\.isValid && \([\s\S]{0,2000}Migrer la chaîne rompue/);
+  assert.match(panel, /setExportError\(/);
+  assert.match(panel, /setDeleteError\(/);
+  assert.equal((panel.match(/role="alertdialog"/g) ?? []).length, 1);
+  assert.ok(panel.indexOf('role="alertdialog"') > panel.indexOf('aria-labelledby="deletion-title"'));
+});
+
+test('V5 P-D2 : le popover À faire laisse le titre sur sa propre rangée', () => {
+  const css = readSource('../src/index.css');
+  // Largeur : 480 px sur ordinateur, 100vw − 32px en mobile (règle unique, la règle mobile ne fixe pas de largeur).
+  assert.match(css, /\.todo-popover \{[^}]*width: min\(480px, calc\(100vw - 32px\)\);/s, 'popover 480 px, 100vw − 32px en mobile');
+  assert.doesNotMatch(css, /min\(360px, calc\(100vw - 32px\)\)/, 'l’ancienne largeur a disparu');
+  // Ligne de tâche : statut (col. 1) puis titre pleine largeur (col. 2) ; les actions passent en rangée 2, colonne 2.
+  assert.match(css, /\.todo-list > li \{[^}]*grid-template-columns: auto minmax\(0, 1fr\);/s, 'deux colonnes : statut, puis titre pleine largeur');
+  assert.match(css, /\.todo-list > li \{[^}]*gap: var\(--s1\) var\(--s3\);/s, 'interligne serré entre titre et actions, colonnes espacées');
+  assert.match(css, /\.todo-list__actions \{[^}]*grid-column: 2;/s, 'les actions passent sous le titre, alignées sur lui');
+  assert.match(css, /\.todo-edit-form \{[^}]*grid-column: 1 \/ -1;/s, 'le formulaire d’édition reste pleine largeur');
+  assert.match(css, /\.todo-popover \{ position: fixed; top: 69px; right: var\(--s3\); \}/, 'la règle mobile ne fixe pas de largeur : min(480px, 100vw − 32px) s’applique');
+});
+
+test('V5 P-D3 : la page Médias ne présente jamais l’absence de vidéo ou de séquence comme un accès restreint', () => {
+  const app = readSource('../src/App.tsx');
+  const media = app.slice(app.indexOf('<MediaPage'), app.indexOf('</MediaPage>'));
+  assert.doesNotMatch(media, /<AccessRestricted/);
+  assert.equal((media.match(/<EmptyMediaSlot slot="main-video"/g) ?? []).length, 1);
+  assert.equal((media.match(/<EmptyMediaSlot slot="spin-3d"/g) ?? []).length, 1);
+  assert.doesNotMatch(media, /isDemoCartulary\s*(?:&&|\?)\s*\(?\s*<EmptyMediaSlot/);
+  for (const tag of media.match(/<EmptyMediaSlot\b[^]*?\/>/g) ?? []) {
+    assert.match(tag, /canEdit=\{canEdit\}/, 'le bouton d’ajout dépend du droit d’édition, jamais de la démo');
+    assert.match(tag, /busy=\{mediaImportBusy\}/);
+    assert.match(tag, /onAddFiles=\{\(files\) => void importMediaFiles\(files, (?:\['(?:main-video|spin-3d)'\]|\[MEDIA_SLOT_TAGS\['(?:main-video|spin-3d)'\]\])\)\}/, 'tag imposé par l’emplacement');
+  }
+  assert.doesNotMatch(app, /const digestFile = async|const newId = \(prefix/);
+  assert.match(app, /import \{ newId \} from '\.\/utils\/identifiers';/);
+  assert.match(app, /import \{ digestFile \} from '\.\/utils\/fileDigest';/);
+  assert.equal((app.match(/buildImportedAssets\(/g) ?? []).length, 1, 'un seul pipeline d’import dans App.tsx');
+  // Le corps d'import des médias (mimeType déclaré par le navigateur) ne vit plus dans App.tsx ; le dépôt des rapports
+  // (mimeType canonique de l'inspection) reste, d'où la clause `mimeType: file\.type` qui distingue les deux corps.
+  assert.doesNotMatch(app, /putValidatedBinary\(\{\s*binaryId,\s*kind: 'media',\s*fileName: file\.name,\s*mimeType: file\.type,/, 'l’import média ne passe plus par un corps local dans App.tsx');
+  const slot = readSource('../src/features/cartulary/components/EmptyMediaSlot.tsx');
+  assert.doesNotMatch(slot, /Lock|Accès restreint|Restricted access|isDemoCartulary|firebase/i);
+  assert.match(slot, /Aucune vidéo ajoutée/); assert.match(slot, /Aucune séquence 3D ajoutée/);
+  assert.match(slot, /No video added/); assert.match(slot, /No 3D sequence added/);
+  assert.match(slot, /type="file"/); assert.match(slot, /className="sr-only"/);
+  const pipeline = readSource('../src/features/cartulary/media/importMediaFiles.ts');
+  assert.doesNotMatch(pipeline, /firebase|firestore|isDemoCartulary|from 'react'/i);
+  assert.match(pipeline, /export const buildImportedAssets/);
+  assert.match(pipeline, /export const MEDIA_SLOT_TAGS: Record<MediaSlotKind, MediaTag> = \{ 'main-video': 'main-video', 'spin-3d': 'spin-3d' \};/);
+  assert.match(readSource('../src/utils/fileDigest.ts'), /globalThis\.crypto\.subtle\.digest\('SHA-256'/);
+  assert.match(readSource('../src/index.css'), /\.empty-media-slot \{[^}]*border: 1px dashed var\(--rule\)/s);
+});

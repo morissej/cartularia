@@ -637,6 +637,10 @@ export class IntegrityJournal {
     return buildMerkleRoot(this.state.events.map((event) => event.hash));
   }
 
+  /**
+   * Reçu d’horodatage local (fixture non qualifiée) : réservé aux tests (`tests/local-integrity-journal.test.mjs`) ;
+   * aucun appelant UI (contrat V5 P-D1). Une fixture n’est jamais présentée comme un horodatage tiers.
+   */
   public async createLocalTestTimestamp(snapshot?: Record<string, unknown>): Promise<LocalTimestampReceipt | null> {
     await this.ready();
     if (snapshot) await this.reconcileSnapshot(snapshot);
@@ -870,6 +874,10 @@ export class IntegrityJournal {
     };
   }
 
+  /**
+   * Altère un événement en place pour exercer la détection de rupture : réservé aux tests
+   * (`tests/local-integrity-journal.test.mjs`) ; aucun appelant UI (contrat V5 P-D1).
+   */
   public simulateTampering(sequenceNumber: number, newDetails: string) {
     this.reloadState();
     const event = this.state.events.find((candidate) => candidate.sequence === sequenceNumber);

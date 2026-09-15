@@ -117,7 +117,11 @@ test('le vocabulaire réserve le Sceau à la projection publique et nomme claire
   assert.doesNotMatch(auditPanel, /Ancrage blockchain public : différé/);
   assert.doesNotMatch(auditPanel, /Exporter la preuve portable/);
   assert.match(auditPanel, /Exporter le carnet local/);
-  assert.match(auditPanel, /Simulation technique/);
+  // V5 P-D1 : plus de tiroir technique en production ; l'export est rangé avec le carnet, la migration
+  // n'est proposée que sous une rupture constatée, la suppression est isolée dans sa propre section.
+  assert.doesNotMatch(auditPanel, /Simulation technique|Technical Simulation|simulateTampering|createLocalTestTimestamp|Falsifier|fixture locale/);
+  assert.match(auditPanel, /Suppression des données/);
+  assert.match(auditPanel, /Migrer la chaîne rompue/);
   assert.match(app, /Le Sceau public identifie une publication émise par le serveur/);
   assert.match(app, /Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert/);
   assert.match(registry, /Chaîne serveur & preuves/);

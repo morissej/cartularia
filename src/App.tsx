@@ -92,6 +92,10 @@ import {
   formatMoney,
   formatPercent,
 } from './utils/formatting';
+import { newId } from './utils/identifiers';
+import { digestFile } from './utils/fileDigest';
+import { buildImportedAssets } from './features/cartulary/media/importMediaFiles';
+import { EmptyMediaSlot } from './features/cartulary/components/EmptyMediaSlot';
 import {
   AccessRestricted,
   BlockMarkers,
@@ -633,16 +637,10 @@ const loadMediaAssets = (): Asset[] => {
   });
 };
 
-const digestFile = async (file: File) => {
-  const digest = await window.crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
-};
-
 const persistJson = (key: string, value: unknown) => {
   void persistCartulariaJson(key, value).catch((error: unknown) => console.error(`Persistance impossible pour ${key}`, error));
 };
 
-const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 /** Schéma vide tant que l'enveloppe autoritaire n'est pas chargée : aucun rendu générique, aucun masquage. */
 const EMPTY_SCHEMA: VerticalSchema = { schemaId: '', assetType: '', version: '', status: 'baseline', defaultVisibility: 'secret', fieldCount: 0, sections: [], fields: [] };
 
@@ -700,6 +698,7 @@ function App() {
   const { mediaAssets, reloadMediaState, commands: mediaCommands } = mediaState;
   const setMediaAssets = mediaCommands.replaceAssets;
   const [mediaUploadTags, setMediaUploadTags] = useState<MediaTag[]>([]);
+  const [mediaImportBusy, setMediaImportBusy] = useState(false);
   const [isEditingChecks, setIsEditingChecks] = useState(false);
   const conditionState = useCartularyConditionState({
     loadChecks: () => isDemoCartulary ? DEFAULT_CHECKS : readStored('cartularia-identification-checks', DEFAULT_CHECKS),
@@ -1676,59 +1675,29 @@ function App() {
     form.reset();
   };
 
+  /** Pipeline unique d'import des médias (V5 P-D3) : Bibliothèque (tags cochés) et emplacements vides (tag imposé). */
+  const importMediaFiles = async (files: File[], tags: MediaTag[]) => {
+    if (files.length === 0) return false;
+    setFileImportError(null);
+    setMediaImportBusy(true);
+    try {
+      mediaCommands.appendAssets(await buildImportedAssets({ files, tags, vault: cartulariaLocalVault }));
+      return true;
+    } catch (caught) {
+      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
+      return false;
+    } finally {
+      setMediaImportBusy(false);
+    }
+  };
+
   const addMediaAssets = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const files = new FormData(form).getAll('media-files').filter(
       (value): value is File => value instanceof File && value.size > 0,
     );
-    if (files.length === 0) return;
-
-    setFileImportError(null);
-    let importedAssets: Asset[];
-    try {
-      importedAssets = await Promise.all(files.map(async (file) => {
-        const hash = await digestFile(file);
-        const binaryId = newId('media-binary');
-        const storedBinary = await cartulariaLocalVault?.putValidatedBinary({
-          binaryId,
-          kind: 'media',
-          fileName: file.name,
-          mimeType: file.type,
-          sha256: hash,
-          blob: file,
-        });
-        const canonicalMimeType = storedBinary?.mimeType || file.type;
-        const type: Asset['type'] = canonicalMimeType.startsWith('image/')
-          ? 'image'
-          : canonicalMimeType.startsWith('video/') ? 'video' : 'document';
-        return {
-          id: newId('asset'),
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          originalFileName: file.name,
-          url: URL.createObjectURL(file),
-          type,
-          ratio: type === 'video' ? '16:9' : '4:5',
-          hash,
-          status: 'Archived',
-          visibility: 'Secret',
-          tags: mediaUploadTags,
-          capturedAt: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
-          metadataTimestamp: new Date(file.lastModified || Date.now()).toISOString(),
-          timestampSource: 'file.lastModified',
-          fileSize: formatFileSize(file.size),
-          mimeType: canonicalMimeType,
-          binaryId,
-          localAvailability: 'available',
-          derivativeStatus: type === 'video' ? 'pending' : 'not-required',
-        };
-      }));
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
-      return;
-    }
-
-    mediaCommands.appendAssets(importedAssets);
+    if (!(await importMediaFiles(files, mediaUploadTags))) return;
     form.reset();
     setMediaUploadTags([]);
   };
@@ -2520,11 +2489,7 @@ function App() {
 
             <section className="media-wide-section">
               <SectionTitle eyebrow={tx('02 · Vidéo principale', '02 · Main video')} title={tx("L’objet en mouvement", 'The object in motion')} publish={publishProps('media-motion')} />
-              {mainVideo ? (
-                <VideoPoster asset={mainVideo} onOpen={setSelectedAsset} />
-              ) : (
-                <AccessRestricted title={tx('Vidéo principale non disponible', 'Main video unavailable')} language={language} />
-              )}
+              {mainVideo ? <VideoPoster asset={mainVideo} onOpen={setSelectedAsset} /> : <EmptyMediaSlot slot="main-video" language={language} canEdit={canEdit} busy={mediaImportBusy} onAddFiles={(files) => void importMediaFiles(files, ['main-video'])} />}
             </section>
 
             <section className="media-wide-section">
@@ -2536,7 +2501,7 @@ function App() {
                   <span><strong>{spinAssets.length} {tx('vues ordonnées', 'ordered views')}</strong></span>
                 </button>
               ) : (
-                <AccessRestricted title={tx('Séquence 3D non affectée', 'No 3D sequence assigned')} language={language} />
+                <EmptyMediaSlot slot="spin-3d" language={language} canEdit={canEdit} busy={mediaImportBusy} onAddFiles={(files) => void importMediaFiles(files, ['spin-3d'])} />
               )}
             </section>
 
@@ -2599,7 +2564,7 @@ function App() {
                         ))}
                       </div>
                     </fieldset>
-                    <button type="submit" className="button button--primary">{tx('Ajouter à la bibliothèque', 'Add to library')}</button>
+                    <button type="submit" className="button button--primary" disabled={mediaImportBusy}>{tx('Ajouter à la bibliothèque', 'Add to library')}</button>
                   </form>
                 </div>
               </section>

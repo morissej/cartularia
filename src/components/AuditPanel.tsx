@@ -7,7 +7,7 @@ import type {
 } from '../utils/integrityJournal';
 import { isRfc3161Receipt } from '../utils/integrityJournal';
 import type { AuditEvent } from '../types';
-import { Check, AlertTriangle, ChevronDown, ChevronUp, Cloud, HardDrive, RefreshCw, Trash2, Clock3 } from 'lucide-react';
+import { Check, AlertTriangle, Cloud, HardDrive, RefreshCw, Trash2, Clock3 } from 'lucide-react';
 import type { HybridPersistenceState } from '../persistence/useHybridPersistence';
 import { requestExternalTimestamp } from '../services/timestamping';
 import {
@@ -175,14 +175,13 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   const [isTimestamping, setIsTimestamping] = useState(false);
   const [timestampError, setTimestampError] = useState<string | null>(null);
   const [timestampNotice, setTimestampNotice] = useState<string | null>(null);
-  const [sensitiveActionError, setSensitiveActionError] = useState<string | null>(null);
+  // V5 P-D1 : deux erreurs distinctes, chacune affichée sous l'action qui l'a produite
+  // (export dans « Carnet local de travail », suppression dans « Suppression des données »).
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [authorityLoadState, setAuthorityLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [authorityIntegrity, setAuthorityIntegrity] = useState<AuthoritativeCartularyIntegrity | null>(null);
   const { runWithStepUp, stepUpDialog } = useStepUpAuthentication(language);
-
-
-  // Onglet technique masqué par défaut (Règle 4)
-  const [showTechnicalSim, setShowTechnicalSim] = useState(false);
 
   const refreshJournal = useCallback(async () => {
     await journal.ready();
@@ -242,18 +241,8 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
     }
   };
 
-  const handleLocalTestTimestamp = async () => {
-    await journal.createLocalTestTimestamp(snapshot);
-    await refreshJournal();
-    onJournalUpdate();
-  };
-
-  const handleTamper = async (seq: number) => {
-    journal.simulateTampering(seq, "FALSIFICATION : Prix d'achat modifié à 15 000 EUR");
-    await refreshJournal();
-    onJournalUpdate();
-  };
-
+  // V5 P-D1 : la migration n'est proposée que sous une rupture constatée (alerte de l'historique) ;
+  // les outils d'essai du carnet (altération simulée, horodatage de test) n'ont plus aucun appelant d'interface.
   const handleReset = async () => {
     await journal.migrateBrokenJournal(snapshot);
     await refreshJournal();
@@ -261,7 +250,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   };
 
   const handleExport = async () => {
-    setSensitiveActionError(null);
+    setExportError(null);
     try {
       await runWithStepUp('secret_export', async () => {
         const bundle = await journal.exportPortableBundle(snapshot);
@@ -277,7 +266,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
       }, { required: persistence.authenticated });
     } catch (nextError) {
       if (!isStepUpCancellation(nextError)) {
-        setSensitiveActionError(nextError instanceof StepUpAuthenticationUnavailableError
+        setExportError(nextError instanceof StepUpAuthenticationUnavailableError
           ? tx('La session a expiré. Reconnectez-vous avant de continuer.', 'The session expired. Sign in again before continuing.')
           : nextError instanceof Error
           ? nextError.message
@@ -288,12 +277,12 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
 
   const handleDeleteAllData = async () => {
     setIsDeleting(true);
-    setSensitiveActionError(null);
+    setDeleteError(null);
     try {
       await runWithStepUp('cloud_delete', onDeleteAllData, { required: persistence.authenticated });
     } catch (nextError) {
       if (!isStepUpCancellation(nextError)) {
-        setSensitiveActionError(nextError instanceof StepUpAuthenticationUnavailableError
+        setDeleteError(nextError instanceof StepUpAuthenticationUnavailableError
           ? tx('La session a expiré. Reconnectez-vous avant de continuer.', 'The session expired. Sign in again before continuing.')
           : nextError instanceof Error
           ? nextError.message
@@ -394,27 +383,6 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
               <RefreshCw size={14} /> {tx('Synchroniser maintenant', 'Sync now')}
             </button>
           )}
-          {!showDeleteConfirmation ? (
-            <button type="button" className="button button--quiet" onClick={() => setShowDeleteConfirmation(true)}><Trash2 size={14} /> {tx('Supprimer mes données', 'Delete my data')}</button>
-          ) : (
-            <div role="alertdialog" aria-labelledby="delete-all-title" aria-describedby="delete-all-description" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s2)', border: '1px solid var(--mark)' }}>
-              <strong id="delete-all-title">{tx('Suppression définitive', 'Permanent deletion')}</strong>
-              <span id="delete-all-description">{language === 'FR'
-                ? `Tapez ${deleteKeyword} pour effacer ce coffre local et, si vous êtes connecté, sa copie privée cloud. Les publications déjà émises ne sont pas supprimées par cette action.`
-                : `Type ${deleteKeyword} to erase this local vault and, if signed in, its private cloud copy. Publications already issued are not deleted by this action.`}</span>
-              <label>{tx('Confirmation', 'Confirmation')}<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" autoFocus /></label>
-              <div style={{ display: 'flex', gap: 'var(--s2)' }}>
-                <button type="button" className="button button--quiet" onClick={() => { setShowDeleteConfirmation(false); setDeleteConfirmation(''); }}>{tx('Annuler', 'Cancel')}</button>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  disabled={deleteConfirmation !== deleteKeyword || isDeleting}
-                  onClick={() => void handleDeleteAllData()}
-                >{isDeleting ? tx('Suppression…', 'Deleting…') : tx('Confirmer la suppression', 'Confirm deletion')}</button>
-              </div>
-            </div>
-          )}
-          {sensitiveActionError && <p role="alert" style={{ margin: 0, color: 'var(--mark)' }}>{sensitiveActionError}</p>}
         </div>
       </section>
 
@@ -551,6 +519,25 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             {timestampNotice && <div role="status" style={{ color: 'var(--muted)', fontSize: '11px' }}>{timestampNotice}</div>}
             {timestampError && <div role="alert" style={{ color: 'var(--mark)', fontSize: '11px' }}>{timestampError}</div>}
           </div>
+
+          {/* V5 P-D1 : export du carnet local, action de production rangée avec le carnet (plus de tiroir technique). */}
+          <div style={{ display: 'grid', gap: '8px', marginTop: 'var(--s2)' }}>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: '11px', lineHeight: 1.45 }}>
+              {tx(
+                'Copie JSON portable des événements et reçus de ce navigateur, vérifiable hors ligne. Elle ne contient aucun original ni aucune preuve serveur.',
+                'Portable JSON copy of this browser’s events and receipts, verifiable offline. It contains no original and no server proof.',
+              )}
+            </p>
+            <button
+              type="button"
+              className="button button--quiet"
+              disabled={!integrityStatus.isValid || proofState.revision === 0}
+              onClick={() => void handleExport()}
+            >
+              {tx('Exporter le carnet local', 'Export local journal')}
+            </button>
+            {exportError && <p role="alert" style={{ margin: 0, color: 'var(--mark)', fontSize: '11px' }}>{exportError}</p>}
+          </div>
         </div>
 
         {/* QR de partage : uniquement vers le mini-site réellement publié (V4 point 2). */}
@@ -571,7 +558,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           {language === 'FR' ? 'Historique local conservé' : 'Preserved local history'}
         </h4>
 
-        {/* Alerte de rupture */}
+        {/* Alerte de rupture : seule issue d'un carnet rompu, la migration n'est proposée qu'ici (V5 P-D1). */}
         {!integrityStatus.isValid && (
           <div style={{
             backgroundColor: 'rgba(166, 58, 42, 0.08)',
@@ -580,20 +567,30 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
             color: 'var(--mark)',
             fontSize: '12px',
             fontFamily: 'var(--font-mono)',
-            display: 'flex',
-            alignItems: 'center',
+            display: 'grid',
             gap: '8px'
           }}>
-            <AlertTriangle size={14} />
-            <span>
-              {language === 'FR'
-                ? (integrityStatus.brokenSequence === undefined
-                    ? 'Incohérence détectée dans le carnet local.'
-                    : `Rupture de chaîne à la séquence #${integrityStatus.brokenSequence} !`)
-                : (integrityStatus.brokenSequence === undefined
-                    ? 'An inconsistency was detected in the local journal.'
-                    : `Chain broken at sequence #${integrityStatus.brokenSequence}!`)}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={14} />
+              <span>
+                {language === 'FR'
+                  ? (integrityStatus.brokenSequence === undefined
+                      ? 'Incohérence détectée dans le carnet local.'
+                      : `Rupture de chaîne à la séquence #${integrityStatus.brokenSequence} !`)
+                  : (integrityStatus.brokenSequence === undefined
+                      ? 'An inconsistency was detected in the local journal.'
+                      : `Chain broken at sequence #${integrityStatus.brokenSequence}!`)}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontFamily: 'var(--font-sans)', fontSize: '11px', lineHeight: 1.45 }}>
+              {tx(
+                'Le carnet local ne peut plus être horodaté ni exporté. La migration archive l’état rompu (conservé, jamais réécrit) et repart d’un carnet vide ; la preuve serveur n’est pas concernée.',
+                'The local journal can no longer be timestamped or exported. Migration archives the broken state (preserved, never rewritten) and starts a fresh journal; the server proof is not affected.',
+              )}
+            </p>
+            <button type="button" className="button button--quiet" style={{ justifySelf: 'start' }} onClick={() => void handleReset()}>
+              {tx('Migrer la chaîne rompue', 'Migrate broken chain')}
+            </button>
           </div>
         )}
 
@@ -684,131 +681,42 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
         )}
       </div>
 
-      {/* 3. Tiroir de Simulation Technique (Masqué par défaut - Règle 4) */}
+      {/* 3. Suppression des données : dernière section, isolée des actions courantes (V5 P-D1). */}
       <div style={{
         borderTop: '1px solid var(--rule)',
         paddingTop: 'var(--s3)',
         marginTop: 'auto'
       }}>
-        <button
-          type="button"
-          onClick={() => setShowTechnicalSim(!showTechnicalSim)}
-          aria-expanded={showTechnicalSim}
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            fontWeight: 700,
-            color: 'var(--muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            padding: 'var(--s2) 0',
-            cursor: 'pointer'
-          }}
-        >
-          <span>{language === 'FR' ? "⚡ Simulation technique" : "⚡ Technical Simulation"}</span>
-          {showTechnicalSim ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-
-        {showTechnicalSim && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--s2)',
-            backgroundColor: 'var(--paper)',
-            padding: 'var(--s3)',
-            marginTop: 'var(--s1)',
-            border: '1px solid var(--rule)'
-          }}>
-            <p style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: 'var(--s1)' }}>
-              {language === 'FR'
-                ? "Simulation locale : testez la détection d’une altération ou créez une fixture. Cette fixture n’est jamais présentée comme un horodatage tiers."
-                : "Local simulation: test tamper detection or create a fixture. This fixture is never presented as a third-party timestamp."}
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--s2)' }}>
-              {integrityStatus.isValid && events.length > 1 ? (
+        <section aria-labelledby="deletion-title" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s3)', border: '1px solid var(--mark)' }}>
+          <h4 id="deletion-title" style={SECTION_TITLE_STYLE}>{tx('Suppression des données', 'Data deletion')}</h4>
+          <p style={{ margin: 0, color: 'var(--muted)', fontSize: '11px', lineHeight: 1.45 }}>
+            {tx(
+              'Action irréversible : efface le coffre local de ce navigateur (originaux, carnet local) et, si vous êtes connecté, la copie privée cloud. Les publications déjà émises, les Sceaux et la chaîne serveur ne sont pas supprimés.',
+              'Irreversible action: erases this browser’s local vault (originals, local journal) and, if you are signed in, the private cloud copy. Publications already issued, Seals and the server chain are not deleted.',
+            )}
+          </p>
+          {!showDeleteConfirmation ? (
+            <button type="button" className="button button--quiet" style={{ justifySelf: 'start' }} onClick={() => setShowDeleteConfirmation(true)}><Trash2 size={14} /> {tx('Supprimer mes données', 'Delete my data')}</button>
+          ) : (
+            <div role="alertdialog" aria-labelledby="delete-all-title" aria-describedby="delete-all-description" style={{ display: 'grid', gap: 'var(--s2)', padding: 'var(--s2)', border: '1px solid var(--mark)' }}>
+              <strong id="delete-all-title">{tx('Suppression définitive', 'Permanent deletion')}</strong>
+              <span id="delete-all-description">{language === 'FR'
+                ? `Tapez ${deleteKeyword} pour effacer ce coffre local et, si vous êtes connecté, sa copie privée cloud. Les publications déjà émises ne sont pas supprimées par cette action.`
+                : `Type ${deleteKeyword} to erase this local vault and, if signed in, its private cloud copy. Publications already issued are not deleted by this action.`}</span>
+              <label>{tx('Confirmation', 'Confirmation')}<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" autoFocus /></label>
+              <div style={{ display: 'flex', gap: 'var(--s2)' }}>
+                <button type="button" className="button button--quiet" onClick={() => { setShowDeleteConfirmation(false); setDeleteConfirmation(''); }}>{tx('Annuler', 'Cancel')}</button>
                 <button
-                  onClick={() => handleTamper(events[1].sequence)}
-                  style={{
-                    flex: 1,
-                    backgroundColor: 'transparent',
-                    border: '1px solid var(--mark)',
-                    color: 'var(--mark)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    transition: 'var(--transition)'
-                  }}
-                >
-                  {language === 'FR'
-                    ? `Falsifier événement #${events[1].sequence}`
-                    : `Tamper event #${events[1].sequence}`}
-                </button>
-              ) : (
-                <button
-                  onClick={handleReset}
-                  style={{
-                    flex: 1,
-                    backgroundColor: 'transparent',
-                    border: '1px solid var(--ink)',
-                    color: 'var(--ink)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    transition: 'var(--transition)'
-                  }}
-                >
-                  {language === 'FR' ? "Migrer la chaîne rompue" : "Migrate broken chain"}
-                </button>
-              )}
-
-              <button
-                onClick={() => void handleLocalTestTimestamp()}
-                disabled={!integrityStatus.isValid}
-                style={{
-                  backgroundColor: integrityStatus.isValid ? 'var(--ink)' : 'var(--fill)',
-                  color: integrityStatus.isValid ? 'var(--paper)' : 'var(--muted)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '8px 12px',
-                  cursor: integrityStatus.isValid ? 'pointer' : 'not-allowed',
-                  transition: 'var(--transition)'
-                }}
-              >
-                {language === 'FR' ? "Créer une fixture locale" : "Create local fixture"}
-              </button>
-              <button
-                onClick={handleExport}
-                disabled={!integrityStatus.isValid || proofState.revision === 0}
-                style={{
-                  width: '100%',
-                  backgroundColor: 'transparent',
-                  border: '1px solid var(--ink)',
-                  color: 'var(--ink)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '8px 12px',
-                  cursor: integrityStatus.isValid && proofState.revision > 0 ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {language === 'FR' ? 'Exporter le carnet local' : 'Export local journal'}
-              </button>
+                  type="button"
+                  className="button button--primary"
+                  disabled={deleteConfirmation !== deleteKeyword || isDeleting}
+                  onClick={() => void handleDeleteAllData()}
+                >{isDeleting ? tx('Suppression…', 'Deleting…') : tx('Confirmer la suppression', 'Confirm deletion')}</button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          {deleteError && <p role="alert" style={{ margin: 0, color: 'var(--mark)' }}>{deleteError}</p>}
+        </section>
       </div>
     </div>
   );

@@ -1,10 +1,12 @@
 import type { ComponentProps } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Le panneau Preuves en lecture seule (démonstration) ne doit afficher aucun message technique
 // (« Connexion requise », « Connectez-vous… ») ni aucune action propriétaire (suppression,
-// simulation, export), et ne doit observer ni la session ni la chaîne serveur.
+// export, migration), et ne doit observer ni la session ni la chaîne serveur.
+// En mode propriétaire (V5 P-D1) : aucun tiroir « Simulation technique », export rangé avec le carnet
+// local, migration proposée seulement sous rupture, suppression isolée dans la dernière section.
 const mocks = vi.hoisted(() => ({
   observeAuthoritativeCartularyIntegrity: vi.fn(),
   requestExternalTimestamp: vi.fn(),
@@ -44,14 +46,19 @@ import type { IntegrityJournal } from '../../src/utils/integrityJournal';
 import type { HybridPersistenceState } from '../../src/persistence/useHybridPersistence';
 import { loadPublicProjection, loadPublicPublicationStatuses, loadPublicPublicationSummaries } from '../../src/services/projections';
 
-const makeJournal = () => {
+const ZERO_DIGEST = 'sha256:0000000000000000000000000000000000000000000000000000000000000000';
+
+const makeJournal = (overrides: Partial<Record<'verifyIntegrity' | 'getProofState' | 'exportPortableBundle', ReturnType<typeof vi.fn>>> = {}) => {
   const journal = {
     ready: vi.fn(async () => undefined),
     verifyIntegrity: vi.fn(async () => ({ isValid: true, errors: [], legacyStatuses: [] })),
     getEvents: vi.fn(() => []),
     getReceipts: vi.fn(() => []),
-    getProofState: vi.fn(() => ({ revision: 0, contentDigest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000', legacyStatuses: [] })),
+    getProofState: vi.fn(() => ({ revision: 0, contentDigest: ZERO_DIGEST, legacyStatuses: [] })),
     reconcileSnapshot: vi.fn(async () => null),
+    migrateBrokenJournal: vi.fn(async () => undefined),
+    exportPortableBundle: vi.fn(async () => ({ cartularyId: 'cart_demo', revision: 1 })),
+    ...overrides,
   };
   return journal as unknown as IntegrityJournal & typeof journal;
 };
@@ -76,10 +83,10 @@ const makePersistence = (authenticated = false) => {
 const TECHNICAL_MESSAGE = /Connexion requise|Sign-in required|Connexion propriétaire requise|Owner sign-in required|Connectez-vous|Sign in /;
 
 const renderPanel = (overrides: Partial<ComponentProps<typeof AuditPanel>> = {}) => {
-  const journal = makeJournal();
+  const journal = (overrides.journal as ReturnType<typeof makeJournal> | undefined) ?? makeJournal();
   const persistence = makePersistence();
   const onDeleteAllData = vi.fn(async () => undefined);
-  render(
+  const { unmount } = render(
     <AuditPanel
       journal={journal}
       cartularyId="cart_demo_rolex_submariner_124060"
@@ -93,7 +100,7 @@ const renderPanel = (overrides: Partial<ComponentProps<typeof AuditPanel>> = {})
       {...overrides}
     />,
   );
-  return { journal, persistence, onDeleteAllData };
+  return { journal, persistence, onDeleteAllData, unmount };
 };
 
 describe('panneau Preuves en lecture seule (démonstration)', () => {
@@ -160,8 +167,13 @@ describe('panneau Preuves propriétaire (comportement préservé)', () => {
 
     expect(screen.getByText('Copie privée cloud')).toBeTruthy();
     expect(screen.getAllByText('Connexion requise').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /Supprimer mes données/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Simulation technique/ })).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Suppression des données' })).getByRole('button', { name: /Supprimer mes données/ })).toBeTruthy();
+    // V5 P-D1 : plus de tiroir technique ; l'export reste, désactivé tant que la révision locale est 0.
+    expect(screen.queryByRole('button', { name: /Simulation technique|Falsifier|fixture/i })).toBeNull();
+    expect(screen.queryByText(/Simulation technique|Technical Simulation/)).toBeNull();
+    const exportButton = screen.getByRole('button', { name: /Exporter le carnet local/ }) as HTMLButtonElement;
+    expect(exportButton).toBeTruthy();
+    expect(exportButton.disabled).toBe(true);
     expect(screen.getByTestId('transfer-panel')).toBeTruthy();
     expect(screen.getByText('Carnet local de travail')).toBeTruthy();
     // V4 point 2 : sans publication constatée, aucun QR ni lien de partage ; la ligne « Code public » reste, avec le code réel.
@@ -192,6 +204,124 @@ describe('panneau Preuves propriétaire (comportement préservé)', () => {
     expect(mocks.observeAuthoritativeCartularyIntegrity).toHaveBeenCalledTimes(1);
     expect(mocks.observeAuthoritativeCartularyIntegrity.mock.calls[0][0]).toBe('cart_demo_rolex_submariner_124060');
     expect(screen.queryByText('Connexion requise')).toBeNull();
+  });
+
+  it('propose la migration seulement quand le carnet local est rompu', async () => {
+    const snapshot = { reference: 'demo' };
+    const intact = renderPanel({ snapshot });
+    await waitFor(() => expect(intact.journal.verifyIntegrity).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Migrer/ })).toBeNull();
+    expect(screen.queryByText(/Rupture de chaîne|Incohérence détectée/)).toBeNull();
+    intact.unmount();
+
+    const broken = makeJournal({
+      verifyIntegrity: vi.fn(async () => ({ isValid: false, errors: [], legacyStatuses: [], brokenSequence: 2 })),
+    });
+    const { journal } = renderPanel({ journal: broken, snapshot });
+    const migrate = await screen.findByRole('button', { name: 'Migrer la chaîne rompue' });
+    expect(screen.getByText('Rupture de chaîne à la séquence #2 !')).toBeTruthy();
+    expect(screen.getByText(/Le carnet local ne peut plus être horodaté ni exporté\./)).toBeTruthy();
+    // Un carnet rompu n'est ni horodatable ni exportable ; la migration est sa seule issue.
+    expect((screen.getByRole('button', { name: 'Exporter le carnet local' }) as HTMLButtonElement).disabled).toBe(true);
+    // La migration est dans l'historique, jamais dans la section de suppression.
+    expect(within(screen.getByRole('region', { name: 'Suppression des données' })).queryByRole('button', { name: /Migrer/ })).toBeNull();
+    fireEvent.click(migrate);
+    await waitFor(() => expect(journal.migrateBrokenJournal).toHaveBeenCalledTimes(1));
+    expect(journal.migrateBrokenJournal).toHaveBeenCalledWith(snapshot);
+  });
+
+  it('isole la suppression dans une section dédiée, en dernier', async () => {
+    const { onDeleteAllData } = renderPanel();
+
+    const regions = screen.getAllByRole('region');
+    const deletion = regions.at(-1) as HTMLElement;
+    expect(deletion).toBe(screen.getByRole('region', { name: 'Suppression des données' }));
+    expect(deletion.tagName).toBe('SECTION');
+    // Dernière section : après l'historique local, et après toute autre région nommée.
+    const history = screen.getByText('Historique local conservé');
+    expect(history.compareDocumentPosition(deletion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(deletion).getByText(/Action irréversible : efface le coffre local de ce navigateur/)).toBeTruthy();
+
+    // « Conservation des données » ne porte plus que la synchronisation.
+    const preservation = screen.getByRole('region', { name: 'Conservation des données' });
+    expect(within(preservation).queryByRole('button', { name: /Supprimer/ })).toBeNull();
+    expect(within(preservation).queryByRole('alertdialog')).toBeNull();
+
+    fireEvent.click(within(deletion).getByRole('button', { name: /Supprimer mes données/ }));
+    const dialog = within(deletion).getByRole('alertdialog', { name: 'Suppression définitive' });
+    const confirm = within(dialog).getByRole('button', { name: 'Confirmer la suppression' }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText('Confirmation'), { target: { value: 'SUPPRIMER' } });
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    // auth.currentUser nul dans le mock : aucun step-up, l'opération est appelée directement.
+    await waitFor(() => expect(onDeleteAllData).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('exporte le carnet local depuis « Carnet local de travail », hors de tout tiroir', async () => {
+    const snapshot = { reference: 'demo' };
+    const journal = makeJournal({ getProofState: vi.fn(() => ({ revision: 1, contentDigest: ZERO_DIGEST, legacyStatuses: [] })) });
+    const createObjectURL = vi.fn(() => 'blob:x');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    const downloads: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { downloads.push(this.download); });
+
+    renderPanel({ journal, snapshot });
+    const exportButton = screen.getByRole('button', { name: 'Exporter le carnet local' }) as HTMLButtonElement;
+    expect(exportButton.disabled).toBe(false);
+    expect(screen.getByText(/Copie JSON portable des événements et reçus de ce navigateur/)).toBeTruthy();
+    // Rangé sous « Carnet local de travail », avant l'historique et hors de la section de suppression.
+    const journalTitle = screen.getByText('Carnet local de travail');
+    const history = screen.getByText('Historique local conservé');
+    expect(journalTitle.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(exportButton.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Suppression des données' })).queryByRole('button', { name: /Exporter/ })).toBeNull();
+
+    fireEvent.click(exportButton);
+    await waitFor(() => expect(journal.exportPortableBundle).toHaveBeenCalledTimes(1));
+    expect(journal.exportPortableBundle).toHaveBeenCalledWith(snapshot);
+    await waitFor(() => expect(downloads).toEqual(['carnet-local-cart_demo-r1.json']));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('affiche chaque erreur sous l’action qui l’a produite, jamais dans l’autre section', async () => {
+    const journal = makeJournal({
+      getProofState: vi.fn(() => ({ revision: 1, contentDigest: ZERO_DIGEST, legacyStatuses: [] })),
+      exportPortableBundle: vi.fn(async () => { throw new Error('Export refusé par le coffre'); }),
+    });
+    const onDeleteAllData = vi.fn(async () => { throw new Error('Suppression refusée'); });
+    renderPanel({ journal, onDeleteAllData });
+    const deletion = screen.getByRole('region', { name: 'Suppression des données' });
+    const history = screen.getByText('Historique local conservé');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exporter le carnet local' }));
+    const exportAlert = await screen.findByRole('alert');
+    expect(exportAlert.textContent).toBe('Export refusé par le coffre');
+    expect(exportAlert.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(deletion).queryByRole('alert')).toBeNull();
+
+    fireEvent.click(within(deletion).getByRole('button', { name: /Supprimer mes données/ }));
+    fireEvent.change(within(deletion).getByLabelText('Confirmation'), { target: { value: 'SUPPRIMER' } });
+    fireEvent.click(within(deletion).getByRole('button', { name: 'Confirmer la suppression' }));
+    const deleteAlert = await within(deletion).findByRole('alert');
+    expect(deleteAlert.textContent).toBe('Suppression refusée');
+    // Les deux états coexistent : l'erreur d'export n'est ni effacée ni déplacée par la suppression.
+    expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(['Export refusé par le coffre', 'Suppression refusée']);
+    expect((within(deletion).getByRole('button', { name: 'Confirmer la suppression' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('garde la parité anglaise des textes propriétaires du panneau', () => {
+    renderPanel({ language: 'EN' });
+    expect(screen.getByRole('region', { name: 'Data deletion' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Delete my data/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Export local journal' })).toBeTruthy();
+    expect(screen.getByText(/Irreversible action: erases this browser’s local vault/)).toBeTruthy();
+    expect(screen.getByText(/Portable JSON copy of this browser’s events and receipts/)).toBeTruthy();
+    expect(screen.queryByText(/Technical Simulation|Tamper event|Create local fixture/)).toBeNull();
   });
 });
 
