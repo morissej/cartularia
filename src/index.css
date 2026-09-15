@@ -164,10 +164,11 @@ img { display: block; max-width: 100%; }
 }
 
 .dossier-bar__logo .brand-logo { height: 34px; }
+.dossier-bar__logo .brand-logo-link { min-height: var(--control-size); }
 
 .cartulary-registry-return {
   display: inline-flex;
-  min-height: 34px;
+  min-height: var(--control-size);
   align-items: center;
   gap: var(--s2);
   margin: var(--s2) clamp(var(--s4), 5vw, var(--s5)) 0;
@@ -225,7 +226,7 @@ img { display: block; max-width: 100%; }
 
 .todo-trigger {
   display: inline-flex;
-  min-height: 34px;
+  min-height: var(--control-size);
   align-items: center;
   gap: var(--s2);
   padding: 0 var(--s3);
@@ -854,7 +855,7 @@ img { display: block; max-width: 100%; }
 .cover-sheet__editable-title span,
 .cover-sheet__published-title > p { font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .cover-sheet__editable-title strong,
-.cover-sheet__published-title > h1 { margin-top: var(--s1); font-family: var(--font-display); font-size: clamp(48px, 7vw, 86px); font-weight: 500; letter-spacing: -.04em; line-height: .92; }
+.cover-sheet__published-title > h2 { margin-top: var(--s1); font-family: var(--font-display); font-size: clamp(48px, 7vw, 86px); font-weight: 500; letter-spacing: -.04em; line-height: .92; }
 
 .cover-sheet__published-title,
 .cover-sheet__identity-editor { align-self: center; }
@@ -1595,7 +1596,7 @@ textarea {
 .media-download-link {
   display: inline-flex;
   width: fit-content;
-  min-height: 42px;
+  min-height: var(--control-size);
   align-items: center;
   justify-content: center;
   gap: var(--s2);
@@ -1611,7 +1612,7 @@ textarea {
 }
 
 .media-download-link:hover { background: var(--mark); border-color: var(--mark); color: var(--sheet); }
-.media-download-link--compact { min-height: 34px; padding-inline: var(--s3); font-size: 9px; }
+.media-download-link--compact { padding-inline: var(--s3); font-size: 9px; }
 
 .spin-downloads { padding: var(--s3) var(--s4); border-top: 1px solid var(--rule); background: var(--sheet); }
 .spin-downloads summary { cursor: pointer; font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; }
@@ -2942,7 +2943,7 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .dossier-bar__inner { gap: var(--s2); }
   .dossier-bar__logo .brand-logo { height: 28px; }
   .dossier-bar__controls { gap: var(--s2) !important; }
-  .todo-trigger { width: 42px; padding: 0; justify-content: center; }
+  .todo-trigger { width: var(--control-size); padding: 0; justify-content: center; }
   .todo-trigger > span { display: none; }
   .todo-trigger strong { position: absolute; top: -5px; right: -5px; }
   .todo-popover { position: fixed; top: 69px; right: var(--s3); }
@@ -2971,7 +2972,7 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .cover-sheet__identity-meta { width: 100%; min-width: 0; justify-items: stretch; }
   .cover-sheet__identity-editor { grid-template-columns: 1fr; }
   .cover-sheet__editable-title strong,
-  .cover-sheet__published-title > h1 { font-size: 42px; }
+  .cover-sheet__published-title > h2 { font-size: 42px; }
   .cover-todo-board { padding: var(--s4); }
   .cover-todo-board__header { align-items: flex-start; flex-direction: column; }
   .cover-todo-board__add { grid-template-columns: 1fr; }

@@ -1938,7 +1938,7 @@ function App() {
               <span className="eyebrow">Cartulaire · {cartularyPublicCode}</span>
               <div className="cover-sheet__published-title">
                 <p>{specificationValue('Marque', watch.reference.brand)}</p>
-                <h1>{specificationValue('Modèle', watch.reference.model)}</h1>
+                <h2>{specificationValue('Modèle', watch.reference.model)}</h2>
               </div>
               <div className="cover-sheet__identity-meta">
                 <span className="asset-kind-badge">{assetKindLabel(assetKind)}</span>
@@ -2305,8 +2305,7 @@ function App() {
                   onClick={() => navigateTo(page.id)}
                   aria-current={activeWebsitePage?.id === page.id ? 'page' : undefined}
                 >
-                  <span>{page.number}</span>
-                  {page.label}
+                  <span>{page.number}</span>{'\u00a0'}{page.label}
                 </button>
               ))}
             </div>
@@ -2363,8 +2362,7 @@ function App() {
               onClick={() => navigateTo(page.id)}
               aria-current={activePage === page.id ? 'page' : undefined}
             >
-              <span>{page.number}</span>
-              {page.label}
+              <span>{page.number}</span>{'\u00a0'}{page.label}
             </button>
           ))}
           <button type="button" className="page-tabs__audit" onClick={() => setIsDrawerOpen(true)}>
@@ -2387,8 +2385,8 @@ function App() {
                   </div></>
                 ) : (
                   <h1 className="cover-sheet__editable-heading">{canEdit
-                    ? <button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => setEditingBlock('cover-watch')} title={tx('Cliquer pour modifier', 'Click to edit')}><span>{specificationValue('Marque', watch.reference.brand)}</span><strong>{specificationValue('Modèle', watch.reference.model)}</strong></button>
-                    : <span className="cover-sheet__editable-title"><span>{specificationValue('Marque', watch.reference.brand)}</span><strong>{specificationValue('Modèle', watch.reference.model)}</strong></span>}</h1>
+                    ? <button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => setEditingBlock('cover-watch')} title={tx('Cliquer pour modifier', 'Click to edit')}><span>{specificationValue('Marque', watch.reference.brand)}</span>{' '}<strong>{specificationValue('Modèle', watch.reference.model)}</strong></button>
+                    : <span className="cover-sheet__editable-title"><span>{specificationValue('Marque', watch.reference.brand)}</span>{' '}<strong>{specificationValue('Modèle', watch.reference.model)}</strong></span>}</h1>
                 )}
                 <div className="cover-sheet__identity-meta">
                   {editingBlock === 'cover-watch' ? (
@@ -3339,7 +3337,7 @@ function App() {
           <header className="report-print-view__header">
             <BrandLogo className="report-print-view__logo" variant="monochrome" />
             <span className="eyebrow">{tx('Rapport Cartularia', 'Cartularia report')} · {cartularyPublicCode}</span>
-            <h1>{specificationValue('Marque', watch.reference.brand)}<br />{specificationValue('Modèle', watch.reference.model)}</h1>
+            <h1>{specificationValue('Marque', watch.reference.brand)}{' '}<br />{specificationValue('Modèle', watch.reference.model)}</h1>
             <dl>
               <div><dt>{tx('Référence', 'Reference')}</dt><dd>{specificationValue('Numéro de référence', watch.reference.reference)}</dd></div>
               <div><dt>{tx('Date du rapport', 'Report date')}</dt><dd>{new Intl.DateTimeFormat(interfaceLocale, { dateStyle: 'long' }).format(new Date())}</dd></div>
