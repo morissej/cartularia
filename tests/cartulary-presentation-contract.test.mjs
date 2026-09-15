@@ -607,3 +607,65 @@ test('V5 P-D3 : la page Médias ne présente jamais l’absence de vidéo ou de 
   assert.match(readSource('../src/utils/fileDigest.ts'), /globalThis\.crypto\.subtle\.digest\('SHA-256'/);
   assert.match(readSource('../src/index.css'), /\.empty-media-slot \{[^}]*border: 1px dashed var\(--rule\)/s);
 });
+
+// V5 — point 1 (V-D1, P-D6), commit 1/2 (I3) : lecture en texte pur, édition à la demande par crayon sur les pages 00-04.
+test('V5 point 1 : le mode lecture suit le droit de gérer, sans contrôle désactivé sur les pages 00-04', () => {
+  const app = readSource('../src/App.tsx');
+  const presentation = readSource('../src/features/cartulary/components/CartularyPresentation.tsx');
+  const css = readSource('../src/index.css');
+  // Une seule source de vérité, la même que la page Publication (décision V2 (b) généralisée, D5 (a)).
+  assert.match(app, /const canEdit = authoritative\.canManage;/);
+  assert.doesNotMatch(app, /const canEdit = !isDemoCartulary;/);
+  assert.doesNotMatch(app, /showCompleteContent/);
+  assert.doesNotMatch(app, /isEditingChecks/);
+  // Pages 00-04 : plus aucun fieldset désactivé, aucun contrôle grisé, aucune option démo.
+  const pages = app.slice(app.indexOf('<CoverPage'), app.indexOf('<PublicationPage'));
+  assert.doesNotMatch(pages, /<fieldset className="cartulary-readonly-scope"/);
+  assert.doesNotMatch(pages, /cartulary-readonly-scope/);
+  assert.doesNotMatch(pages, /disabled=\{!canEdit\}/);
+  assert.doesNotMatch(pages, /`demo:\$\{/);
+  assert.doesNotMatch(pages, /disabled=\{isDemoCartulary\}/);
+  // Le crayon n'est posé que si l'édition est possible ; jamais rendu grisé.
+  assert.match(app, /\.\.\.\(editable && canEdit \? \{/);
+  assert.doesNotMatch(app, /disabled: !canEdit/);
+  assert.doesNotMatch(presentation, /disabled=\{selection\.edit\.disabled\}|disabled\?: boolean/);
+  // Les treize blocs restés en champs permanents (fiche de spécifications comprise — P-D6) plus les points à contrôler portent un crayon.
+  for (const id of ['reference-specs', 'reference-checks', 'reference-popularity', 'cover-ownership-history', 'cover-storage', 'cover-transmission', 'condition-documentation', 'value-market', 'value-comparables-listings', 'value-comparables-transactions', 'value-comparables-analysis', 'value-cost-basis', 'value-performance', 'value-sensitivity']) {
+    assert.match(app, new RegExp(`publishProps\\('${id}', true\\)`), `crayon absent sur ${id}`);
+  }
+  // Fiche de spécifications : champs et « Ajouter une donnée » sous l'édition du bloc, ancres IA sur dt/dd en lecture (C5).
+  assert.match(app, /editingBlock === 'reference-specs' \? \(/);
+  assert.match(app, /\{editingBlock === 'reference-specs' && \(pendingSpecificationGroupId === group\.id/);
+  assert.match(app, /<dt \{\.\.\.aiFieldProps\('reference\.specifications\[\]\.label', item\.id\)\}>\{item\.label\}<\/dt><dd \{\.\.\.aiFieldProps\('reference\.specifications\[\]\.value', item\.id\)\}>\{item\.value\}<\/dd>/);
+  // Aucune affordance inerte : ni onActivate ni onClick conditionnés par « canEdit && ».
+  assert.doesNotMatch(app, /onActivate=\{\(\) => canEdit &&/);
+  assert.doesNotMatch(app, /onClick=\{\(\) => canEdit && setEditingBlock/);
+  assert.doesNotMatch(pages, /<h1[^\n]*<button[^\n]*editable-click-target[^\n]*canEdit &&/);
+  // Perte du droit pendant une édition : retour au texte.
+  assert.match(app, /useEffect\(\(\) => \{ if \(!canEdit\) \{ setEditingBlock\(null\); setPendingSpecificationGroupId\(null\); \} \}, \[canEdit\]\);/);
+  // Les trois faits d'état passent par EditableFact (ancres collectées par validate:ai dans App.tsx).
+  for (const field of ['condition.summary.lastCondition', 'condition.summary.conclusion', 'condition.summary.openPoint']) {
+    assert.match(app, new RegExp(`<EditableFact aiField="${field.replace(/\./g, '\\.')}"`), `${field} sans EditableFact`);
+  }
+  assert.match(presentation, /export function EditableFact\(/);
+  // « Valeur retenue » de la page 01 toujours affichée (décision 1-D4).
+  assert.doesNotMatch(app, /ACCÈS RESTREINT|RESTRICTED ACCESS/);
+  // Visionneuse : lecture sur le droit de gérer, original à la demande inchangé.
+  assert.match(app, /<MediaViewerModal[\s\S]{0,1200}readOnly=\{!canEdit\}/);
+  assert.match(app, /readOnly=\{!canEdit\}\s*originalOnDemand=\{authoritative\.canManage\}/);
+  // Composants de lecture purs : neuf exports, aucun contrôle, aucune branche démo, aucune donnée distante.
+  const readOnlyBlocks = readSource('../src/features/cartulary/components/CartularyReadOnlyBlocks.tsx');
+  assert.doesNotMatch(readOnlyBlocks, /firebase|firestore|isDemoCartulary|<input|<select|<textarea|<button|<fieldset|editable-click-target|role="button"/i);
+  for (const name of ['CoverFactsReadOnly', 'OwnershipHistoryReadOnly', 'VaultCodeListReadOnly', 'DocumentationRegisterReadOnly', 'MarketDepthReadOnly', 'ValuationLevelsReadOnly', 'AnalysisRowsReadOnly', 'CostBasisReadOnly', 'ExitAssumptionsReadOnly']) {
+    assert.match(readOnlyBlocks, new RegExp(`export function ${name}\\(`), `${name} absent`);
+    assert.match(pages, new RegExp(`<${name}\\b`), `${name} non rendu par les pages`);
+  }
+  assert.equal((readOnlyBlocks.match(/^export /gm) ?? []).length, 9, 'exactement neuf exports');
+  // C4 : AccessRestricted, Lock (présentation) et .restricted-card retirés ensemble ; règles CSS mortes retirées.
+  assert.doesNotMatch(app, /AccessRestricted/);
+  assert.doesNotMatch(presentation, /AccessRestricted|\bLock\b|Accès restreint/);
+  assert.doesNotMatch(css, /\.restricted-card|\.cartulary-readonly-scope|\.content-marker:disabled|input:disabled \+ span|select:disabled/);
+  // Inchangés (verrous existants) : page 05 sur canManagePublication, gardes canEdit des commandes, sélection de publication.
+  assert.match(app, /const canManagePublication = authoritative\.canManage;/);
+  assert.equal((app.match(/if \(!canEdit\) return;/g) ?? []).length, 3);
+});

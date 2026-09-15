@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { Lock, Pencil, Play, Plus, Trash2, Video } from 'lucide-react';
+import { Pencil, Play, Plus, Trash2, Video } from 'lucide-react';
 import type { AIFieldId } from '../../../ai/fieldCatalog.ts';
 import { aiFieldProps } from '../../../ai/fieldCatalog.ts';
 import { PrivateMediaImage } from '../../../components/PrivateMediaImage.tsx';
@@ -10,10 +10,10 @@ import type { Asset, ComparableTransaction } from '../../../types/index.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
 import { formatDate, formatMoney } from '../../../utils/formatting.ts';
 
+// V5 point 1 : le crayon n'existe que si l'édition est possible (`edit` absent sinon) ; jamais rendu grisé.
 export interface MarkerState {
   active: boolean;
   onToggle: () => void;
-  disabled?: boolean;
 }
 
 // V4 D5 : plus aucun marqueur de destination sur les blocs ; la sélection se fait dans la table de la page Publication.
@@ -35,7 +35,6 @@ export function BlockMarkers({ selection, label }: { selection: BlockMarkerState
         type="button"
         className={`content-marker content-marker--edit no-print ${selection.edit.active ? 'is-active' : ''}`}
         onClick={selection.edit.onToggle}
-        disabled={selection.edit.disabled}
         aria-pressed={selection.edit.active}
         aria-label={`${selection.language === 'FR' ? (selection.edit.active ? 'Terminer la modification de' : 'Modifier') : (selection.edit.active ? 'Finish editing' : 'Edit')} ${label}`}
         title={selection.language === 'FR' ? 'Modifier le texte' : 'Edit text'}
@@ -80,6 +79,24 @@ export function EditableParagraphs({
       ) : <p key={index} {...(aiField ? aiFieldProps(aiField, index) : {})}>{value}</p>)}
     </div>
   );
+}
+
+/**
+ * V5 point 1 : fait éditable à la demande. Texte pur par défaut ; bouton d'entrée en édition seulement si
+ * `onActivate` est fourni (droit de gérer reconnu) ; champ pendant l'édition du bloc. L'ancre IA reste sur
+ * l'élément rendu dans les trois cas.
+ */
+export function EditableFact({ aiField, value, editing, onChange, onActivate, label }: {
+  aiField: AIFieldId;
+  value: string;
+  editing: boolean;
+  onChange: (value: string) => void;
+  onActivate?: () => void;
+  label: string;
+}) {
+  if (editing) return <input {...aiFieldProps(aiField)} type="text" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label} />;
+  if (onActivate) return <button {...aiFieldProps(aiField)} type="button" className="editable-fact" onClick={onActivate}>{value}</button>;
+  return <span {...aiFieldProps(aiField)}>{value}</span>;
 }
 
 /**
@@ -224,8 +241,4 @@ export function ComparableTable({
       </div>
     </div>
   );
-}
-
-export function AccessRestricted({ title, language = 'FR' }: { title: string; language?: InterfaceLanguage }) {
-  return <div className="restricted-card"><Lock size={18} /><span className="eyebrow">{language === 'FR' ? 'Accès restreint' : 'Restricted access'}</span><h3>{title}</h3></div>;
 }

@@ -10,7 +10,6 @@ import {
   Globe2,
   Lock,
   Paperclip,
-  Pencil,
   Play,
   Plus,
   RotateCw,
@@ -97,9 +96,9 @@ import { digestFile } from './utils/fileDigest';
 import { buildImportedAssets } from './features/cartulary/media/importMediaFiles';
 import { EmptyMediaSlot } from './features/cartulary/components/EmptyMediaSlot';
 import {
-  AccessRestricted,
   BlockMarkers,
   ComparableTable,
+  EditableFact,
   EditableParagraphs,
   PageIntroduction,
   SectionTitle,
@@ -107,6 +106,7 @@ import {
   VideoPoster,
   type BlockMarkerState,
 } from './features/cartulary/components/CartularyPresentation';
+import { AnalysisRowsReadOnly, CostBasisReadOnly, CoverFactsReadOnly, DocumentationRegisterReadOnly, ExitAssumptionsReadOnly, MarketDepthReadOnly, OwnershipHistoryReadOnly, ValuationLevelsReadOnly, VaultCodeListReadOnly } from './features/cartulary/components/CartularyReadOnlyBlocks';
 import {
   PROTECTED_SPECIFICATION_IDS,
   appendSpecification,
@@ -662,8 +662,9 @@ function App() {
     readStored<unknown>(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR'),
   ));
   const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary });
-  const canEdit = !isDemoCartulary;
-  const showCompleteContent = canEdit || isDemoCartulary;
+  // V5 point 1 (V-D1, P-D6) : une seule source de vérité pour l'édition des pages 00-04, la même que la page Publication (V2 (b), D5 (a)) :
+  // faux en démonstration (hook désactivé), hors session, pendant la résolution des droits et pour tout lecteur sans « cartulary.edit ».
+  const canEdit = authoritative.canManage;
   // Décision V2 (b) : la page Publication n'est éditable que si le serveur reconnaît le droit de gérer l'objet ;
   // tout autre lecteur (démonstration comprise, hook autoritaire désactivé) reçoit le rendu lecture des quatre structures.
   const canManagePublication = authoritative.canManage;
@@ -685,7 +686,8 @@ function App() {
   const setMediaAssets = mediaCommands.replaceAssets;
   const [mediaUploadTags, setMediaUploadTags] = useState<MediaTag[]>([]);
   const [mediaImportBusy, setMediaImportBusy] = useState(false);
-  const [isEditingChecks, setIsEditingChecks] = useState(false);
+  // Perte du droit de gérer pendant une édition (déconnexion) : le bloc revient au texte, sans champ orphelin.
+  useEffect(() => { if (!canEdit) { setEditingBlock(null); setPendingSpecificationGroupId(null); } }, [canEdit]);
   const conditionState = useCartularyConditionState({
     loadChecks: () => isDemoCartulary ? DEFAULT_CHECKS : readStored('cartularia-identification-checks', DEFAULT_CHECKS),
     loadEntries: loadConditionEntries,
@@ -1264,11 +1266,11 @@ function App() {
   const publishProps = (blockId: PublishedBlockId, editable = false): BlockMarkerState => ({
     blockId,
     language,
-    ...(editable ? {
+    ...(editable && canEdit ? {
       edit: {
         active: editingBlock === blockId,
-        onToggle: () => setEditingBlock((current) => current === blockId ? null : blockId),
-        disabled: !canEdit,
+        // Un bloc à la fois ; le formulaire d'ajout de spécification ne survit pas à la sortie de son bloc.
+        onToggle: () => { setPendingSpecificationGroupId(null); setEditingBlock((current) => current === blockId ? null : blockId); },
       },
     } : {}),
   });
@@ -1375,6 +1377,8 @@ function App() {
       : [...current, blockId]);
   };
   const ownershipSummary = ownershipHistorySummary(ownershipHistory, language);
+  // Libellé de repli de la Collection (sélecteur d'édition et lecture) : indisponible, non renseignée ou en cours de chargement.
+  const collectionFallbackLabel = publicationCollectionError ? tx('Collection indisponible', 'Collection unavailable') : collectionContext ? tx('Collection non renseignée', 'Collection not specified') : tx('Chargement de la Collection…', 'Loading Collection…');
   const ownershipAssessment = ownershipValuationAssessment(ownershipHistory, language);
   const interfaceLocale = language === 'FR' ? 'fr-FR' : 'en-GB';
   const mediaTagLabel = (tag: { id: MediaTag; label: string }) => language === 'FR' ? tag.label : ({
@@ -1616,7 +1620,7 @@ function App() {
 
   const addCheck = () => {
     conditionCommands.addCheck({ id: newId('check'), title: 'Nouveau point de contrôle', note: '', checked: false });
-    setIsEditingChecks(true);
+    setEditingBlock('reference-checks');
   };
 
   const addConditionEntry = async (event: FormEvent<HTMLFormElement>) => {
@@ -2387,30 +2391,33 @@ function App() {
                     <label>{tx("Nom de l’objet", 'Object name')}<input {...aiFieldProps('cover.watch.model')} type="text" value={specificationValue('Modèle', watch.reference.model)} onChange={(event) => updateSpecificationValue('Modèle', event.target.value)} /></label>
                   </div></>
                 ) : (
-                  <h1 className="cover-sheet__editable-heading"><button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => canEdit && setEditingBlock('cover-watch')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>
-                      <span>{specificationValue('Marque', watch.reference.brand)}</span>
-                      <strong>{specificationValue('Modèle', watch.reference.model)}</strong>
-                    </button></h1>
+                  <h1 className="cover-sheet__editable-heading">{canEdit
+                    ? <button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => setEditingBlock('cover-watch')} title={tx('Cliquer pour modifier', 'Click to edit')}><span>{specificationValue('Marque', watch.reference.brand)}</span><strong>{specificationValue('Modèle', watch.reference.model)}</strong></button>
+                    : <span className="cover-sheet__editable-title"><span>{specificationValue('Marque', watch.reference.brand)}</span><strong>{specificationValue('Modèle', watch.reference.model)}</strong></span>}</h1>
                 )}
                 <div className="cover-sheet__identity-meta">
-                  <label className="asset-kind-control">{tx('Type de bien', 'Asset type')}
-                    <select {...aiFieldProps('cover.asset.type')} value={assetKind} onChange={(event) => setAssetKind(event.target.value as AssetKind)} disabled={!canEdit}>
-                      {ASSET_KINDS.map((kind) => <option key={kind} value={kind}>{assetKindLabel(kind)}</option>)}
-                    </select>
-                  </label>
-                  <label className="watch-status-control">{tx('Statut', 'Status')}
-                    <select {...aiFieldProps('cover.watch.status')} value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchPatrimonialStatus)} disabled={!canEdit}>
-                      <option value="Patrimonial">{tx('Patrimonial', 'Collection asset')}</option>
-                      <option value="À vendre">{tx('À vendre', 'For sale')}</option>
-                      <option value="Ouvert à proposition">{tx('Ouvert à proposition', 'Open to offers')}</option>
-                    </select>
-                  </label>
-                  <label className="asset-kind-control">{tx('Collection', 'Collection')}
-                    <select value={collectionId} onChange={(event) => setCollectionId(event.target.value)} disabled={!canEdit}>
-                      {!availableCollections.some((entry) => entry.id === collectionId) && <option value={collectionId}>{publicationCollectionError ? tx('Collection indisponible', 'Collection unavailable') : collectionContext ? tx('Collection non renseignée', 'Collection not specified') : tx('Chargement de la Collection…', 'Loading Collection…')}</option>}
-                      {availableCollections.map((collection) => <option value={collection.id} key={collection.id}>{collection.name}</option>)}
-                    </select>
-                  </label>
+                  {editingBlock === 'cover-watch' ? (
+                    <>
+                      <label className="asset-kind-control">{tx('Type de bien', 'Asset type')}
+                        <select {...aiFieldProps('cover.asset.type')} value={assetKind} onChange={(event) => setAssetKind(event.target.value as AssetKind)}>
+                          {ASSET_KINDS.map((kind) => <option key={kind} value={kind}>{assetKindLabel(kind)}</option>)}
+                        </select>
+                      </label>
+                      <label className="watch-status-control">{tx('Statut', 'Status')}
+                        <select {...aiFieldProps('cover.watch.status')} value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchPatrimonialStatus)}>
+                          <option value="Patrimonial">{tx('Patrimonial', 'Collection asset')}</option>
+                          <option value="À vendre">{tx('À vendre', 'For sale')}</option>
+                          <option value="Ouvert à proposition">{tx('Ouvert à proposition', 'Open to offers')}</option>
+                        </select>
+                      </label>
+                      <label className="asset-kind-control">{tx('Collection', 'Collection')}
+                        <select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+                          {!availableCollections.some((entry) => entry.id === collectionId) && <option value={collectionId}>{collectionFallbackLabel}</option>}
+                          {availableCollections.map((collection) => <option value={collection.id} key={collection.id}>{collection.name}</option>)}
+                        </select>
+                      </label>
+                    </>
+                  ) : <CoverFactsReadOnly assetKindLabel={assetKindLabel(assetKind)} statusLabel={watchStatusLabel(watchStatus)} collectionName={availableCollections.find((entry) => entry.id === collectionId)?.name ?? collectionFallbackLabel} language={language} />}
                   <small {...aiFieldProps('cover.watch.reference')}>{specificationValue('Numéro de référence', watch.reference.reference)}</small>
                 </div>
               </div>
@@ -2460,12 +2467,12 @@ function App() {
                 <h1>{watch.reference.model}</h1>
                 {editingBlock === 'media-hero' ? (
                   <AutoResizeTextarea {...aiFieldProps('media.hero.summary')} className="editable-copy-single" value={editableCopy.heroSummary} rows={5} onChange={(event) => setEditableCopy((current) => ({ ...current, heroSummary: event.target.value }))} aria-label={tx('Modifier la présentation principale', 'Edit main presentation')} />
-                ) : <p {...aiFieldProps('media.hero.summary')} className="watch-hero__summary editable-click-target" onClick={() => canEdit && setEditingBlock('media-hero')} tabIndex={canEdit ? 0 : undefined} onKeyDown={(event) => { if (event.key === 'Enter' && canEdit) setEditingBlock('media-hero'); }} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
+                ) : <p {...aiFieldProps('media.hero.summary')} className={canEdit ? 'watch-hero__summary editable-click-target' : 'watch-hero__summary'} onClick={canEdit ? () => setEditingBlock('media-hero') : undefined} tabIndex={canEdit ? 0 : undefined} onKeyDown={canEdit ? (event) => { if (event.key === 'Enter') setEditingBlock('media-hero'); } : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
                 {canEdit && <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance propriétaire', 'Ownership provenance')}</strong><p>{ownershipSummary}</p></aside>}
                 <dl className="hero-facts">
                   <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
                   <div><dt>{tx('Dernier contrôle', 'Last inspection')}</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
-                  <div><dt>{tx('Valeur retenue', 'Retained value')}</dt><dd>{canEdit ? formatMoney(retainedValuation.amount, watch.currency) : tx('ACCÈS RESTREINT', 'RESTRICTED ACCESS')}</dd></div>
+                  <div><dt>{tx('Valeur retenue', 'Retained value')}</dt><dd>{formatMoney(retainedValuation.amount, watch.currency)}</dd></div>
                   <div><dt>{tx('Dossier', 'Record')}</dt><dd>{cartularyPublicCode}</dd></div>
                 </dl>
               </div>
@@ -2567,11 +2574,11 @@ function App() {
                 <article className="editorial-card editorial-card--large">
                 <span className="eyebrow">{tx('Historique du modèle', 'Model history')}</span>
                 <h2>{editableCopy.originTitle || `Histoire de la référence ${watch.reference.reference}`}</h2>
-                <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={() => canEdit && setEditingBlock('reference-history')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
+                <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={canEdit ? () => setEditingBlock('reference-history') : undefined} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
                 </article>
                 <aside className="quote-card">
                 <span className="eyebrow">{tx('À savoir', 'Good to know')}</span>
-                {editingBlock === 'reference-history' ? <AutoResizeTextarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className="editable-click-target" onClick={() => canEdit && setEditingBlock('reference-history')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
+                {editingBlock === 'reference-history' ? <AutoResizeTextarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className={canEdit ? 'editable-click-target' : undefined} onClick={canEdit ? () => setEditingBlock('reference-history') : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
                 </aside>
               </div>
             </section>
@@ -2579,7 +2586,7 @@ function App() {
 
             {schemaHas('reference.specifications') && (
             <section>
-              <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} publish={publishProps('reference-specs')} />
+              <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} publish={publishProps('reference-specs', true)} />
               <div className="specification-groups">
                 {specificationGroups.map((group) => (
                   <section className="specification-group" key={group.id}>
@@ -2587,7 +2594,7 @@ function App() {
                     <dl>
                       {group.items.map((item) => (
                         <div className="specification-row" key={item.id} data-ai-scope="reference.specifications[]" data-ai-instance={item.id}>
-                          {canEdit ? (
+                          {editingBlock === 'reference-specs' ? (
                             <>
                               {PROTECTED_SPECIFICATION_IDS.has(item.id)
                                 ? <dt {...aiFieldProps('reference.specifications[].label', item.id)}>{item.label}</dt>
@@ -2595,11 +2602,11 @@ function App() {
                               <dd><input {...aiFieldProps('reference.specifications[].value', item.id)} type="text" value={item.value} onChange={(event) => updateSpecification(group.id, item.id, { value: event.target.value })} aria-label={tx(`Modifier ${item.label}`, `Edit ${item.label}`)} /></dd>
                               <button type="button" className="icon-button specification-remove no-print" onClick={() => deleteSpecification(group.id, item.id)} disabled={PROTECTED_SPECIFICATION_IDS.has(item.id)} aria-label={tx(`Supprimer ${item.label}`, `Delete ${item.label}`)} title={PROTECTED_SPECIFICATION_IDS.has(item.id) ? tx('Ligne d’identité posée à la création : non supprimable', 'Identity line set at creation: cannot be deleted') : tx('Supprimer cette donnée', 'Delete this field')}><Trash2 size={15} aria-hidden="true" /><span>{tx('Retirer', 'Remove')}</span></button>
                             </>
-                          ) : <><dt>{item.label}</dt><dd>{item.value}</dd></>}
+                          ) : <><dt {...aiFieldProps('reference.specifications[].label', item.id)}>{item.label}</dt><dd {...aiFieldProps('reference.specifications[].value', item.id)}>{item.value}</dd></>}
                         </div>
                       ))}
                     </dl>
-                    {canEdit && (pendingSpecificationGroupId === group.id
+                    {editingBlock === 'reference-specs' && (pendingSpecificationGroupId === group.id
                       ? <SpecificationAddForm language={language} groupTitle={group.title} existingLabels={group.items.map((item) => item.label)} onAdd={(label, value) => addSpecification(group.id, label, value)} onClose={() => setPendingSpecificationGroupId(null)} />
                       : <button type="button" className="specification-add button button--quiet no-print" onClick={() => setPendingSpecificationGroupId(group.id)}><Plus size={14} /> {tx('Ajouter une donnée', 'Add data')}</button>)}
                   </section>
@@ -2613,28 +2620,24 @@ function App() {
               <div className="section-heading-row">
                 <SectionTitle eyebrow={tx('Identification', 'Identification')} title={tx('Points à contrôler', 'Inspection points')} />
                 <div className="section-heading-actions">
-                  <BlockMarkers selection={publishProps('reference-checks')} label={tx('Points à contrôler', 'Inspection points')} />
-                  {canEdit && (
-                    <button type="button" className={`content-marker content-marker--edit no-print ${isEditingChecks ? 'is-active' : ''}`} onClick={() => setIsEditingChecks((value) => !value)} aria-pressed={isEditingChecks} aria-label={isEditingChecks ? tx('Terminer la modification de la liste', 'Finish editing the list') : tx('Modifier la liste', 'Edit the list')} title={tx('Modifier la liste', 'Edit the list')}><Pencil size={15} /></button>
-                  )}
+                  <BlockMarkers selection={publishProps('reference-checks', true)} label={tx('Points à contrôler', 'Inspection points')} />
                 </div>
               </div>
               <div className="identification-list">
                 {identificationChecks.map((item, index) => (
                   <article key={item.id} className={item.checked ? 'is-checked' : ''} data-ai-scope="reference.checks[]" data-ai-instance={item.id}>
                     <span>{String(index + 1).padStart(2, '0')}</span>
-                    <label className="control-check">
-                      <input
-                        {...aiFieldProps('reference.checks[].checked', item.id)}
-                        type="checkbox"
-                        checked={item.checked}
-                        disabled={!canEdit}
-                        onChange={(event) => updateCheck(item.id, { checked: event.target.checked })}
-                      />
-                      <span aria-hidden="true">✓</span>
-                    </label>
+                    {canEdit ? (
+                      <label className="control-check">
+                        <input {...aiFieldProps('reference.checks[].checked', item.id)} type="checkbox" checked={item.checked} onChange={(event) => updateCheck(item.id, { checked: event.target.checked })} />
+                        <span aria-hidden="true">✓</span>
+                      </label>
+                    ) : (
+                      // Lecture : la case reste un geste rapide du propriétaire ; pour tout autre lecteur, texte pur (état lu par le lecteur d'écran).
+                      <span className="control-check control-check--static" {...aiFieldProps('reference.checks[].checked', item.id)}><span aria-hidden="true" className={item.checked ? 'is-checked' : undefined}>✓</span><span className="sr-only">{item.checked ? tx('Contrôlé', 'Checked') : tx('À contrôler', 'To check')}</span></span>
+                    )}
                     <div>
-                      {isEditingChecks ? (
+                      {editingBlock === 'reference-checks' ? (
                         <>
                           <input {...aiFieldProps('reference.checks[].title', item.id)} value={item.title} onChange={(event) => updateCheck(item.id, { title: event.target.value })} aria-label={tx('Point de contrôle', 'Inspection point')} />
                           <AutoResizeTextarea {...aiFieldProps('reference.checks[].note', item.id)} value={item.note} onChange={(event) => updateCheck(item.id, { note: event.target.value })} aria-label={tx('Détail du contrôle', 'Inspection details')} rows={2} />
@@ -2643,7 +2646,7 @@ function App() {
                         <><h3>{item.title}</h3><p>{item.note}</p></>
                       )}
                     </div>
-                    {isEditingChecks && (
+                    {editingBlock === 'reference-checks' && (
                       <button
                         type="button"
                         className="icon-button no-print"
@@ -2654,7 +2657,7 @@ function App() {
                   </article>
                 ))}
               </div>
-              {canEdit && (
+              {editingBlock === 'reference-checks' && (
                 <button type="button" className="button button--quiet no-print" onClick={addCheck}><Plus size={14} /> {tx('Ajouter un point', 'Add point')}</button>
               )}
               <p className="method-note">{tx('Le Sceau public identifie une publication émise par le serveur. La chaîne serveur se vérifie dans « Preuves ». Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert.', 'The public Seal identifies a server-issued publication. The server chain is checked under “Proofs”. Neither indicator replaces a physical examination or an expert opinion.')}</p>
@@ -2663,19 +2666,19 @@ function App() {
 
             {schemaHas('reference.popularity') && (
             <section>
-              <SectionTitle eyebrow={tx('Communauté et ressources', 'Community and resources')} title={tx('Popularité du modèle', 'Model popularity')} publish={publishProps('reference-popularity')} />
+              <SectionTitle eyebrow={tx('Communauté et ressources', 'Community and resources')} title={tx('Popularité du modèle', 'Model popularity')} publish={publishProps('reference-popularity', true)} />
               <div className="popularity-resources">
                 <div className="popularity-resources__head"><span>{tx('Site ou forum', 'Website or forum')}</span><span>Type</span><span>URL</span><span /></div>
                 {popularityResources.map((resource) => {
                   const hasValidUrl = /^https?:\/\//i.test(resource.url);
                   return (
                     <div key={resource.id} data-ai-scope="reference.popularity[]" data-ai-instance={resource.id}>
-                      {canEdit ? (
+                      {editingBlock === 'reference-popularity' ? (
                         <input {...aiFieldProps('reference.popularity[].name', resource.id)} type="text" value={resource.name} onChange={(event) => updatePopularityResource(resource.id, 'name', event.target.value)} aria-label={tx('Nom du site ou forum', 'Website or forum name')} />
                       ) : (
                         <strong>{resource.name}</strong>
                       )}
-                      {canEdit ? (
+                      {editingBlock === 'reference-popularity' ? (
                         <select {...aiFieldProps('reference.popularity[].type', resource.id)} value={resource.type} onChange={(event) => updatePopularityResource(resource.id, 'type', event.target.value as PopularityResourceType)} aria-label={`Type ${resource.name}`}>
                           {(['Forum officiel', 'Discussion dédiée', 'Communauté', 'Base de données', 'Revue'] as PopularityResourceType[]).map((type) => <option key={type} value={type}>{popularityTypeLabel(type)}</option>)}
                         </select>
@@ -2683,19 +2686,19 @@ function App() {
                         <span>{popularityTypeLabel(resource.type)}</span>
                       )}
                       <div className="popularity-url-cell">
-                        {canEdit ? (
+                        {editingBlock === 'reference-popularity' ? (
                           <input {...aiFieldProps('reference.popularity[].url', resource.id)} type="url" value={resource.url} onChange={(event) => updatePopularityResource(resource.id, 'url', event.target.value)} aria-label={`URL ${resource.name}`} placeholder="https://" />
                         ) : (
                           <span>{resource.url}</span>
                         )}
                         {hasValidUrl && <a href={resource.url} target="_blank" rel="noreferrer" aria-label={tx(`Ouvrir ${resource.name}`, `Open ${resource.name}`)}><ExternalLink size={15} /></a>}
                       </div>
-                      {canEdit && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: popularityResources, setItems: setPopularityResources, id: resource.id, targetLabel: resource.name })} aria-label={tx(`Supprimer ${resource.name}`, `Delete ${resource.name}`)}><Trash2 size={15} /></button>}
+                      {editingBlock === 'reference-popularity' && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: popularityResources, setItems: setPopularityResources, id: resource.id, targetLabel: resource.name })} aria-label={tx(`Supprimer ${resource.name}`, `Delete ${resource.name}`)}><Trash2 size={15} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {canEdit && (
+              {editingBlock === 'reference-popularity' && (
                 <button type="button" className="button button--quiet no-print" onClick={() => setPopularityResources((current) => [...current, { id: newId('popularity'), name: '', type: 'Communauté', url: '' }])}><Plus size={14} /> {tx('Ajouter un site ou forum', 'Add a website or forum')}</button>
               )}
             </section>
@@ -2734,12 +2737,9 @@ function App() {
 
         <ConditionPage active={activePage === 'condition'}>
             <PageIntroduction number="03" title={tx("L’objet", 'The object')} />
-            <fieldset className="cartulary-readonly-scope" disabled={!canEdit}>
 
-            {showCompleteContent && (
-              <>
                 <section>
-                  <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history')} />
+                  <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history', true)} />
                   <article className="ownership-history-card">
                     <header className="ownership-history-card__heading">
                       <div>
@@ -2748,6 +2748,7 @@ function App() {
                       </div>
                       <span>{ownershipHistory.length} {language === 'FR' ? `période${ownershipHistory.length > 1 ? 's' : ''}` : `period${ownershipHistory.length === 1 ? '' : 's'}`}</span>
                     </header>
+                    {editingBlock === 'cover-ownership-history' ? (<>
                     {ownershipHistory.length > 0 ? (
                       <div className="ownership-history-list">
                         {ownershipHistory.map((entry, index) => {
@@ -2772,24 +2773,25 @@ function App() {
                       </div>
                     ) : <p className="ownership-history-empty">{tx("Aucun propriétaire précédent renseigné.", 'No previous owner entered.')}</p>}
                     <button type="button" className="button button--quiet no-print" onClick={addOwnershipHistory}><Plus size={14} /> {tx('Ajouter une période', 'Add period')}</button>
+                    </>) : <OwnershipHistoryReadOnly entries={ownershipHistory} language={language} />}
                     <div className="ownership-history-summary" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Synthèse de provenance', 'Provenance summary')}</strong><p>{ownershipSummary}</p></div>
                   </article>
                 </section>
 
                 <section>
-                  <SectionTitle eyebrow={tx('Conservation pseudonymisée', 'Pseudonymous safekeeping')} title={tx('Stockage', 'Storage')} publish={publishProps('cover-storage')} />
+                  <SectionTitle eyebrow={tx('Conservation pseudonymisée', 'Pseudonymous safekeeping')} title={tx('Stockage', 'Storage')} publish={publishProps('cover-storage', true)} />
                   <article className="storage-card storage-code-card">
-                    <VaultCodeHandoffControl handoff={vaultCodeHandoff} disabled={isDemoCartulary} />
+                    {editingBlock === 'cover-storage' && <VaultCodeHandoffControl handoff={vaultCodeHandoff} />}
                     <header className="storage-card__heading">
                       <div><span className="eyebrow">{tx('Lieux du Coffre personnel', 'Personal Vault locations')}</span></div>
                       <span>{storageCodes.length} {language === 'FR' ? `lieu${storageCodes.length > 1 ? 'x' : ''}` : `location${storageCodes.length === 1 ? '' : 's'}`}</span>
                     </header>
-                    {storageCodes.length > 0 ? <div className="storage-code-list">{storageCodes.map((storageCode, index) => (
+                    {editingBlock !== 'cover-storage' ? <VaultCodeListReadOnly items={storageCodes} emptyLabel={tx('Aucun lieu sélectionné.', 'No location selected.')} language={language} aiField="condition.storage.codeNames[]" /> : storageCodes.length > 0 ? <div className="storage-code-list">{storageCodes.map((storageCode, index) => (
                       <div key={storageCode.id}>
                         <span>{String(index + 1).padStart(2, '0')}</span>
                         <select
                           {...aiFieldProps('condition.storage.codeNames[]', storageCode.id)}
-                          value={isDemoCartulary && storageCode.codeName ? `demo:${storageCode.id}` : storageCode.correspondenceCode || (storageCode.codeName ? `legacy:${storageCode.id}` : '')}
+                          value={storageCode.correspondenceCode || (storageCode.codeName ? `legacy:${storageCode.id}` : '')}
                           onChange={(event) => {
                             const option = storageLocationOptions.find((entry) => entry.code === event.target.value);
                             ownerCommands.updateStorageCode(storageCode.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
@@ -2797,7 +2799,6 @@ function App() {
                           aria-label={tx(`Lieu de stockage ${index + 1}`, `Storage location ${index + 1}`)}
                         >
                           <option value="">{tx('Choisir un lieu', 'Select a location')}</option>
-                          {isDemoCartulary && storageCode.codeName && <option value={`demo:${storageCode.id}`}>{storageCode.codeName}</option>}
                           {!storageCode.correspondenceCode && storageCode.codeName && <option value={`legacy:${storageCode.id}`}>{storageCode.codeName}</option>}
                           {storageCode.correspondenceCode && !storageLocationOptions.some((option) => option.code === storageCode.correspondenceCode) && <option value={storageCode.correspondenceCode}>{storageCode.codeName || storageCode.correspondenceCode} · {tx('référence conservée, codes à actualiser', 'saved reference, refresh codes')}</option>}
                           {storageLocationOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel} · {option.code}</option>)}
@@ -2806,19 +2807,15 @@ function App() {
                         <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: storageCodes, setItems: setStorageCodes, id: storageCode.id, targetLabel: storageCode.codeName || tx(`le lieu ${index + 1}`, `location ${index + 1}`) })} aria-label={tx('Supprimer ce lieu', 'Delete this location')}><Trash2 size={15} /></button>
                       </div>
                     ))}</div> : <p className="storage-empty">{tx('Aucun lieu sélectionné.', 'No location selected.')}</p>}
-                    <button type="button" className="button button--quiet no-print" onClick={addStorageCode}><Plus size={14} /> {tx('Ajouter un lieu', 'Add a location')}</button>
+                    {editingBlock === 'cover-storage' && <button type="button" className="button button--quiet no-print" onClick={addStorageCode}><Plus size={14} /> {tx('Ajouter un lieu', 'Add a location')}</button>}
                   </article>
                 </section>
-              </>
-            )}
 
-            {showCompleteContent ? (
-              <>
                 {schemaHas('condition.description') && (
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx("Description de l’objet", 'Object description')} publish={publishProps('condition-description', true)} />
                   <article className="watch-description-card">
-                    <EditableParagraphs aiField="condition.description.paragraphs[]" values={editableCopy.watchDescription} editing={editingBlock === 'condition-description'} onActivate={() => canEdit && setEditingBlock('condition-description')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, watchDescription: current.watchDescription.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
+                    <EditableParagraphs aiField="condition.description.paragraphs[]" values={editableCopy.watchDescription} editing={editingBlock === 'condition-description'} onActivate={canEdit ? () => setEditingBlock('condition-description') : undefined} onChange={(index, value) => setEditableCopy((current) => ({ ...current, watchDescription: current.watchDescription.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
                     <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance prise en compte', 'Provenance considered')}</strong><p>{ownershipSummary}</p></aside>
                   </article>
                 </section>
@@ -2828,11 +2825,11 @@ function App() {
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx('État actuel', 'Current condition')} publish={publishProps('condition-summary', true)} />
                   <article className="current-condition-summary">
-                    <EditableParagraphs aiField="condition.summary.paragraphs[]" values={editableCopy.conditionSummary} editing={editingBlock === 'condition-summary'} onActivate={() => canEdit && setEditingBlock('condition-summary')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, conditionSummary: current.conditionSummary.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
+                    <EditableParagraphs aiField="condition.summary.paragraphs[]" values={editableCopy.conditionSummary} editing={editingBlock === 'condition-summary'} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} onChange={(index, value) => setEditableCopy((current) => ({ ...current, conditionSummary: current.conditionSummary.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
                     <dl>
-                      <div><dt>{tx('Dernier état', 'Latest condition')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.lastCondition')} value={editableCopy.conditionFacts.lastCondition} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, lastCondition: event.target.value } }))} aria-label={tx('Dernier état', 'Latest condition')} /> : <button {...aiFieldProps('condition.summary.lastCondition')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.lastCondition}</button>}</dd></div>
-                      <div><dt>Conclusion</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.conclusion')} value={editableCopy.conditionFacts.conclusion} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, conclusion: event.target.value } }))} aria-label="Conclusion" /> : <button {...aiFieldProps('condition.summary.conclusion')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.conclusion}</button>}</dd></div>
-                      <div><dt>{tx('Point ouvert', 'Open point')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.openPoint')} value={editableCopy.conditionFacts.openPoint} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, openPoint: event.target.value } }))} aria-label={tx('Point ouvert', 'Open point')} /> : <button {...aiFieldProps('condition.summary.openPoint')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.openPoint}</button>}</dd></div>
+                      <div><dt>{tx('Dernier état', 'Latest condition')}</dt><dd><EditableFact aiField="condition.summary.lastCondition" value={editableCopy.conditionFacts.lastCondition} editing={editingBlock === 'condition-summary'} onChange={(value) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, lastCondition: value } }))} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} label={tx('Dernier état', 'Latest condition')} /></dd></div>
+                      <div><dt>Conclusion</dt><dd><EditableFact aiField="condition.summary.conclusion" value={editableCopy.conditionFacts.conclusion} editing={editingBlock === 'condition-summary'} onChange={(value) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, conclusion: value } }))} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} label="Conclusion" /></dd></div>
+                      <div><dt>{tx('Point ouvert', 'Open point')}</dt><dd><EditableFact aiField="condition.summary.openPoint" value={editableCopy.conditionFacts.openPoint} editing={editingBlock === 'condition-summary'} onChange={(value) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, openPoint: value } }))} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} label={tx('Point ouvert', 'Open point')} /></dd></div>
                     </dl>
                   </article>
                 </section>
@@ -2840,25 +2837,25 @@ function App() {
 
                 {schemaHas('condition.documentation') && (
                 <section>
-                  <SectionTitle eyebrow={tx('Ensemble associé', 'Associated set')} title={tx('Papiers, documentation et accessoires', 'Papers, documentation and accessories')} publish={publishProps('condition-documentation')} />
+                  <SectionTitle eyebrow={tx('Ensemble associé', 'Associated set')} title={tx('Papiers, documentation et accessoires', 'Papers, documentation and accessories')} publish={publishProps('condition-documentation', true)} />
+                  {editingBlock === 'condition-documentation' ? (<>
                   <div className="documentation-register">
                     <div className="documentation-register__head"><span>{tx('Catégorie', 'Category')}</span><span>Description</span><span>{tx('État', 'Condition')}</span><span /></div>
                     {documentationItems.map((item) => (
                       <div key={item.id} data-ai-scope="condition.documentation[]" data-ai-instance={item.id}>
-                        <select {...aiFieldProps('condition.documentation[].category', item.id)} value={item.category} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'category', event.target.value as DocumentationCategory)} aria-label={tx('Catégorie documentaire', 'Document category')}>
+                        <select {...aiFieldProps('condition.documentation[].category', item.id)} value={item.category} onChange={(event) => updateDocumentationItem(item.id, 'category', event.target.value as DocumentationCategory)} aria-label={tx('Catégorie documentaire', 'Document category')}>
                           {(['Facture', 'Garantie', 'Assurances', 'Boîte', 'Écrin', 'Manuel', 'Certificat', 'Accessoire', 'Autre'] as DocumentationCategory[]).map((category) => <option key={category} value={category}>{documentationCategoryLabel(category)}</option>)}
                         </select>
-                        <AutoResizeTextarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
-                        <select {...aiFieldProps('condition.documentation[].state', item.id)} value={item.state} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'state', event.target.value as DocumentationState)} aria-label={tx(`État ${item.category}`, `${item.category} condition`)}>
+                        <AutoResizeTextarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
+                        <select {...aiFieldProps('condition.documentation[].state', item.id)} value={item.state} onChange={(event) => updateDocumentationItem(item.id, 'state', event.target.value as DocumentationState)} aria-label={tx(`État ${item.category}`, `${item.category} condition`)}>
                           {(['Présent', 'Complet', 'Incomplet', 'Manquant', 'À vérifier'] as DocumentationState[]).map((state) => <option key={state} value={state}>{documentationStateLabel(state)}</option>)}
                         </select>
-                        {canEdit && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: documentationItems, setItems: setDocumentationItems, id: item.id, targetLabel: item.category })} aria-label={tx(`Supprimer ${item.category}`, `Delete ${item.category}`)}><Trash2 size={15} /></button>}
+                        <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: documentationItems, setItems: setDocumentationItems, id: item.id, targetLabel: item.category })} aria-label={tx(`Supprimer ${item.category}`, `Delete ${item.category}`)}><Trash2 size={15} /></button>
                       </div>
                     ))}
                   </div>
-                  {canEdit && (
-                    <button type="button" className="button button--quiet no-print" onClick={() => setDocumentationItems((current) => [...current, { id: newId('documentation'), category: 'Autre', description: '', state: 'À vérifier' }])}><Plus size={14} /> {tx('Ajouter un élément', 'Add item')}</button>
-                  )}
+                  <button type="button" className="button button--quiet no-print" onClick={() => setDocumentationItems((current) => [...current, { id: newId('documentation'), category: 'Autre', description: '', state: 'À vérifier' }])}><Plus size={14} /> {tx('Ajouter un élément', 'Add item')}</button>
+                  </>) : <DocumentationRegisterReadOnly items={documentationItems} categoryLabel={documentationCategoryLabel} stateLabel={documentationStateLabel} language={language} />}
                   <div className="documentation-media">
                     <div className="documentation-media__heading">
                       <h3>{tx('Fichiers liés', 'Linked files')}</h3>
@@ -2908,7 +2905,7 @@ function App() {
                           </header>
                           {editingBlock === 'condition-reference-report'
                             ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="condition-entry__note-input" value={referenceConditionReport.note} rows={5} onChange={(event) => setConditionEntries((current) => current.map((entry) => entry.id === referenceConditionReport.id ? { ...entry, note: event.target.value } : entry))} aria-label={tx('Modifier le rapport de référence', 'Edit reference report')} />
-                            : referenceConditionReport.note && <p {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="editable-click-target" onClick={() => canEdit && setEditingBlock('condition-reference-report')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{referenceConditionReport.note}</p>}
+                            : referenceConditionReport.note && <p {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className={canEdit ? 'editable-click-target' : undefined} onClick={canEdit ? () => setEditingBlock('condition-reference-report') : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{referenceConditionReport.note}</p>}
                           {referenceConditionReport.attachments.length > 0 && (
                             <ul className="attachment-list">
                               {referenceConditionReport.attachments.map((attachment, index) => <li key={`${referenceConditionReport.id}-${attachment.name}-${index}`}><Paperclip size={13} />{attachment.url ? <a href={attachment.url} download={attachment.name}>{attachment.name}</a> : <span>{attachment.name}</span>}{attachment.size && <small>{Math.ceil(attachment.size / 1024)} ko</small>}</li>)}
@@ -2933,7 +2930,7 @@ function App() {
                             </header>
                             {editingBlock === 'condition-prior-reviews'
                               ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', entry.id)} className="condition-entry__note-input" value={entry.note} rows={4} onChange={(event) => setConditionEntries((current) => current.map((item) => item.id === entry.id ? { ...item, note: event.target.value } : item))} aria-label={tx('Modifier la revue antérieure', 'Edit previous review')} />
-                              : entry.note && <p {...aiFieldProps('condition.reports[].note', entry.id)} className="editable-click-target" onClick={() => canEdit && setEditingBlock('condition-prior-reviews')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{entry.note}</p>}
+                              : entry.note && <p {...aiFieldProps('condition.reports[].note', entry.id)} className={canEdit ? 'editable-click-target' : undefined} onClick={canEdit ? () => setEditingBlock('condition-prior-reviews') : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{entry.note}</p>}
                             {entry.attachments.length > 0 && (
                               <ul className="attachment-list">
                                 {entry.attachments.map((attachment, index) => <li key={`${entry.id}-${attachment.name}-${index}`}><Paperclip size={13} />{attachment.url ? <a href={attachment.url} download={attachment.name}>{attachment.name}</a> : <span>{attachment.name}</span>}{attachment.size && <small>{Math.ceil(attachment.size / 1024)} ko</small>}</li>)}
@@ -2957,25 +2954,20 @@ function App() {
                   </div>
                 </section>
                 )}
-              </>
-            ) : (
-              <AccessRestricted title={tx("Rapports et notes de l’objet", 'Object reports and notes')} language={language} />
-            )}
 
-            {showCompleteContent && (
               <section>
-                <SectionTitle eyebrow={tx('Correspondance pseudonymisée', 'Pseudonymous correspondence')} title={tx('Transmission', 'Transmission')} publish={publishProps('cover-transmission')} />
+                <SectionTitle eyebrow={tx('Correspondance pseudonymisée', 'Pseudonymous correspondence')} title={tx('Transmission', 'Transmission')} publish={publishProps('cover-transmission', true)} />
                 <article className="storage-card storage-code-card">
-                  <VaultCodeHandoffControl handoff={vaultCodeHandoff} disabled={isDemoCartulary} />
+                  {editingBlock === 'cover-transmission' && <VaultCodeHandoffControl handoff={vaultCodeHandoff} />}
                   <header className="storage-card__heading">
                     <div><span className="eyebrow">{tx('Personnes du Coffre personnel', 'Personal Vault people')}</span></div>
                     <span>{transmissionCodes.length} {language === 'FR' ? `personne${transmissionCodes.length > 1 ? 's' : ''}` : `person${transmissionCodes.length === 1 ? '' : 's'}`}</span>
                   </header>
-                  {transmissionCodes.length > 0 ? <div className="storage-code-list">{transmissionCodes.map((reference, index) => (
+                  {editingBlock !== 'cover-transmission' ? <VaultCodeListReadOnly items={transmissionCodes} emptyLabel={tx('Aucune personne sélectionnée.', 'No person selected.')} language={language} /> : transmissionCodes.length > 0 ? <div className="storage-code-list">{transmissionCodes.map((reference, index) => (
                     <div key={reference.id}>
                       <span>{String(index + 1).padStart(2, '0')}</span>
                       <select
-                        value={isDemoCartulary && reference.codeName ? `demo:${reference.id}` : reference.correspondenceCode || (reference.codeName ? `legacy:${reference.id}` : '')}
+                        value={reference.correspondenceCode || (reference.codeName ? `legacy:${reference.id}` : '')}
                         onChange={(event) => {
                           const option = transmissionPersonOptions.find((entry) => entry.code === event.target.value);
                           ownerCommands.updateTransmissionCode(reference.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
@@ -2983,7 +2975,6 @@ function App() {
                         aria-label={tx(`Personne chargée de la transmission ${index + 1}`, `Transmission person ${index + 1}`)}
                       >
                         <option value="">{tx('Choisir une personne', 'Select a person')}</option>
-                        {isDemoCartulary && reference.codeName && <option value={`demo:${reference.id}`}>{reference.codeName}</option>}
                         {!reference.correspondenceCode && reference.codeName && <option value={`legacy:${reference.id}`}>{reference.codeName}</option>}
                         {reference.correspondenceCode && !transmissionPersonOptions.some((option) => option.code === reference.correspondenceCode) && <option value={reference.correspondenceCode}>{reference.codeName || reference.correspondenceCode} · {tx('référence conservée, codes à actualiser', 'saved reference, refresh codes')}</option>}
                         {transmissionPersonOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel} · {option.code}</option>)}
@@ -2992,24 +2983,21 @@ function App() {
                       <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: transmissionCodes, setItems: setTransmissionCodes, id: reference.id, targetLabel: reference.codeName || tx(`la personne ${index + 1}`, `person ${index + 1}`) })} aria-label={tx('Supprimer cette personne', 'Delete this person')}><Trash2 size={15} /></button>
                     </div>
                   ))}</div> : <p className="storage-empty">{tx('Aucune personne sélectionnée.', 'No person selected.')}</p>}
-                  <button type="button" className="button button--quiet no-print" onClick={addTransmissionCode}><Plus size={14} /> {tx('Ajouter une personne', 'Add a person')}</button>
+                  {editingBlock === 'cover-transmission' && <button type="button" className="button button--quiet no-print" onClick={addTransmissionCode}><Plus size={14} /> {tx('Ajouter une personne', 'Add a person')}</button>}
                 </article>
               </section>
-            )}
-            </fieldset>
             <GenericSchemaPageSections page="condition" {...genericPageProps} />
         </ConditionPage>
 
         <ValuePage active={activePage === 'value'}>
             <PageIntroduction number="04" title={tx('Valorisation', 'Valuation')} />
-            <fieldset className="cartulary-readonly-scope" disabled={!canEdit}>
 
-            {!schemaHas('value.market_depth') ? null : showCompleteContent ? (
+            {schemaHas('value.market_depth') && (
               <section>
-                <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} publish={publishProps('value-market')} />
+                <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} publish={publishProps('value-market', true)} />
                 <div className="market-grid">
                   <article className="market-chart-card">
-                    <div className="market-chart-card__heading"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><button type="button" className="button button--quiet no-print" onClick={() => setIsMarketHistoryEditorOpen(true)}><Plus size={14} /> {tx('Ajouter une évaluation', 'Add valuation')}</button></div>
+                    <div className="market-chart-card__heading"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span>{canEdit && <button type="button" className="button button--quiet no-print" onClick={() => setIsMarketHistoryEditorOpen(true)}><Plus size={14} /> {tx('Ajouter une évaluation', 'Add valuation')}</button>}</div>
                     <div className="market-bars" aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>
                       {marketValues.map((valuation) => (
                         <div key={valuation.id} data-ai-scope="value.market.valuations[]" data-ai-instance={valuation.id}>
@@ -3023,6 +3011,7 @@ function App() {
                   </article>
 
                   <article className="market-depth-card">
+                  {editingBlock === 'value-market' ? (<>
                   <div className="market-depth-card__heading">
                     <span className="eyebrow">{tx('Profondeur de marché', 'Market depth')}</span>
                     <label>{tx('Date de l’analyse', 'Analysis date')}<input {...aiFieldProps('value.market.analysisDate')} type="date" value={marketDepth.analysisDate} onChange={(event) => setMarketDepth((current) => ({ ...current, analysisDate: event.target.value }))} /></label>
@@ -3040,6 +3029,7 @@ function App() {
                       <label>{tx('Valeur haute', 'High value')}<input {...aiFieldProps('value.market.highValue')} type="number" min="0" step="100" value={marketDepth.highValue} onChange={(event) => setMarketDepth((current) => ({ ...current, highValue: Math.max(0, Number(event.target.value)) }))} /></label>
                     </div>
                   </div>
+                  </>) : <MarketDepthReadOnly marketDepth={marketDepth} currency={watch.currency} language={language} />}
                   </article>
 
                   <article className="retained-value-card">
@@ -3047,6 +3037,7 @@ function App() {
                       <span className="eyebrow">{tx('Décision du propriétaire', 'Owner decision')}</span>
                       <h3>{tx('Niveaux de valorisation', 'Valuation levels')}</h3>
                     </div>
+                    {editingBlock === 'value-market' ? (<>
                     <label className="retained-value-card__amount">{tx('Valorisation brute', 'Gross valuation')}
                       <span>
                         <input {...aiFieldProps('value.retained.amount')} type="number" min="0" step="100" value={retainedValuation.amount} onChange={(event) => setRetainedValuation((current) => ({ ...current, amount: Math.max(0, Number(event.target.value)) }))} />
@@ -3063,6 +3054,7 @@ function App() {
                     <label className="retained-value-card__explanation">{tx('Explication de la valeur retenue', 'Retained value explanation')}
                       <AutoResizeTextarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder={tx('Expliquez le montant retenu, les ajustements et les réserves éventuelles.', 'Explain the retained amount, adjustments and any reservations.')} />
                     </label>
+                    </>) : <ValuationLevelsReadOnly retained={retainedValuation} currentValue={marketDepth.midValue} net={retainedNetValuation} netAfterTax={retainedNetAfterTaxValuation} currency={watch.currency} language={language} />}
                     <aside className="ownership-valuation-note" {...aiFieldProps('value.provenance.ownershipAssessment')}>
                       <strong>{tx('Critère de provenance', 'Provenance criterion')}</strong>
                       <p>{ownershipAssessment}</p>
@@ -3070,20 +3062,19 @@ function App() {
                   </article>
                 </div>
               </section>
-            ) : (
-              <AccessRestricted title={tx('Analyse de marché', 'Market analysis')} language={language} />
             )}
 
-            {showCompleteContent && schemaHas('value.comparables') && (
+            {schemaHas('value.comparables') && (
               <section>
                 <SectionTitle eyebrow={tx('Analyse de marché', 'Market analysis')} title={tx('Comparables', 'Comparable items')} />
                 <div className="comparable-groups">
-                  <ComparableTable title={tx('Annonces en cours', 'Current listings')} items={listingComparables} selection={publishProps('value-comparables-listings')} onUpdate={canEdit ? updateComparable : undefined} onDelete={canEdit ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={canEdit ? () => addComparable('Annonce') : undefined} language={language} />
-                  <ComparableTable title={tx('Transactions réalisées', 'Completed transactions')} items={transactionComparables} selection={publishProps('value-comparables-transactions')} onUpdate={canEdit ? updateComparable : undefined} onDelete={canEdit ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={canEdit ? () => addComparable('Transaction') : undefined} language={language} />
+                  <ComparableTable title={tx('Annonces en cours', 'Current listings')} items={listingComparables} selection={publishProps('value-comparables-listings', true)} onUpdate={editingBlock === 'value-comparables-listings' ? updateComparable : undefined} onDelete={editingBlock === 'value-comparables-listings' ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={editingBlock === 'value-comparables-listings' ? () => addComparable('Annonce') : undefined} language={language} />
+                  <ComparableTable title={tx('Transactions réalisées', 'Completed transactions')} items={transactionComparables} selection={publishProps('value-comparables-transactions', true)} onUpdate={editingBlock === 'value-comparables-transactions' ? updateComparable : undefined} onDelete={editingBlock === 'value-comparables-transactions' ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={editingBlock === 'value-comparables-transactions' ? () => addComparable('Transaction') : undefined} language={language} />
                 </div>
 
                 <div className="comparables-analysis">
-                  <div className="comparables-analysis__heading"><h3>{tx('Synthèse de l’analyse', 'Analysis summary')}</h3><BlockMarkers selection={publishProps('value-comparables-analysis')} label={tx('Synthèse de l’analyse des comparables', 'Comparable analysis summary')} /></div>
+                  <div className="comparables-analysis__heading"><h3>{tx('Synthèse de l’analyse', 'Analysis summary')}</h3><BlockMarkers selection={publishProps('value-comparables-analysis', true)} label={tx('Synthèse de l’analyse des comparables', 'Comparable analysis summary')} /></div>
+                  {editingBlock === 'value-comparables-analysis' ? (<>
                   <div className="comparables-analysis-table" role="table" aria-label={tx('Synthèse de l’analyse des comparables', 'Comparable analysis summary')}>
                     <div className="comparables-analysis-table__head" role="row">
                       <span>{tx('Angle d’analyse', 'Analysis angle')}</span><span>{tx('Constat', 'Finding')}</span><span>{tx('Lecture', 'Interpretation')}</span>
@@ -3098,15 +3089,17 @@ function App() {
                     ))}
                   </div>
                   <button type="button" className="button button--quiet no-print" onClick={() => setComparableAnalysis((current) => [...current, { id: newId('analysis'), angle: '', finding: '', reading: '' }])}><Plus size={14} /> {tx('Ajouter une ligne d’analyse', 'Add analysis row')}</button>
+                  </>) : <AnalysisRowsReadOnly rows={comparableAnalysis} language={language} />}
                   <small>{language === 'FR' ? `ÉCHANTILLON INTERNE · ${comparables.length} OBSERVATION${comparables.length > 1 ? 'S' : ''} · CONCLUSIONS À CONFIRMER PAR UN ÉCHANTILLON ÉLARGI` : `INTERNAL SAMPLE · ${comparables.length} OBSERVATION${comparables.length === 1 ? '' : 'S'} · CONCLUSIONS TO BE CONFIRMED USING A LARGER SAMPLE`}</small>
                 </div>
               </section>
             )}
 
-            {showCompleteContent && schemaHas('value.cost_basis') && (
+            {schemaHas('value.cost_basis') && (
               <section>
-                <SectionTitle eyebrow={tx('Acquisition', 'Acquisition')} title={tx('Prix de revient', 'Cost basis')} publish={publishProps('value-cost-basis')} />
+                <SectionTitle eyebrow={tx('Acquisition', 'Acquisition')} title={tx('Prix de revient', 'Cost basis')} publish={publishProps('value-cost-basis', true)} />
                 <div className="cost-basis-card">
+                  {editingBlock === 'value-cost-basis' ? (<>
                   <div className="purchase-fields">
                     <label>{tx('Date d’achat', 'Purchase date')}<input {...aiFieldProps('value.purchase.date')} type="date" value={purchase.date} onChange={(event) => setPurchase({ ...purchase, date: event.target.value })} /></label>
                     <label>{tx('Valeur d’achat', 'Purchase value')}<input {...aiFieldProps('value.purchase.price')} type="number" min="0" step="1" value={purchase.purchasePrice} onChange={(event) => setPurchase({ ...purchase, purchasePrice: Number(event.target.value) })} /></label>
@@ -3130,6 +3123,7 @@ function App() {
                     className="button button--quiet no-print"
                     onClick={() => setPurchaseExpenses((current) => [...current, { id: newId('expense'), kind: 'Autre', date: '', label: '', amount: 0 }])}
                   ><Plus size={14} /> {tx('Ajouter une dépense', 'Add expense')}</button>
+                  </>) : <CostBasisReadOnly purchase={purchase} expenses={purchaseExpenses} kindLabel={expenseKindLabel} currency={watch.currency} language={language} />}
                   <div {...aiFieldProps('value.computed.costBasis')} className="cost-basis-total">
                     <Calculator size={20} />
                     <span>{tx('Prix de revient', 'Cost basis')}</span>
@@ -3139,15 +3133,17 @@ function App() {
               </section>
             )}
 
-            {showCompleteContent && schemaHas('value.performance') && (
+            {schemaHas('value.performance') && (
               <section>
-                <SectionTitle eyebrow={tx('Performance de détention', 'Holding performance')} title={tx('Plus-value, moins-value et TRI', 'Capital gain, loss and IRR')} publish={publishProps('value-performance')} />
+                <SectionTitle eyebrow={tx('Performance de détention', 'Holding performance')} title={tx('Plus-value, moins-value et TRI', 'Capital gain, loss and IRR')} publish={publishProps('value-performance', true)} />
                 <div className="performance-card">
+                  {editingBlock === 'value-performance' ? (
                   <div className="exit-fields">
                     <label>{tx('Date de vente', 'Sale date')}<input {...aiFieldProps('value.exit.saleDate')} type="date" min={purchase.date} value={exitAssumptions.saleDate} onChange={(event) => setExitAssumptions({ ...exitAssumptions, saleDate: event.target.value })} /></label>
                     <label>{tx('Prix de vente', 'Sale price')}<input {...aiFieldProps('value.exit.salePrice')} type="number" min="0" step="100" value={exitAssumptions.salePrice} onChange={(event) => setExitAssumptions({ ...exitAssumptions, salePrice: Number(event.target.value) })} /></label>
                     <label>{tx('Coût de cession', 'Disposal cost')}<input {...aiFieldProps('value.exit.disposalCostPct')} type="number" min="0" max="100" step="0.5" value={exitAssumptions.disposalCostPct} onChange={(event) => setExitAssumptions({ ...exitAssumptions, disposalCostPct: Number(event.target.value) })} /><span>%</span></label>
                   </div>
+                  ) : <ExitAssumptionsReadOnly exit={exitAssumptions} currency={watch.currency} language={language} />}
                   <div className="performance-results">
                     <div><span>{tx('Prix de revient', 'Cost basis')}</span><strong>{formatMoney(costBasis, watch.currency)}</strong></div>
                     <div><span>{tx('Coût de cession', 'Disposal cost')}</span><strong>− {formatMoney(disposalCost, watch.currency)}</strong></div>
@@ -3167,14 +3163,16 @@ function App() {
               </section>
             )}
 
-            {showCompleteContent && schemaHas('value.sensitivity') && (
+            {schemaHas('value.sensitivity') && (
               <section>
-                <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} publish={publishProps('value-sensitivity')} />
+                <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} publish={publishProps('value-sensitivity', true)} />
                 <div {...aiFieldProps('value.computed.sensitivity')} className="sensitivity-stack">
+                  {editingBlock === 'value-sensitivity' && (
                   <div className="sensitivity-parameters no-print">
                     <div><span>{tx('Prix de vente testés', 'Tested sale prices')}</span>{sensitivityPrices.map((price, index) => <label key={`price-input-${index}`}>{tx('Scénario', 'Scenario')} {index + 1}<input {...aiFieldProps('value.sensitivity.prices[]', index)} type="number" min="0" step="100" value={price} onChange={(event) => setSensitivityPrices((current) => current.map((item, itemIndex) => itemIndex === index ? Math.max(0, Number(event.target.value)) : item))} /></label>)}</div>
                     <div><span>{tx('Coûts de cession testés', 'Tested disposal costs')}</span>{sensitivityCosts.map((cost, index) => <label key={`cost-input-${index}`}>{tx('Scénario', 'Scenario')} {index + 1}<span><input {...aiFieldProps('value.sensitivity.costs[]', index)} type="number" min="0" max="100" step="0.5" value={cost} onChange={(event) => setSensitivityCosts((current) => current.map((item, itemIndex) => itemIndex === index ? Math.min(100, Math.max(0, Number(event.target.value))) : item))} /><strong>%</strong></span></label>)}</div>
                   </div>
+                  )}
                   <div>
                     <h3>{tx('Plus-value ou moins-value nette', 'Net capital gain or loss')}</h3>
                     <div className="sensitivity-table" role="table" aria-label={tx('Sensibilité de la plus-value ou moins-value', 'Capital gain or loss sensitivity')}>
@@ -3208,7 +3206,6 @@ function App() {
                 </div>
               </section>
             )}
-            </fieldset>
             <GenericSchemaPageSections page="value" {...genericPageProps} />
         </ValuePage>
 
@@ -3450,7 +3447,7 @@ function App() {
         onToggleTag={toggleMediaTag}
         onChangeVisibility={(id, visibility) => { if (!canEdit) return; setMediaAssets((current) => current.map((asset) => asset.id === id ? { ...asset, visibility } : asset)); }}
         onDelete={deleteMediaAsset}
-        readOnly={isDemoCartulary}
+        readOnly={!canEdit}
         originalOnDemand={authoritative.canManage}
       />}
 

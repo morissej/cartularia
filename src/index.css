@@ -218,13 +218,6 @@ img { display: block; max-width: 100%; }
   text-transform: uppercase;
 }
 
-.cartulary-readonly-scope {
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
 .cartulary-registry-return:hover { border-color: var(--mark); color: var(--mark); }
 
 .dossier-bar__todo { position: relative; }
@@ -620,7 +613,6 @@ img { display: block; max-width: 100%; }
 
 .content-marker--edit:hover { border-color: var(--ink); color: var(--ink); }
 .content-marker--edit.is-active { border-color: var(--ink); background: var(--fill); color: var(--ink); }
-.content-marker:disabled { cursor: not-allowed; opacity: .55; }
 .publishable-block > .content-markers { position: absolute; top: var(--s3); right: var(--s3); z-index: 4; }
 
 .section-heading-row {
@@ -833,6 +825,10 @@ img { display: block; max-width: 100%; }
   font-weight: 700;
   text-transform: uppercase;
 }
+
+/* V5 point 1 — faits de couverture en lecture : même gabarit que les sélecteurs d'édition, texte pur. */
+.cover-sheet__facts { display: grid; gap: var(--s1); }
+.cover-sheet__facts dd { min-width: 0; overflow-wrap: anywhere; color: var(--ink); font-family: var(--font-sans); font-size: 13px; text-transform: none; }
 
 .cover-sheet__editable-title {
   display: grid;
@@ -1139,6 +1135,7 @@ img { display: block; max-width: 100%; }
 .storage-code-list { display: grid; gap: var(--s2); }
 .storage-code-list > div { display: grid; grid-template-columns: 40px minmax(180px, .8fr) minmax(220px, 1.2fr) 44px; align-items: start; gap: var(--s2); }
 .storage-code-list > div > span { font-family: var(--font-mono); font-size: 10px; }
+.storage-code-list > div > p { color: var(--muted); font-size: 13px; line-height: 1.5; }
 
 .reference-report-card { display: grid; gap: var(--s4); padding: var(--s5); border: 1px solid var(--rule); background: var(--sheet); }
 .reference-report-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: var(--s3); }
@@ -1347,20 +1344,6 @@ textarea {
 }
 
 .icon-button:hover { border-color: var(--mark); color: var(--mark); }
-
-.restricted-card {
-  display: grid;
-  min-height: 220px;
-  place-items: center;
-  align-content: center;
-  gap: var(--s2);
-  border: 1px solid var(--rule);
-  background: var(--fill);
-  text-align: center;
-}
-
-.restricted-card > svg { color: var(--mark); }
-.restricted-card h3 { font-size: 18px; }
 
 /* V5 P-D3 — emplacement vide de la page Médias : état neutre (tirets, pictogramme sourd), jamais un refus de droit. */
 .empty-media-slot {
@@ -1871,7 +1854,9 @@ textarea {
 
 .control-check input:checked + span { border-color: var(--verified); background: var(--verified); color: var(--sheet); }
 .control-check input:focus-visible + span { outline: 2px solid var(--mark); outline-offset: 2px; }
-.control-check input:disabled + span { cursor: default; }
+/* V5 point 1 — case en lecture : texte pur, aucun contrôle ; l'état coché est porté par la classe. */
+.control-check--static > span { cursor: default; }
+.control-check--static > span.is-checked { border-color: var(--verified); background: var(--verified); color: var(--sheet); }
 
 .identification-list h3 { padding-top: 8px; font-size: 15px; }
 .identification-list p { margin-top: var(--s1); color: var(--muted); font-size: 13px; line-height: 1.55; }
@@ -2015,8 +2000,6 @@ textarea {
 .documentation-register select,
 .documentation-register textarea { width: 100%; min-height: 44px; padding: var(--s2) var(--s3); border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); font-size: 13px; }
 .documentation-register textarea { resize: vertical; }
-.documentation-register select:disabled,
-.documentation-register textarea:disabled { opacity: 1; color: var(--ink); -webkit-text-fill-color: var(--ink); }
 
 .documentation-media { margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--rule); }
 .documentation-media__heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s3); }
@@ -2255,6 +2238,12 @@ textarea {
 .retained-value-card__amount > span { display: grid; grid-template-columns: minmax(0, 1fr) 56px; }
 .retained-value-card__amount > span > strong { display: grid; place-items: center; border: 1px solid var(--rule); border-left: 0; background: var(--ink); color: var(--sheet); font-family: var(--font-mono); font-size: 10px; }
 .retained-value-card__amount > small { color: var(--muted); font-family: var(--font-mono); font-size: 9px; }
+/* V5 point 1 — niveaux de valorisation en lecture : mêmes colonnes, texte pur. */
+.retained-value-card dl, .retained-value-card__explanation { display: grid; gap: var(--s1); }
+.retained-value-card dt { color: var(--muted); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
+.retained-value-card dd > strong { font-family: var(--font-mono); font-size: 24px; font-weight: 700; }
+.retained-value-card dd > small { color: var(--muted); font-family: var(--font-mono); font-size: 9px; }
+.retained-value-card__explanation > p { white-space: pre-wrap; color: var(--muted); line-height: 1.7; }
 .retained-value-card__levels { display: grid; gap: var(--s2); }
 .retained-value-card__levels label > span { display: grid; grid-template-columns: minmax(0, 1fr) 56px; }
 .retained-value-card__levels label > span > strong { display: grid; place-items: center; border: 1px solid var(--rule); border-left: 0; background: var(--fill); color: var(--ink); font-size: 9px; }
@@ -2402,6 +2391,8 @@ textarea {
   border: 1px solid var(--rule);
   background: var(--sheet);
 }
+
+.performance-card > .metric-grid { margin-top: 0; }
 
 .exit-fields {
   display: grid;
@@ -3009,7 +3000,7 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .storage-card { padding: var(--s4); }
   .storage-card__heading { align-items: start; flex-direction: column; }
   .storage-code-list > div { grid-template-columns: 32px minmax(0, 1fr) 44px; }
-  .storage-code-list > div > textarea { grid-column: 2 / -1; }
+  .storage-code-list > div > :is(textarea, p) { grid-column: 2 / -1; }
   .reference-report-card { padding: var(--s4); }
   .reference-report-upload { grid-template-columns: 1fr; }
   .privacy-link-card { grid-template-columns: 1fr; padding: var(--s4); }

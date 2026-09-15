@@ -55,6 +55,37 @@ describe('visionneuse média extraite', () => {
     expect(onToggleTag).toHaveBeenCalledWith('asset-document', 'documentation');
     expect(onDelete).toHaveBeenCalledWith('asset-document');
   });
+
+  // V5 point 1 (coherence.md M5) : readOnly={!canEdit} depuis App.tsx — un lecteur consulte et navigue, sans catégoriser,
+  // sans changer la visibilité ni supprimer ; aucun texte « démonstration » dans la modale.
+  it('en lecture seule, conserve la consultation et retire toute commande d’édition', () => {
+    const onChangeVisibility = vi.fn();
+    render(<MediaViewerModal
+      asset={documentAsset}
+      assetCount={2}
+      position={0}
+      audience="Secret"
+      language="FR"
+      mediaTags={[{ id: 'documentation', label: 'Documentation' }]}
+      dialogRef={createRef<HTMLDivElement>()}
+      onClose={vi.fn()}
+      onMove={vi.fn()}
+      onToggleTag={vi.fn()}
+      onChangeVisibility={onChangeVisibility}
+      onDelete={vi.fn()}
+      readOnly
+    />);
+
+    expect(screen.getByRole('dialog', { name: 'Facture d’achat' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Média suivant' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Télécharger le média : Facture d’achat' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Documentation' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /Supprimer ce fichier/ })).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByText(/Autorisation de publication du média/)).toBeNull();
+    expect(screen.queryByText(/démonstration/i)).toBeNull();
+    expect(onChangeVisibility).not.toHaveBeenCalled();
+  });
 });
 
 describe('confirmation de suppression extraite', () => {
