@@ -97,3 +97,18 @@ Relecture adversariale du lot B (deux angles, serveur et client, chaque constat 
 | F4, CL-4 (mineur) | Ordre fonction → Hosting, symptôme `invalid_generic_operation` et effet muet sur `GenericCartularyView` consignés seulement dans le scratchpad | Cette section | `tests/cartulary-review-policy.test.mjs` : le journal nomme le symptôme, les sorties et le lecteur non routé, et la source les confirme |
 
 Écartés : le site média pré-existant de `tests/cartulary-create.test.mjs` (`syncMutation`, `requestId: token`, antérieur au lot B) n'est pas réécrit — convention héritée, sans effet sur le serveur, émulateur seulement.
+
+## 7. Production (15 septembre, soir)
+
+| Étape | Résultat |
+|---|---|
+| Hosting V5 (points 1-6, lot A) | Build sur `efbe528`, bundle `index-CPftixPZ.js`, 550 fichiers, 75 nouveaux. 20 fonctions inchangées (`de9e5daa` ×4, `0ed44691` ×7, `8167c7dc` ×5, `98daf07d` ×4). |
+| Recette anonyme démo (`/cartulary-demo`, viewport 1 280 × 800) | Pages 00-04 : 0 `input/select/textarea`, 0 `[disabled]`, 0 `role="button"`, 0 `fieldset`, 0 « Ajouter », 0 « Accès restreint » ; bandeau « Démonstration en lecture seule » ; fiche de spécifications en 6 `dl` / 38 `dt` ; documentation en `role="table"` ; valorisation en texte (65 montants) ; aucun débordement horizontal. |
+| Lot B — suites émulateur | `test:live-sync` 6, `test:create` 26 + 5, `test:cartulary` 34, `test:security-wave2` 7 + 22 + 6, `test:demo-account:full` 1, `rolex-dossier` 53 : tout vert sur `094aa50`. |
+| Lot B — fonction (Jérôme) | `firebase deploy --only functions:cartularia-sync:syncCartularyToRegistry` : 20 fonctions, hash de `syncCartularyToRegistry` `de9e5daa…` → `f1de8b8b…`, les 19 autres inchangés (512 Mo / 120 s conservés). |
+| Hosting H3 (lot B client) | Build sur `094aa50`, bundle `index-Bkdx1efa.js` (« Marquer comme revu » dans 4 morceaux), 73 fichiers nouveaux. |
+| Recette propriétaire (Chrome reconnecté, lecture seule par l'assistant) | Rolex, Accueil : crayon « Modifier Accueil de l'objet », bloc « Revue du propriétaire · Déclaré, non revu » avec bouton « Marquer comme revu », tableau À faire éditable, section générique avec badge « Déclarations à vérifier » ; aucun bandeau de lecture seule. Preuves : « Synchroniser maintenant », « Proposer la cession », « Horodater le carnet local », « Exporter le carnet local », section « Suppression des données » en dernier avec « Supprimer mes données » ; aucune « Simulation technique ». Registre, vue d'ensemble : carte « À revoir » avec lien « Voir les Cartulaires à revoir ». |
+
+Reste à Jérôme : cliquer « Marquer comme revu » (sur le Rolex ou un objet de test ; attendu : « Confirmation en cours… » puis « Revu par le propriétaire le {date} · Partiel », badge des sections disparu, « À revoir » décrémenté au Registre après synchronisation, événement « Revue du propriétaire confirmée » aux Preuves) ; confirmer D5 (a) (lecture seule hors session) ; recette création (5 fichiers : étapes, jamais « 100 % » en phase serveur, « Créé en N s ») ; recette propriétaire V4 (journal V4 § 7).
+
+V5 est close pour ce qui relève de l'assistant. V6 (« Mobile et accessibilité », plan § V6) s'ouvre le 15 septembre.
