@@ -74,12 +74,11 @@ import {
   type PublishedBlockId,
 } from './domain/publication';
 import {
+  DEFAULT_INTERFACE_LANGUAGE,
   INTERFACE_LANGUAGE_STORAGE_KEY,
   adjacentCartularyPage,
   cartularyPageFromHash,
-  normalizeInterfaceLanguage,
   type CartularyPage,
-  type InterfaceLanguage,
 } from './utils/interfaceState';
 import { useDialogFocus } from './hooks/useDialogFocus';
 import { removeItemById, restoreItemAtIndex } from './utils/undoableDeletion';
@@ -661,9 +660,8 @@ function App() {
       document.title = `Cartulaire ${watch.reference.brand} ${watch.reference.model} · Cartularia`;
     }
   }, [isWatchWebsite, watch]);
-  const [language, setLanguage] = useState<InterfaceLanguage>(() => normalizeInterfaceLanguage(
-    readStored<unknown>(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR'),
-  ));
+  // V6 (V-D9) : bascule FR/EN masquée tant que la traduction est partielle ; la préférence stockée n'est plus relue.
+  const language = DEFAULT_INTERFACE_LANGUAGE;
   const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary });
   // V5 point 1 (V-D1, P-D6) : une seule source de vérité pour l'édition des pages 00-04, la même que la page Publication (V2 (b), D5 (a)) :
   // faux en démonstration (hook désactivé), hors session, pendant la résolution des droits et pour tout lecteur sans « cartulary.edit ».
@@ -877,7 +875,6 @@ function App() {
       const detail = (event as CustomEvent<CloudPullAppliedDetail>).detail;
       if (!detail || detail.cartularyId !== mockCartulary.id) return;
       const keys = new Set(detail.stateKeys);
-      if (keys.has(INTERFACE_LANGUAGE_STORAGE_KEY)) setLanguage(normalizeInterfaceLanguage(readStored(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR')));
       reloadMediaState(keys);
       reloadConditionState(keys);
       reloadOwnerState(keys);
@@ -2342,7 +2339,6 @@ function App() {
         brand={watch.reference.brand}
         model={watch.reference.model}
         language={language}
-        setLanguage={setLanguage}
         followUp={followUp}
         readOnly={!canEdit}
         demonstration={isDemoCartulary}

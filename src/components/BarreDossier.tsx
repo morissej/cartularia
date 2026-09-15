@@ -16,7 +16,6 @@ interface BarreDossierProps {
   brand: string;
   model: string;
   language: 'FR' | 'EN';
-  setLanguage: (lang: 'FR' | 'EN') => void;
   followUp: CartularyFollowUpController;
   /** Lecture (V5 point 1) : aucun geste sur les tâches, pastilles en texte, aucun message de synchronisation. */
   readOnly?: boolean;
@@ -31,7 +30,6 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
   brand,
   model,
   language,
-  setLanguage,
   followUp,
   readOnly = false,
   demonstration = false,
@@ -305,22 +303,6 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                 )}
               </section>
             )}
-          </div>
-
-          {/* Langue FR / EN */}
-          <div className="dossier-bar__languages" style={{ display: 'flex', gap: '6px' }}>
-            {(['FR', 'EN'] as const).map((lang) => (
-              <button
-                type="button"
-                key={lang}
-                className={`language-toggle${language === lang ? ' is-active' : ''}`}
-                onClick={() => setLanguage(lang)}
-                aria-label={lang === 'FR' ? 'Afficher l’interface en français' : 'Display the interface in English'}
-                aria-pressed={language === lang}
-              >
-                {lang}
-              </button>
-            ))}
           </div>
         </div>
       </div>

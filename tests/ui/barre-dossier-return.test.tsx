@@ -13,7 +13,7 @@ const followUp: CartularyFollowUpController = {
 };
 
 const renderBar = (returnHref?: string) => render(
-  <BarreDossier publicCode="DEMO-ROL-124060" brand="Rolex" model="Submariner" language="FR" setLanguage={() => undefined} followUp={followUp} readOnly returnHref={returnHref} />,
+  <BarreDossier publicCode="DEMO-ROL-124060" brand="Rolex" model="Submariner" language="FR" followUp={followUp} readOnly returnHref={returnHref} />,
 );
 
 describe('BarreDossier — le logo suit le retour décidé par App.tsx', () => {

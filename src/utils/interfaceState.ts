@@ -6,6 +6,8 @@ export type ApplicationRoute = 'home' | 'code-handoff-return' | 'service-informa
 export const INTERFACE_LANGUAGE_STORAGE_KEY = 'cartularia-interface-language';
 
 export const normalizeInterfaceLanguage = (value: unknown): InterfaceLanguage => value === 'EN' ? 'EN' : 'FR';
+/** V6 (V-D9) : langue de l'interface du Cartulaire tant que la bascule FR/EN est masquée (traduction partielle). */
+export const DEFAULT_INTERFACE_LANGUAGE: InterfaceLanguage = 'FR';
 
 export const cartularyPageFromHash = (hash: string): CartularyPage => {
   const candidate = hash.replace(/^#/, '');

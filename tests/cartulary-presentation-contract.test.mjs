@@ -846,3 +846,46 @@ test('V5 point 4 lot B (client) : revue du propriétaire sur la page Accueil, ba
   // B11 : l'explication du Registre nomme l'action par le libellé exact du bouton.
   assert.match(readSource('../src/features/registry/registryPresentation.ts'), /\(« Marquer comme revu »\)/);
 });
+
+// V6 — point « traduction » (V-D9 : bascule FR/EN masquée, D1 (a), D2 retrait pur ; V-D10 : graphie « mini-site », D3 version 1.4.0 conservée).
+test('V6 (V-D9, V-D10) : aucune bascule FR/EN rendue, langue fixée à FR sans relecture de la préférence, lang="fr", aucune graphie fautive de « mini-site » (espace avant le tiret)', () => {
+  const app = readSource('../src/App.tsx');
+  const header = readSource('../src/components/BarreDossier.tsx');
+  const state = readSource('../src/utils/interfaceState.ts');
+  const css = readSource('../src/index.css');
+  // La barre ne porte plus ni sélecteur, ni bouton pressé, ni rappel de changement de langue ; elle reste traduisible par sa prop `language`.
+  assert.doesNotMatch(header, /language-toggle|dossier-bar__languages|setLanguage|aria-pressed|Display the interface in English|Afficher l’interface en français/);
+  assert.match(header, /language: 'FR' \| 'EN';/);
+  assert.match(header, /const isFrench = language === 'FR';/);
+  // La langue de l'interface est une constante importée (annotée en union : un `const` local serait rétréci à 'FR', TS2367 sur chaque `language === 'EN'`).
+  assert.match(state, /export const DEFAULT_INTERFACE_LANGUAGE: InterfaceLanguage = 'FR';/);
+  assert.match(state, /export const normalizeInterfaceLanguage = /, 'normalisation conservée (verrou historique tests/interface-state.test.mjs)');
+  assert.match(app, /import \{[^}]*\bDEFAULT_INTERFACE_LANGUAGE\b[^}]*\} from '\.\/utils\/interfaceState';/, 'constante importée, jamais redéclarée localement');
+  assert.match(app, /const language = DEFAULT_INTERFACE_LANGUAGE;/);
+  assert.doesNotMatch(app, /setLanguage|normalizeInterfaceLanguage|type InterfaceLanguage|readStored[^\n]*INTERFACE_LANGUAGE_STORAGE_KEY/, 'la préférence de langue stockée (scopée et brouillon cloud) n’est plus relue, ni au montage ni au tirage cloud');
+  assert.equal((app.match(/INTERFACE_LANGUAGE_STORAGE_KEY/g) ?? []).length, 2, 'import et écriture d’auto-réparation seulement');
+  // Auto-réparation conservée : le document reste en français et une préférence « EN » résiduelle est réécrite « FR » au premier montage (écrasement assumé).
+  assert.match(app, /document\.documentElement\.lang = language === 'FR' \? 'fr' : 'en';\s*persistJson\(INTERFACE_LANGUAGE_STORAGE_KEY, language\);/);
+  assert.match(readSource('../index.html'), /<html lang="fr">/);
+  // Parité EN dormante câblée : la barre reçoit toujours la langue (remise en service par `git revert`, sans réécriture).
+  const barStart = app.indexOf('<BarreDossier');
+  assert.ok(barStart >= 0);
+  assert.match(app.slice(barStart, app.indexOf('/>', barStart)), /language=\{language\}/);
+  // Aucune règle morte : la feuille ne cite plus le sélecteur, ni hors ni dans la tranche mobile (bornes du contrat V5 inchangées).
+  assert.doesNotMatch(css, /\.language-toggle|\.dossier-bar__languages/);
+  assert.match(css, /\.dossier-bar__todo \{ position: relative; \}\n\n\.todo-trigger \{/);
+  assert.match(css, /\.dossier-bar__controls \{ gap: var\(--s2\) !important; \}\n  \.todo-trigger \{/);
+  // V-D10, garde unique (C4, TR G1) : aucune graphie fautive de « mini-site » (espace avant le tiret) dans src/, tests/ ni scripts/ ; motif construit par concaténation pour ne pas s'auto-détecter ; copies « 2 » ignorées.
+  const faultyPattern = new RegExp('mini' + ' -site', 'i');
+  const walkAll = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : walkAll(path);
+    return /\.(ts|tsx|mjs|js)$/.test(entry.name) && !/ 2\.(ts|tsx|mjs|js)$/.test(entry.name) ? [path] : [];
+  });
+  const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
+  const faulty = ['src', 'tests', 'scripts'].flatMap((folder) => walkAll(join(repositoryRoot, folder)))
+    .filter((path) => faultyPattern.test(readFileSync(path, 'utf8')))
+    .map((path) => relative(repositoryRoot, path).split(sep).join('/'));
+  assert.deepEqual(faulty, []);
+  assert.equal(CARTULARY_PRESENTATION_CONTRACT_VERSION, 'cartulary-presentation@1.4.0', 'D3 : version conservée, titre jamais rendu');
+});

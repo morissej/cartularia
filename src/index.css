@@ -223,24 +223,6 @@ img { display: block; max-width: 100%; }
 
 .dossier-bar__todo { position: relative; }
 
-.language-toggle {
-  display: grid;
-  width: 36px;
-  min-height: 36px;
-  place-items: center;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  transition: var(--transition);
-}
-
-.language-toggle:hover { border-color: var(--rule); color: var(--ink); }
-.language-toggle.is-active { border-color: var(--ink); color: var(--ink); }
-
 .todo-trigger {
   display: inline-flex;
   min-height: 34px;
@@ -2960,8 +2942,6 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .dossier-bar__inner { gap: var(--s2); }
   .dossier-bar__logo .brand-logo { height: 28px; }
   .dossier-bar__controls { gap: var(--s2) !important; }
-  .dossier-bar__languages { display: flex !important; gap: 2px !important; }
-  .language-toggle { width: 32px; min-height: 36px; }
   .todo-trigger { width: 42px; padding: 0; justify-content: center; }
   .todo-trigger > span { display: none; }
   .todo-trigger strong { position: absolute; top: -5px; right: -5px; }

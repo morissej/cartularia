@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEFAULT_INTERFACE_LANGUAGE,
   adjacentCartularyPage,
   applicationRouteFromPathname,
   cartularyPageFromHash,
@@ -75,4 +76,6 @@ test('la route de démonstration ne retombe jamais sur un Cartulaire privé', ()
 test('les préférences persistées invalides utilisent des valeurs sûres', () => {
   assert.equal(normalizeInterfaceLanguage('EN'), 'EN');
   assert.equal(normalizeInterfaceLanguage('DE'), 'FR');
+  // V6 (V-D9, G2) : bascule masquée, la langue de l'interface du Cartulaire est FR ; une clé résiduelle « EN » n'est plus relue.
+  assert.equal(DEFAULT_INTERFACE_LANGUAGE, 'FR');
 });

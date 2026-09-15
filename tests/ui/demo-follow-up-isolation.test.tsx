@@ -83,7 +83,7 @@ describe('Suivi en lecture seule hors démonstration', () => {
 
   it('rend le popover de la barre en texte : pastilles sans bouton, aucun message de synchronisation', () => {
     const { result } = renderReadOnlyController();
-    render(<BarreDossier publicCode="TEST-1" brand="Objet" model="Test" language="FR" setLanguage={() => undefined} followUp={result.current} readOnly />);
+    render(<BarreDossier publicCode="TEST-1" brand="Objet" model="Test" language="FR" followUp={result.current} readOnly />);
     fireEvent.click(screen.getByRole('button', { name: /A Faire.*2 tâche/ }));
     const panel = screen.getByLabelText('À Faire du Cartulaire');
     expect(panel.querySelector('.todo-sync-error')).toBeNull();

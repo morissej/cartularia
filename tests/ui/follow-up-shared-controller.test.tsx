@@ -22,7 +22,7 @@ vi.mock('../../src/services/followUp.ts', () => ({
 const Harness = () => {
   const followUp = useCartularyFollowUp({ cartularyId: 'cart_test', language: 'FR' });
   return <>
-    <BarreDossier publicCode="TEST-1" brand="Objet" model="Test" language="FR" setLanguage={() => undefined} followUp={followUp} />
+    <BarreDossier publicCode="TEST-1" brand="Objet" model="Test" language="FR" followUp={followUp} />
     <CartularyTodoBoard followUp={followUp} language="FR" />
   </>;
 };

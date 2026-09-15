@@ -20,7 +20,7 @@ const followUp = (): CartularyFollowUpController => ({
 });
 
 const barProps = (controller: CartularyFollowUpController) => ({
-  brand: 'Marque', model: 'Modèle', publicCode: 'OBJ-0001', language: 'FR' as const, setLanguage: () => undefined, followUp: controller, returnHref: '/registry',
+  brand: 'Marque', model: 'Modèle', publicCode: 'OBJ-0001', language: 'FR' as const, followUp: controller, returnHref: '/registry',
 });
 
 describe('BarreDossier : édition d’une tâche entamée puis passage en lecture', () => {
