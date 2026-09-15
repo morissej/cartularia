@@ -66,20 +66,11 @@ import {
 import {
   PUBLISHED_BLOCK_IDS,
   PUBLICATION_BLOCK_CATALOG,
-  applyPublicationDecision,
-  destinationLabel,
-  destinationMarker,
-  evaluatePublicationEligibility,
   filterPublicationBlockIds,
   filterRequestedWebsiteBlocks,
   getPublicationPolicy,
-  isSelectionValidated,
-  publicationActionFor,
-  type PublicationAction,
   type PublicationDecision,
   type PublicationDestination,
-  type PublicationEligibility,
-  type PublicationPolicyResult,
   type PublishedBlockId,
 } from './domain/publication';
 import {
@@ -183,16 +174,6 @@ import {
 } from './domain/valuationPerformance';
 
 const AuditPanel = lazy(() => import('./components/AuditPanel.tsx').then((module) => ({ default: module.AuditPanel })));
-
-interface PublicationIntent {
-  requestId: string;
-  destination: PublicationDestination;
-  blockId: PublishedBlockId;
-  blockLabel: string;
-  action: PublicationAction;
-  eligibility: PublicationEligibility;
-  policy: PublicationPolicyResult;
-}
 
 type PopularityResourceType = 'Forum officiel' | 'Discussion dédiée' | 'Communauté' | 'Base de données' | 'Revue';
 
@@ -873,16 +854,7 @@ function App() {
   const setExternalPublicationEnabled = publicationCommands.setExternalEnabled;
   const setCollectionPublicationEnabled = publicationCommands.setCollectionEnabled;
   const setCommunityPublicationEnabled = publicationCommands.setCommunityEnabled;
-  const setPublicationDecisions = publicationCommands.replaceDecisions;
   const setPublicationSourceBinding = publicationCommands.setSourceBinding;
-  const [publicationIntent, setPublicationIntent] = useState<PublicationIntent | null>(null);
-  const [publicationAcknowledged, setPublicationAcknowledged] = useState(false);
-  const [publicationError, setPublicationError] = useState<string | null>(null);
-  const [isPublicationSubmitting, setIsPublicationSubmitting] = useState(false);
-  const [publicationSourceDigest, setPublicationSourceDigest] = useState('');
-  const publicationSourceSnapshotRef = useRef<Record<string, unknown> | null>(null);
-  const publicationSubmissionRef = useRef(false);
-  const publicationDialogOpenedAtRef = useRef(0);
   const [specificationGroups, setSpecificationGroups] = useState<SpecificationGroupData[]>(loadSpecificationGroups);
   const [editableCopy, setEditableCopy] = useState<EditableCopyData>(loadEditableCopy);
   const [cloudRefreshVersion, setCloudRefreshVersion] = useState(0);
@@ -895,19 +867,12 @@ function App() {
   const [publicProjectionAbsent, setPublicProjectionAbsent] = useState(false);
   const persistence = useHybridPersistence(mockCartulary.id, !isDemoCartulary && !isWatchWebsite);
   const drawerRef = useRef<HTMLElement>(null);
-  const publicationDialogRef = useRef<HTMLDivElement>(null);
   const deletionDialogRef = useRef<HTMLDivElement>(null);
   const marketHistoryDialogRef = useRef<HTMLDivElement>(null);
   const spinDialogRef = useRef<HTMLDivElement>(null);
   const mediaDialogRef = useRef<HTMLDivElement>(null);
 
   useDialogFocus(isDrawerOpen, drawerRef, () => setIsDrawerOpen(false));
-  useDialogFocus(Boolean(publicationIntent), publicationDialogRef, () => {
-    if (isPublicationSubmitting) return;
-    setPublicationIntent(null);
-    setPublicationAcknowledged(false);
-    setPublicationError(null);
-  });
   useDialogFocus(Boolean(pendingDeletion), deletionDialogRef, () => {
     if (!isDeletingItem) setPendingDeletion(null);
   });
@@ -1008,11 +973,6 @@ function App() {
     purchaseExpenses,
     exitAssumptions,
   ]);
-  const effectivePublicationSourceDigest = publicationSourceSnapshotRef.current === publicationSourceSnapshot
-    && publicationSourceBinding.digest === publicationSourceDigest
-    ? publicationSourceDigest
-    : '';
-  const effectivePublicationSourceRevision = effectivePublicationSourceDigest ? publicationSourceBinding.revision : 0;
   const integritySnapshot = useMemo<Record<string, unknown>>(() => ({
     ...publicationSourceSnapshot,
     publication: {
@@ -1028,16 +988,13 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    setPublicationSourceDigest('');
     void computeHash(publicationSourceSnapshot).then((digest) => {
       if (!active) return;
-      publicationSourceSnapshotRef.current = publicationSourceSnapshot;
       setPublicationSourceBinding((current) => current.digest === digest ? current : {
         revision: current.revision + 1,
         digest,
         updatedAt: new Date().toISOString(),
       });
-      setPublicationSourceDigest(digest);
     }).catch((error: unknown) => console.error('Empreinte de publication impossible', error));
     return () => {
       active = false;
@@ -1241,32 +1198,12 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moveSelectedAsset, renderedAssets.length, selectedAsset]);
-  const publicationMainPhoto = mediaAssets.find((asset) => asset.tags.includes('main-photo'));
   const referenceConditionReport = conditionEntries.find((entry) => entry.id === 'report-2026-08-08') ?? conditionEntries[0];
   const priorConditionReviews = conditionEntries.filter((entry) => entry.id !== referenceConditionReport?.id);
   const rawSpecificationValue = (label: string) =>
     specificationGroups.flatMap((group) => group.items).find((item) => item.label === label)?.value ?? '';
   const specificationValue = (label: string, fallback: string) =>
     rawSpecificationValue(label) || fallback;
-  const publicationEligibilityFor = (destination: PublicationDestination) => evaluatePublicationEligibility({
-    brand: rawSpecificationValue('Marque'),
-    model: rawSpecificationValue('Modèle'),
-    mainPhoto: publicationMainPhoto,
-    destination,
-  });
-  const selectedBlocksFor = (destination: PublicationDestination) => (
-    destination === 'website' ? publishedBlocks
-      : destination === 'collection' ? collectionBlocks
-        : destination === 'report' ? reportBlocks : communityBlocks
-  );
-  const selectionIsValidated = (destination: PublicationDestination, blockId: PublishedBlockId) => isSelectionValidated({
-    selected: selectedBlocksFor(destination).includes(blockId),
-    destination,
-    blockId,
-    decisions: publicationDecisions,
-    sourceDigest: effectivePublicationSourceDigest,
-    sourceRevision: effectivePublicationSourceRevision,
-  });
   const approvedWebsiteBlocks = filterPublicationBlockIds('website', publishedBlocks);
   const approvedReportBlocks = filterPublicationBlockIds('report', reportBlocks);
   // V4 décision 2 : un paramètre blocks= de l'aperçu local ne dépasse jamais la sélection locale (aperçu ⊆ sélection).
@@ -1336,137 +1273,10 @@ function App() {
   const reportTimestampReceipt = [...journal.getReceipts()].reverse().find(isRfc3161Receipt);
   const reportTimestampCoversContent = reportTimestampReceipt?.anchoredContentDigest === reportProofState.contentDigest;
 
-  const closePublicationDialog = () => {
-    setPublicationIntent(null);
-    setPublicationAcknowledged(false);
-    setPublicationError(null);
-  };
-
-  const requestPublicationChange = (
-    destination: PublicationDestination,
-    blockId: PublishedBlockId,
-    blockLabel: string,
-  ) => {
-    if (!canEdit) return;
-    publicationDialogOpenedAtRef.current = performance.now();
-    const selected = selectedBlocksFor(destination).includes(blockId);
-    const validated = selectionIsValidated(destination, blockId);
-    setPublicationIntent({
-      requestId: `publication-${globalThis.crypto.randomUUID()}`,
-      destination,
-      blockId,
-      blockLabel,
-      action: publicationActionFor({ selected, validated }),
-      eligibility: publicationEligibilityFor(destination),
-      policy: getPublicationPolicy(destination, blockId),
-    });
-    setPublicationAcknowledged(false);
-    setPublicationError(null);
-  };
-
-  const confirmPublicationIntent = async (overrideAction?: PublicationAction) => {
-    if (!publicationIntent || publicationSubmissionRef.current) return;
-    const action = overrideAction ?? publicationIntent.action;
-    const removalOfLegacySelection = publicationIntent.action === 'validate' && action === 'revoke';
-    if (!publicationAcknowledged && !removalOfLegacySelection) return;
-    publicationSubmissionRef.current = true;
-    setIsPublicationSubmitting(true);
-    setPublicationError(null);
-    try {
-      const [currentDigest, currentEligibility] = await Promise.all([
-        computeHash(publicationSourceSnapshot),
-        Promise.resolve(publicationEligibilityFor(publicationIntent.destination)),
-      ]);
-      const currentPolicy = getPublicationPolicy(publicationIntent.destination, publicationIntent.blockId);
-      if (action !== 'revoke' && (
-        !currentEligibility.isEligible
-        || !currentPolicy.allowed
-        || currentDigest !== effectivePublicationSourceDigest
-        || effectivePublicationSourceRevision === 0
-      )) {
-        setPublicationIntent((current) => current ? {
-          ...current,
-          eligibility: currentEligibility,
-          policy: currentPolicy,
-        } : current);
-        setPublicationAcknowledged(false);
-        setPublicationError(tx(
-          'Le dossier, sa révision ou la politique a changé. Les contrôles ont été recalculés ; corrigez les points bloquants puis relancez la décision.',
-          'The record, its revision or the policy changed. Checks were recalculated; resolve the blocking items and start the decision again.',
-        ));
-        return;
-      }
-
-      const reconciliation = await journal.reconcileSnapshot(integritySnapshot);
-      if (reconciliation) setEventTrigger((previous) => previous + 1);
-      const decision: PublicationDecision = {
-        requestId: publicationIntent.requestId,
-        destination: publicationIntent.destination,
-        blockId: publicationIntent.blockId,
-        blockLabel: publicationIntent.blockLabel,
-        action,
-        status: 'confirmed',
-        decisionSource: 'human_confirmed',
-        decidedAt: new Date().toISOString(),
-        sourceRevision: effectivePublicationSourceRevision,
-        sourceDigest: currentDigest,
-        policyVersion: 'publication-policy-v2',
-        prerequisites: currentEligibility.prerequisites,
-      };
-      const marker = destinationMarker(decision.destination);
-      await journal.logEvent(
-        action === 'revoke' ? 'PUBLICATION_SELECTION_REVOKED' : 'PUBLICATION_SELECTION_CONFIRMED',
-        'Propriétaire',
-        `${marker} · ${decision.blockId} · ${action} · prérequis ${currentEligibility.prerequisites.filter((item) => item.satisfied).length}/3 · source ${currentDigest.slice(0, 23)}`,
-        {
-          requestId: decision.requestId,
-          resource: { type: 'publication_selection', id: `${decision.destination}:${decision.blockId}` },
-        },
-      );
-
-      setPublicationDecisions((current) => current.some((item) => item.requestId === decision.requestId)
-        ? current
-        : [...current, decision]);
-      if (decision.destination === 'website') {
-        setPublishedBlocks((current) => applyPublicationDecision(current, decision));
-      } else if (decision.destination === 'collection') {
-        setCollectionBlocks((current) => applyPublicationDecision(current, decision));
-      } else if (decision.destination === 'report') {
-        setReportBlocks((current) => applyPublicationDecision(current, decision));
-      } else {
-        setCommunityBlocks((current) => applyPublicationDecision(current, decision));
-      }
-      setEventTrigger((previous) => previous + 1);
-      closePublicationDialog();
-    } catch (error) {
-      setPublicationError(error instanceof Error ? error.message : tx('La décision n’a pas pu être enregistrée.', 'The decision could not be saved.'));
-    } finally {
-      publicationSubmissionRef.current = false;
-      setIsPublicationSubmitting(false);
-    }
-  };
-
+  // V4 D5 : la sélection par destination se fait dans la table de la page Publication ; le bloc ne porte plus que son crayon d'édition.
   const publishProps = (blockId: PublishedBlockId, editable = false): BlockMarkerState => ({
     blockId,
     language,
-    website: {
-      active: publishedBlocks.includes(blockId),
-      pendingValidation: publishedBlocks.includes(blockId) && !selectionIsValidated('website', blockId),
-      onToggle: (label) => requestPublicationChange('website', blockId, label),
-      disabled: !canEdit,
-    },
-    report: {
-      active: reportBlocks.includes(blockId),
-      pendingValidation: reportBlocks.includes(blockId) && !selectionIsValidated('report', blockId),
-      onToggle: (label) => requestPublicationChange('report', blockId, label),
-      disabled: !canEdit,
-    },
-    community: {
-      active: communityBlocks.includes(blockId),
-      pendingValidation: communityBlocks.includes(blockId) && !selectionIsValidated('community', blockId),
-      onToggle: (label) => requestPublicationChange('community', blockId, label),
-      disabled: !canEdit,
-    },
     ...(editable ? {
       edit: {
         active: editingBlock === blockId,
@@ -3660,126 +3470,6 @@ function App() {
           </Suspense>
         </aside>
       </>}
-
-      {publicationIntent && (
-        <div className="modal-overlay" onClick={() => {
-          if (!isPublicationSubmitting && performance.now() - publicationDialogOpenedAtRef.current > 350) {
-            closePublicationDialog();
-          }
-        }}>
-          <div
-            ref={publicationDialogRef}
-            className="modal-content modal-content--publication"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="publication-dialog-title"
-            aria-describedby="publication-dialog-description"
-            data-focus-layer="true"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <span className="eyebrow">{tx('Préparation de la sélection', 'Selection preparation')} · {destinationMarker(publicationIntent.destination)}</span>
-                <strong id="publication-dialog-title">
-                  {publicationIntent.action === 'revoke'
-                    ? tx('Révoquer la sélection', 'Revoke selection')
-                    : publicationIntent.action === 'validate' ? tx('Valider une sélection existante', 'Validate existing selection') : tx('Valider avant sélection', 'Validate before selection')}
-                </strong>
-              </div>
-              <button type="button" onClick={closePublicationDialog} disabled={isPublicationSubmitting} aria-label={tx('Fermer la validation de publication', 'Close publication validation')}><X size={18} /></button>
-            </div>
-            <div className="publication-dialog__body">
-              <div className="publication-dialog__summary">
-                <span className={`publication-destination publication-destination--${publicationIntent.destination}`}>{destinationMarker(publicationIntent.destination)}</span>
-                <div>
-                  <span className="eyebrow">{language === 'FR' ? destinationLabel(publicationIntent.destination) : publicationIntent.destination === 'website' ? 'External publication' : publicationIntent.destination === 'collection' ? 'Collection' : publicationIntent.destination === 'report' ? 'PDF report' : 'Circle'}</span>
-                  <h3>{publicationIntent.blockLabel}</h3>
-                  <code>{publicationIntent.blockId}</code>
-                </div>
-              </div>
-
-              <p id="publication-dialog-description" className="publication-dialog__explanation">
-                {publicationIntent.destination === 'website'
-                  ? tx('Cette décision autorise le contenu dans la publication extérieure. La publication publique réelle reste un acte serveur distinct, lié à la révision et contrôlé par liste blanche.', 'This decision authorizes the content in the external publication. Actual public publication remains a separate server act, tied to the revision and controlled by an allowlist.')
-                  : publicationIntent.destination === 'collection'
-                    ? tx('Cette décision autorise le contenu dans les Collections sélectionnées. La projection du Registre reste filtrée côté serveur.', 'This decision authorizes the content in the selected Collections. The Registry projection remains server-filtered.')
-                  : publicationIntent.destination === 'report'
-                    ? tx('Cette décision autorise le contenu dans le prochain rapport PDF. Le rapport reste une projection privée du propriétaire.', 'This decision authorizes the content in the next PDF report. The report remains a private owner projection.')
-                    : tx('Cette décision prépare le contenu pour Le Cercle. Aucun contenu n’est envoyé tant que la commande serveur correspondante n’est pas reliée.', 'This decision prepares the content for the Circle. No content is sent until the corresponding server command is connected.')}
-              </p>
-
-              {publicationIntent.action !== 'revoke' && (
-                <section className="publication-dialog__checks" aria-labelledby="publication-prerequisites-title">
-                  <div className="publication-dialog__section-heading">
-                    <h4 id="publication-prerequisites-title">{tx('Informations minimales de l’objet', 'Minimum object information')}</h4>
-                    <span>{publicationIntent.eligibility.prerequisites.filter((item) => item.satisfied).length}/3</span>
-                  </div>
-                  <ul>
-                    {publicationIntent.eligibility.prerequisites.map((item) => (
-                      <li className={item.satisfied ? 'is-valid' : 'is-blocking'} key={item.id}>
-                        <span aria-hidden="true">{item.satisfied ? '✓' : '×'}</span>
-                        <div><strong>{language === 'FR' ? item.label : item.id === 'brand' ? 'Brand' : item.id === 'model' ? 'Model' : 'Main photo'}</strong><small>{language === 'FR' ? item.detail : item.satisfied ? item.detail : item.id === 'brand' ? 'Not provided' : item.id === 'model' ? 'Not provided' : 'An archived main image with visibility compatible with this destination is required'}</small></div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              <div className={`publication-dialog__policy ${publicationIntent.policy.allowed ? 'is-valid' : 'is-blocking'}`} role={publicationIntent.policy.allowed ? undefined : 'alert'}>
-                <strong>{publicationIntent.policy.allowed ? tx('Politique de destination conforme', 'Destination policy satisfied') : tx('Destination interdite pour ce bloc', 'Destination forbidden for this block')}</strong>
-                <p>{language === 'FR' ? publicationIntent.policy.reason : publicationIntent.destination === 'report'
-                  ? 'The PDF report remains a private owner projection.'
-                  : publicationIntent.destination === 'website'
-                    ? (publicationIntent.policy.allowed ? 'Content allowed by the publication allowlist; it remains server-controlled.' : 'This content is excluded from external publication.')
-                    : publicationIntent.destination === 'collection'
-                      ? (publicationIntent.policy.allowed ? 'Content allowed for Collection publication.' : 'This content remains private.')
-                    : (publicationIntent.policy.allowed ? 'Block allowed for a server-filtered Circle projection.' : 'This block contains private data incompatible with a Circle projection.')}</p>
-              </div>
-
-              <dl className="publication-dialog__proof">
-                <div><dt>{tx('Révision source', 'Source revision')}</dt><dd>{effectivePublicationSourceRevision || '—'}</dd></div>
-                <div><dt>{tx('Empreinte source', 'Source digest')}</dt><dd><code>{effectivePublicationSourceDigest ? `${effectivePublicationSourceDigest.slice(0, 23)}…` : tx('Calcul en cours…', 'Computing…')}</code></dd></div>
-                <div><dt>{tx('Identifiant de décision', 'Decision identifier')}</dt><dd><code>{publicationIntent.requestId.slice(0, 27)}…</code></dd></div>
-              </dl>
-
-              {publicationError && <p className="publication-dialog__error" role="alert">{publicationError}</p>}
-
-              <label className="publication-dialog__acknowledgement">
-                <input
-                  type="checkbox"
-                  checked={publicationAcknowledged}
-                  onChange={(event) => setPublicationAcknowledged(event.target.checked)}
-                  disabled={isPublicationSubmitting}
-                />
-                <span>{tx('Je confirme être le propriétaire à l’origine de cette décision et avoir contrôlé la destination', 'I confirm that I am the owner making this decision and that I have checked destination')} {destinationMarker(publicationIntent.destination)}.</span>
-              </label>
-
-              <div className="publication-dialog__actions">
-                {publicationIntent.action === 'validate' && (
-                  <button type="button" className="button button--quiet" onClick={() => void confirmPublicationIntent('revoke')} disabled={isPublicationSubmitting}>
-                    {tx('Retirer la sélection historique', 'Remove previous selection')}
-                  </button>
-                )}
-                <button type="button" className="button button--quiet" onClick={closePublicationDialog} disabled={isPublicationSubmitting}>{tx('Annuler', 'Cancel')}</button>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={() => void confirmPublicationIntent()}
-                  disabled={isPublicationSubmitting
-                    || !publicationAcknowledged
-                    || !effectivePublicationSourceDigest
-                    || (publicationIntent.action !== 'revoke' && (!publicationIntent.eligibility.isEligible || !publicationIntent.policy.allowed))}
-                >
-                  {isPublicationSubmitting
-                    ? tx('Enregistrement…', 'Saving…')
-                    : publicationIntent.action === 'revoke' ? tx('Confirmer la révocation', 'Confirm revocation') : tx('Confirmer la décision', 'Confirm decision')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {isMarketHistoryEditorOpen && <MarketHistoryDialog
         values={marketValues}

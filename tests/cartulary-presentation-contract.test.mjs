@@ -244,7 +244,8 @@ test('le panneau Preuves reçoit le mode lecture et la publication constatée de
   // Décision (c) étendue : la consultation démo n'écrit pas non plus l'événement d'accès dans le navigateur.
   assert.match(appSource, /useEffect\(\(\) => \{\s*if \(isDemoCartulary\) return;[^\n]*\n\s*journal\s*\.logEvent\(\s*'ACCESS_CARTULARY'/);
   // Les autres journalisations locales sont derrière des gestes d'édition (canEdit) ou le mode propriétaire du panneau Preuves.
-  assert.equal((appSource.match(/journal\s*\.logEvent\(/g) ?? []).length, 6);
+  // V4 D5 : 6 → 5, le dialogue de décision par bloc (PUBLICATION_SELECTION_CONFIRMED / _REVOKED) a été retiré avec son chemin mort.
+  assert.equal((appSource.match(/journal\s*\.logEvent\(/g) ?? []).length, 5);
   assert.match(appSource, /loadPublicPublicationSummaries\(\[cartularyPublicCode\]\)/);
   // Le compte « en ligne » du résumé lecture vient des blocs réellement publiés, jamais de la sélection démo.
   assert.match(appSource, /setPublishedWebsiteBlockIds\(summary\?\.published === true \? summary\.blockIds : null\)/);

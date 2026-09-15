@@ -14,19 +14,10 @@ export interface MarkerState {
   disabled?: boolean;
 }
 
-export interface PublicationMarkerState {
-  active: boolean;
-  pendingValidation: boolean;
-  onToggle: (label: string) => void;
-  disabled?: boolean;
-}
-
+// V4 D5 : plus aucun marqueur de destination sur les blocs ; la sélection se fait dans la table de la page Publication.
 export interface BlockMarkerState {
   blockId: PublishedBlockId;
   language: InterfaceLanguage;
-  website: PublicationMarkerState;
-  report: PublicationMarkerState;
-  community: PublicationMarkerState;
   edit?: MarkerState;
 }
 

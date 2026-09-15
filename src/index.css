@@ -612,19 +612,8 @@ img { display: block; max-width: 100%; }
 .content-markers .content-marker { border: 0; border-left: 1px solid var(--rule); }
 .content-markers .content-marker:first-child { border-left: 0; }
 
-.content-marker > span { font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
 .content-marker--edit:hover { border-color: var(--ink); color: var(--ink); }
 .content-marker--edit.is-active { border-color: var(--ink); background: var(--fill); color: var(--ink); }
-.content-marker.is-pending-validation { outline: 2px solid #b06f00; outline-offset: -3px; }
-.content-marker.is-pending-validation::after {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  background: #f0b84b;
-  content: '';
-}
 .content-marker:disabled { cursor: not-allowed; opacity: .55; }
 .publishable-block > .content-markers { position: absolute; top: var(--s3); right: var(--s3); z-index: 4; }
 
@@ -2679,59 +2668,6 @@ textarea {
 .modal-content--spin { overflow-y: auto; }
 .modal-header > div { display: flex; flex-direction: column; gap: var(--s1); }
 
-.modal-content--publication { width: min(780px, 100%); overflow: hidden; }
-.publication-dialog__body {
-  display: grid;
-  max-height: calc(100vh - 132px);
-  overflow-y: auto;
-  gap: var(--s4);
-  padding: var(--s5);
-}
-.publication-dialog__summary { display: grid; grid-template-columns: 64px 1fr; gap: var(--s4); align-items: center; }
-.publication-dialog__summary h3 { margin: var(--s1) 0; font-size: 24px; }
-.publication-dialog__summary code,
-.publication-dialog__proof code { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 10px; }
-.publication-destination {
-  display: grid;
-  width: 64px;
-  height: 64px;
-  place-items: center;
-  border: 1px solid var(--ink);
-  background: var(--sheet);
-  font-family: var(--font-mono);
-  font-size: 24px;
-  font-weight: 700;
-}
-.publication-destination--website { border-color: var(--mark); color: var(--mark); }
-.publication-destination--community { border-color: var(--private); color: var(--private); }
-.publication-dialog__explanation { padding: var(--s3); border-left: 3px solid var(--ink); background: var(--fill); font-size: 13px; }
-.publication-dialog__checks { border: 1px solid var(--rule); }
-.publication-dialog__section-heading { display: flex; align-items: center; justify-content: space-between; padding: var(--s3); border-bottom: 1px solid var(--rule); }
-.publication-dialog__section-heading h4 { font-size: 14px; }
-.publication-dialog__section-heading span { font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
-.publication-dialog__checks ul { display: grid; list-style: none; }
-.publication-dialog__checks li { display: grid; grid-template-columns: 32px 1fr; gap: var(--s2); align-items: center; padding: var(--s3); border-bottom: 1px solid var(--rule); }
-.publication-dialog__checks li:last-child { border-bottom: 0; }
-.publication-dialog__checks li > span { display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid currentColor; font-family: var(--font-mono); font-weight: 700; }
-.publication-dialog__checks li > div { display: grid; gap: 2px; }
-.publication-dialog__checks small { color: var(--muted); font-size: 11px; }
-.publication-dialog__checks .is-valid { color: #28613d; }
-.publication-dialog__checks .is-blocking { color: #8a2f26; }
-.publication-dialog__policy { padding: var(--s3); border: 1px solid currentColor; }
-.publication-dialog__policy strong { font-size: 13px; }
-.publication-dialog__policy p { margin-top: var(--s1); font-size: 12px; }
-.publication-dialog__policy.is-valid { color: #28613d; }
-.publication-dialog__policy.is-blocking { color: #8a2f26; background: #fff4f2; }
-.publication-dialog__proof { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
-.publication-dialog__proof > div { display: grid; min-height: 72px; align-content: space-between; gap: var(--s2); padding: var(--s3); border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
-.publication-dialog__proof dt { color: var(--muted); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
-.publication-dialog__proof dd { font-family: var(--font-mono); font-size: 11px; }
-.publication-dialog__error { padding: var(--s3); border: 1px solid #8a2f26; background: #fff4f2; color: #8a2f26; font-size: 12px; }
-.publication-dialog__acknowledgement { display: grid; grid-template-columns: 22px 1fr; gap: var(--s3); align-items: start; padding: var(--s3); border: 1px solid var(--ink); cursor: pointer; font-size: 12px; }
-.publication-dialog__acknowledgement input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--ink); }
-.publication-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
-.publication-dialog__actions .button:first-child { margin-right: auto; }
-
 .modal-content--deletion { width: min(580px, 100%); overflow: hidden; }
 .deletion-dialog__body { display: grid; gap: var(--s4); padding: var(--s5); }
 .deletion-dialog__body > strong { overflow-wrap: anywhere; font-family: var(--font-display); font-size: 28px; font-weight: 500; }
@@ -3170,16 +3106,7 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .editorial-footer > div { flex-direction: column; gap: var(--s1); }
   .modal-overlay { padding: 0; }
   .modal-content--market-history { width: 100%; height: 100vh; max-height: 100vh; border: 0; }
-  .modal-content--publication { width: 100%; height: 100vh; max-height: 100vh; border: 0; }
   .modal-content--deletion { width: 100%; max-height: 100vh; border-right: 0; border-left: 0; }
-  .modal-content--publication .modal-header { min-height: 72px; }
-  .publication-dialog__body { max-height: calc(100vh - 72px); padding: var(--s4); }
-  .publication-dialog__summary { grid-template-columns: 52px 1fr; gap: var(--s3); }
-  .publication-destination { width: 52px; height: 52px; font-size: 20px; }
-  .publication-dialog__summary h3 { font-size: 19px; }
-  .publication-dialog__proof { grid-template-columns: 1fr; }
-  .publication-dialog__actions { display: grid; grid-template-columns: 1fr; }
-  .publication-dialog__actions .button:first-child { margin-right: 0; }
   .deletion-dialog__actions { display: grid; grid-template-columns: 1fr; }
   .undo-toast { right: var(--s2); bottom: var(--s2); width: calc(100vw - 16px); grid-template-columns: 1fr 36px; }
   .undo-toast p { grid-column: 1 / -1; }

@@ -11,9 +11,6 @@ import {
 const markerState = (overrides: Partial<BlockMarkerState> = {}): BlockMarkerState => ({
   blockId: 'cover-watch',
   language: 'FR',
-  website: { active: false, pendingValidation: false, onToggle: vi.fn() },
-  report: { active: false, pendingValidation: false, onToggle: vi.fn() },
-  community: { active: false, pendingValidation: false, onToggle: vi.fn() },
   ...overrides,
 });
 
@@ -30,9 +27,7 @@ describe('contrôles des blocs métier', () => {
 
     await user.click(screen.getByRole('button', { name: 'Modifier Origines' }));
 
-    expect(selection.website.onToggle).not.toHaveBeenCalled();
-    expect(selection.report.onToggle).not.toHaveBeenCalled();
-    expect(selection.community.onToggle).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(selection.edit?.onToggle).toHaveBeenCalledOnce();
   });
 });
