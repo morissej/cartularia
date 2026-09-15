@@ -585,13 +585,15 @@ export const applyPresentationMirrors = async ({ firestore, uid, cartularyId, bi
       if (computed && !isDeepStrictEqual(existing.thumbnail, computed)) patch.thumbnail = computed;
       if (existing.thumbnailStatus !== thumbnailStatus) patch.thumbnailStatus = thumbnailStatus;
       if (computed) { itemThumbnail = true; itemThumbnailAssetId = primaryAssetId; }
-      if (Object.keys(patch).length && !dryRun) { await itemRef.set(patch, { merge: true }); writes += 1; }
+      // update() (document existant) : la map `thumbnail` est REMPLACÉE ; set(…, { merge: true }) la fusionnerait en
+      // profondeur (clé `path` d'une vignette bundle ou `dataUrl` d'une inline conservée : clé étrangère au contrat).
+      if (Object.keys(patch).length && !dryRun) { await itemRef.update(patch); writes += 1; }
     }
   }
   if (mirror && !dryRun) {
     for (const document of assets.docs) {
       if (isDeepStrictEqual(document.data()?.privatePresentation, mirror)) continue;
-      await firestore.doc(`cartularies/${cartularyId}/assets/${document.id}`).set({ privatePresentation: mirror }, { merge: true });
+      await firestore.doc(`cartularies/${cartularyId}/assets/${document.id}`).update({ privatePresentation: mirror });
       writes += 1;
     }
   }

@@ -12,16 +12,39 @@
 export const createMemoryFirestore = (initial = {}) => {
   const documents = new Map(Object.entries(initial).map(([path, data]) => [path, structuredClone(data)]));
   const snapshot = (path) => ({ id: path.split('/').at(-1), ref: docRef(path), exists: documents.has(path), data: () => (documents.has(path) ? structuredClone(documents.get(path)) : undefined) });
+  // Sémantique Firestore (SDK Admin, DocumentMask.fromObject) : `set(…, { merge: true })` fusionne les maps imbriquées EN
+  // PROFONDEUR (un champ map existant garde ses clés absentes du patch) ; une map explicitement VIDE ({}), un tableau, null,
+  // une instance (Timestamp) ou une sentinelle REMPLACENT le champ ; `FieldValue.delete()` retire le champ ; `update()` et un
+  // `set` sans merge REMPLACENT chaque champ nommé. La fusion est décidée sur la donnée brute (prototypes intacts), le clonage
+  // vient après : une instance ou une sentinelle n'est jamais confondue avec une map. Les clés pointées ne sont pas des
+  // chemins ici (aucun appelant n'en écrit).
+  const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
+  const isDeleteSentinel = (value) => value !== null && typeof value === 'object' && value.methodName === 'FieldValue.delete';
+  const deepMerge = (base, patch) => {
+    const next = { ...base };
+    for (const [key, value] of Object.entries(patch)) {
+      if (isDeleteSentinel(value)) { delete next[key]; continue; }
+      next[key] = isPlainObject(value) && Object.keys(value).length > 0 && isPlainObject(base?.[key]) ? deepMerge(base[key], value) : value;
+    }
+    return next;
+  };
+  const shallowApply = (base, patch) => {
+    const next = { ...base };
+    for (const [key, value] of Object.entries(patch)) { if (isDeleteSentinel(value)) delete next[key]; else next[key] = value; }
+    return next;
+  };
   const write = (path, data, { merge = false, create = false, update = false } = {}) => {
     if (create && documents.has(path)) throw new Error(`Document déjà présent : ${path}`);
     if (update && !documents.has(path)) throw new Error(`Document absent : ${path}`);
-    const next = merge || update ? { ...(documents.get(path) ?? {}), ...structuredClone(data) } : structuredClone(data);
-    documents.set(path, next);
+    const existing = documents.get(path) ?? {};
+    const next = merge ? deepMerge(existing, data) : update ? shallowApply(existing, data) : data;
+    documents.set(path, structuredClone(next));
   };
   const compare = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
   const matches = (entry, filters) => filters.every(({ field, operator, value }) => operator === '==' ? entry.data()?.[field] === value : operator === '!=' ? entry.data()?.[field] !== value : true);
   const finish = (docs, order, maximum) => {
-    let result = docs;
+    // Sans orderBy, Firestore rend les documents dans l'ordre de leur identifiant (jamais l'ordre d'insertion).
+    let result = [...docs].sort((left, right) => compare(left.ref.path, right.ref.path));
     if (order) result = [...result].sort((left, right) => (order.direction === 'desc' ? -1 : 1) * compare(left.data()?.[order.field], right.data()?.[order.field]));
     if (maximum !== null) result = result.slice(0, maximum);
     return { docs: result, size: result.length, empty: result.length === 0 };

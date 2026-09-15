@@ -141,7 +141,7 @@ test('exécution : variantes + inline + miroirs pour l’objet seulement, item i
   const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY });
   const applied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
   assert.equal(applied.ok, true);
-  assert.deepEqual(applied.summary, { generated: 1, failed: 0, alreadyCurrent: 0, skipped: 0, mirrored: 2, assetsMirrored: 2, itemThumbnail: 'inline', firestoreWrites: 3 });
+  assert.deepEqual(applied.summary, { generated: 1, failed: 0, alreadyCurrent: 0, skipped: 0, mirrored: 2, assetsMirrored: 2, itemThumbnail: 'inline', bundleSuperseded: false, firestoreWrites: 3 });
   assert.deepEqual(applied.results.map((result) => [result.binaryId, result.status, result.variants.length]), [['bin_missing', 'generated', 3]]);
   const dump = env.firestore.dump();
   const manifest = dump[`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_missing`];
@@ -430,4 +430,239 @@ test('tour 5 : rejeu du script sans --force sur un binaire dont sharp a refusé 
   assert.deepEqual(forced.toGenerate, ['bin_corrupt']);
   const forcedRun = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan: forced });
   assert.equal(forcedRun.summary.failed, 1);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// 15 septembre, constaté sur l'IWC pilote en production : sémantique Firestore de set(…, { merge: true }) sur une map.
+// ---------------------------------------------------------------------------------------------------------------------
+
+test('P4 réel (IWC) : asset primaire régénéré dans la même exécution que --bundle-thumbnail → l’inline du miroir prime (K3, comme la synchro), bundle ignoré (bundle_superseded), aucune clé étrangère, rejeu à 0', async () => {
+  const env = await seed();
+  const bundleBytes = await sharp({ create: { width: 240, height: 160, channels: 3, background: '#357' } }).webp().toBuffer();
+  const path = '/assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp';
+  const readBundleFile = async () => bundleBytes;
+  // bin_missing → asset_missing = primaryAssetId : à générer. Avant le 15/09, les miroirs posaient l'inline puis le bundle
+  // l'écrasait par set(…, { merge: true }) : Firestore fusionnait les deux maps et gardait `dataUrl` (7 095 caractères
+  // constatés sur registries/…/items/cart_iwc_flieger_utc_2002), et chaque rejeu refaisait deux écritures (inline, bundle).
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'], bundleThumbnailPath: path, readBundleFile });
+  assert.deepEqual(plan.toGenerate, ['bin_missing']);
+  assert.equal(plan.plannedItemThumbnail, 'inline', 'l’inline de l’asset primaire prime sur le bundle demandé');
+  assert.ok(plan.warnings.some((warning) => warning.startsWith('bundle_superseded')));
+  assert.ok(plan.bundle, 'le bundle reste décrit dans le plan (repli si la génération échoue)');
+  const applied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
+  assert.equal(applied.summary.generated, 1);
+  assert.equal(applied.summary.itemThumbnail, 'inline');
+  assert.equal(applied.summary.bundleSuperseded, true);
+  assert.equal(applied.summary.firestoreWrites, 2, 'asset + item (inline) ; aucune écriture bundle');
+  const item = env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`];
+  assert.deepEqual(Object.keys(item.thumbnail).sort(), ['assetId', 'dataUrl', 'height', 'kind', 'sha256', 'width']);
+  assert.equal(item.thumbnail.kind, 'inline');
+  assert.equal(item.thumbnail.assetId, 'asset_missing');
+  assert.equal(item.thumbnailStatus, 'ready');
+  assert.equal(item.updatedAt, 'avant');
+  assert.equal(item.revision, 7);
+  // Rejeu : already_current, inline identique → aucune écriture, bundle toujours ignoré.
+  const replay = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'], bundleThumbnailPath: path, readBundleFile });
+  assert.deepEqual(replay.counts, { already_current: 1 });
+  assert.equal(replay.plannedItemThumbnail, 'inline');
+  const writes = countWrites(env.firestore);
+  const again = await applyPresentationRegeneration({ firestore: writes.firestore, storage: env.storage, plan: replay });
+  assert.equal(again.summary.firestoreWrites, 0);
+  assert.equal(again.summary.bundleSuperseded, true);
+  assert.equal(writes.count(), 0);
+});
+
+test('P4 réel (IWC) rejoué sur l’état de production du 15/09 (bundle pollué d’une dataUrl, asset primaire déjà miroité) : une seule écriture, l’item passe à l’inline propre, puis 0', async () => {
+  const env = await seed();
+  const bundleBytes = await sharp({ create: { width: 240, height: 160, channels: 3, background: '#357' } }).webp().toBuffer();
+  const path = '/assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp';
+  const readBundleFile = async () => bundleBytes;
+  const first = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'], bundleThumbnailPath: path, readBundleFile });
+  await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan: first });
+  const inline = env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail;
+  // État constaté en production : bundle posé par-dessus l'inline avec set(…, { merge: true }) → dataUrl résiduelle.
+  await env.firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).set({ thumbnail: { kind: 'bundle', path, width: 240, height: 160, assetId: 'asset_missing', sha256: digestOf(bundleBytes) }, thumbnailStatus: 'ready' }, { merge: true });
+  assert.equal(typeof env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail.dataUrl, 'string', 'fusion en profondeur reproduite');
+  const replay = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'], bundleThumbnailPath: path, readBundleFile });
+  const writes = countWrites(env.firestore);
+  const applied = await applyPresentationRegeneration({ firestore: writes.firestore, storage: env.storage, plan: replay });
+  assert.equal(applied.summary.firestoreWrites, 1);
+  assert.equal(writes.count(), 1);
+  assert.deepEqual(env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail, inline, 'inline propre, sans path ni sha256 du bundle');
+  const third = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan: await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'], bundleThumbnailPath: path, readBundleFile }) });
+  assert.equal(third.summary.firestoreWrites, 0);
+});
+
+test('bundle en repli : la génération de l’asset primaire échoue (sharp) → thumbnailStatus failed par les miroirs puis vignette bundle posée (ready), sans clé étrangère', async () => {
+  const env = await seed();
+  const corrupt = Buffer.from('ceci n’est pas une image jpeg');
+  const digest = digestOf(corrupt);
+  const storagePath = `private-drafts/${UID}/${CARTULARY}/bin_corrupt/${digest.replace('sha256:', '')}/original`;
+  await env.storage.bucket().file(storagePath).save(corrupt, { metadata: { contentType: 'image/jpeg', metadata: {} } });
+  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_corrupt`).set({
+    ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_corrupt', kind: 'media', fileName: 'bin_corrupt.jpg', mimeType: 'image/jpeg', size: corrupt.length, sha256: digest, storagePath,
+    deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION,
+  });
+  await env.firestore.doc(`cartularies/${CARTULARY}/assets/asset_missing`).update({ binaryId: 'bin_corrupt' });
+  const bundleBytes = await sharp({ create: { width: 240, height: 160, channels: 3, background: '#357' } }).webp().toBuffer();
+  const path = '/assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp';
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_corrupt'], bundleThumbnailPath: path, readBundleFile: async () => bundleBytes });
+  assert.equal(plan.plannedItemThumbnail, 'inline');
+  const applied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
+  assert.equal(applied.summary.failed, 1);
+  assert.equal(applied.summary.itemThumbnail, 'bundle', 'repli bundle après échec de génération');
+  assert.equal(applied.summary.bundleSuperseded, false);
+  const item = env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`];
+  assert.deepEqual(item.thumbnail, { kind: 'bundle', path, width: 240, height: 160, assetId: 'asset_missing', sha256: digestOf(bundleBytes) });
+  assert.equal(item.thumbnailStatus, 'ready');
+});
+
+test('réparation d’une vignette bundle polluée (dataUrl résiduelle en production) : le rejeu --bundle-thumbnail la remplace entièrement en une écriture', async () => {
+  const env = await seed();
+  const bundleBytes = await sharp({ create: { width: 240, height: 160, channels: 3, background: '#357' } }).webp().toBuffer();
+  const path = '/assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp';
+  const clean = { kind: 'bundle', path, width: 240, height: 160, assetId: 'asset_missing', sha256: digestOf(bundleBytes) };
+  await env.firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).set({ thumbnail: { ...clean, dataUrl: 'data:image/webp;base64,AAAA' }, thumbnailStatus: 'ready' }, { merge: true });
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_pdf'], bundleThumbnailPath: path, readBundleFile: async () => bundleBytes });
+  const writes = countWrites(env.firestore);
+  const applied = await applyPresentationRegeneration({ firestore: writes.firestore, storage: env.storage, plan });
+  assert.equal(applied.summary.firestoreWrites, 1);
+  assert.equal(writes.count(), 1);
+  assert.deepEqual(env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail, clean, 'clé étrangère retirée');
+});
+
+test('Firestore en mémoire : set(…, { merge: true }) fusionne les maps en profondeur comme Firestore, update() remplace le champ', async () => {
+  const firestore = createMemoryFirestore();
+  await firestore.doc('t/a').set({ map: { x: 1, nested: { keep: true } }, list: [1, 2], scalar: 'a' });
+  await firestore.doc('t/a').set({ map: { y: 2, nested: { add: 1 } }, list: [3], scalar: 'b' }, { merge: true });
+  assert.deepEqual(firestore.dump()['t/a'], { map: { x: 1, y: 2, nested: { keep: true, add: 1 } }, list: [3], scalar: 'b' });
+  await firestore.doc('t/a').update({ map: { z: 3 } });
+  assert.deepEqual(firestore.dump()['t/a'].map, { z: 3 });
+  await firestore.doc('t/a').set({ map: { w: 4 } });
+  assert.deepEqual(firestore.dump()['t/a'], { map: { w: 4 } });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Relecture du 15 septembre (mutants survivants et écarts plan / exécution).
+// ---------------------------------------------------------------------------------------------------------------------
+
+const bundleFixture = async () => {
+  const bundleBytes = await sharp({ create: { width: 240, height: 160, channels: 3, background: '#357' } }).webp().toBuffer();
+  const path = '/assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp';
+  return { bundleBytes, path, readBundleFile: async () => bundleBytes, clean: { kind: 'bundle', path, width: 240, height: 160, assetId: 'asset_missing', sha256: digestOf(bundleBytes) } };
+};
+
+test('miroir privatePresentation d’ancienne forme (clé étrangère) sur l’asset → remplacé entièrement par update(), aucune clé résiduelle', async () => {
+  const env = await seed();
+  await env.firestore.doc(`cartularies/${CARTULARY}/assets/asset_missing`).set({ privatePresentation: { version: 'presentation-v2', binaryId: 'bin_missing', storagePath: 'private-derivatives/ancien.webp', thumbnail: { dataUrl: 'data:image/webp;base64,AAAA', legacy: true } } }, { merge: true });
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'] });
+  await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
+  const mirror = env.firestore.dump()[`cartularies/${CARTULARY}/assets/asset_missing`].privatePresentation;
+  assert.deepEqual(Object.keys(mirror).sort(), ['binaryId', 'thumbnail', 'variants', 'version'], 'storagePath v2 retiré');
+  assert.equal(mirror.thumbnail.legacy, undefined, 'clé imbriquée étrangère retirée');
+  assert.equal(mirror.version, 'presentation-v3');
+});
+
+test('K3 exige assetId = primaryAssetId : une vignette inline d’un AUTRE asset ne prime pas, le bundle la remplace', async () => {
+  const env = await seed();
+  const { path, readBundleFile, clean } = await bundleFixture();
+  const stale = { kind: 'inline', dataUrl: 'data:image/webp;base64,AAAA', width: 240, height: 160, assetId: 'asset_autre', sha256: `sha256:${'a'.repeat(64)}` };
+  await env.firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).update({ thumbnail: stale, thumbnailStatus: 'ready' });
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_pdf'], bundleThumbnailPath: path, readBundleFile });
+  assert.equal(plan.plannedItemThumbnail, 'bundle');
+  assert.ok(!plan.warnings.some((warning) => warning.startsWith('bundle_superseded')));
+  const applied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
+  assert.equal(applied.summary.bundleSuperseded, false);
+  assert.equal(applied.summary.itemThumbnail, 'bundle');
+  assert.equal(applied.summary.firestoreWrites, 1);
+  assert.deepEqual(env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail, clean);
+});
+
+test('K3 sur la vignette NORMALISÉE : une inline hors contrat (dataUrl non WebP) sur l’asset primaire ne prime pas, le bundle la remplace', async () => {
+  const env = await seed();
+  const { path, readBundleFile, clean } = await bundleFixture();
+  const invalid = { kind: 'inline', dataUrl: 'data:image/png;base64,AAAA', width: 240, height: 160, assetId: 'asset_missing', sha256: `sha256:${'a'.repeat(64)}` };
+  await env.firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).update({ thumbnail: invalid, thumbnailStatus: 'ready' });
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_pdf'], bundleThumbnailPath: path, readBundleFile });
+  assert.equal(plan.plannedItemThumbnail, 'bundle');
+  const applied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
+  assert.equal(applied.summary.bundleSuperseded, false);
+  assert.equal(applied.summary.firestoreWrites, 1);
+  assert.deepEqual(env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail, clean);
+});
+
+test('plan = exécution sous --limit : binaire de l’asset primaire au-delà de la limite → le plan annonce le bundle (pas d’avertissement bundle_superseded) et l’exécution le pose ; passage suivant : inline, puis 0', async () => {
+  const env = await seed();
+  const { path, readBundleFile, clean } = await bundleFixture();
+  // bin_aaa (autre asset) précède bin_missing (asset primaire) dans l'ordre des identifiants : limit 1 exclut le primaire.
+  const other = await image(500, 300, '#246');
+  const digest = digestOf(other);
+  const storagePath = `private-drafts/${UID}/${CARTULARY}/bin_aaa/${digest.replace('sha256:', '')}/original`;
+  await env.storage.bucket().file(storagePath).save(other, { metadata: { contentType: 'image/jpeg', metadata: {} } });
+  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_aaa`).set({ ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_aaa', kind: 'media', fileName: 'a.jpg', mimeType: 'image/jpeg', size: other.length, sha256: digest, storagePath, deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION });
+  await env.firestore.doc(`cartularies/${CARTULARY}/assets/asset_aaa`).set({ id: 'asset_aaa', binaryId: 'bin_aaa', mediaKind: 'image' });
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_aaa', 'bin_missing'], limit: 1, bundleThumbnailPath: path, readBundleFile });
+  assert.deepEqual(plan.toGenerate, ['bin_aaa']);
+  assert.equal(plan.plannedItemThumbnail, 'bundle');
+  assert.ok(plan.warnings.some((warning) => warning.startsWith('limit:')));
+  assert.ok(!plan.warnings.some((warning) => warning.startsWith('bundle_superseded')));
+  const applied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
+  assert.equal(applied.summary.itemThumbnail, 'bundle');
+  assert.equal(applied.summary.bundleSuperseded, false);
+  assert.deepEqual(env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail, clean);
+  // Passage suivant : le primaire est généré, son inline prime (annoncée par le plan), le bundle est ignoré.
+  const second = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_aaa', 'bin_missing'], limit: 1, bundleThumbnailPath: path, readBundleFile });
+  assert.deepEqual(second.toGenerate, ['bin_missing']);
+  assert.equal(second.plannedItemThumbnail, 'inline');
+  const secondApplied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan: second });
+  assert.equal(secondApplied.summary.itemThumbnail, 'inline');
+  assert.equal(secondApplied.summary.bundleSuperseded, true);
+  assert.equal(env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail.kind, 'inline');
+  const third = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_aaa', 'bin_missing'], limit: 1, bundleThumbnailPath: path, readBundleFile });
+  const writes = countWrites(env.firestore);
+  await applyPresentationRegeneration({ firestore: writes.firestore, storage: env.storage, plan: third });
+  assert.equal(writes.count(), 0);
+});
+
+test('plan = exécution hors passage : item déjà en inline du primaire dont le binaire est ignoré (supprimé) → plan « inline » + bundle_superseded, exécution sans écriture ; statut périmé réparé en une écriture', async () => {
+  const env = await seed();
+  const { path, readBundleFile } = await bundleFixture();
+  const first = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'] });
+  await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan: first });
+  const inline = env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`].thumbnail;
+  assert.equal(inline.kind, 'inline');
+  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_missing`).update({ deleted: true });
+  await env.firestore.doc(`cartularies/${CARTULARY}/assets/asset_missing`).update({ privatePresentation: null });
+  const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'], bundleThumbnailPath: path, readBundleFile });
+  assert.deepEqual(plan.counts, { skipped: 1 });
+  assert.equal(plan.plannedItemThumbnail, 'inline', 'inline conservée pour le même asset (registryItemThumbnailFor)');
+  assert.ok(plan.warnings.some((warning) => warning.startsWith('bundle_superseded')));
+  const writes = countWrites(env.firestore);
+  const applied = await applyPresentationRegeneration({ firestore: writes.firestore, storage: env.storage, plan });
+  assert.equal(applied.summary.itemThumbnail, 'inline');
+  assert.equal(applied.summary.bundleSuperseded, true);
+  assert.equal(writes.count(), 0);
+  await env.firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).update({ thumbnailStatus: 'pending' });
+  const repair = countWrites(env.firestore);
+  const repaired = await applyPresentationRegeneration({ firestore: repair.firestore, storage: env.storage, plan });
+  assert.equal(repaired.summary.firestoreWrites, 1, 'statut réparé');
+  assert.equal(repair.count(), 1);
+  const item = env.firestore.dump()[`registries/${REGISTRY}/items/${CARTULARY}`];
+  assert.equal(item.thumbnailStatus, 'ready');
+  assert.deepEqual(item.thumbnail, inline);
+});
+
+test('Firestore en mémoire, fidélité au SDK Admin : map vide, sentinelle delete, instance Timestamp et sentinelle increment remplacent ou retirent, jamais fusionnés', async () => {
+  const { FieldValue, Timestamp } = await import('firebase-admin/firestore');
+  const firestore = createMemoryFirestore();
+  await firestore.doc('t/b').set({ map: { x: 1 }, gone: { y: 2 }, at: { foo: 1 }, count: { old: true }, keep: 1 });
+  await firestore.doc('t/b').set({ map: {}, gone: FieldValue.delete(), at: Timestamp.fromMillis(10_000), count: FieldValue.increment(1) }, { merge: true });
+  const stored = firestore.dump()['t/b'];
+  assert.deepEqual(stored.map, {}, 'map explicitement vide : remplacée');
+  assert.equal('gone' in stored, false, 'FieldValue.delete() retire le champ');
+  assert.deepEqual(Object.keys(stored.at).sort(), ['_nanoseconds', '_seconds'], 'instance Timestamp : remplace la map');
+  assert.deepEqual(stored.count, { operand: 1 }, 'sentinelle : remplace (jamais fusionnée dans la map existante)');
+  assert.equal(stored.keep, 1);
+  await firestore.doc('t/b').update({ keep: FieldValue.delete() });
+  assert.equal('keep' in firestore.dump()['t/b'], false);
 });

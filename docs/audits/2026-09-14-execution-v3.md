@@ -270,3 +270,36 @@ Simulations distantes du 15 septembre (lecture seule, session CLI, après le com
 | P4 IWC | `plannedItemThumbnail 'bundle'`, `bundle.bytes = 4 212`, `width 240 × height 160`, `assetId` = `primaryAssetId` ; mais aussi `counts.to_generate = 45` (25 photos privées + 20 binaires `seed_iwc_*`), `skipped = 2` (facture PDF, vidéo). Le titre « aucune écriture Storage » de P4 supposait qu’aucun binaire IWC ne serait classé `to_generate` : c’est faux, l’IWC pilote a 45 images privées acceptées sans variantes. | `--execute` attendu : 45 × 4 variantes écrites dans `private-derivatives/wave1-owner/cart_iwc_flieger_utc_2002/…`, `assetsMirrored = 45`, `itemThumbnail 'bundle'` (la vignette bundle prime : posée en dernier), `firestoreWrites = 46` ; rejeu : 0. Sans ces variantes, les photos privées IWC resteraient « Aperçu en préparation » après P6. |
 | P5 seed démo v3 | `mode dry-run`, `auth read-only / unchanged`, 5 `update` sur `registries/reg_cartularia_demo/items/*`, `applied false`. | Conforme à l’attendu (5 vignettes bundle). |
 | P6 build | `VITE_USE_FIREBASE_EMULATORS=false npm run build` : OK, 101 dérivés démo dans `dist/assets/demo-watches/derivatives`, 93 morceaux JS pour 1 799 ko au total (App 309 ko, Firestore 461 ko, index 210 ko). Déploiement Hosting différé jusqu’à P3–P5 : le client V3 n’a plus d’original de repli, il afficherait « Aperçu en préparation » sur les pilotes tant que les miroirs ne sont pas posés. | Déployer après P5. |
+
+## 12. Vérification de P2–P5 (15 septembre, lecture seule) et défaut de fusion Firestore
+
+### 12.1 Constats
+
+| Étape | Constat (lecture seule, session CLI) | Verdict |
+|---|---|---|
+| P2 fonctions | 20 fonctions ; `createCartularyFromPrivateDraft`, `syncCartularyToRegistry`, `verifyPrivateDraftBacklogDaily`, `verifyPrivateDraftUpload` portent un même hash de source (`de9e5daa…`) distinct des trois autres lots (`0ed44691…` ×7, `8167c7dc…` ×5, `98daf07d…` ×4 lot C) ; `verifyPrivateDraftUpload` concurrency 1, 1 GiB, 540 s. | Fait. |
+| P3 Rolex | Plan rejoué : `already_current 32`, `skipped 12` (6 `not_image`, 6 `not_accepted` : 7 manifestes `rejected` + jamais vérifiés), `existingThumbnailKind 'inline'`, `toGenerate []`. Item : `thumbnail` inline (clés `assetId,dataUrl,height,kind,sha256,width`, 3 043 caractères, 240 × 240, `assetId` = primaire), `thumbnailStatus 'ready'`, `updatedAt` 2026-09-08 inchangé ; 32 assets sur 44 avec `privatePresentation` (clés `binaryId,thumbnail,variants,version`) ; 44 manifestes, 32 avec variantes, 0 `variantsFailure`. | Fait, idempotent. |
+| P4 IWC | Plan rejoué : `already_current 45`, `skipped 2` (facture PDF, vidéo), `existingThumbnailKind 'bundle'`. 45 assets sur 55 miroités (asset primaire compris, variantes 240/480/768/1200) ; Storage : 172 variantes v3 (45 × 240, 44 × 480, 44 × 768, 39 × 1200, 5,8 Mo), `derivativeId` = dernier segment partout ; 47 manifestes acceptés, 45 avec variantes, 0 échec. **Item : vignette `kind 'bundle'` portant en plus une `dataUrl` de 7 095 caractères** (voir 12.2). | Fait ; item à réparer (12.3). |
+| P5 seed démo v3 | `--expect-no-writes` refusé : 5 écritures restent nécessaires ; les 5 items démo n'ont ni `thumbnail` ni `thumbnailStatus` et datent du 14/09 19 h 39 (seed v2) ; aucune sauvegarde `demo-data-enrichment-v3-*` sur disque. | **Non appliqué** : à lancer (12.3). |
+
+### 12.2 Défaut : `set(…, { merge: true })` fusionne les maps en profondeur
+
+Firestore (SDK Admin, `DocumentMask.fromObject`) construit le masque d'un `set` avec `merge: true` à partir des chemins feuilles : une map imbriquée est fusionnée avec la map existante, dont les clés absentes du patch survivent. Le script posait d'abord l'inline de l'asset primaire (miroirs), puis le bundle par `set merge` : `dataUrl` a survécu. L'assistant `tests/helpers/memory-firestore.mjs` faisait une fusion plate : invisible aux tests. Le client n'en souffrait pas (`normalizeRegistryThumbnail` ne relit que les clés du contrat), mais la clé étrangère contredit le contrat et l'item aurait porté 7 ko inutiles à chaque lecture de la Galerie.
+
+Second défaut mis au jour en corrigeant le premier : à chaque rejeu de P4, les miroirs reposaient l'inline (1 écriture) puis le bundle la remplaçait (1 écriture) — non idempotent, et contraire à la synchronisation qui, elle, préfère toujours l'inline du miroir de l'asset primaire (`registryItemThumbnailFor`).
+
+Correctifs (relus par trois relecteurs adversariaux, 22 sites `merge` de `scripts/lib` balayés : aucun autre résidu possible) :
+- `applyPresentationMirrors` : `update()` sur l'item et sur les assets (remplacement du champ) ; bundle : `update()`.
+- Règle K3 partagée avec la synchro (`primaryInlineThumbnail`) : l'inline du miroir de l'asset primaire prime (plan `plannedItemThumbnail 'inline'` + avertissement `bundle_superseded`, exécution `summary.bundleSuperseded`, vignette et statut réparés en une écriture au plus) ; le bundle n'est posé que si l'asset primaire n'a ni miroir ni inline (binaire non image, non accepté, hors `--limit`, ou génération en échec) ; plan et exécution annoncent la même chose, y compris sous `--limit`.
+- Assistant mémoire fidèle au SDK : fusion en profondeur sur `merge`, map vide / tableau / null / instance / sentinelle remplacent, `FieldValue.delete()` retire, `update()` remplace le champ, documents rendus dans l'ordre des identifiants.
+- Tests : `presentation-regeneration-command.test.mjs` +8 (P4 réel, état de production pollué → 1 écriture puis 0, repli bundle après échec, miroir d'ancienne forme remplacé, inline d'un autre asset, inline hors contrat, plan = exécution sous `--limit` et hors passage, fidélité de l'assistant). Chaque test tue le mutant qui l'a motivé (relecture).
+
+Conséquence pour l'IWC pilote : la vignette de l'item sera l'inline de son asset primaire (comme le Rolex), non plus le bundle ; le bundle reste utile aux objets dont la couverture n'a pas de miroir.
+
+### 12.3 Reste à lancer (Jérôme, depuis `04_Application/Prototype Antigravity`, dans cet ordre)
+
+```
+GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/regenerate-presentation-derivatives.mjs --cartulary cart_iwc_flieger_utc_2002 --expect-owner wave1-owner --allow-remote --bundle-thumbnail /assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp --execute
+GCLOUD_PROJECT=studio-2614005370-a3e51 node scripts/run-with-firebase-cli-adc.mjs -- node scripts/seed-demo-account.mjs --data-only --apply --allow-remote --backup-dir=/Users/jeromemorisseau/cartularia-demo-repair-20260915
+```
+Attendu : IWC `PRESENTATION_REGENERATION_APPLIED`, `plannedItemThumbnail 'inline'`, `warnings` = [`bundle_superseded…`], `applied.summary.firestoreWrites = 1`, `bundleSuperseded true`, 0 écriture Storage (rejeu : 0) ; seed `applied: true`, 5 `update`, sauvegarde `demo-data-enrichment-v3-*/backup.json`. Puis vérification par l'assistant (item IWC inline sans `dataUrl` résiduelle, `--expect-no-writes`), P6 Hosting, P7 mesures.

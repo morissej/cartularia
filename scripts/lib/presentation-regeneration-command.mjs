@@ -5,7 +5,20 @@ import {
   classifyPresentationRegeneration,
   regeneratePresentationDerivatives,
 } from './private-upload-command.mjs';
-import { registryThumbnailFromBundle, sha256Of, validRegistryThumbnail } from './presentation-variants.mjs';
+import { registryThumbnailFromAsset, registryThumbnailFromBundle, sha256Of, validRegistryThumbnail } from './presentation-variants.mjs';
+import { normalizeRegistryThumbnail } from './registry-thumbnail.mjs';
+
+/**
+ * K3, même règle que registryItemThumbnailFor (synchronisation) : la vignette de l'item est l'inline du miroir de l'asset
+ * primaire dès qu'il en a un ; sinon une inline déjà posée pour ce même asset est conservée ; sinon null (place au bundle).
+ */
+const primaryInlineThumbnail = ({ primaryAssetId, primaryAsset, existingThumbnail }) => {
+  if (typeof primaryAssetId !== 'string' || !primaryAssetId) return null;
+  const computed = normalizeRegistryThumbnail(registryThumbnailFromAsset(primaryAsset, primaryAssetId));
+  if (computed) return computed;
+  const current = normalizeRegistryThumbnail(existingThumbnail);
+  return current?.kind === 'inline' && current.assetId === primaryAssetId ? current : null;
+};
 
 /**
  * Script Admin unique de rattrapage des dérivés de présentation (K7) : plan/exécution par Cartulaire.
@@ -59,7 +72,8 @@ Options :
   --bundle-thumbnail <path> IWC/bundle : pose registries/{r}/items/{id}.thumbnail = { kind: 'bundle', path, width, height,
                             assetId, sha256 } (+ thumbnailStatus 'ready') depuis le fichier public/<path> (≤ 240 px, WebP),
                             sans Storage ; assetId = primaryAssetId de l'item (item sans primaryAssetId, ou --bundle-asset
-                            différent : bundle_asset_mismatch, rien n'est écrit).
+                            différent : bundle_asset_mismatch, rien n'est écrit). Ignorée (bundle_superseded) dès que
+                            l'asset primaire porte un miroir : sa vignette inline prime (K3), comme à la synchronisation.
   --help, -h                cette aide.
 
 Variables :
@@ -210,8 +224,13 @@ export const planPresentationRegeneration = async ({
   const counts = binaries.reduce((total, binary) => ({ ...total, [binary.status]: (total[binary.status] || 0) + 1 }), {});
   const toGenerate = binaries.filter((binary) => binary.status === 'to_generate').map((binary) => binary.binaryId);
   if (toGenerate.length > limit) warnings.push(`limit: ${toGenerate.length} binaires à régénérer, ${limit} traités par exécution.`);
-  const mirrorable = binaries.filter((binary) => binary.status === 'to_generate' || binary.status === 'already_current');
-  const plannedItemThumbnail = primaryAssetId && mirrorable.some((binary) => binary.assetIds.includes(primaryAssetId)) ? 'inline' : null;
+  // Vignette d'item annoncée = celle que l'exécution posera : inline si le binaire de l'asset primaire est traité par CE
+  // passage (généré dans la limite, ou déjà courant donc miroité) ou si l'asset primaire porte déjà un miroir / l'item une
+  // inline pour cet asset (K3, primaryInlineThumbnail) ; sinon null (le bundle demandé, s'il y en a un).
+  const treated = new Set([...toGenerate.slice(0, limit), ...binaries.filter((binary) => binary.status === 'already_current').map((binary) => binary.binaryId)]);
+  const primaryAsset = primaryAssetId ? assetSnapshot.docs.find((document) => document.id === primaryAssetId)?.data() ?? null : null;
+  const primaryTreated = Boolean(primaryAssetId) && binaries.some((binary) => treated.has(binary.binaryId) && binary.assetIds.includes(primaryAssetId));
+  const plannedItemThumbnail = primaryTreated || primaryInlineThumbnail({ primaryAssetId, primaryAsset, existingThumbnail }) ? 'inline' : null;
 
   let bundle = null;
   if (bundleThumbnailPath) {
@@ -224,6 +243,10 @@ export const planPresentationRegeneration = async ({
     bundle = await describeBundleThumbnail({ path: bundleThumbnailPath, bytes: await readBundleFile(bundleThumbnailPath), assetId: primaryAssetId });
   }
   const blockers = [];
+  // K3 : la vignette de l'item vient de l'asset primaire (miroir) dès qu'il en a un ; la synchronisation applique la même
+  // règle (registryItemThumbnailFor) et remplacerait toute vignette bundle par l'inline. Le bundle n'est donc posé que si
+  // l'asset primaire n'a pas de miroir courant à l'issue de l'exécution (binaire non image, non accepté, ou génération en échec).
+  if (bundle && plannedItemThumbnail === 'inline') warnings.push('bundle_superseded: l’asset primaire porte ou portera un miroir de présentation ; la vignette inline prime (K3), la vignette bundle ne sera posée qu’en cas d’échec de génération.');
   if (!registryId) warnings.push('registry_unknown: la racine ne porte pas registryId, aucune vignette d’item ne sera posée.');
   if (registryId && !itemExists) warnings.push('item_missing: aucune projection registries/{r}/items/{id}, aucune vignette d’item ne sera posée.');
   return {
@@ -239,7 +262,7 @@ export const planPresentationRegeneration = async ({
     toGenerate: toGenerate.slice(0, limit),
     limit,
     force,
-    plannedItemThumbnail: bundle ? 'bundle' : plannedItemThumbnail,
+    plannedItemThumbnail: plannedItemThumbnail ?? (bundle ? 'bundle' : null),
     bundle: bundle ? { kind: 'bundle', path: bundle.path, width: bundle.width, height: bundle.height, assetId: bundle.assetId, sha256: bundle.sha256, bytes: bundle.bytes } : null,
     warnings,
     blockers,
@@ -253,7 +276,7 @@ export const planPresentationRegeneration = async ({
 
 export const applyPresentationRegeneration = async ({ firestore, storage, bucketName = undefined, plan, force = plan.force }) => {
   const results = [];
-  const summary = { generated: 0, failed: 0, alreadyCurrent: 0, skipped: 0, mirrored: 0, assetsMirrored: 0, itemThumbnail: null, firestoreWrites: 0 };
+  const summary = { generated: 0, failed: 0, alreadyCurrent: 0, skipped: 0, mirrored: 0, assetsMirrored: 0, itemThumbnail: null, bundleSuperseded: false, firestoreWrites: 0 };
   for (const binaryId of plan.toGenerate) {
     const identity = { uid: plan.ownerUid, cartularyId: plan.cartularyId, binaryId };
     const result = await regeneratePresentationDerivatives({ firestore, storage, bucketName, ...identity, force });
@@ -281,11 +304,27 @@ export const applyPresentationRegeneration = async ({ firestore, storage, bucket
     const { bytes: _bytes, ...thumbnail } = plan.bundle;
     const itemRef = firestore.doc(`registries/${plan.registryId}/items/${plan.cartularyId}`);
     const existing = (await itemRef.get()).data() ?? {};
-    if (!isDeepStrictEqual(existing.thumbnail, thumbnail) || existing.thumbnailStatus !== 'ready') {
-      await itemRef.set({ thumbnail, thumbnailStatus: 'ready' }, { merge: true });
-      summary.firestoreWrites += 1;
+    const primaryAsset = (await firestore.doc(`cartularies/${plan.cartularyId}/assets/${plan.primaryAssetId}`).get()).data() ?? null;
+    const inline = primaryInlineThumbnail({ primaryAssetId: plan.primaryAssetId, primaryAsset, existingThumbnail: existing.thumbnail });
+    if (inline) {
+      // K3 : l'inline du miroir de l'asset primaire (posé par ce passage ou un précédent) prime ; le bundle est ignoré,
+      // exactement comme la synchronisation le ferait au passage suivant. L'item converge tout de suite (vignette et statut
+      // réparés au besoin, une écriture au plus), puis rejeu strictement idempotent.
+      const patch = {};
+      if (!isDeepStrictEqual(existing.thumbnail, inline)) patch.thumbnail = inline;
+      if (existing.thumbnailStatus !== 'ready') patch.thumbnailStatus = 'ready';
+      if (Object.keys(patch).length) { await itemRef.update(patch); summary.firestoreWrites += 1; }
+      summary.itemThumbnail = 'inline';
+      summary.bundleSuperseded = true;
+    } else {
+      if (!isDeepStrictEqual(existing.thumbnail, thumbnail) || existing.thumbnailStatus !== 'ready') {
+        // update() : remplace la map `thumbnail` entière — set(…, { merge: true }) la fusionnerait en profondeur et
+        // conserverait une `dataUrl` résiduelle (constaté sur l'IWC pilote le 15/09).
+        await itemRef.update({ thumbnail, thumbnailStatus: 'ready' });
+        summary.firestoreWrites += 1;
+      }
+      summary.itemThumbnail = 'bundle';
     }
-    summary.itemThumbnail = 'bundle';
   }
   return { results, mirrors, summary, ok: summary.failed === 0 };
 };
