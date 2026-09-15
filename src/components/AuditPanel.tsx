@@ -18,8 +18,8 @@ import {
   deriveAuthoritativeIntegrityLevel,
   deriveLocalWorkJournalLevel,
 } from '../domain/integrityPresentation';
-import QRCode from 'qrcode';
 import { CartularyTransferPanel } from './CartularyTransferPanel';
+import { PublishedWebsiteQr } from './PublishedWebsiteQr';
 import {
   isStepUpCancellation,
   StepUpAuthenticationUnavailableError,
@@ -32,7 +32,6 @@ interface AuditPanelProps {
   language: 'FR' | 'EN';
   publicShareCode?: string;
   snapshot: Record<string, unknown>;
-  publicShareUrl: string;
   refreshToken: number;
   persistence: HybridPersistenceState;
   onDeleteAllData: () => Promise<void>;
@@ -45,9 +44,9 @@ interface AuditPanelProps {
   /** Lien vers la page Preuves du Registre de démonstration, affiché seulement en lecture seule. */
   demoRegistryProofsHref?: string | null;
   /**
-   * Adresse du mini-site réellement publié, constatée à l'exécution (loadPublicPublicationStatuses).
-   * En lecture seule, le code public et le QR ne s'affichent que si cette adresse est fournie :
-   * jamais de faux « publié ».
+   * Adresse du mini-site réellement publié, constatée à l'exécution (loadPublicPublicationSummaries).
+   * En lecture comme en mode propriétaire, le QR de partage ne s'affiche que si cette adresse est
+   * fournie : jamais de faux « publié », jamais de QR vers une adresse vide (V4 point 2).
    */
   publishedWebsiteUrl?: string | null;
 }
@@ -79,7 +78,6 @@ interface ReadOnlyProofsProps {
   publicShareCode: string;
   publishedWebsiteUrl: string | null;
   demoRegistryProofsHref: string | null;
-  qrDataUrl: string;
   serverProofTitle: string;
   serverProofDoctrine: string;
 }
@@ -94,7 +92,6 @@ const ReadOnlyProofs: React.FC<ReadOnlyProofsProps> = ({
   publicShareCode,
   publishedWebsiteUrl,
   demoRegistryProofsHref,
-  qrDataUrl,
   serverProofTitle,
   serverProofDoctrine,
 }) => {
@@ -141,18 +138,7 @@ const ReadOnlyProofs: React.FC<ReadOnlyProofsProps> = ({
             <span style={{ color: 'var(--muted)' }}>{tx('Code public du Cartulaire', 'Public Cartulary code')}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{publicShareCode}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', backgroundColor: 'var(--paper)', padding: 'var(--s3)', border: '1px solid var(--rule)' }}>
-            <a href={publishedWebsiteUrl} target="_blank" rel="noreferrer" aria-label={tx('Ouvrir le mini-site publié lié au QR code', 'Open the published mini-site linked to the QR code')}>
-              {qrDataUrl
-                ? <img src={qrDataUrl} width="64" height="64" alt={tx('QR code vers le mini-site publié', 'QR code to the published mini-site')} style={{ display: 'block', border: '1px solid var(--ink)' }} />
-                : <span style={{ display: 'grid', width: '64px', height: '64px', placeItems: 'center', border: '1px solid var(--rule)', color: 'var(--muted)', fontSize: '9px' }}>QR</span>}
-            </a>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)' }}>{tx('QR CODE DE PARTAGE', 'SHARE QR CODE')}</span>
-              <span style={{ fontSize: '10px', color: 'var(--muted)' }}>{tx('Scannez pour ouvrir le mini-site publié.', 'Scan to open the published mini-site.')}</span>
-              <span style={{ maxWidth: '330px', overflowWrap: 'anywhere', fontSize: '8px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{publishedWebsiteUrl}</span>
-            </div>
-          </div>
+          <PublishedWebsiteQr language={language} url={publishedWebsiteUrl} />
         </section>
       )}
     </div>
@@ -165,7 +151,6 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   language,
   publicShareCode = language === 'FR' ? 'Non émis' : 'Not issued',
   snapshot,
-  publicShareUrl,
   refreshToken,
   persistence,
   onDeleteAllData,
@@ -191,7 +176,6 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
   const [timestampError, setTimestampError] = useState<string | null>(null);
   const [timestampNotice, setTimestampNotice] = useState<string | null>(null);
   const [sensitiveActionError, setSensitiveActionError] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState('');
   const [authorityLoadState, setAuthorityLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [authorityIntegrity, setAuthorityIntegrity] = useState<AuthoritativeCartularyIntegrity | null>(null);
   const { runWithStepUp, stepUpDialog } = useStepUpAuthentication(language);
@@ -214,28 +198,6 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
     if (readOnly) return;
     refreshJournal();
   }, [readOnly, refreshJournal, refreshToken]);
-
-  // En lecture seule, le QR ne vise que le mini-site réellement publié ; sinon aucun QR.
-  const qrTarget = readOnly ? (publishedWebsiteUrl ?? '') : publicShareUrl;
-
-  useEffect(() => {
-    let active = true;
-    if (!qrTarget) {
-      setQrDataUrl('');
-      return () => { active = false; };
-    }
-    void QRCode.toDataURL(qrTarget, {
-      width: 192,
-      margin: 1,
-      errorCorrectionLevel: 'M',
-      color: { dark: '#1a1815', light: '#ffffff' },
-    }).then((dataUrl) => {
-      if (active) setQrDataUrl(dataUrl);
-    }).catch(() => {
-      if (active) setQrDataUrl('');
-    });
-    return () => { active = false; };
-  }, [qrTarget]);
 
   useEffect(() => {
     if (readOnly || !persistence.authenticated) {
@@ -376,7 +338,6 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
         publicShareCode={publicShareCode}
         publishedWebsiteUrl={publishedWebsiteUrl}
         demoRegistryProofsHref={demoRegistryProofsHref}
-        qrDataUrl={qrDataUrl}
         serverProofTitle={serverProofTitle}
         serverProofDoctrine={serverProofDoctrine}
       />
@@ -592,31 +553,10 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({
           </div>
         </div>
 
-        {/* QR Code de Partage en petit dans les détails (Règle 3) */}
-        <div style={{
-          marginTop: 'var(--s3)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--s3)',
-          backgroundColor: 'var(--paper)',
-          padding: 'var(--s3)',
-          border: '1px solid var(--rule)'
-        }}>
-          <a href={publicShareUrl} target="_blank" rel="noreferrer" aria-label={language === 'FR' ? 'Ouvrir la fiche publique liée au QR code' : 'Open the public record linked to the QR code'}>
-            {qrDataUrl
-              ? <img src={qrDataUrl} width="64" height="64" alt={language === 'FR' ? 'QR code vers la fiche publique' : 'QR code to the public record'} style={{ display: 'block', border: '1px solid var(--ink)' }} />
-              : <span style={{ display: 'grid', width: '64px', height: '64px', placeItems: 'center', border: '1px solid var(--rule)', color: 'var(--muted)', fontSize: '9px' }}>QR</span>}
-          </a>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)' }}>
-              {language === 'FR' ? "QR CODE DE PARTAGE" : "SHARE QR CODE"}
-            </span>
-            <span style={{ fontSize: '10px', color: 'var(--muted)' }}>
-              {language === 'FR' ? "Scannez pour ouvrir la fiche publique." : "Scan to open the public record."}
-            </span>
-            <span style={{ maxWidth: '330px', overflowWrap: 'anywhere', fontSize: '8px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{publicShareUrl}</span>
-          </div>
-        </div>
+        {/* QR de partage : uniquement vers le mini-site réellement publié (V4 point 2). */}
+        {publishedWebsiteUrl
+          ? <div style={{ marginTop: 'var(--s3)' }}><PublishedWebsiteQr language={language} url={publishedWebsiteUrl} /></div>
+          : <p role="note" style={{ margin: 'var(--s3) 0 0', color: 'var(--muted)', fontSize: '11px', lineHeight: 1.45 }}>{tx('Aucun mini-site publié : le QR code de partage apparaît une fois la publication confirmée depuis la page Publication.', 'No published mini-site: the share QR code appears once publication is confirmed from the Publication page.')}</p>}
       </div>
 
       {/* 2. Journal d'Audit Châné */}

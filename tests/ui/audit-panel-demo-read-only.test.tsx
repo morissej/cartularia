@@ -86,7 +86,6 @@ const renderPanel = (overrides: Partial<ComponentProps<typeof AuditPanel>> = {})
       language="FR"
       publicShareCode="DEMO-ROL-124060"
       snapshot={{}}
-      publicShareUrl="https://cartularia.test/watch-website?publicCode=DEMO-ROL-124060"
       refreshToken={0}
       persistence={persistence}
       onDeleteAllData={onDeleteAllData}
@@ -165,9 +164,27 @@ describe('panneau Preuves propriétaire (comportement préservé)', () => {
     expect(screen.getByRole('button', { name: /Simulation technique/ })).toBeTruthy();
     expect(screen.getByTestId('transfer-panel')).toBeTruthy();
     expect(screen.getByText('Carnet local de travail')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Ouvrir la fiche publique liée au QR code' })).toBeTruthy();
+    // V4 point 2 : sans publication constatée, aucun QR ni lien de partage ; la ligne « Code public » reste, avec le code réel.
+    expect(screen.queryByRole('link', { name: /QR code/ })).toBeNull();
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByRole('note').textContent).toMatch(/Aucun mini-site publié : le QR code de partage apparaît une fois la publication confirmée depuis la page Publication\./);
+    expect(screen.getByText('Code public du Cartulaire')).toBeTruthy();
+    expect(screen.getByText('DEMO-ROL-124060')).toBeTruthy();
+    expect(screen.queryByText(/Non émis|fiche publique/)).toBeNull();
     await waitFor(() => expect(journal.ready).toHaveBeenCalled());
     expect(mocks.observeAuthoritativeCartularyIntegrity).not.toHaveBeenCalled();
+  });
+
+  it('mode propriétaire : QR et lien seulement vers un mini-site réellement publié', async () => {
+    const publishedWebsiteUrl = 'https://cartularia.test/watch-website?publicCode=DEMO-ROL-124060';
+    renderPanel({ publishedWebsiteUrl });
+
+    expect(screen.getByRole('link', { name: 'Ouvrir le mini-site publié lié au QR code' }).getAttribute('href')).toBe(publishedWebsiteUrl);
+    await waitFor(() => expect(screen.getByRole('img', { name: 'QR code vers le mini-site publié' }).getAttribute('src')).toBe('data:image/png;base64,x'));
+    expect(screen.getByText(publishedWebsiteUrl)).toBeTruthy();
+    expect(screen.queryByText(/fiche publique/)).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(screen.getByText('DEMO-ROL-124060')).toBeTruthy();
   });
 
   it('observe la chaîne serveur du Cartulaire une fois le propriétaire connecté', () => {

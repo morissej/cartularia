@@ -5,7 +5,7 @@ const api = vi.hoisted(() => ({ load: vi.fn(), publish: vi.fn(), revoke: vi.fn()
 vi.mock('../../src/services/websitePublication', () => ({ loadWebsitePublicationState: api.load, publishWebsiteSelection: api.publish, revokeWebsiteSelection: api.revoke }));
 const state = { cartularyId: 'cart_test', publicCode: 'OBJ-PUB', revision: 1, status: 'draft', blockIds: [] };
 const blocks = [{ id: 'condition-summary', title: 'État', payload: { paragraphs: ['Bon état'] }, assets: [] }];
-beforeEach(() => { api.load.mockReset().mockResolvedValue(state); api.publish.mockReset(); api.revoke.mockReset(); });
+beforeEach(() => { sessionStorage.clear(); api.load.mockReset().mockResolvedValue(state); api.publish.mockReset(); api.revoke.mockReset(); });
 describe('publication confirmée uniquement après réponse serveur', () => {
   it('ne confond pas une erreur de lecture avec un brouillon', async () => {
     api.load.mockRejectedValue(new Error('unavailable'));
@@ -22,7 +22,8 @@ describe('publication confirmée uniquement après réponse serveur', () => {
     const button = screen.getByRole('button', { name: 'Publier le mini-site' });
     expect(button.hasAttribute('disabled')).toBe(true);
     fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(button);
-    await screen.findByRole('alert');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/^Connexion interrompue Demande conservée, confirmation serveur non reçue : le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon\.$/);
     expect(changed).not.toHaveBeenCalled();
     expect(screen.queryByRole('link', { name: 'Ouvrir le mini-site public' })).toBeNull();
     fireEvent.click(button);
@@ -31,6 +32,63 @@ describe('publication confirmée uniquement après réponse serveur', () => {
     expect(api.publish.mock.calls[0][0]).toEqual(api.publish.mock.calls[1][0]);
     expect(api.publish.mock.calls[0][0].confirmedNonPersonalMedia).toBe(true);
     await waitFor(() => expect(screen.getByRole('checkbox').hasAttribute('checked')).toBe(false));
+  });
+  it('n’annonce pas de demande conservée quand le serveur a refusé la demande', async () => {
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('La révision attendue a changé.'), { code: 'functions/failed-precondition' })).mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('La révision attendue a changé.');
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    await screen.findByRole('link', { name: 'Ouvrir le mini-site public' });
+    expect(api.publish.mock.calls[1][0].requestId).not.toBe(api.publish.mock.calls[0][0].requestId);
+  });
+  it('nomme la demande pendant l’appel, puis constate la publication', async () => {
+    let resolvePublish: (value: unknown) => void = () => undefined;
+    api.publish.mockImplementationOnce(() => new Promise((resolve) => { resolvePublish = resolve; }));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Publication demandée · en cours (10 à 30 s)…'));
+    expect(screen.queryByText('Publication en cours…')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Publier le mini-site' }).hasAttribute('disabled')).toBe(true);
+    resolvePublish({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    await screen.findByText('Mini-site publié');
+    expect(screen.getByRole('link', { name: 'Ouvrir le mini-site public' })).toBeTruthy();
+  });
+  it('nomme le retrait pendant l’appel', async () => {
+    api.load.mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    let resolveRevoke: (value: unknown) => void = () => undefined;
+    api.revoke.mockImplementationOnce(() => new Promise((resolve) => { resolveRevoke = resolve; }));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Retirer le mini-site' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Retrait demandé · en cours…'));
+    resolveRevoke({ ...state, revision: 5, status: 'revoked', blockIds: [] });
+    await screen.findByText('Mini-site retiré');
+  });
+  it('signale l’écart entre la sélection et les contenus en ligne dans un élément séparé', async () => {
+    api.load.mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    const twoBlocks = [...blocks, { id: 'provenance', title: 'Provenance', payload: { paragraphs: ['Achat neuf'] }, assets: [] }];
+    const view = render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={twoBlocks} />);
+    expect(await screen.findByText('Mini-site publié')).toBeTruthy();
+    expect(screen.getByRole('note').textContent).toBe('Sélection différente des contenus en ligne : 1 en ligne, 2 sélectionnés. « Mettre à jour le mini-site » publiera la sélection actuelle.');
+    view.rerender(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(screen.getByText('Mini-site publié')).toBeTruthy();
+  });
+  it('ne signale aucun écart pour la même sélection dans un autre ordre, ni sans publication', async () => {
+    api.load.mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['provenance', 'condition-summary'] });
+    const twoBlocks = [...blocks, { id: 'provenance', title: 'Provenance', payload: { paragraphs: ['Achat neuf'] }, assets: [] }];
+    const view = render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={twoBlocks} />);
+    await screen.findByText('Mini-site publié');
+    expect(screen.queryByRole('note')).toBeNull();
+    view.unmount();
+    api.load.mockResolvedValue({ ...state, status: 'revoked', revision: 4, blockIds: ['provenance'] });
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Mini-site retiré');
+    expect(screen.queryByRole('note')).toBeNull();
   });
   it('un accès en lecture seule ne déclenche aucune commande et ne se prétend pas démonstration', () => {
     render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} readOnly />);

@@ -232,6 +232,26 @@ test('le panneau Preuves reçoit le mode lecture et la publication constatée de
   assert.match(appSource, /publishedWebsiteBlockIds=\{publishedWebsiteBlockIds\}/);
   // Décision (d) : le lien mini-site dérive uniquement de l'état constaté, jamais d'une constante.
   assert.match(appSource, /const publishedWebsiteUrl = websitePublished \? publicShareUrl : null;/);
+  // V4 point 2 : code public réel, plus d'adresse dérivée du code, relecture du constat après chaque action du panneau.
+  assert.match(auditPanelBlock, /publicShareCode=\{cartularyPublicCode\}/);
+  assert.doesNotMatch(auditPanelBlock, /publicShareUrl=|seal\?\.supportCode/);
+  assert.match(appSource, /<PublicWebsitePublicationPanel[^\n]*language=\{language\} onStateChanged=\{\(\) => setWebsitePublicationCheck\(\(value\) => value \+ 1\)\}/);
+  assert.match(appSource, /\[cartularyPublicCode, isWatchWebsite, websitePublicationCheck\]\);/);
+  // QR de partage : un seul composant, alimenté par la seule adresse publiée, monté sous publishedWebsiteUrl dans les deux branches.
+  const auditPanelSource = readFileSync(new URL('../src/components/AuditPanel.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(auditPanelSource, /publicShareUrl|from 'qrcode'|fiche publique/);
+  assert.match(auditPanelSource, /publishedWebsiteUrl\s*\?\s*<div[^\n]*<PublishedWebsiteQr/);
+  assert.match(auditPanelSource, /\{publishedWebsiteUrl && \([\s\S]{0,1200}<PublishedWebsiteQr/);
+  assert.match(auditPanelSource, /Aucun mini-site publié : le QR code de partage apparaît une fois la publication confirmée depuis la page Publication\./);
+  const qrImporters = walkSources(sourceRoot).filter((path) => readFileSync(path, 'utf8').includes("from 'qrcode'")).map(relativeSource);
+  assert.deepEqual(qrImporters, ['src/components/PublishedWebsiteQr.tsx']);
+  // États du panneau (vocabulaire du plan) et demande persistée par onglet (lot B) : libellés nommés, jamais « en cours » sans « demandé(e) ».
+  const panelSource = readFileSync(new URL('../src/components/PublicWebsitePublicationPanel.tsx', import.meta.url), 'utf8');
+  assert.match(panelSource, /Publication demandée · en cours \(10 à 30 s\)…/);
+  assert.match(panelSource, /Retrait demandé · en cours…/);
+  assert.doesNotMatch(panelSource, /Publication en cours…|Retrait en cours…/);
+  assert.match(panelSource, /Demande conservée, confirmation serveur non reçue/);
+  assert.match(panelSource, /readWebsiteRequestSession\(cartularyId\)/);
 });
 
 // V3 — contrat unique des dérivés (K4, K6, K9) : variantes de présentation, jamais de repli sur l'original, aucune branche démo.

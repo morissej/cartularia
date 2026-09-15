@@ -766,6 +766,7 @@ function App() {
   const [websitePublished, setWebsitePublished] = useState(false);
   // Blocs réellement en ligne (publications/{code}.blockIds), lus avec le statut ; null tant que rien n'est constaté.
   const [publishedWebsiteBlockIds, setPublishedWebsiteBlockIds] = useState<string[] | null>(null);
+  const [websitePublicationCheck, setWebsitePublicationCheck] = useState(0); // V4 point 2 : relecture du constat publications/{code} après Publier / Retirer / Reprendre
   useEffect(() => {
     if (isDemoCartulary || isWatchWebsite) return;
     let active = true;
@@ -1302,7 +1303,7 @@ function App() {
       })
       .catch(() => { if (active) { setWebsitePublished(false); setPublishedWebsiteBlockIds(null); } });
     return () => { active = false; };
-  }, [cartularyPublicCode, isWatchWebsite]);
+  }, [cartularyPublicCode, isWatchWebsite, websitePublicationCheck]);
   const publishedWebsiteUrl = websitePublished ? publicShareUrl : null;
   const localPublicationPreviewParameters = new URLSearchParams({
     publicCode: cartularyPublicCode,
@@ -3515,7 +3516,7 @@ function App() {
               )}
               {renderPublicationBlockSelector('website', publishedBlocks)}
               <WebsiteDraftWarnings blocks={websiteDraft} language={language} />
-              <PublicWebsitePublicationPanel cartularyId={mockCartulary.id} blocks={websiteDraftRequest(websiteDraft)} beforePublish={persistence.syncNow} readOnly={isDemoCartulary} language={language} />
+              <PublicWebsitePublicationPanel cartularyId={mockCartulary.id} blocks={websiteDraftRequest(websiteDraft)} beforePublish={persistence.syncNow} readOnly={isDemoCartulary} language={language} onStateChanged={() => setWebsitePublicationCheck((value) => value + 1)} />
             </article>
 
             <article className="publication-scope publication-scope--collection">
@@ -3697,9 +3698,8 @@ function App() {
               journal={journal}
               cartularyId={mockCartulary.id}
               language={language}
-              publicShareCode={mockCartulary.seal?.supportCode}
+              publicShareCode={cartularyPublicCode}
               snapshot={integritySnapshot}
-              publicShareUrl={publicShareUrl}
               refreshToken={eventTrigger}
               persistence={persistence}
               onDeleteAllData={handleDeleteAllData}
