@@ -21,6 +21,10 @@ test('le site Collection agrège les objets projetés et les filtre par type', (
   assert.match(collectionSite, /publicationId/);
   assert.match(collectionSite, /projection de publication dédiée/);
   assert.match(collectionSite, /Filtrer par type d’objet/);
+  // V4 P-C6 : le lien d'un objet dépend de son statut réel et de ses blocs Web admis, jamais du seul statut.
+  assert.match(collectionSite, /loadPublicPublicationSummaries/);
+  assert.match(collectionSite, /websiteHasPublishedContent/);
+  assert.doesNotMatch(collectionSite, /loadPublicPublicationStatuses/);
 });
 
 test('Le Cercle agrège toutes les publications approuvées et les filtre par type', () => {

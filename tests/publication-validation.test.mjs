@@ -10,6 +10,7 @@ import {
   isSelectionValidated,
   publicationActionFor,
   validatedBlockIds,
+  websiteHasPublishedContent,
 } from '../src/domain/publication.ts';
 
 const publicPhoto = {
@@ -70,6 +71,11 @@ test('la liste blanche W du client reste identique à la commande serveur', () =
   assert.equal(getPublicationPolicy('community', 'cover-ownership-history').allowed, false);
   assert.equal(getPublicationPolicy('collection', 'media-hero').allowed, true);
   assert.equal(getPublicationPolicy('collection', 'cover-storage').allowed, false);
+  // V4 P-C6 : un mini-site n'est « en ligne » que s'il porte au moins un bloc admis pour le Web.
+  assert.equal(websiteHasPublishedContent([]), false);
+  assert.equal(websiteHasPublishedContent(['value-market']), false);
+  assert.equal(websiteHasPublishedContent(['cover-watch']), true);
+  assert.equal(websiteHasPublishedContent(['bloc-inconnu', 'media-hero']), true);
 });
 
 test('une sélection historique sans décision humaine reste en attente de validation', () => {

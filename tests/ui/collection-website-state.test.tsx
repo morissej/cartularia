@@ -17,7 +17,7 @@ vi.mock('../../src/services/collections', () => ({
 }));
 vi.mock('../../src/services/projections', () => ({
   loadRegistryItems: (...args: unknown[]) => fixture.items(...args),
-  loadPublicPublicationStatuses: vi.fn(async () => ({})),
+  loadPublicPublicationSummaries: vi.fn(async () => ({})),
 }));
 
 const DEMO_PREVIEW = '/collection-website?preview=local&registryId=reg_cartularia_demo&collectionIds=col_demo_montres';
