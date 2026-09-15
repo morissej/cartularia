@@ -1,4 +1,5 @@
 import type { Asset } from '../types/index.ts';
+import type { PublishedBlockId } from '../domain/publication.ts';
 
 export const DEMO_ACCOUNT = {
   userName: 'demo',
@@ -511,6 +512,13 @@ export const demoCartularyContentById = (cartularyId: string | null | undefined)
 export const DEMO_SUBMARINER_CARTULARY_ID = DEMO_CARTULARIES[0].id;
 /** Code public du seul objet démo publié en V2 ; ce n'est pas une source de « publié » (lecture à l'exécution). */
 export const DEMO_SUBMARINER_PUBLIC_CODE = DEMO_CARTULARIES[0].publicCode;
+/**
+ * Sélection démo du mini-site (V4 D3) : les 8 blocs réellement publiés par scripts/lib/demo-publication-command.mjs
+ * (qui réexporte cette constante), pour que l'aperçu local démo montre exactement le mini-site démo en ligne.
+ */
+export const DEMO_WEBSITE_BLOCK_IDS = Object.freeze([
+  'cover-watch', 'media-hero', 'media-library', 'reference-history', 'reference-specs', 'reference-checks', 'condition-description', 'condition-summary',
+] as const satisfies readonly PublishedBlockId[]);
 
 export const demoCartularyById = (cartularyId: string | null | undefined) => (
   DEMO_CARTULARIES.find((cartulary) => cartulary.id === cartularyId) ?? null

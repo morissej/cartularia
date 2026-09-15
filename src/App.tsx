@@ -71,6 +71,7 @@ import {
   destinationMarker,
   evaluatePublicationEligibility,
   filterPublicationBlockIds,
+  filterRequestedWebsiteBlocks,
   publicationBlockIdsFor,
   getPublicationPolicy,
   isSelectionValidated,
@@ -156,7 +157,7 @@ import { resolveRegistryReturn } from './features/registry/registryReturn.ts';
 import { parseRegistryRoute, registryHref } from './features/registry/registryRouting';
 import type { RegistryCollectionDocument } from './domain/collections';
 import { loadCartularyCollectionContext, saveRegistryCollection } from './services/collections';
-import { DEMO_ACCOUNT } from './data/demoCartularies';
+import { DEMO_ACCOUNT, DEMO_WEBSITE_BLOCK_IDS } from './data/demoCartularies';
 import { loadPublicPublicationSummaries } from './services/projections';
 import { PublicationReadOnlySummary } from './features/cartulary/components/PublicationReadOnlySummary';
 import {
@@ -491,7 +492,8 @@ const loadConditionEntries = (): ConditionEntry[] => (isDemoCartulary ? DEFAULT_
 }));
 
 const loadPublishedBlocks = (): PublishedBlockId[] => {
-  if (isDemoCartulary) return [...PUBLISHED_BLOCK_IDS];
+  // V4 D3 : la sélection démo du mini-site vaut les 8 blocs réellement publiés (aperçu local démo = mini-site démo).
+  if (isDemoCartulary) return [...DEMO_WEBSITE_BLOCK_IDS];
   const stored = readStored<string[]>(
     'cartularia-published-blocks',
     ['media-hero', 'media-slideshow', 'reference-history', 'reference-specs'],
@@ -1266,7 +1268,9 @@ function App() {
   });
   const approvedWebsiteBlocks = filterPublicationBlockIds('website', publishedBlocks);
   const approvedReportBlocks = filterPublicationBlockIds('report', reportBlocks);
-  const requestedPublishedBlocks = publishedBlocksFromUrl();
+  // V4 décision 2 : un paramètre blocks= de l'aperçu local ne dépasse jamais la sélection locale (aperçu ⊆ sélection).
+  const requestedUrlBlocks = publishedBlocksFromUrl();
+  const requestedPublishedBlocks = requestedUrlBlocks && filterRequestedWebsiteBlocks(requestedUrlBlocks, approvedWebsiteBlocks);
   const firestorePublishedBlocks = publicProjection?.blocks
     .map((block) => block.blockId)
     .filter((blockId): blockId is PublishedBlockId => PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)) ?? [];
@@ -2232,35 +2236,6 @@ function App() {
             </div>
           </section>
         );
-      case 'cover-owner':
-        return (
-          <section>
-            <SectionTitle eyebrow={tx('Propriétaire', 'Owner')} title={tx('Propriétaire actuel', 'Current owner')} />
-            <article className="owner-card owner-card--published">
-              <p><strong>{tx('Pseudonyme / Code', 'Alias / Code')} :</strong> {userAlias || tx('Non renseigné', 'Not provided')}</p>
-              <p><strong>{tx('Statut de détention', 'Holding status')} :</strong> {watchStatusLabel(watchStatus)}</p>
-            </article>
-          </section>
-        );
-      case 'cover-transmission':
-        return (
-          <section>
-            <SectionTitle eyebrow={tx('Transmission', 'Transmission')} title={tx('Règles et contacts de transmission', 'Transmission rules & contacts')} />
-            <article className="transmission-card transmission-card--published">
-              {transmissionCodes.length > 0 ? (
-                <div className="storage-published-grid">
-                  {transmissionCodes.map((person, index) => (
-                    <article key={person.id}>
-                      <span className="eyebrow">{tx('Contact', 'Contact')} {String(index + 1).padStart(2, '0')}</span>
-                      <h3>{person.codeName || person.correspondenceCode || tx('Contact confidentiel', 'Confidential contact')}</h3>
-                      {person.note && <p>{person.note}</p>}
-                    </article>
-                  ))}
-                </div>
-              ) : <p className="storage-empty">{tx('Aucun contact de transmission renseigné.', 'No transmission contact entered.')}</p>}
-            </article>
-          </section>
-        );
       case 'cover-ownership-history':
         return (
           <section>
@@ -2277,19 +2252,6 @@ function App() {
                 </div>
               ) : <p className="ownership-history-empty">{tx('Aucun propriétaire précédent renseigné.', 'No previous owner entered.')}</p>}
               <div className="ownership-history-summary" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Synthèse de provenance', 'Provenance summary')}</strong><p>{ownershipSummary}</p></div>
-            </article>
-          </section>
-        );
-      case 'cover-storage':
-        return (
-          <section>
-            <SectionTitle eyebrow={tx('Conservation', 'Safekeeping')} title={tx('Stockage', 'Storage')} />
-            <article className="storage-card storage-card--published">
-              {storageCodes.length > 0 ? (
-                <div className="storage-published-grid">
-                  {storageCodes.map((location, index) => <article key={location.id}><span className="eyebrow">{tx('Code', 'Code')} {String(index + 1).padStart(2, '0')}</span><h3>{location.codeName}</h3></article>)}
-                </div>
-              ) : <p className="storage-empty">{tx('Aucun nom de code de stockage renseigné.', 'No storage code name entered.')}</p>}
             </article>
           </section>
         );

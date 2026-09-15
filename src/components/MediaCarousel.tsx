@@ -13,6 +13,8 @@ interface MediaCarouselProps {
   eyebrow?: string;
   onOpen: (asset: Asset) => void;
   compact?: boolean;
+  /** `false` : aucun lien de téléchargement (aperçu local d'un binaire privé, V4 G1 : l'original n'est jamais offert à la place de la copie). */
+  downloads?: boolean;
 }
 
 export function MediaCarousel({
@@ -21,6 +23,7 @@ export function MediaCarousel({
   eyebrow,
   onOpen,
   compact = false,
+  downloads = true,
 }: MediaCarouselProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const currentIndex = Math.max(0, assets.findIndex((asset) => asset.id === selectedId));
@@ -112,7 +115,7 @@ export function MediaCarousel({
           )}
         </div>
         <div className="media-carousel__actions">
-          <MediaDownloadLink media={current} language={language} compact />
+          {downloads && <MediaDownloadLink media={current} language={language} compact />}
           <div className="media-carousel__count">
             <span>{String(currentIndex + 1).padStart(2, '0')}</span>
             <span>/</span>

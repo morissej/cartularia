@@ -419,3 +419,30 @@ test('V3 K5 : Galerie et Catalogue lisent la vignette de l’item, sans lecture 
   assert.match(thumbnail, /Aucune vignette disponible/);
   assert.doesNotMatch(thumbnail, /Accès restreint/);
 });
+
+test('V4 point 1 : l’aperçu local rend la projection publique, sans bloc personnel ni original', () => {
+  const app = readSource('../src/App.tsx');
+  const start = app.indexOf('const renderWatchWebsiteBlock = (blockId: PublishedBlockId, forPrint = false) => {');
+  assert.ok(start > 0, 'renderWatchWebsiteBlock introuvable');
+  const end = app.indexOf('\n  };\n', start);
+  assert.ok(end > start, 'fin du renderer introuvable');
+  const renderer = app.slice(start, end);
+  assert.doesNotMatch(renderer, /case '(?:cover-owner|cover-transmission|cover-storage)':/, 'aucun rendu des blocs personnels');
+  assert.doesNotMatch(renderer, /userAlias|transmissionCodes|storageCodes/, 'aucune donnée personnelle dans le rendu des blocs');
+  assert.match(renderer, /if \(isWatchWebsite && localPublicationPreviewAllowed\) \{\s*const preview = localPreviewBlocks\.find\(/, 'l’aperçu passe toujours par ProjectedPublicBlock');
+  const draft = readSource('../src/domain/websiteDraft.ts');
+  assert.match(draft, /localPreview: \{ binaryId: asset\.binaryId, cartularyId: asset\.cartularyId, privatePresentation: asset\.privatePresentation \}/);
+  assert.doesNotMatch(draft, /localPreview:[^}]*\b(?:url|downloadUrl|storagePath)\b/, 'la source privée d’aperçu ne porte jamais d’adresse');
+  const projected = readSource('../src/components/ProjectedPublicBlock.tsx');
+  assert.match(projected, /preview \? asset\.localPreview : undefined/, 'la source privée n’est lue qu’en aperçu');
+  assert.doesNotMatch(projected, /acquirePrivateMediaObjectUrl|role="original"/);
+  assert.match(projected, /const privateInPreview = \(asset: Asset\) => preview && Boolean\(asset\.binaryId\);/, 'un binaire privé en aperçu n’offre jamais l’original');
+  assert.match(projected, /downloads=\{!preview\}/, 'le carrousel n’offre pas l’original en aperçu');
+  assert.match(projected, /originalOnDemand=\{!preview\}/);
+  assert.match(readSource('../src/components/MediaCarousel.tsx'), /\{downloads && <MediaDownloadLink media=\{current\}/);
+  // Décision 2 : un paramètre blocks= ne dépasse jamais la sélection locale.
+  assert.match(app, /filterRequestedWebsiteBlocks\(requestedUrlBlocks, approvedWebsiteBlocks\)/);
+  // D3 (a) : sélection démo du mini-site = les 8 blocs réellement publiés (constante partagée client / script Admin).
+  assert.match(app, /if \(isDemoCartulary\) return \[\.\.\.DEMO_WEBSITE_BLOCK_IDS\];/);
+  assert.match(readSource('../scripts/lib/demo-publication-command.mjs'), /export const DEFAULT_DEMO_WEBSITE_BLOCKS = DEMO_WEBSITE_BLOCK_IDS;/);
+});

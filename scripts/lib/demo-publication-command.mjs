@@ -4,7 +4,7 @@ import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import sharp from 'sharp';
-import { buildDemoCartularyAssets, DEMO_ACCOUNT, DEMO_CARTULARIES, demoCartularyContentById } from '../../src/data/demoCartularies.ts';
+import { buildDemoCartularyAssets, DEMO_ACCOUNT, DEMO_CARTULARIES, DEMO_WEBSITE_BLOCK_IDS, demoCartularyContentById } from '../../src/data/demoCartularies.ts';
 import { filterPublicationBlockIds, PUBLICATION_BLOCK_CATALOG } from '../../src/domain/publication.ts';
 import { verifyAuditChain } from './audit-verifier.mjs';
 import { CANONICALIZATION_VERSION, canonicalize, sha256Bytes, sha256Digest } from './canonical-json.mjs';
@@ -52,9 +52,8 @@ export const DEMO_EYEBROW = 'Démonstration · données fictives';
 export const DEMO_DISCLAIMER = 'Exemplaire, documents, historique et valeurs fictifs.';
 export const DEMO_AUDIT_ROLE = 'demo_seed';
 export const DEMO_DECISION_SOURCE = 'admin_demo_seed';
-export const DEFAULT_DEMO_WEBSITE_BLOCKS = Object.freeze([
-  'cover-watch', 'media-hero', 'media-library', 'reference-history', 'reference-specs', 'reference-checks', 'condition-description', 'condition-summary',
-]);
+// V4 D3 : même liste que la sélection démo du client (aperçu local démo = mini-site démo publié), valeur inchangée.
+export const DEFAULT_DEMO_WEBSITE_BLOCKS = DEMO_WEBSITE_BLOCK_IDS;
 export const DEMO_DERIVATIVE_MAX_EDGE = 1600;
 export const DEMO_DERIVATIVE_WEBP_QUALITY = 82;
 const PUBLIC_CACHE_CONTROL = 'private, no-store, max-age=0';

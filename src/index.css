@@ -1138,14 +1138,6 @@ img { display: block; max-width: 100%; }
 .storage-card > .button { margin-top: var(--s4); }
 .storage-empty { padding: var(--s5); border: 1px dashed var(--rule); color: var(--muted); text-align: center; }
 
-.storage-published-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
-.storage-published-grid > article { padding: var(--s4); border: 1px solid var(--rule); background: var(--sheet); }
-.storage-published-grid h3 { margin: var(--s2) 0 var(--s4); font-size: 21px; }
-.storage-published-grid dl { display: grid; border-top: 1px solid var(--rule); }
-.storage-published-grid dl > div { display: grid; grid-template-columns: minmax(120px, 32%) minmax(0, 1fr); gap: var(--s3); padding: var(--s3) 0; border-bottom: 1px solid var(--rule); }
-.storage-published-grid dt { color: var(--muted); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
-.storage-published-grid dd { white-space: pre-wrap; }
-
 .privacy-link-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .8fr); gap: var(--s5); padding: var(--s5); border: 1px solid var(--rule); background: var(--surface-secondary); }
 .privacy-link-card > div:first-child { display: grid; align-content: start; gap: var(--s2); }
 .privacy-link-card h3 { font-size: 24px; }
@@ -2625,7 +2617,6 @@ textarea {
 .spin-360-preview { border: 1px solid var(--rule); padding: 8pt; background: #faf9f6; text-align: center; break-inside: avoid; }
 .spin-360-preview__image { width: 100%; max-height: 240pt; object-fit: contain; background: #fff; }
 .spin-360-preview__caption { display: block; margin-top: 6pt; font-family: var(--font-mono); font-size: 7.5pt; color: var(--muted); }
-.owner-card--published, .transmission-card--published { border: 1px solid var(--rule); padding: 10pt 14pt; background: #faf9f6; break-inside: avoid; }
 .report-print-view > footer { display: flex; justify-content: space-between; align-items: center; padding-top: 14pt; margin-top: 20pt; border-top: 1px solid var(--rule); color: var(--muted); font-family: var(--font-mono); font-size: 7pt; text-transform: uppercase; break-inside: avoid; }
 
 .drawer-overlay {
@@ -2947,8 +2938,7 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .cover-todo-board__list > li > select { grid-column: 2 / 4; }
   .transmission-list,
   .transmission-published-grid,
-  .storage-list,
-  .storage-published-grid { grid-template-columns: 1fr; }
+  .storage-list { grid-template-columns: 1fr; }
   .owner-document-upload { grid-template-columns: 1fr 1fr; }
   .owner-document-upload .button { grid-column: 1 / -1; min-height: 48px; }
   .watch-hero { grid-template-columns: repeat(8, minmax(0, 1fr)); }
@@ -3243,9 +3233,6 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .report-print-view .specification-group,
   .report-print-view .current-condition-summary,
   .report-print-view .watch-description-card,
-  .report-print-view .owner-card--published,
-  .report-print-view .transmission-card--published,
-  .report-print-view .storage-card--published,
   .report-print-view .ownership-history-card--published,
   .report-print-view .market-chart-card,
   .report-print-view .market-depth-card,
