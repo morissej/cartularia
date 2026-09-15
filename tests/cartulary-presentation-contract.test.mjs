@@ -27,6 +27,8 @@ test('tous les Cartulaires partagent les six pages et les structures communes', 
     'publication.community',
     'publication.report',
   ]);
+  // V6 (V-D10) : titre de la structure commune « mini-site » sans espace parasite ; version 1.4.0 conservée (D3).
+  assert.equal(COMMON_CARTULARY_STRUCTURE.find(({ id }) => id === 'publication.cartulary')?.title, 'Publiez un mini-site de votre Cartulaire');
   assert.equal(cartularyPageForSchemaSection('technical.powertrain'), 'reference');
   assert.equal(cartularyPageForSchemaSection('history.service'), 'condition');
   assert.equal(cartularyPageForSchemaSection('value.market'), 'value');

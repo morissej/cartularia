@@ -23,7 +23,7 @@ export const COMMON_CARTULARY_STRUCTURE = [
   { id: 'condition.storage', page: 'condition', title: 'Stockage' },
   { id: 'condition.transmission', page: 'condition', title: 'Transmission' },
   { id: 'reference.reports', page: 'reference', title: 'Rapports sur la référence' },
-  { id: 'publication.cartulary', page: 'publication', title: 'Publiez un mini -site de votre Cartulaire' },
+  { id: 'publication.cartulary', page: 'publication', title: 'Publiez un mini-site de votre Cartulaire' },
   { id: 'publication.collections', page: 'publication', title: 'Publiez votre objet dans une Collection' },
   { id: 'publication.community', page: 'publication', title: 'Publiez votre objet dans Le Cercle' },
   { id: 'publication.report', page: 'publication', title: 'Rapport PDF' },
