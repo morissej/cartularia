@@ -106,6 +106,9 @@ export function MediaViewerModal({
   const [originalAssetId, setOriginalAssetId] = useState<string | null>(null);
   const showOriginal = originalAssetId === asset.id;
   const canRequestOriginal = originalOnDemand && asset.type === 'image' && Boolean(asset.binaryId) && !showOriginal;
+  // V5 relecture (H2) : en lecture, les catégories sont du texte (aucun bouton grisé — V-D1 « sans contrôle »).
+  const tagsReadOnly = readOnly || audience !== 'Secret';
+  const activeTagLabels = mediaTags.filter((tag) => asset.tags.includes(tag.id)).map((tag) => tag.label);
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div ref={dialogRef} className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-dialog-title" data-focus-layer="true" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
@@ -135,7 +138,7 @@ export function MediaViewerModal({
             <h2 id="media-dialog-title" {...aiFieldProps('media.assets[].name', asset.id)}>{asset.name}</h2>
             {position >= 0 && <span className="media-modal__position" aria-live="polite">{position + 1} / {assetCount}</span>}
           </div>
-          <fieldset className="media-tag-editor">
+          {!tagsReadOnly && <fieldset className="media-tag-editor">
             <legend>{tx('Catégories', 'Categories')}</legend>
             {mediaTags.map((tag) => (
               <button
@@ -144,12 +147,12 @@ export function MediaViewerModal({
                 {...aiFieldProps('media.assets[].tags', `${asset.id}:${tag.id}`)}
                 className={asset.tags.includes(tag.id) ? 'is-active' : ''}
                 onClick={() => onToggleTag(asset.id, tag.id)}
-                disabled={readOnly || audience !== 'Secret'}
                 aria-pressed={asset.tags.includes(tag.id)}
               >{tag.label}</button>
             ))}
-          </fieldset>
+          </fieldset>}
           <dl>
+            {tagsReadOnly && activeTagLabels.length > 0 && <div><dt>{tx('Catégories', 'Categories')}</dt><dd {...aiFieldProps('media.assets[].tags', asset.id)}>{activeTagLabels.join(' · ')}</dd></div>}
             <div><dt>{tx('Horodatage', 'Timestamp')}</dt><dd {...aiFieldProps('media.assets[].metadataTimestamp', asset.id)}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : '—'}</dd></div>
             <div><dt>Source</dt><dd>{asset.timestampSource === 'file.lastModified' ? tx('Métadonnée du fichier', 'File metadata') : tx('Métadonnée du catalogue', 'Catalogue metadata')}</dd></div>
             <div><dt>{tx('Visibilité', 'Visibility')}</dt><dd>{asset.visibility}</dd></div>

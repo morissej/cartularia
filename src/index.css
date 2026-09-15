@@ -1836,7 +1836,8 @@ textarea {
   border-bottom: 1px solid var(--rule);
 }
 
-.identification-list article > span {
+/* V5 relecture (R-09) : la case de lecture (span.control-check--static, enfant direct de l'article) n'est pas un numéro. */
+.identification-list article > span:not(.control-check) {
   padding-top: 10px;
   color: var(--muted);
   font-family: var(--font-mono);
@@ -3112,7 +3113,8 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .comparables-table > div:not(.comparables-table__head) > .icon-button[data-column-label] { width: 100%; }
   .comparables-table > div > span:nth-child(2) { display: grid; }
   .comparables-table > div > strong:last-child { text-align: left; }
-  .comparables-analysis-table__head { display: none !important; }
+  /* V5 relecture (A6) : en-tête masqué visuellement seulement — ses columnheader restent lus par le lecteur d'écran. */
+  .comparables-analysis-table__head { position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
   .comparables-analysis-table > div { grid-template-columns: 1fr; gap: var(--s1); padding-block: var(--s4); }
   .comparables-analysis-table > div:has(input) { min-width: 0; grid-template-columns: minmax(0, 1fr); }
   .comparables-analysis-table input,

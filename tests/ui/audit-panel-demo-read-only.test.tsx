@@ -265,8 +265,11 @@ describe('panneau Preuves propriétaire (comportement préservé)', () => {
     expect(screen.queryByText(/Rupture de chaîne|Incohérence détectée/)).toBeNull();
     intact.unmount();
 
+    // V5 relecture (R-07) : un carnet rompu a des événements, donc une révision positive — sans elle, le bouton
+    // serait désactivé par la seule révision nulle et la garde `!integrityStatus.isValid` ne serait pas prouvée.
     const broken = makeJournal({
       verifyIntegrity: vi.fn(async () => ({ isValid: false, errors: [], legacyStatuses: [], brokenSequence: 2 })),
+      getProofState: vi.fn(() => ({ revision: 3, contentDigest: ZERO_DIGEST, legacyStatuses: [] })),
     });
     const { journal } = renderPanel({ journal: broken, snapshot });
     const migrate = await screen.findByRole('button', { name: 'Migrer la chaîne rompue' });

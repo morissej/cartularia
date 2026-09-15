@@ -744,3 +744,41 @@ test('V5 point 1 (2/2) : barre À faire, tableau À faire, Preuves et visionneus
   assert.equal((shell.match(/isDemoCartulary/g) ?? []).length, explained, 'isDemoCartulary conditionne une structure ou un droit dans la coque du lecteur');
   assert.equal((shell.match(/demonstration=\{isDemoCartulary\}/g) ?? []).length, 4, 'BarreDossier, CartularyAccessNotice, CartularyTodoBoard, PublicationReadOnlySummary');
 });
+
+// V5 — relecture adversariale (honnêteté, régression, accessibilité, sécurité-données) : correctifs verrouillés à la source.
+test('V5 relecture : catégories en texte dans la visionneuse, édition de tâche fermée en lecture, case de lecture alignée, en-têtes de tableau lus sur mobile', () => {
+  const app = readSource('../src/App.tsx');
+  const css = readSource('../src/index.css');
+  const modals = readSource('../src/features/cartulary/modals/CartularyModals.tsx');
+  const header = readSource('../src/components/BarreDossier.tsx');
+  const presentation = readSource('../src/features/cartulary/components/CartularyPresentation.tsx');
+  const readOnlyBlocks = readSource('../src/features/cartulary/components/CartularyReadOnlyBlocks.tsx');
+  // H2 : en lecture (ou hors audience Secret), aucun bouton de catégorie grisé — les catégories actives sont une ligne de texte.
+  assert.match(modals, /const tagsReadOnly = readOnly \|\| audience !== 'Secret';/);
+  assert.match(modals, /\{!tagsReadOnly && <fieldset className="media-tag-editor">/);
+  assert.doesNotMatch(modals, /disabled=\{readOnly \|\| audience !== 'Secret'\}/);
+  assert.match(modals, /\{tagsReadOnly && activeTagLabels\.length > 0 && <div><dt>\{tx\('Catégories', 'Categories'\)\}<\/dt><dd \{\.\.\.aiFieldProps\('media\.assets\[\]\.tags', asset\.id\)\}>/);
+  // H5 : l'édition d'une tâche du popover se ferme quand le droit se perd ; aucune soumission hors droit.
+  assert.match(header, /useEffect\(\(\) => \{\s*if \(readOnly\) \{\s*setEditingId\(null\);\s*setEditingText\(''\);\s*\}\s*\}, \[readOnly\]\);/);
+  assert.match(header, /\{!readOnly && editingId === todo\.id \? \(/);
+  assert.match(header, /if \(readOnly \|\| !editingId \|\| !text\) return;/);
+  // R-09 : la case de lecture (span enfant direct de l'article) échappe à la règle du numéro (padding-top 10px, 10px mono).
+  assert.match(css, /\.identification-list article > span:not\(\.control-check\) \{\n  padding-top: 10px;/);
+  assert.doesNotMatch(css, /\.identification-list article > span \{/);
+  // A6 : sous 768 px, l'en-tête de la synthèse d'analyse est masqué visuellement seulement (columnheader conservés).
+  const mobile = css.slice(css.indexOf('@media (max-width: 767px) {'), css.indexOf('@media (prefers-reduced-motion: reduce) {', css.indexOf('@media (max-width: 767px) {')));
+  assert.doesNotMatch(mobile, /\.comparables-analysis-table__head \{ display: none/);
+  assert.match(mobile, /\.comparables-analysis-table__head \{ position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important;[^\n]*clip: rect\(0, 0, 0, 0\) !important;/);
+  // A9 (MA8, MA15) : les grilles à colonnes fixes passent à une colonne sur mobile (formulaire d'ajout, registre de documentation).
+  assert.match(mobile, /\.specification-add-form \{ grid-template-columns: 1fr; \}/);
+  assert.match(mobile, /\.watch-website__document-list > div \{ grid-template-columns: 1fr;/);
+  // A4 : le registre de documentation en lecture est un tableau nommé, en-tête lu par le lecteur d'écran (.sr-only, jamais display: none).
+  assert.match(readOnlyBlocks, /<div className="watch-website__document-list" role="table" aria-label=\{tx\('Papiers, documentation et accessoires', 'Papers, documentation and accessories'\)\}>\s*<div className="sr-only" role="row">/);
+  assert.equal((readOnlyBlocks.match(/role="columnheader"/g) ?? []).length, 6, 'trois en-têtes pour la synthèse d’analyse, trois pour le registre de documentation');
+  // A2 : à la fermeture du formulaire d'ajout, le focus revient sur « Ajouter une donnée » (bouton .specification-add d'App.tsx).
+  assert.match(presentation, /window\.requestAnimationFrame\(\(\) => host\?\.querySelector<HTMLElement>\('\.specification-add'\)\?\.focus\(\)\);/);
+  assert.match(app, /<button type="button" className="specification-add button button--quiet no-print" onClick=\{\(\) => setPendingSpecificationGroupId\(group\.id\)\}>/);
+  // A3 : le fait activable garde un nom accessible à valeur vide et annonce l'action ; App.tsx lui passe la langue.
+  assert.match(presentation, /className="editable-fact" onClick=\{onActivate\} aria-label=\{value \? undefined : label\} title=\{language === 'FR' \? 'Cliquer pour modifier' : 'Click to edit'\}/);
+  assert.equal((app.match(/<EditableFact [^\n]*language=\{language\} \/>/g) ?? []).length, 3);
+});

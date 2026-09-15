@@ -86,16 +86,19 @@ export function EditableParagraphs({
  * `onActivate` est fourni (droit de gérer reconnu) ; champ pendant l'édition du bloc. L'ancre IA reste sur
  * l'élément rendu dans les trois cas.
  */
-export function EditableFact({ aiField, value, editing, onChange, onActivate, label }: {
+export function EditableFact({ aiField, value, editing, onChange, onActivate, label, language = 'FR' }: {
   aiField: AIFieldId;
   value: string;
   editing: boolean;
   onChange: (value: string) => void;
   onActivate?: () => void;
   label: string;
+  language?: InterfaceLanguage;
 }) {
   if (editing) return <input {...aiFieldProps(aiField)} type="text" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label} />;
-  if (onActivate) return <button {...aiFieldProps(aiField)} type="button" className="editable-fact" onClick={onActivate}>{value}</button>;
+  // V5 relecture (A3) : nom accessible garanti même si la valeur a été effacée (libellé du fait) ; l'action est
+  // annoncée par le même titre que les autres cibles d'édition.
+  if (onActivate) return <button {...aiFieldProps(aiField)} type="button" className="editable-fact" onClick={onActivate} aria-label={value ? undefined : label} title={language === 'FR' ? 'Cliquer pour modifier' : 'Click to edit'}>{value}</button>;
   return <span {...aiFieldProps(aiField)}>{value}</span>;
 }
 
@@ -121,14 +124,23 @@ export function SpecificationAddForm({
 }) {
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
+  const formRef = useRef<HTMLFormElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
   const duplicateMessageId = useId();
   const isFrench = language === 'FR';
   const trimmedLabel = label.trim();
   const duplicate = isDuplicateSpecificationLabel(existingLabels, trimmedLabel);
   const canSubmit = trimmedLabel.length > 0 && !duplicate;
+  // V5 relecture (A2, WCAG 2.4.3) : à la fermeture, le formulaire est démonté et le bouton « Ajouter une donnée »
+  // (`.specification-add`) reprend sa place dans le même hôte ; le focus lui revient au lieu de retomber sur <body>.
+  const close = () => {
+    const host = formRef.current?.parentElement;
+    onClose();
+    window.requestAnimationFrame(() => host?.querySelector<HTMLElement>('.specification-add')?.focus());
+  };
   return (
     <form
+      ref={formRef}
       className="specification-add-form no-print"
       aria-label={isFrench ? `Ajouter une donnée dans ${groupTitle}` : `Add data to ${groupTitle}`}
       onSubmit={(event) => {
@@ -142,7 +154,7 @@ export function SpecificationAddForm({
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return;
         event.preventDefault();
-        onClose();
+        close();
       }}
     >
       <label>
@@ -162,7 +174,7 @@ export function SpecificationAddForm({
         <input type="text" value={value} onChange={(event) => setValue(event.target.value)} />
       </label>
       <button type="submit" className="button button--primary" disabled={!canSubmit}><Plus size={14} aria-hidden="true" /> {isFrench ? 'Ajouter' : 'Add'}</button>
-      <button type="button" className="button button--quiet" onClick={onClose}>{isFrench ? 'Terminer' : 'Done'}</button>
+      <button type="button" className="button button--quiet" onClick={close}>{isFrench ? 'Terminer' : 'Done'}</button>
       {duplicate && <p id={duplicateMessageId} role="status">{isFrench ? 'Ce libellé existe déjà dans ce groupe.' : 'This label already exists in this group.'}</p>}
     </form>
   );

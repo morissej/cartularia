@@ -94,13 +94,18 @@ export function DocumentationRegisterReadOnly({ items, categoryLabel, stateLabel
 }) {
   const tx = translator(language);
   if (items.length === 0) return <p className="storage-empty">{tx('Aucun élément associé renseigné.', 'No associated item entered.')}</p>;
+  // V5 relecture (A4) : même sémantique de tableau qu'`AnalysisRowsReadOnly` — l'en-tête (catégorie, description,
+  // état) est lu par le lecteur d'écran et masqué visuellement (`.sr-only`, jamais `display: none`).
   return (
-    <div className="watch-website__document-list">
+    <div className="watch-website__document-list" role="table" aria-label={tx('Papiers, documentation et accessoires', 'Papers, documentation and accessories')}>
+      <div className="sr-only" role="row">
+        <span role="columnheader">{tx('Catégorie', 'Category')}</span><span role="columnheader">Description</span><span role="columnheader">{tx('État', 'Condition')}</span>
+      </div>
       {items.map((item) => (
-        <div key={item.id} data-ai-scope="condition.documentation[]" data-ai-instance={item.id}>
-          <span {...aiFieldProps('condition.documentation[].category', item.id)}>{categoryLabel(item.category)}</span>
-          <p {...aiFieldProps('condition.documentation[].description', item.id)}>{item.description || tx('Description non renseignée.', 'Description not provided.')}</p>
-          <strong {...aiFieldProps('condition.documentation[].state', item.id)}>{stateLabel(item.state)}</strong>
+        <div key={item.id} role="row" data-ai-scope="condition.documentation[]" data-ai-instance={item.id}>
+          <span role="cell" {...aiFieldProps('condition.documentation[].category', item.id)}>{categoryLabel(item.category)}</span>
+          <p role="cell" {...aiFieldProps('condition.documentation[].description', item.id)}>{item.description || tx('Description non renseignée.', 'Description not provided.')}</p>
+          <strong role="cell" {...aiFieldProps('condition.documentation[].state', item.id)}>{stateLabel(item.state)}</strong>
         </div>
       ))}
     </div>

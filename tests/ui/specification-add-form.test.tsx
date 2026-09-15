@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SpecificationAddForm } from '../../src/features/cartulary/components/CartularyPresentation.tsx';
@@ -99,6 +100,46 @@ describe('formulaire d’ajout d’une spécification', () => {
     await user.click(screen.getByRole('button', { name: 'Terminer' }));
     expect(onClose).toHaveBeenCalledTimes(2);
     expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  // V5 relecture (A2, WCAG 2.4.3) : hôte calqué sur App.tsx — le formulaire et le bouton « Ajouter une donnée »
+  // se remplacent dans la même section ; à la fermeture, le focus revient sur le bouton, jamais sur <body>.
+  function GroupHost() {
+    const [open, setOpen] = useState(true);
+    return (
+      <section className="specification-group">
+        <h3>Autres</h3>
+        <dl><div className="specification-row"><dt><input type="text" aria-label="Modifier le nom de Seconde" defaultValue="Seconde" /></dt><dd><input type="text" aria-label="Modifier Seconde" defaultValue="Centrale" /></dd></div></dl>
+        {open
+          ? <SpecificationAddForm language="FR" groupTitle="Autres" existingLabels={['Seconde']} onAdd={vi.fn()} onClose={() => setOpen(false)} />
+          : <button type="button" className="specification-add button button--quiet no-print" onClick={() => setOpen(true)}>Ajouter une donnée</button>}
+      </section>
+    );
+  }
+
+  it('rend le focus au bouton « Ajouter une donnée » après Échap', async () => {
+    const user = userEvent.setup();
+    render(<GroupHost />);
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Libellé' }));
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('form')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ajouter une donnée' })));
+  });
+
+  it('rend le focus au bouton « Ajouter une donnée » après « Terminer » activé au clavier', async () => {
+    const user = userEvent.setup();
+    render(<GroupHost />);
+
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Terminer' }));
+    await user.keyboard('{Enter}');
+
+    expect(screen.queryByRole('form')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ajouter une donnée' })));
+    expect(document.activeElement).not.toBe(document.body);
   });
 
   it('offre la parité EN : nom du formulaire, champs, boutons et message de doublon', async () => {

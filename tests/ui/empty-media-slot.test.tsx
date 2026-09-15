@@ -15,10 +15,15 @@ const video = (name = 'objet-mouvement.mp4') => new File(['x'], name, { type: 'v
 const photo = (name: string) => new File(['x'], name, { type: 'image/jpeg' });
 const fileInput = (container: HTMLElement) => container.querySelector<HTMLInputElement>('input[type="file"]');
 const choose = (input: HTMLInputElement, files: File[]) => fireEvent.change(input, { target: { files } });
+// V5 relecture (R-08) : sous jsdom, `input.value` d'un champ fichier vaut toujours '' (la liste posée par fireEvent
+// n'est pas celle de l'implémentation) ; seule l'observation du setter prouve la remise à zéro `input.value = ''`.
+// L'espion est posé avant le rendu : React capture le descripteur du prototype au montage du champ.
+const spyValueSetter = () => vi.spyOn(HTMLInputElement.prototype, 'value', 'set');
 
 describe('emplacement vidéo principale', () => {
   it('propose un bouton d’ajout qui ouvre un sélecteur de fichiers vidéo, fichier unique, et remet le fichier choisi', () => {
     const onAddFiles = vi.fn();
+    const valueSetter = spyValueSetter();
     const { container } = render(<EmptyMediaSlot slot="main-video" language="FR" canEdit onAddFiles={onAddFiles} />);
 
     const group = screen.getByRole('group', { name: 'Aucune vidéo ajoutée' });
@@ -37,10 +42,12 @@ describe('emplacement vidéo principale', () => {
     expect(input.tabIndex).toBe(-1);
 
     const file = video();
+    expect(valueSetter).not.toHaveBeenCalledWith('');
     choose(input, [file]);
     expect(onAddFiles).toHaveBeenCalledOnce();
     expect(onAddFiles).toHaveBeenCalledWith([file]);
-    expect(input.value).toBe('');
+    expect(valueSetter).toHaveBeenCalledWith('');
+    valueSetter.mockRestore();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -58,6 +65,7 @@ describe('emplacement vidéo principale', () => {
 
   it('refuse une image dans l’emplacement vidéo : message inline, rien remis à l’appelant, nouvelle sélection possible', () => {
     const onAddFiles = vi.fn();
+    const valueSetter = spyValueSetter();
     const { container } = render(<EmptyMediaSlot slot="main-video" language="FR" canEdit onAddFiles={onAddFiles} />);
     const input = fileInput(container);
     if (!input) throw new Error('input file introuvable');
@@ -66,7 +74,9 @@ describe('emplacement vidéo principale', () => {
 
     expect(onAddFiles).not.toHaveBeenCalled();
     expect(screen.getByRole('alert').textContent).toBe('Sélectionnez un fichier vidéo (MP4, MOV).');
-    expect(input.value).toBe('');
+    // Le même fichier peut être rechoisi après le refus : le sélecteur est vidé.
+    expect(valueSetter).toHaveBeenCalledWith('');
+    valueSetter.mockRestore();
 
     // Un fichier conforme lève le message.
     choose(input, [video()]);

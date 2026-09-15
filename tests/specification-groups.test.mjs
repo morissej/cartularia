@@ -256,7 +256,14 @@ test('13. garde de source : App.tsx passe par le module et ne crée plus de « N
     '<SpecificationAddForm',
     "aiFieldProps('reference.specifications[].label'",
     "aiFieldProps('reference.specifications[].value'",
+    // V5 relecture (C7) : les deux couches de protection des lignes d'identité sont figées une à une —
+    // la garde de deleteSpecification (défense en profondeur) et l'attribut disabled du bouton « Retirer ».
+    'if (PROTECTED_SPECIFICATION_IDS.has(itemId)) return;',
+    ' disabled={PROTECTED_SPECIFICATION_IDS.has(item.id)}',
+    // V5 relecture (A1, WCAG 2.5.3) : le nom accessible du bouton contient son libellé visible « Retirer ».
+    'aria-label={tx(`Retirer ${item.label}`, `Remove ${item.label}`)}',
   ].filter((anchor) => !app.includes(anchor));
   assert.deepEqual(missing, [], 'ancres attendues dans App.tsx (dont celles de validate:ai)');
+  assert.equal(app.includes('Supprimer ${item.label}'), false, 'A1 : plus aucun nom accessible « Supprimer … » sur le bouton « Retirer »');
   assert.equal(app.includes('Nouvelle donnée'), false, 'plus aucune ligne « Nouvelle donnée » créée par App.tsx');
 });

@@ -45,6 +45,7 @@ describe('visionneuse média extraite', () => {
 
     expect(screen.getByRole('dialog', { name: 'Facture d’achat' })).toBeTruthy();
     expect(screen.getByText('1 / 2')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Catégories' })).toBeTruthy();
     const download = screen.getByRole('link', { name: 'Télécharger le média : Facture d’achat' });
     expect(download.getAttribute('href')).toBe('/facture.pdf');
     expect(download.getAttribute('download')).toBe('facture.pdf');
@@ -58,6 +59,8 @@ describe('visionneuse média extraite', () => {
 
   // V5 point 1 (coherence.md M5) : readOnly={!canEdit} depuis App.tsx — un lecteur consulte et navigue, sans catégoriser,
   // sans changer la visibilité ni supprimer ; aucun texte « démonstration » dans la modale.
+  // V5 relecture (H2) : M5 figeait sept boutons de catégories grisés ; en lecture, les catégories actives sont du texte
+  // (V-D1 « texte pur, sans contrôle »), le fieldset n'est pas monté et aucun bouton désactivé ne subsiste.
   it('en lecture seule, conserve la consultation et retire toute commande d’édition', () => {
     const onChangeVisibility = vi.fn();
     render(<MediaViewerModal
@@ -79,12 +82,35 @@ describe('visionneuse média extraite', () => {
     expect(screen.getByRole('dialog', { name: 'Facture d’achat' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Média suivant' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Télécharger le média : Facture d’achat' })).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Documentation' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Documentation' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Catégories' })).toBeNull();
+    expect(document.querySelectorAll('button[disabled]')).toHaveLength(0);
+    expect(screen.getByText('Catégories')).toBeTruthy();
+    expect(screen.getByText('Documentation').closest('dd')?.getAttribute('data-ai-field')).toBe('media.assets[].tags');
     expect(screen.queryByRole('button', { name: /Supprimer ce fichier/ })).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.queryByText(/Autorisation de publication du média/)).toBeNull();
     expect(screen.queryByText(/démonstration/i)).toBeNull();
     expect(onChangeVisibility).not.toHaveBeenCalled();
+  });
+
+  it('en lecture seule sans catégorie connue (site public), aucune ligne « Catégories » ni bouton', () => {
+    render(<MediaViewerModal
+      asset={documentAsset}
+      assetCount={1}
+      position={0}
+      audience="Tous"
+      language="FR"
+      mediaTags={[]}
+      dialogRef={createRef<HTMLDivElement>()}
+      onClose={vi.fn()}
+      onMove={vi.fn()}
+      onToggleTag={vi.fn()}
+      onDelete={vi.fn()}
+      readOnly
+    />);
+    expect(screen.queryByText('Catégories')).toBeNull();
+    expect(document.querySelectorAll('fieldset, button[disabled]')).toHaveLength(0);
   });
 });
 

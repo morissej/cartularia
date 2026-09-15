@@ -94,6 +94,12 @@ it('affiche trois étapes honnêtes, une barre déterminée en phase fichiers se
   expect(live[0].getAttribute('aria-label')).toBe('Étapes de la création');
   expect(live[0].textContent).not.toContain('s écoulées');
   expect(live[0].textContent).not.toMatch(/o sur .* téléversés|Ordre de grandeur/);
+  // V5 relecture (A9 MA2) : le chronomètre (enfant direct de la section) n'est sous aucun ancêtre aria-live,
+  // la section elle-même comprise — sinon chaque seconde serait annoncée.
+  const clock = document.querySelector('.registry-create-progress > small');
+  expect(clock?.textContent).toContain('s écoulées');
+  expect(clock?.closest('[aria-live]')).toBeNull();
+  expect(progressSection().hasAttribute('aria-live')).toBe(false);
 
   // Serveur en cours : troisième étape courante, seconde faite ; toujours pas de « 100 ».
   act(() => onStatus!('processing'));

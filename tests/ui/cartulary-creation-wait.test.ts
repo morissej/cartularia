@@ -94,6 +94,11 @@ describe('attente de la création par écoute', () => {
     expect(statuses).toEqual(['pending', 'pending']);
     expect(api.runTransaction).toHaveBeenCalledTimes(1);
     expect(api.unsubscribe).toHaveBeenCalledTimes(1);
+    // V5 relecture (R-04) : le délai global est annulé à la résolution (aucune minuterie orpheline) et le second
+    // instantané failed n'a programmé aucun rejeu à 2,5 s — la garde `retrying` est ainsi prouvée, pas seulement commentée.
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(api.runTransaction).toHaveBeenCalledTimes(1);
   });
 
   it('trois échecs réessayables : deux rejeux (1 s puis 2,5 s) puis CartularyCreationFailedError', async () => {

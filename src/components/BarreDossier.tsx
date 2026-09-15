@@ -87,6 +87,15 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
     return () => window.clearTimeout(timeout);
   }, [deletedTodo]);
 
+  // V5 relecture (H5) : perte du droit de gérer pendant l'édition d'une tâche (session verrouillée, D5 (a)) —
+  // le formulaire se ferme, comme le bloc en édition d'App.tsx et le tableau À faire ; aucun champ orphelin.
+  useEffect(() => {
+    if (readOnly) {
+      setEditingId(null);
+      setEditingText('');
+    }
+  }, [readOnly]);
+
   const addTodo = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = newTodo.trim();
@@ -105,7 +114,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
   const saveTodo = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = editingText.trim();
-    if (!editingId || !text) return;
+    if (readOnly || !editingId || !text) return;
 
     updateTodo(editingId, { text });
     setEditingId(null);
@@ -243,7 +252,7 @@ export const BarreDossier: React.FC<BarreDossierProps> = ({
                   <ul className="todo-list">
                     {todos.map((todo) => (
                       <li key={todo.id}>
-                        {editingId === todo.id ? (
+                        {!readOnly && editingId === todo.id ? (
                           <form className="todo-edit-form" onSubmit={saveTodo}>
                             <input
                               type="text"
