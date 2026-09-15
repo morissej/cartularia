@@ -1,9 +1,11 @@
+import { useId, useRef, useState } from 'react';
 import { Lock, Pencil, Play, Plus, Trash2, Video } from 'lucide-react';
 import type { AIFieldId } from '../../../ai/fieldCatalog.ts';
 import { aiFieldProps } from '../../../ai/fieldCatalog.ts';
 import { PrivateMediaImage } from '../../../components/PrivateMediaImage.tsx';
 import { AutoResizeTextarea } from '../../../components/AutoResizeTextarea.tsx';
 import type { PublishedBlockId } from '../../../domain/publication.ts';
+import { isDuplicateSpecificationLabel } from '../../../domain/specificationGroups.ts';
 import type { Asset, ComparableTransaction } from '../../../types/index.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
 import { formatDate, formatMoney } from '../../../utils/formatting.ts';
@@ -77,6 +79,75 @@ export function EditableParagraphs({
         <AutoResizeTextarea key={index} {...(aiField ? aiFieldProps(aiField, index) : {})} value={value} rows={4} onChange={(event) => onChange(index, event.target.value)} aria-label={language === 'FR' ? `Modifier le paragraphe ${index + 1}` : `Edit paragraph ${index + 1}`} />
       ) : <p key={index} {...(aiField ? aiFieldProps(aiField, index) : {})}>{value}</p>)}
     </div>
+  );
+}
+
+/**
+ * V5 point 3 (P-C4) : formulaire d'ajout d'une ligne dans un groupe de spécifications. La ligne
+ * n'entre dans l'état qu'à la validation d'un libellé non vide et unique dans le groupe (à la casse
+ * et aux espaces près) ; la valeur est facultative. Après validation, le formulaire reste ouvert,
+ * vidé, le focus revenant sur le libellé pour une saisie en chaîne ; « Terminer » ou Échap le ferme.
+ * La règle d'unicité est doublée côté commande (`appendSpecification`).
+ */
+export function SpecificationAddForm({
+  language,
+  groupTitle,
+  existingLabels,
+  onAdd,
+  onClose,
+}: {
+  language: InterfaceLanguage;
+  groupTitle: string;
+  existingLabels: readonly string[];
+  onAdd: (label: string, value: string) => void;
+  onClose: () => void;
+}) {
+  const [label, setLabel] = useState('');
+  const [value, setValue] = useState('');
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const duplicateMessageId = useId();
+  const isFrench = language === 'FR';
+  const trimmedLabel = label.trim();
+  const duplicate = isDuplicateSpecificationLabel(existingLabels, trimmedLabel);
+  const canSubmit = trimmedLabel.length > 0 && !duplicate;
+  return (
+    <form
+      className="specification-add-form no-print"
+      aria-label={isFrench ? `Ajouter une donnée dans ${groupTitle}` : `Add data to ${groupTitle}`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!canSubmit) return;
+        onAdd(trimmedLabel, value.trim());
+        setLabel('');
+        setValue('');
+        labelInputRef.current?.focus();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <label>
+        <span>{isFrench ? 'Libellé' : 'Label'}</span>
+        <input
+          ref={labelInputRef}
+          autoFocus
+          type="text"
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          aria-invalid={duplicate || undefined}
+          aria-describedby={duplicate ? duplicateMessageId : undefined}
+        />
+      </label>
+      <label>
+        <span>{isFrench ? 'Valeur' : 'Value'}</span>
+        <input type="text" value={value} onChange={(event) => setValue(event.target.value)} />
+      </label>
+      <button type="submit" className="button button--primary" disabled={!canSubmit}><Plus size={14} aria-hidden="true" /> {isFrench ? 'Ajouter' : 'Add'}</button>
+      <button type="button" className="button button--quiet" onClick={onClose}>{isFrench ? 'Terminer' : 'Done'}</button>
+      {duplicate && <p id={duplicateMessageId} role="status">{isFrench ? 'Ce libellé existe déjà dans ce groupe.' : 'This label already exists in this group.'}</p>}
+    </form>
   );
 }
 

@@ -103,9 +103,18 @@ import {
   EditableParagraphs,
   PageIntroduction,
   SectionTitle,
+  SpecificationAddForm,
   VideoPoster,
   type BlockMarkerState,
 } from './features/cartulary/components/CartularyPresentation';
+import {
+  PROTECTED_SPECIFICATION_IDS,
+  appendSpecification,
+  mergeStoredSpecificationGroups,
+  specificationGroupsFromLegacyWatchData,
+  type SpecificationGroup,
+  type SpecificationItem,
+} from './domain/specificationGroups';
 import {
   DeletionDialog,
   MarketHistoryDialog,
@@ -190,17 +199,8 @@ interface PopularityResource {
   url: string;
 }
 
-interface SpecificationDatum {
-  id: string;
-  label: string;
-  value: string;
-}
-
-interface SpecificationGroupData {
-  id: string;
-  title: string;
-  items: SpecificationDatum[];
-}
+type SpecificationDatum = SpecificationItem;
+type SpecificationGroupData = SpecificationGroup;
 
 interface EditableCopyData {
   originTitle?: string;
@@ -545,29 +545,14 @@ const loadPublicationSourceBinding = (): PublicationSourceBinding => {
   };
 };
 
+// V5 point 3 (P-C4) : l'état enregistré fait foi (lignes ajoutées, libellés, suppressions durables) ;
+// le catalogue ne sert qu'à compléter la forme de création, les libellés d'identité et les valeurs de repli.
 const loadSpecificationGroups = (): SpecificationGroupData[] => {
   if (isDemoCartulary) return DEFAULT_SPECIFICATION_GROUPS;
   const stored = readStored<SpecificationGroupData[] | null>('cartularia-specification-groups', null);
-  if (stored?.length) {
-    const storedValues = new Map(stored.flatMap((group) => group.items || []).map((item) => [item.id, item.value === 'Voir 04 · Valeur' ? 'Voir 04 · Valorisation' : item.value]));
-    return DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
-      ...group,
-      items: group.items.map((item) => ({ ...item, value: storedValues.get(item.id) || item.value })),
-    }));
-  }
+  if (stored?.length) return mergeStoredSpecificationGroups(stored, DEFAULT_SPECIFICATION_GROUPS);
   const legacy = readStored<Record<string, string> | null>('cartularia-basic-watch-data', null);
-  if (!legacy) return DEFAULT_SPECIFICATION_GROUPS;
-  const legacyMap: Record<string, string> = {
-    'ad-code': legacy.adCode, brand: legacy.brand, collection: legacy.collection, model: legacy.model,
-    reference: legacy.reference, movement: legacy.movement, case: legacy.caseMaterial,
-    bracelet: legacy.braceletMaterial, year: legacy.productionYear, condition: legacy.condition,
-    delivered: legacy.deliveredContent, gender: legacy.gender, location: legacy.location,
-    price: legacy.price, availability: legacy.availability,
-  };
-  return DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.map((item) => ({ ...item, value: legacyMap[item.id] ?? item.value })),
-  }));
+  return legacy ? specificationGroupsFromLegacyWatchData(legacy, DEFAULT_SPECIFICATION_GROUPS) : DEFAULT_SPECIFICATION_GROUPS;
 };
 
 const loadEditableCopy = (): EditableCopyData => {
@@ -694,6 +679,7 @@ function App() {
   const [fileImportError, setFileImportError] = useState<string | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
   const [editingBlock, setEditingBlock] = useState<PublishedBlockId | null>(null);
+  const [pendingSpecificationGroupId, setPendingSpecificationGroupId] = useState<string | null>(null);
   const mediaState = useCartularyMediaState({ loadAssets: loadMediaAssets });
   const { mediaAssets, reloadMediaState, commands: mediaCommands } = mediaState;
   const setMediaAssets = mediaCommands.replaceAssets;
@@ -1903,6 +1889,7 @@ function App() {
   };
 
   const deleteSpecification = (groupId: string, itemId: string) => {
+    if (PROTECTED_SPECIFICATION_IDS.has(itemId)) return;
     const group = specificationGroups.find((candidate) => candidate.id === groupId);
     const removed = group ? removeItemById(group.items, itemId) : null;
     if (!group || !removed) return;
@@ -1928,10 +1915,8 @@ function App() {
     });
   };
 
-  const addSpecification = (groupId: string) => {
-    setSpecificationGroups((current) => current.map((group) => group.id === groupId
-      ? { ...group, items: [...group.items, { id: newId('spec'), label: 'Nouvelle donnée', value: '' }] }
-      : group));
+  const addSpecification = (groupId: string, label: string, value: string) => {
+    setSpecificationGroups((current) => appendSpecification(current, groupId, { id: newId('spec'), label, value }) ?? current);
   };
 
   const renderWatchWebsiteBlock = (blockId: PublishedBlockId, forPrint = false) => {
@@ -2082,9 +2067,9 @@ function App() {
             <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} />
             <div className="specification-groups">
               {specificationGroups.map((group) => (
-                <section className="specification-group" key={group.title}>
+                <section className="specification-group" key={group.id}>
                   <h3>{group.title}</h3>
-                  <dl>{group.items.map((item) => <div key={item.id}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
+                  <dl>{group.items.filter((item) => item.value.trim()).map((item) => <div key={item.id}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
                 </section>
               ))}
             </div>
@@ -2597,22 +2582,26 @@ function App() {
               <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} publish={publishProps('reference-specs')} />
               <div className="specification-groups">
                 {specificationGroups.map((group) => (
-                  <section className="specification-group" key={group.title}>
+                  <section className="specification-group" key={group.id}>
                     <h3>{group.title}</h3>
                     <dl>
                       {group.items.map((item) => (
                         <div className="specification-row" key={item.id} data-ai-scope="reference.specifications[]" data-ai-instance={item.id}>
                           {canEdit ? (
                             <>
-                              <dt><input {...aiFieldProps('reference.specifications[].label', item.id)} type="text" value={item.label} onChange={(event) => updateSpecification(group.id, item.id, { label: event.target.value })} aria-label={tx(`Modifier le nom de ${item.label}`, `Edit the name of ${item.label}`)} /></dt>
+                              {PROTECTED_SPECIFICATION_IDS.has(item.id)
+                                ? <dt {...aiFieldProps('reference.specifications[].label', item.id)}>{item.label}</dt>
+                                : <dt><input {...aiFieldProps('reference.specifications[].label', item.id)} type="text" value={item.label} onChange={(event) => updateSpecification(group.id, item.id, { label: event.target.value })} aria-label={tx(`Modifier le nom de ${item.label}`, `Edit the name of ${item.label}`)} /></dt>}
                               <dd><input {...aiFieldProps('reference.specifications[].value', item.id)} type="text" value={item.value} onChange={(event) => updateSpecification(group.id, item.id, { value: event.target.value })} aria-label={tx(`Modifier ${item.label}`, `Edit ${item.label}`)} /></dd>
-                              <button type="button" className="icon-button no-print" onClick={() => deleteSpecification(group.id, item.id)} aria-label={tx(`Supprimer ${item.label}`, `Delete ${item.label}`)}><Trash2 size={15} /></button>
+                              <button type="button" className="icon-button specification-remove no-print" onClick={() => deleteSpecification(group.id, item.id)} disabled={PROTECTED_SPECIFICATION_IDS.has(item.id)} aria-label={tx(`Supprimer ${item.label}`, `Delete ${item.label}`)} title={PROTECTED_SPECIFICATION_IDS.has(item.id) ? tx('Ligne d’identité posée à la création : non supprimable', 'Identity line set at creation: cannot be deleted') : tx('Supprimer cette donnée', 'Delete this field')}><Trash2 size={15} aria-hidden="true" /><span>{tx('Retirer', 'Remove')}</span></button>
                             </>
                           ) : <><dt>{item.label}</dt><dd>{item.value}</dd></>}
                         </div>
                       ))}
                     </dl>
-                    {canEdit && <button type="button" className="specification-add button button--quiet no-print" onClick={() => addSpecification(group.id)}><Plus size={14} /> {tx('Ajouter une donnée', 'Add data')}</button>}
+                    {canEdit && (pendingSpecificationGroupId === group.id
+                      ? <SpecificationAddForm language={language} groupTitle={group.title} existingLabels={group.items.map((item) => item.label)} onAdd={(label, value) => addSpecification(group.id, label, value)} onClose={() => setPendingSpecificationGroupId(null)} />
+                      : <button type="button" className="specification-add button button--quiet no-print" onClick={() => setPendingSpecificationGroupId(group.id)}><Plus size={14} /> {tx('Ajouter une donnée', 'Add data')}</button>)}
                   </section>
                 ))}
               </div>

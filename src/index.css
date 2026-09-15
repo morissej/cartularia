@@ -1818,7 +1818,7 @@ textarea {
 .specification-group dl > div:last-child { border-bottom: 0; }
 .specification-group dt { color: var(--ink); font-size: 13px; font-weight: 600; }
 .specification-group dd { color: var(--muted); font-size: 13px; line-height: 1.45; }
-.specification-group dl > .specification-row:has(> button) { grid-template-columns: minmax(150px, 36%) minmax(180px, 1fr) 44px; }
+.specification-group dl > .specification-row:has(> button) { grid-template-columns: minmax(150px, 36%) minmax(180px, 1fr) auto; }
 .specification-row dt input,
 .specification-row dd input { width: 100%; min-height: 38px; padding: var(--s1) var(--s2); border: 1px solid transparent; border-bottom-color: var(--rule); background: var(--paper); color: var(--ink); font-size: 13px; }
 .specification-row dt input { font-weight: 600; }
@@ -1827,6 +1827,15 @@ textarea {
 .specification-row dd input:hover,
 .specification-row dd input:focus { border-color: var(--ink); background: var(--sheet); }
 .specification-add { margin: var(--s3) var(--s4) var(--s4); }
+/* V5 point 3 (P-C4) : suppression reconnaissable (icône + texte « Retirer ») et ajout à la validation. */
+.specification-remove { display: inline-flex; align-items: center; gap: 4px; width: auto; height: auto; min-height: var(--control-size); padding: 0 var(--s2); font-size: 12px; white-space: nowrap; }
+.specification-remove:disabled { cursor: not-allowed; opacity: .45; }
+.specification-remove:disabled:hover { border-color: var(--rule); color: inherit; }
+.specification-add-form { display: grid; grid-template-columns: minmax(150px, 36%) minmax(180px, 1fr) auto auto; gap: var(--s2); align-items: end; margin: var(--s3) var(--s4) var(--s4); }
+.specification-add-form label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.specification-add-form input { min-height: 38px; padding: var(--s1) var(--s2); border: 1px solid var(--rule); background: var(--paper); color: var(--ink); font-size: 13px; }
+.specification-add-form input[aria-invalid="true"] { border-color: var(--mark); }
+.specification-add-form p { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
 
 .identification-list { border-top: 1px solid var(--rule); }
 
@@ -3040,10 +3049,11 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .specification-groups { grid-template-columns: 1fr; }
   .specification-group:first-child { grid-column: auto; }
   .specification-group dl > div { grid-template-columns: 1fr; gap: var(--s1); padding-block: var(--s3); }
-  .specification-group dl > .specification-row:has(> button) { grid-template-columns: minmax(0, 1fr) 44px; }
+  .specification-group dl > .specification-row:has(> button) { grid-template-columns: minmax(0, 1fr) auto; }
   .specification-row:has(> button) dt,
   .specification-row:has(> button) dd { grid-column: 1; }
   .specification-row:has(> button) > button { grid-column: 2; grid-row: 1 / span 2; }
+  .specification-add-form { grid-template-columns: 1fr; }
   .history-text p { font-size: 14px; }
   .identification-list article { grid-template-columns: 34px 44px 1fr; gap: var(--s2); }
   .identification-list article > .icon-button { grid-column: 3; }
