@@ -46,8 +46,11 @@
 
 .registry-topbar--chooser { grid-template-columns: 1fr auto; }
 
-.registry-brand { display: block; width: 176px; }
+/* Cibles tactiles (V6, V-D7, D11 (a)) : marque de la topbar ≥ 44 px, règle scopée (jamais globale sur .brand-logo-link).
+   Conteneur en flex (et non block) : le lien inline-flex de 44 px n'ajoute plus la descente de ligne au bloc (mesuré 47 → 44 px). */
+.registry-brand { display: flex; width: 176px; }
 .registry-brand .brand-logo { height: 36px; }
+.registry-brand .brand-logo-link { min-height: var(--control-size); }
 
 .registry-product-label {
   display: grid;
@@ -87,7 +90,7 @@
 .registry-context-select { display: grid; gap: 2px; }
 .registry-context-select select {
   max-width: 280px;
-  min-height: 36px;
+  min-height: var(--control-size);
   padding: 0 34px 0 var(--s3);
   border: 1px solid var(--rule);
   background: var(--sheet);
@@ -110,7 +113,7 @@
 
 .registry-signout {
   display: inline-flex;
-  min-height: 40px;
+  min-height: var(--control-size);
   align-items: center;
   justify-content: center;
   gap: var(--s2);
@@ -130,7 +133,7 @@
 
 .registry-home-link {
   display: inline-flex;
-  min-height: 40px;
+  min-height: var(--control-size);
   align-items: center;
   justify-content: center;
   gap: var(--s2);
@@ -1442,6 +1445,7 @@
 
 .registry-auth-logo { position: absolute; top: 32px; left: clamp(40px, 8vw, 120px); width: 190px; }
 .registry-auth-logo .brand-logo { width: 100%; height: auto; }
+.registry-auth-logo .brand-logo-link { min-height: var(--control-size); }
 .registry-auth-intro > p:not(.registry-kicker) { max-width: 680px; color: var(--muted); font-family: var(--font-display); font-size: clamp(20px, 2.5vw, 32px); line-height: 1.35; }
 .registry-auth-principle { display: flex; align-items: center; gap: var(--s2); max-width: 560px; padding-top: var(--s4); border-top: 1px solid var(--rule); color: var(--muted); font-size: 12px; }
 .registry-auth-principle svg { width: 18px; color: var(--positive); }
@@ -1478,7 +1482,7 @@
 
 .registry-auth-panel form > button:disabled { cursor: not-allowed; opacity: .45; }
 .registry-auth-panel form > button svg { width: 17px; }
-.registry-auth-create-link { margin-top: var(--s3); color: var(--muted); font-size: 11px; font-weight: 600; text-align: center; }
+.registry-auth-create-link { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-size); margin-top: var(--s3); color: var(--muted); font-size: 11px; font-weight: 600; text-align: center; }
 .registry-auth-create-link:hover { color: var(--mark); }
 .registry-form-error { margin-top: var(--s2); color: var(--negative); font-size: 11px; }
 
