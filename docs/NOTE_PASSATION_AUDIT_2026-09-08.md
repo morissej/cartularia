@@ -354,8 +354,8 @@ git diff --check
   les montants du profil qui alimenteraient le Registre) ; rapport classé Secret (`root.valuation`)
   ; prévenir le propriétaire du risque de « conflict » client ; demande pending jamais traitée :
   `npm run sync:worker -- --allow-remote` via `run-with-firebase-cli-adc.mjs` ; tests : `npm run
-  test:iwc-profile-keys`) ; le pilote IWC reste en `watch@1.3.0` tant que `schema:upgrade` n’a pas
-  été lancé. Toute action distante exige une autorisation explicite de Jérôme.
+  test:iwc-profile-keys`) ; le pilote IWC est en `watch@1.6.0` depuis le 9 septembre (`schema:upgrade`,
+  journal V1 § 10, révision 8 ; constaté en V7). Toute action distante exige une autorisation explicite de Jérôme.
 - **Décisions ouvertes** : activer une version automobile dans le manifeste (aujourd’hui
   `car@1.2.0` est `baseline`, la règle « dernière publiée » s’applique) ; sortir de
   `cartularyIds.ts` la correspondance des codes publics du pilote ; supprimer ou archiver les

@@ -88,3 +88,18 @@ test('V6 relecture (F7) : le retour en haut de page est immédiat sous prefers-r
   assert.equal(pageScrollBehavior({}), 'smooth', 'jsdom (tests/ui) n’implémente pas matchMedia');
   assert.deepEqual(queries, ['(prefers-reduced-motion: reduce)']);
 });
+
+test('ADR-029 (V7, décision b) : un code public ne sélectionne plus de Cartulaire côté client — /watch-website?publicCode=ROL-… ne charge plus le Rolex', () => {
+  const website = cartularyIdFromLocation({ pathname: '/watch-website', search: '' });
+  const reader = cartularyIdFromLocation({ pathname: '/cartulary', search: '' });
+  assert.equal(website, IWC_CARTULARY_ID);
+  for (const code of ['ROL-487D9CAD', 'ROLEX-1675-01', 'OP-4892-XZ9', 'DEMO-ROL-124060', 'WCH-ABCDEF12']) {
+    // Le mini-site ne dépend que de la projection publique `publications/{code}` (App.tsx) ; l'identifiant local reste celui par défaut.
+    assert.equal(cartularyIdFromLocation({ pathname: '/watch-website', search: `?publicCode=${code}` }), website, code);
+    assert.notEqual(cartularyIdFromLocation({ pathname: '/watch-website', search: `?publicCode=${code}` }), ROLEX_CARTULARY_ID, code);
+    assert.equal(cartularyIdFromLocation({ pathname: '/cartulary', search: `?publicCode=${code}` }), reader, code);
+    assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-view', search: `?publicCode=${code}` }), reader, code);
+  }
+  // Un identifiant explicite garde la priorité, code public ou non.
+  assert.equal(cartularyIdFromLocation({ pathname: '/watch-website', search: `?publicCode=ROL-487D9CAD&cartularyId=${ROLEX_CARTULARY_ID}` }), ROLEX_CARTULARY_ID);
+});

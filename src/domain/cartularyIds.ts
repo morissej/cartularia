@@ -23,9 +23,8 @@ export const cartularyIdFromLocation = (location: Pick<Location, 'pathname' | 's
   // Sans identifiant, ou avec un identifiant hors démonstration, la Submariner est chargée.
   if (isDemoRoute) return requested && isDemoCartularyId(requested) ? requested : DEMO_SUBMARINER_CARTULARY_ID;
   if (requested && SAFE_CARTULARY_ID.test(requested)) return requested;
-  const publicCode = parameters.get('publicCode');
-  if (publicCode === 'ROL-487D9CAD' || publicCode === 'ROLEX-1675-01') return ROLEX_CARTULARY_ID;
-  if (publicCode === 'OP-4892-XZ9') return IWC_CARTULARY_ID;
+  // ADR-029 (V7) : plus aucune correspondance code public → Cartulaire côté client ; la projection
+  // publique (`publications/{code}.cartularyId`) est la seule source sur `/watch-website`.
   return IWC_CARTULARY_ID;
 };
 

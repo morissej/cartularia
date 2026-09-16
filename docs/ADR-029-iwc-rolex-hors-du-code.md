@@ -42,6 +42,16 @@ qu’en code.
   migrations à date fixe, pas des branches de présentation.
 - `cartularyIds.ts` garde l’identifiant par défaut de `/cartulary` et la correspondance des codes
   publics du pilote ; les déplacer en données relève d’une décision de routage séparée.
+  **Addendum V7 (16 septembre 2026, décision D5)** : la correspondance des codes publics
+  (`ROL-487D9CAD`, `ROLEX-1675-01`, `OP-4892-XZ9`) est retirée du routage client — aucun lien ne
+  produisait `/cartulary?publicCode=` et `/watch-website` résout son contenu par la projection
+  publique `publications/{code}` seule. `cartularyIds.ts` ne garde que l’identifiant par défaut de
+  `/cartulary` (constante de module, à instruire avec le routeur client, V-B4) ; sur `/watch-website`,
+  le suivi des rappels passe en `readOnlyPreview`, comme en démonstration : plus d’écoute Firestore
+  ni de lecture locale de l’objet actif depuis le mini-site. Verrous : `tests/interface-state.test.mjs`
+  (un code public ne sélectionne plus de Cartulaire), `tests/cartulary-presentation-contract.test.mjs`
+  (aucun code public en dur dans `cartularyIds.ts`), `tests/hygiene-v7.test.mjs` (mini-site sans
+  écoute des rappels).
 
 ## Conséquences
 

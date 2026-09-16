@@ -664,7 +664,7 @@ function App() {
   }, [isWatchWebsite, watch]);
   // V6 (V-D9) : bascule FR/EN masquée tant que la traduction est partielle ; la préférence stockée n'est plus relue.
   const language = DEFAULT_INTERFACE_LANGUAGE;
-  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary });
+  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary || isWatchWebsite });
   // V5 point 1 (V-D1, P-D6) : une seule source de vérité pour l'édition des pages 00-04, la même que la page Publication (V2 (b), D5 (a)) :
   // faux en démonstration (hook désactivé), hors session, pendant la résolution des droits et pour tout lecteur sans « cartulary.edit ».
   const canEdit = authoritative.canManage;

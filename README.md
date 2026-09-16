@@ -55,7 +55,7 @@ npm run build
 
 ## Fondations Firebase — vague 1
 
-La première vague met en place Auth, organisations, memberships, Registres et le schéma historique `watch@1.3.0` dans un environnement d’émulation sécurisé. Le catalogue conserve désormais cette baseline à 78 champs et publie `watch@1.4.0` à 91 champs comme version active, sans réécriture de l’artefact historique. Les règles restent deny-by-default ; depuis la vague 3, Storage ouvre uniquement un dérivé sous `public/{publicCode}/...` lorsque la publication Firestore correspondante est active.
+La première vague met en place Auth, organisations, memberships, Registres et le schéma historique `watch@1.3.0` dans un environnement d’émulation sécurisé. Le catalogue conserve cette baseline à 78 champs et publie `watch@1.6.0` comme version active (pointeur `activeVersions` de `firebase/schema-catalog/manifest.json`, ADR-030) ; `watch@1.4.0` et `watch@1.5.0` restent des artefacts immuables, sans réécriture de l’artefact historique. Les règles restent deny-by-default ; depuis la vague 3, Storage ouvre uniquement un dérivé sous `public/{publicCode}/...` lorsque la publication Firestore correspondante est active.
 
 Le guide d’exécution et les garde-fous de déploiement sont décrits dans [`docs/FOUNDATIONS_WAVE_1.md`](docs/FOUNDATIONS_WAVE_1.md). La décision d’architecture correspondante est consignée dans [`docs/ADR-001-fondations-firebase.md`](docs/ADR-001-fondations-firebase.md).
 

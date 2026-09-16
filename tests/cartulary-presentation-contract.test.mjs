@@ -172,7 +172,7 @@ test('ADR-028 : la liste des sections spécialisées ne cite que des sections pu
 
 // ADR-026, durcissement du 2026-09-08 : aucune condition par marque ou identifiant de Cartulaire
 // dans l'application. Les seules mentions tolérées sont des fixtures de seed, des migrations datées
-// et la correspondance de routage des codes publics du pilote.
+// et l'identifiant par défaut de `/cartulary` (V7 : la correspondance des codes publics est retirée).
 const IDENTITY_ALLOWLIST = [
   'src/domain/cartularyIds.ts',
   'src/bootstrap/applicationBootstrap.ts',
@@ -208,6 +208,16 @@ test('ADR-026 durci : aucune condition par marque ou identifiant hors fixtures, 
   assert.match(bootstrap, /Migration datée \(ADR-029\)/, 'l’hydratation IWC reste documentée comme migration datée');
   const active = readFileSync(new URL('../src/data/activeCartulary.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(active, /mockData/, 'le Cartulaire actif ne lit plus la fixture IWC');
+});
+
+// ADR-029, V7 (décision b) : plus aucune correspondance code public → Cartulaire côté client ; sur
+// `/watch-website`, la projection publique `publications/{code}` est la seule source (App.tsx). Le
+// comportement de cartularyIdFromLocation est vérifié dans tests/interface-state.test.mjs.
+test('ADR-029 (V7) : aucun code public en dur dans cartularyIds.ts, qui ne garde que l’identifiant par défaut', () => {
+  const ids = readFileSync(new URL('../src/domain/cartularyIds.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(ids, /publicCode|ROL-487D9CAD|ROLEX-1675-01|OP-4892-XZ9/, 'le routage ne lit plus publicCode et ne connaît plus les codes du pilote');
+  assert.equal((ids.match(/\bROLEX_CARTULARY_ID\b/g) ?? []).length, 1, 'ROLEX_CARTULARY_ID reste exporté (fixtures et migrations) mais n’est plus une cible de routage');
+  assert.match(ids, /\n  return IWC_CARTULARY_ID;\n\};\n/, 'repli unique : l’identifiant par défaut');
 });
 
 test('ADR-026 durci : le mode démonstration ne décide ni des pages ni des structures communes', () => {
