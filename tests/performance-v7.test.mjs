@@ -1,16 +1,19 @@
-// V7 (V-B2, décisions D6, D7, D8, D11) — barrière du point « bundle », commit C1 : découpage react/icons de vite.config.ts, greffon
+// V7 (V-B2, décisions D6, D7, D8, D10, D11) — barrière du point « bundle ». Commit C1 : découpage react/icons de vite.config.ts, greffon
 // retirant les copies numérotées de dist/, garde hosting.ignore des deux configurations Hosting, budgets étendus de measure:pf0,
-// mesure des surfaces (measure:surfaces) et scripts test:v7 / verify:v7. Assertions de source et de comportement (les configurations
-// Vite sont importées telles quelles par Node, le greffon et measure:pf0 sont exercés sur des dossiers témoins) : chacune échoue
-// sans le code qu'elle verrouille. Les contrôles sur le vrai dist/ sont ceux de measure:pf0 et measure:surfaces (verify:v7).
+// mesure des surfaces (measure:surfaces) et scripts test:v7 / verify:v7. Commit C2 : préchargement du Registre depuis la page de
+// connexion (registryPreload.ts, câblage d'AccountAccessPage, seuil du parcours à chaud). Assertions de source et de comportement (les
+// configurations Vite sont importées telles quelles par Node, le greffon et measure:pf0 sont exercés sur des dossiers témoins, les
+// sources TSX sont lues par l'AST TypeScript) : chacune échoue sans le code qu'elle verrouille. Les contrôles sur le vrai dist/ sont
+// ceux de measure:pf0 et measure:surfaces (verify:v7) ; le comportement du préchargement est exercé par tests/ui/registry-preload.test.tsx.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = (path) => readFileSync(join(root, path), 'utf8');
@@ -183,12 +186,100 @@ test('V-B2 : measure-surfaces a les garde-fous de l’audit axe (Chrome install�
   assert.match(source, /\{ name: 'connexion', path: '\/account\/sign-in', settle: 3500 \}, \{ name: 'registre-items', path: REGISTRY_ITEMS, settle: 2000 \}/, 'parcours à chaud : la connexion attend 3,5 s d’inactivité avant l’étape Registre');
   assert.match(source, /width: 390, height: 844, mobile: true/);
   assert.match(source, /width: 1440, height: 900, mobile: false/);
-  assert.match(source, /const LIMITS = \{\n  accueil: \{ requêtes: 22, js: 10 \},\n  connexion: \{ jsInitiaux: 14 \},\n  'demo-cover': \{ js: 32 \},\n  registre: \{ js: 20 \},\n\};/);
+  assert.match(source, /const LIMITS = \{\n  accueil: \{ requêtes: 22, js: 10 \},\n  connexion: \{ jsInitiaux: 14 \},\n  'demo-cover': \{ js: 32 \},\n  registre: \{ js: 20 \},\n  'registre-items': \{ jsRéseau: 0, réseau: 3 \},\n\};/);
   assert.match(source, /if \(result\.js\.icônes > 0\) violations\.push/, '0 morceau « icône seule » sur chaque surface');
+  // C2 (D10) : l'étape Registre du parcours à chaud est contrôlée sur --check (0 JS réseau, ≤ 3 requêtes réseau), pas seulement relevée.
+  assert.match(source, /for \(const step of report\.sequence\) \{\n    const limit = LIMITS\[step\.step\] \?\? \{\};/);
+  assert.match(source, /if \(limit\.jsRéseau !== undefined && step\.jsRéseau > limit\.jsRéseau\) violations\.push\(/);
+  assert.match(source, /if \(limit\.réseau !== undefined && step\.réseau > limit\.réseau\) violations\.push\(/);
   assert.match(source, /docs\/audits\/perf/);
   assert.match(source, /process\.exit\(violations\.length === 0 \? 0 : 1\);/);
   // Le serveur local rejoue la réécriture Hosting et ses en-têtes de cache (parcours à chaud comparable à la production).
   assert.match(source, /'cache-control': immutable \? 'public, max-age=31536000, immutable' : 'no-cache, no-store, must-revalidate'/);
+});
+
+// ---------------------------------------------------------------- C2 / D10 : préchargement du Registre depuis la page de connexion
+// Lecture AST (technique de tests/performance-wave5.test.mjs) : imports statiques, import() dynamiques et leur position (dans lazy( ou non,
+// dans quel appel), appels de fonctions et corps des useEffect.
+const parse = (path) => ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true, path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+const analyze = (path) => {
+  const parsed = parse(path);
+  const staticImports = new Map();
+  const dynamicImports = [];
+  const calls = [];
+  const visit = (node, callers) => {
+    if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) staticImports.set(node.moduleSpecifier.text, node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) ? node.importClause.namedBindings.elements.map((element) => element.name.text) : []);
+    let next = callers;
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression.kind === ts.SyntaxKind.ImportKeyword ? 'import' : node.expression.getText(parsed);
+      calls.push({ callee, node, callers });
+      if (callee === 'import' && ts.isStringLiteral(node.arguments[0])) dynamicImports.push({ specifier: node.arguments[0].text, callers });
+      next = [...callers, callee];
+    }
+    ts.forEachChild(node, (child) => visit(child, next));
+  };
+  visit(parsed, []);
+  return { parsed, staticImports, dynamicImports, calls };
+};
+const resolveSpecifier = (from, specifier) => resolve(root, dirname(from), specifier);
+const PRELOAD = 'src/features/public/registryPreload.ts';
+const ACCOUNT = 'src/features/public/AccountAccessPage.tsx';
+const REGISTRY_APP = 'src/features/registry/RegistryApp.tsx';
+const REGISTRY_ITEMS = 'src/features/registry/RegistryItems.tsx';
+
+test('C2 (D10) : registryPreload.ts importe dynamiquement RegistryApp et RegistryItems hors de lazy(), les mêmes modules que RootPage / RegistryApp, sans rien importer d’autre ni toucher Firebase', () => {
+  const { staticImports, dynamicImports, calls } = analyze(PRELOAD);
+  assert.deepEqual([...staticImports.keys()], [], 'aucun import statique : le module ne doit tirer aucun morceau au chargement de la page de connexion');
+  assert.deepEqual(dynamicImports.map(({ specifier }) => specifier), ['../registry/RegistryApp.tsx', '../registry/RegistryItems.tsx']);
+  for (const { specifier, callers } of dynamicImports) assert.ok(!callers.includes('lazy'), `${specifier} : préchargement, pas une frontière React.lazy`);
+  assert.ok(dynamicImports.every(({ callers }) => callers.includes('Promise.allSettled')), 'les deux import() sont regroupés dans Promise.allSettled : un fichier disparu après déploiement ne produit aucun rejet non géré');
+  // Identité des modules : ce que RootPage.tsx et RegistryApp.tsx chargent par lazy() — Vite réutilise donc les mêmes morceaux.
+  const preloaded = dynamicImports.map(({ specifier }) => resolveSpecifier(PRELOAD, specifier));
+  const rootPage = analyze('src/RootPage.tsx').dynamicImports.map(({ specifier }) => resolveSpecifier('src/RootPage.tsx', specifier));
+  const registryApp = analyze(REGISTRY_APP).dynamicImports.map(({ specifier }) => resolveSpecifier(REGISTRY_APP, specifier));
+  assert.ok(rootPage.includes(resolve(root, REGISTRY_APP)), 'RootPage.tsx charge toujours RegistryApp par lazy()');
+  assert.ok(registryApp.includes(resolve(root, REGISTRY_ITEMS)), 'RegistryApp.tsx charge toujours RegistryItems par lazy()');
+  assert.deepEqual(preloaded, [resolve(root, REGISTRY_APP), resolve(root, REGISTRY_ITEMS)]);
+  // Planification : 1 500 ms d'inactivité, puis requestIdleCallback (délai maximal 1 000 ms → 2 500 ms au plus tard, D10) ou chargement
+  // immédiat sans requestIdleCallback ; l'annulation rend le minuteur et la poignée d'inactivité.
+  const source = read(PRELOAD);
+  assert.match(source, /export const REGISTRY_PRELOAD_DELAY_MS = 1500;/);
+  assert.match(source, /export const REGISTRY_PRELOAD_IDLE_TIMEOUT_MS = 1000;/);
+  assert.match(source, /typeof window\.requestIdleCallback === 'function'/, 'tolérant à l’absence de requestIdleCallback (Safari, jsdom)');
+  assert.match(source, /window\.requestIdleCallback\([^\n]*\{ timeout: REGISTRY_PRELOAD_IDLE_TIMEOUT_MS \}\)/);
+  assert.match(source, /window\.setTimeout\(/);
+  assert.match(source, /window\.clearTimeout\(timer\);/);
+  assert.match(source, /window\.cancelIdleCallback\(idle\);/);
+  assert.ok(calls.some(({ callee }) => callee === 'window.setTimeout') && calls.some(({ callee }) => callee === 'window.clearTimeout') && calls.some(({ callee }) => callee === 'window.cancelIdleCallback'));
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(code, /firebase|firestore|getAuth|onSnapshot|getDoc|fetch\(/i, 'jamais d’appel Firebase ni réseau direct (hors commentaires) : le module ne fait qu’importer');
+});
+
+test('C2 (D10) : AccountAccessPage planifie le préchargement dans un useEffect gardé (connexion vers le Registre seulement), rend son annulation, et garde window.location.assign vers le Registre démo', () => {
+  const { parsed, staticImports, dynamicImports, calls } = analyze(ACCOUNT);
+  assert.deepEqual(staticImports.get('./registryPreload.ts'), ['scheduleRegistryPreload']);
+  for (const specifier of ['../registry/RegistryApp.tsx', '../registry/RegistryItems.tsx']) assert.ok(!staticImports.has(specifier), `${specifier} jamais importé statiquement par la page de connexion`);
+  assert.deepEqual(dynamicImports, [], 'les import() vivent dans registryPreload.ts, pas dans la page');
+  const source = read(ACCOUNT);
+  assert.match(source, /const registryAhead = !creation && requestedSpace !== 'vault' && \(demoRequested \|\| returnTo\.startsWith\('\/registry'\)\);/, 'garde G4 : ni création, ni Coffre, ni destination hors Registre');
+  // L'appel est le retour d'un useEffect dont la dépendance est la garde : une planification par affichage, annulée au démontage.
+  const effects = calls.filter(({ callee }) => callee === 'useEffect');
+  const preloadEffect = effects.find(({ node }) => node.arguments[0].getText(parsed).includes('scheduleRegistryPreload()'));
+  assert.ok(preloadEffect, 'un useEffect appelle scheduleRegistryPreload()');
+  assert.equal(preloadEffect.node.arguments[0].getText(parsed).replace(/\s+/g, ' '), '() => { if (!registryAhead) return undefined; return scheduleRegistryPreload(); }');
+  assert.equal(preloadEffect.node.arguments[1].getText(parsed), '[registryAhead]');
+  const schedule = calls.filter(({ callee }) => callee === 'scheduleRegistryPreload');
+  assert.equal(schedule.length, 1);
+  assert.deepEqual(schedule[0].callers, ['useEffect'], 'appelé directement dans le useEffect, sans argument (chargement par défaut)');
+  assert.equal(schedule[0].node.arguments.length, 0);
+  assert.match(source, /window\.location\.assign\(`\/registry\/\$\{encodeURIComponent\(DEMO_ACCOUNT\.registryId\)\}\/items`\);/, 'aucun routeur (D4) : la connexion démo navigue toujours par window.location.assign');
+  // Les tests qui rendent la page mockent les deux modules du Registre (M9 : jsdom sans requestIdleCallback, repli 1 500 ms → firebase.ts réel).
+  for (const file of ['tests/ui/account-access-corrections.test.tsx', 'tests/ui/registry-preload.test.tsx']) {
+    const testSource = read(file);
+    assert.match(testSource, /render\(<AccountAccessPage \/>\)/, `${file} rend la page`);
+    for (const module of ['RegistryApp', 'RegistryItems']) assert.match(testSource, new RegExp(`vi\\.mock\\('\\.\\./\\.\\./src/features/registry/${module}\\.tsx'`), `${file} : ${module} mocké`);
+  }
+  assert.match(read('tests/ui/registry-preload.test.tsx'), /scheduleRegistryPreload: vi\.fn\(/, 'le câblage est observé par une enveloppe transparente de scheduleRegistryPreload');
 });
 
 // ---------------------------------------------------------------- package.json : test:v7 / verify:v7 (définition exacte figée au commit de fusion)

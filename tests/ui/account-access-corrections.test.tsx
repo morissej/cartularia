@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../src/services/foundations', () => ({
   createCartulariaAccount: vi.fn(), signInToCartularia: vi.fn(), resumeRegistryAccountActivation: vi.fn(),
 }));
+// V7 (V-B2, M9) : la page de connexion précharge le Registre 1,5 s après son rendu (annulé au démontage par cleanup) ; jsdom n'a pas
+// requestIdleCallback et un test qui dépasserait ce délai chargerait RegistryApp, donc firebase.ts réel : les deux modules sont mockés.
+vi.mock('../../src/features/registry/RegistryApp.tsx', () => ({ RegistryApp: () => null }));
+vi.mock('../../src/features/registry/RegistryItems.tsx', () => ({ RegistryItems: () => null }));
 import { AccountAccessPage } from '../../src/features/public/AccountAccessPage';
 import { createCartulariaAccount, resumeRegistryAccountActivation, signInToCartularia } from '../../src/services/foundations';
 

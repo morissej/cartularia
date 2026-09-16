@@ -5,6 +5,7 @@ import { createCartulariaAccount, resumeRegistryAccountActivation, signInToCartu
 import { normalizeUserAlias } from '../../domain/personalDataBoundary';
 import { DEMO_ACCOUNT } from '../../data/demoCartularies.ts';
 import { personalVaultHref, safeAccountReturnPath } from './publicRoutes';
+import { scheduleRegistryPreload } from './registryPreload.ts';
 import './public-site.css';
 
 const friendlyAccountError = (error: unknown, creation: boolean) => {
@@ -41,6 +42,16 @@ export function AccountAccessPage() {
     document.title = `${creation ? 'Créer un compte' : 'Connexion'} · Cartularia`;
     if (requestedSpace === 'vault') window.location.replace(vaultHref);
   }, [creation, requestedSpace, vaultHref]);
+
+  // V7 (V-B2, D10) : quand la connexion mène au Registre (démo, ou returnTo /registry* — valeur par défaut), ses morceaux JS et
+  // registry-*.css sont tirés dans le cache HTTP à l'inactivité, 1,5 à 2,5 s après le premier rendu, pendant que le visiteur lit ou
+  // saisit ; jamais à la création (cible /account/security), ni vers le Coffre (redirigé ci-dessus), ni vers une autre destination.
+  // Annulé au démontage. Aucun appel Firebase (voir registryPreload.ts) ; window.location.assign reste la navigation (aucun routeur, D4).
+  const registryAhead = !creation && requestedSpace !== 'vault' && (demoRequested || returnTo.startsWith('/registry'));
+  useEffect(() => {
+    if (!registryAhead) return undefined;
+    return scheduleRegistryPreload();
+  }, [registryAhead]);
 
   const submitRegistry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

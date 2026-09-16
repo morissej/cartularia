@@ -43,12 +43,14 @@ const viewports = [
 // Seuils de --check (comptes et octets seulement, jamais de durée : les temps locaux sont du bruit). Posés le 16 septembre 2026 sur le build
 // à deux groupes react/icons avec Google Fonts (mesuré : accueil 20 requêtes / 8 JS, connexion 12 JS initiaux, démo 29 JS, Registre 17 JS),
 // marge +2 requêtes / +1 à +3 JS ; à fixer depuis le relevé fusionné au commit C5 (K9). Le seuil du parcours à chaud (étape Registre :
-// 0 JS réseau, ≤ 3 requêtes) est posé par le commit C2, seul à le rendre tenable ; « 0 requête tierce » par le commit C4 (polices locales).
+// 0 JS réseau, ≤ 3 requêtes) est posé par le commit C2 (préchargement du Registre à l'inactivité depuis la page de connexion, D10 :
+// mesuré 3 requêtes réseau — index.html, logo, manifeste, tous no-cache — et 0 JS) ; « 0 requête tierce » par le commit C4 (polices locales).
 const LIMITS = {
   accueil: { requêtes: 22, js: 10 },
   connexion: { jsInitiaux: 14 },
   'demo-cover': { js: 32 },
   registre: { js: 20 },
+  'registre-items': { jsRéseau: 0, réseau: 3 },
 };
 
 // Anatomie statique de dist/assets : gzip et signature des morceaux d'icônes (unique import statique, vers ./createLucideIcon-*).
@@ -256,7 +258,12 @@ if (check) {
     if (limit.jsInitiaux !== undefined && result.js.initiaux > limit.jsInitiaux) violations.push(`${where} : ${result.js.initiaux} morceaux JS initiaux (seuil ${limit.jsInitiaux})`);
     if (limit.requêtes !== undefined && result.totals.requêtes > limit.requêtes) violations.push(`${where} : ${result.totals.requêtes} requêtes (seuil ${limit.requêtes})`);
   }
-  for (const step of report.sequence) if (!step.ready) violations.push(`à chaud ${step.step} : surface non rendue`);
+  for (const step of report.sequence) {
+    const limit = LIMITS[step.step] ?? {};
+    if (!step.ready) violations.push(`à chaud ${step.step} : surface non rendue`);
+    if (limit.jsRéseau !== undefined && step.jsRéseau > limit.jsRéseau) violations.push(`à chaud ${step.step} : ${step.jsRéseau} morceau(x) JS demandé(s) au réseau (seuil ${limit.jsRéseau}) : ${step.jsRéseauFichiers.join(', ')}`);
+    if (limit.réseau !== undefined && step.réseau > limit.réseau) violations.push(`à chaud ${step.step} : ${step.réseau} requêtes réseau (seuil ${limit.réseau})`);
+  }
 }
 report.check = { enabled: check, limits: LIMITS, violations };
 
