@@ -9,7 +9,8 @@
 // accueil → connexion (inactivité 3,5 s, le temps d'un éventuel préchargement) → /registry/reg_cartularia_demo/items, avec pour chaque
 // étape les requêtes servies par le cache et ce que le réseau coûte encore.
 // Usage : node scripts/measure-surfaces.mjs --serve dist [--out docs/audits/perf] [--check] [--fonts] [--chrome <chemin>]
-// Sorties : <out>/<date>.json (relevé complet) et <out>/<date>.md (résumé). Codes : 0 sans dépassement, 1 seuil dépassé (--check), 2 non exécuté.
+// Sorties : <out>/<date>.json (relevé complet) et <out>/<date>.md (résumé), sans port ni heure (seuls les temps mesurés varient d'une
+// exécution à l'autre). Codes : 0 sans dépassement, 1 seuil dépassé (--check), 2 non exécuté.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -40,16 +41,18 @@ const viewports = [
   { name: 'desktop-1440', width: 1440, height: 900, mobile: false, scale: 1 },
   { name: 'mobile-390', width: 390, height: 844, mobile: true, scale: 3 },
 ];
-// Seuils de --check (comptes et octets seulement, jamais de durée : les temps locaux sont du bruit). Posés le 16 septembre 2026 sur le build
-// à deux groupes react/icons avec Google Fonts (mesuré : accueil 20 requêtes / 8 JS, connexion 12 JS initiaux, démo 29 JS, Registre 17 JS),
-// marge +2 requêtes / +1 à +3 JS ; à fixer depuis le relevé fusionné au commit C5 (K9). Le seuil du parcours à chaud (étape Registre :
-// 0 JS réseau, ≤ 3 requêtes) est posé par le commit C2 (préchargement du Registre à l'inactivité depuis la page de connexion, D10 :
-// mesuré 3 requêtes réseau — index.html, logo, manifeste, tous no-cache — et 0 JS) ; « 0 requête tierce » par le commit C4 (polices locales).
+// Seuils de --check (comptes et octets seulement, jamais de durée : les temps locaux sont du bruit). Fixés au commit de fusion C5 (K9) depuis le
+// relevé du build fusionné C1-C3 du 16 septembre 2026 (docs/audits/perf/2026-09-16.json : deux groupes react/icons, préchargement du Registre,
+// Google Fonts encore ; mesuré, identique à 1 440 et 390 : accueil 20 requêtes / 8 JS, connexion 12 JS initiaux, démo 29 JS, Registre 17 JS),
+// marge +2 requêtes / +1 morceau JS : tout morceau ajouté à une surface se voit et se décide ici. Le seuil du parcours à chaud (étape Registre :
+// 0 JS réseau, ≤ 3 requêtes) vient du commit C2 (préchargement à l'inactivité depuis la page de connexion, D10 : mesuré 3 requêtes réseau —
+// index.html, logo, manifeste, tous no-cache — et 0 JS) ; « 0 requête tierce » sera activé par le commit C4 (polices locales, −4 requêtes Google
+// +3 .woff2 même origine sur l'accueil : le seuil de 22 requêtes tient).
 const LIMITS = {
-  accueil: { requêtes: 22, js: 10 },
-  connexion: { jsInitiaux: 14 },
-  'demo-cover': { js: 32 },
-  registre: { js: 20 },
+  accueil: { requêtes: 22, js: 9 },
+  connexion: { jsInitiaux: 13 },
+  'demo-cover': { js: 30 },
+  registre: { js: 18 },
   'registre-items': { jsRéseau: 0, réseau: 3 },
 };
 
@@ -119,14 +122,16 @@ const READY = `!!document.querySelector('.page-tabs') || !!document.querySelecto
 const METRICS = `(() => new Promise((done) => {
   const nav = performance.getEntriesByType('navigation')[0];
   let lcp = null;
+  // Les liens injectés par Vite portent l'origine du serveur local (port éphémère) : ramenés au chemin pour un relevé sans port (F4 de l'audit axe).
+  const local = (href) => (href && href.startsWith(location.origin) ? href.slice(location.origin.length) : href);
   const finish = () => done({
     domContentLoaded: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
     load: nav ? Math.round(nav.loadEventEnd) : null,
     lcp,
     title: document.title,
-    modulepreload: Array.from(document.querySelectorAll('link[rel="modulepreload"]')).map((l) => l.getAttribute('href')),
-    preload: Array.from(document.querySelectorAll('link[rel="preload"],link[rel="prefetch"]')).map((l) => l.rel + ' ' + l.getAttribute('href')),
-    externalStylesheets: Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map((l) => l.getAttribute('href')).filter((h) => /^https?:/.test(h)),
+    modulepreload: Array.from(document.querySelectorAll('link[rel="modulepreload"]')).map((l) => local(l.getAttribute('href'))),
+    preload: Array.from(document.querySelectorAll('link[rel="preload"],link[rel="prefetch"]')).map((l) => l.rel + ' ' + local(l.getAttribute('href'))),
+    stylesheets: Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map((l) => local(l.getAttribute('href'))),
     fontFaces: Array.from(document.fonts).map((f) => f.family + ' ' + f.weight + ' ' + f.status),
   });
   try {
@@ -279,7 +284,7 @@ lines.push('', '## Parcours à chaud (un onglet, cache actif, en-têtes Hosting)
 for (const step of report.sequence) lines.push(`| ${step.step} | ${step.requêtes} | ${step.servisParLeCache} | ${step.réseau} | ${kb(step.octetsRéseau)} | ${step.jsRéseau} (${kb(step.jsRéseauOctets)}) | ${step.jsRéseauFichiers.map(shortName).join(', ') || '—'} | ${step.aprèsPrêt.requêtes} |`);
 lines.push('', '## Document (bureau)', '');
 for (const result of report.results.filter((entry) => entry.viewport === 'desktop-1440')) {
-  lines.push(`- ${result.surface} : titre « ${result.title} », modulepreload ${JSON.stringify(result.modulepreload)}, preload/prefetch ${JSON.stringify(result.preload)}, feuilles externes ${JSON.stringify(result.externalStylesheets)}, polices résolues ${result.fontFaces.length}.`);
+  lines.push(`- ${result.surface} : titre « ${result.title} », modulepreload ${JSON.stringify(result.modulepreload)}, preload/prefetch ${JSON.stringify(result.preload)}, feuilles de style ${JSON.stringify(result.stylesheets)}, polices résolues ${result.fontFaces.length}.`);
 }
 lines.push('', '## Morceaux JS par surface (bureau)', '');
 for (const result of report.results.filter((entry) => entry.viewport === 'desktop-1440')) {

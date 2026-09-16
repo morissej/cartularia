@@ -186,7 +186,11 @@ test('V-B2 : measure-surfaces a les garde-fous de l’audit axe (Chrome install�
   assert.match(source, /\{ name: 'connexion', path: '\/account\/sign-in', settle: 3500 \}, \{ name: 'registre-items', path: REGISTRY_ITEMS, settle: 2000 \}/, 'parcours à chaud : la connexion attend 3,5 s d’inactivité avant l’étape Registre');
   assert.match(source, /width: 390, height: 844, mobile: true/);
   assert.match(source, /width: 1440, height: 900, mobile: false/);
-  assert.match(source, /const LIMITS = \{\n  accueil: \{ requêtes: 22, js: 10 \},\n  connexion: \{ jsInitiaux: 14 \},\n  'demo-cover': \{ js: 32 \},\n  registre: \{ js: 20 \},\n  'registre-items': \{ jsRéseau: 0, réseau: 3 \},\n\};/);
+  // C5 (K9) : seuils fixés depuis le relevé du build fusionné (accueil 20 requêtes / 8 JS, connexion 12 JS initiaux, démo 29, Registre 17), marge +2 requêtes / +1 JS.
+  assert.match(source, /const LIMITS = \{\n  accueil: \{ requêtes: 22, js: 9 \},\n  connexion: \{ jsInitiaux: 13 \},\n  'demo-cover': \{ js: 30 \},\n  registre: \{ js: 18 \},\n  'registre-items': \{ jsRéseau: 0, réseau: 3 \},\n\};/);
+  // C5 : aucun port éphémère dans le relevé (les liens injectés par Vite portent l'origine du serveur local : ramenés au chemin).
+  assert.match(source, /const local = \(href\) => \(href && href\.startsWith\(location\.origin\) \? href\.slice\(location\.origin\.length\) : href\);/);
+  assert.match(source, /const base = `http:\/\/127\.0\.0\.1:\$\{server\.address\(\)\.port\}`; \/\/ port éphémère : jamais écrit dans le relevé/);
   assert.match(source, /if \(result\.js\.icônes > 0\) violations\.push/, '0 morceau « icône seule » sur chaque surface');
   // C2 (D10) : l'étape Registre du parcours à chaud est contrôlée sur --check (0 JS réseau, ≤ 3 requêtes réseau), pas seulement relevée.
   assert.match(source, /for \(const step of report\.sequence\) \{\n    const limit = LIMITS\[step\.step\] \?\? \{\};/);
@@ -282,15 +286,14 @@ test('C2 (D10) : AccountAccessPage planifie le préchargement dans un useEffect 
   assert.match(read('tests/ui/registry-preload.test.tsx'), /scheduleRegistryPreload: vi\.fn\(/, 'le câblage est observé par une enveloppe transparente de scheduleRegistryPreload');
 });
 
-// ---------------------------------------------------------------- package.json : test:v7 / verify:v7 (définition exacte figée au commit de fusion)
-test('Barrière V7 : test:v7 prolonge test:v6 sans suite d’émulateur, verify:v7 enchaîne audit:a11y (qui construit dist/), measure:pf0 et measure:surfaces --check', () => {
-  const { scripts, dependencies } = JSON.parse(read('package.json'));
+// ---------------------------------------------------------------- package.json : test:v7 / verify:v7 — forme de la barrière
+// (la définition exacte des scripts et le compte des dépendances sont figés par le contrat, test « V7 (fusion) », K13 : une assertion par invariant).
+test('Barrière V7 : test:v7 prolonge test:v6 sans suite d’émulateur et porte performance-v7, verify:v7 enchaîne audit:a11y (qui construit dist/) avant measure:pf0 et measure:surfaces --check', () => {
+  const { scripts } = JSON.parse(read('package.json'));
   assert.ok(scripts['test:v7'].startsWith('npm run test:v6 && '), 'test:v7 commence par test:v6');
   assert.match(scripts['test:v7'], /npm run test:performance-hygiene/, 'hygiène des API de performance (measure-surfaces est balayé)');
   assert.match(scripts['test:v7'], /node --test [^&]*tests\/performance-v7\.test\.mjs/);
   assert.doesNotMatch(scripts['test:v7'], /emulators:exec|:emulator/, 'aucune suite d’émulateur dans la barrière (K8)');
-  assert.equal(scripts['measure:surfaces'], 'node scripts/measure-surfaces.mjs --serve dist --out docs/audits/perf --check --fonts');
-  assert.equal(scripts['measure:pf0'], 'node scripts/measure-pf0-build.mjs');
-  assert.equal(scripts['verify:v7'], 'npm run test:v7 && npm run audit:a11y && npm run measure:pf0 && npm run measure:surfaces');
-  assert.equal(Object.keys(dependencies).length, 13, 'aucune dépendance d’exécution ajoutée par V7');
+  assert.match(scripts['measure:surfaces'], /^node scripts\/measure-surfaces\.mjs --serve dist --out docs\/audits\/perf --check\b/, 'seuils contrôlés (--check) sur dist/, relevé dans docs/audits/perf');
+  assert.ok(scripts['verify:v7'].indexOf('npm run audit:a11y') < scripts['verify:v7'].indexOf('npm run measure:pf0') && scripts['verify:v7'].indexOf('npm run measure:pf0') < scripts['verify:v7'].indexOf('npm run measure:surfaces'), 'audit:a11y construit dist/ que les deux mesures lisent');
 });

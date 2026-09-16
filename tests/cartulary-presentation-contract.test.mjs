@@ -1092,3 +1092,49 @@ test('V6 relecture : audit axe mesuré contre clientWidth, nœuds à vérifier c
   assert.match(readSource('../src/features/registry/RegistryApp.tsx'), /window\.scrollTo\(\{ top: 0, behavior: 'instant' \}\);/, 'le Registre reste immédiat (D7, contrat registre)');
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\n  \*, \*::before, \*::after \{ scroll-behavior: auto !important;/, 'la feuille couvre toujours les défilements `auto`');
 });
+
+// V7 — fusion (journal docs/audits/2026-09-16-execution-v7.md ; cohérence K8 barrières, K13 définitions exactes, D6-D8 découpage et gardes de
+// livraison, D13 exceptions axe). Une assertion par invariant : les configurations Vite sont exercées par tests/performance-v7.test.mjs (groupes,
+// greffon, hosting.ignore par listFiles, measure:pf0 sur dossier témoin) et les décisions par tests/hygiene-v7.test.mjs ; ce bloc fige ce que la
+// vague livre — scripts npm, dépendances, noms des mécanismes, relevé daté — et ce que V8 hérite (six exceptions axe reportées, datées).
+test('V7 (fusion) : barrières test:v7 / verify:v7 figées, 13 dépendances, groupes react + icons et greffon dans vite.config.ts, aucune copie numérotée servie (greffon, hosting.ignore, measure:pf0), relevé perf daté sans port, exceptions axe reportées à V8 avec motif daté', () => {
+  const packageJson = JSON.parse(readSource('../package.json'));
+  // K8 : test:v7 = test:v6 + hygiène des API de performance + performance-v7 + hygiene-v7 (interface-state est déjà dans test:v3) ; aucune suite d'émulateur.
+  // verify:v7 : audit:a11y construit dist/ que measure:pf0 et measure:surfaces lisent ; --fonts tolère Google Fonts tant que C4 (polices hébergées) n'est pas livré — C4 réécrit cette ligne.
+  assert.equal(packageJson.scripts['test:v7'], 'npm run test:v6 && npm run test:performance-hygiene && node --test tests/performance-v7.test.mjs tests/hygiene-v7.test.mjs');
+  assert.equal(packageJson.scripts['measure:pf0'], 'node scripts/measure-pf0-build.mjs');
+  assert.equal(packageJson.scripts['measure:surfaces'], 'node scripts/measure-surfaces.mjs --serve dist --out docs/audits/perf --check --fonts');
+  assert.equal(packageJson.scripts['verify:v7'], 'npm run test:v7 && npm run audit:a11y && npm run measure:pf0 && npm run measure:surfaces');
+  assert.equal(Object.keys(packageJson.dependencies).length, 13, 'aucune dépendance d’exécution ajoutée par V7 (test:v6, audit:a11y et verify:v6 restent ceux du test « V6 (fusion) »)');
+  // D7 / D8 (c) : deux groupes de découpage nommés et le greffon de fin de build, dans la configuration principale seulement (D11 : le Coffre n'en reçoit pas).
+  const vite = readSource('../vite.config.ts');
+  assert.match(vite, /codeSplitting: \{\n\s*groups: \[/, 'découpage par groupes rolldown');
+  for (const name of ['react', 'icons']) assert.match(vite, new RegExp(`name: '${name}'`), `groupe ${name}`);
+  assert.match(vite, /name: 'cartularia-copies-numerotees'/);
+  assert.match(vite, /closeBundle\(\) \{/, 'les copies numérotées sont retirées de dist/ après l’écriture du bundle');
+  assert.doesNotMatch(readSource('../vite.personal.config.ts'), /codeSplitting|cartularia-copies-numerotees/);
+  // D8 : aucune copie numérotée servie — trois gardes indépendantes : le greffon (build), hosting.ignore des deux sites (liste de déploiement), measure:pf0 (verify:v7, bloquant).
+  for (const file of ['firebase.json', 'firebase.personal.json']) assert.ok(JSON.parse(readSource(`../${file}`)).hosting.ignore.includes('**/* [0-9].*'), `${file} : hosting.ignore`);
+  const pf0 = readSource('../scripts/measure-pf0-build.mjs');
+  assert.match(pf0, /\n  numberedCopies: /, 'measure:pf0 compte les copies numérotées de dist/');
+  assert.match(pf0, /numberedCopies === 0/, 'et refuse la première');
+  // Relevé du build fusionné (C5), produit par measure:surfaces --check : daté au jour, sans port éphémère, quatre surfaces × deux fenêtres, aucun dépassement,
+  // aucun morceau « icône seule », étape Registre du parcours à chaud sans JS réseau.
+  const surveySource = readSource('../docs/audits/perf/2026-09-16.json');
+  const survey = JSON.parse(surveySource);
+  assert.equal(survey.date, '2026-09-16');
+  assert.doesNotMatch(surveySource, /127\.0\.0\.1:\d+/, 'port éphémère absent du relevé');
+  assert.deepEqual(survey.results.map(({ viewport, surface }) => `${viewport} ${surface}`), ['desktop-1440', 'mobile-390'].flatMap((viewport) => ['accueil', 'connexion', 'demo-cover', 'registre'].map((surface) => `${viewport} ${surface}`)));
+  assert.ok(survey.results.every((result) => result.ready && result.js.icônes === 0), 'surfaces rendues, 0 morceau « icône seule »');
+  assert.equal(survey.check.enabled, true);
+  assert.deepEqual(survey.check.violations, []);
+  assert.equal(survey.sequence.find((step) => step.step === 'registre-items')?.jsRéseau, 0, 'étape Registre à chaud : 0 JS réseau (C2, D10)');
+  // D13 : les six exceptions axe posées en V6 avec l'échéance « V7 » sont reportées à « V8 » avec un motif daté ; un contrôle mécanique « until ≥ vague courante »
+  // n'existe pas (dette consignée au journal V7) : ce bloc vérifie seulement qu'aucune échéance ne reste à la vague livrée.
+  const allowlist = JSON.parse(readSource('../scripts/audit-accessibility.allowlist.json')).entries;
+  assert.equal(allowlist.length, 6);
+  for (const entry of allowlist) {
+    assert.equal(entry.until, 'V8', `${entry.rule} ${entry.target}`);
+    assert.match(entry.reason, /Reportée à V8 le 16 septembre 2026 \(D13\)/, `${entry.rule} ${entry.target} : motif daté du report`);
+  }
+});

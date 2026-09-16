@@ -118,7 +118,7 @@
     "test:v6": "npm run test:v5 && node --test tests/registry-public-mobile-contract.test.mjs tests/cartulary-headings.test.mjs tests/touch-targets-contract.test.mjs",
     "audit:a11y": "VITE_USE_FIREBASE_EMULATORS=false npm run build && node scripts/audit-accessibility.mjs --serve dist",
     "verify:v6": "npm run test:v6 && npm run audit:a11y",
-    "test:v7": "npm run test:v6 && npm run test:performance-hygiene && node --test tests/performance-v7.test.mjs",
+    "test:v7": "npm run test:v6 && npm run test:performance-hygiene && node --test tests/performance-v7.test.mjs tests/hygiene-v7.test.mjs",
     "verify:v7": "npm run test:v7 && npm run audit:a11y && npm run measure:pf0 && npm run measure:surfaces",
     "test:retention": "FIREBASE_CLI_DISABLE_UPDATE_CHECK=true firebase emulators:exec --project cartularia-retention-test --only firestore \"node --test tests/retention-command.test.mjs\"",
     "retention:private": "node scripts/run-private-retention.mjs",
