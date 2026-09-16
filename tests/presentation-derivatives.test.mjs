@@ -202,12 +202,15 @@ test('le générateur est idempotent, ignore les copies « 2. » et ne réécrit
   }
 });
 
-test('les polices ne dépendent plus d’un import CSS tardif', async () => {
+// PF4 : l'@import Google tardif est parti de variables.css ; V7 (V-B5, commit C4) : le document ne dépend plus de Google Fonts du tout —
+// les @font-face vivent dans src/styles/fonts.css et index.html précharge Newsreader (police du h1). Détail des fichiers : tests/fonts-contract.test.mjs.
+test('les polices ne dépendent plus d’un import CSS tardif ni de Google Fonts', async () => {
   const [variables, html] = await Promise.all([readFile('src/styles/variables.css', 'utf8'), readFile('index.html', 'utf8')]);
   assert.doesNotMatch(variables, /@import\s+url\([^)]*fonts\.googleapis\.com/);
-  assert.match(html, /rel="preconnect" href="https:\/\/fonts\.googleapis\.com"/);
-  assert.match(html, /rel="preconnect" href="https:\/\/fonts\.gstatic\.com" crossorigin/);
-  assert.match(html, /rel="stylesheet" href="https:\/\/fonts\.googleapis\.com\/css2\?/);
+  assert.doesNotMatch(html, /fonts\.googleapis\.com/);
+  assert.doesNotMatch(html, /fonts\.gstatic\.com/);
+  assert.doesNotMatch(html, /rel="preconnect"/);
+  assert.match(html, /rel="preload" as="font" type="font\/woff2" crossorigin href="\/src\/assets\/fonts\/newsreader\//);
 });
 
 test('les dérivés de bundle sont résolus par le catalogue partagé, jamais par un préfixe de marque en dur', async () => {

@@ -1,7 +1,7 @@
 {
   "date": "2026-09-16",
   "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "fonts": "Google Fonts tolérées (--fonts)",
+  "fonts": "réseau coupé hors 127.0.0.1 (polices servies par dist/)",
   "cache": "désactivé et vidé avant chaque surface",
   "results": [
     {
@@ -10,101 +10,64 @@
       "viewport": "desktop-1440",
       "ready": true,
       "readyAfterMs": 511,
-      "domContentLoaded": 76,
-      "load": 77,
-      "lcp": 444,
+      "domContentLoaded": 17,
+      "load": 18,
+      "lcp": 384,
       "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/HomePage-Db97xDrj.js",
+        "/assets/HomePage-CBTCy4yp.js",
         "/assets/icons-CaennByB.js",
         "/assets/demoCartularies-Dl9Sy6ps.js",
         "/assets/registryReturn-CesYsGbK.js",
         "/assets/registryCatalog-cNvFQ2G6.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/public-site-e8vVAg3S.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 loaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 loaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 loaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 loaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 20,
-        "octets": 691604,
-        "distant": 4
+        "requêtes": 19,
+        "octets": 691402,
+        "distant": 0,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
+        "font": {
           "requêtes": 3,
           "échecs": 0,
-          "octets": 165031,
-          "gzip": 26097,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 8,
           "échecs": 0,
           "octets": 305703,
-          "gzip": 95737,
+          "gzip": 95736,
           "distant": 0
         },
-        "autre": {
-          "requêtes": 1,
+        "css": {
+          "requêtes": 2,
           "échecs": 0,
-          "octets": 680,
-          "gzip": 0,
+          "octets": 164494,
+          "gzip": 26373,
           "distant": 0
         },
         "image": {
@@ -114,19 +77,19 @@
           "gzip": 0,
           "distant": 0
         },
-        "font": {
-          "requêtes": 3,
+        "autre": {
+          "requêtes": 1,
           "échecs": 0,
-          "octets": 198236,
+          "octets": 680,
           "gzip": 0,
-          "distant": 3
+          "distant": 0
         }
       },
       "js": {
         "morceaux": 8,
         "initiaux": 8,
         "octetsBruts": 303889,
-        "gzip": 95737,
+        "gzip": 95736,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -139,7 +102,7 @@
           "initial": true
         },
         {
-          "file": "HomePage-Db97xDrj.js",
+          "file": "HomePage-CBTCy4yp.js",
           "raw": 32309,
           "gzip": 9238,
           "icône": false,
@@ -160,9 +123,9 @@
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -188,47 +151,23 @@
           "initial": true
         }
       ],
-      "remote": [
-        {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1498,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        }
-      ]
+      "remote": [],
+      "tiers": []
     },
     {
       "surface": "connexion",
       "path": "/account/sign-in",
       "viewport": "desktop-1440",
       "ready": true,
-      "readyAfterMs": 510,
-      "domContentLoaded": 26,
-      "load": 27,
-      "lcp": 380,
+      "readyAfterMs": 513,
+      "domContentLoaded": 23,
+      "load": 23,
+      "lcp": 356,
       "title": "Connexion · Cartularia",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/AccountAccessPage-TaYgyBnd.js",
+        "/assets/AccountAccessPage-BOLs8Mpg.js",
         "/assets/icons-CaennByB.js",
         "/assets/demoCartularies-Dl9Sy6ps.js",
         "/assets/personalDataBoundary-kRAOoDWj.js",
@@ -237,8 +176,8 @@
         "/assets/index.esm-DRo0ZM8h.js",
         "/assets/firebase-Cua6VH5-.js",
         "/assets/publicRoutes-DS-O10kQ.js",
-        "/assets/RegistryApp-C3TR73o8.js",
-        "/assets/index-254gF_q7.js",
+        "/assets/RegistryApp-CHGozIKj.js",
+        "/assets/index-CBFIhEXE.js",
         "/assets/registryCatalog-cNvFQ2G6.js",
         "/assets/projections-CcW_nv0s.js",
         "/assets/followUp-TgYMdKVm.js",
@@ -249,83 +188,53 @@
         "/assets/RegistryFilterPanel-Dqq1yx7c.js",
         "/assets/registryThumbnail-DPo4XDK7.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/public-site-e8vVAg3S.css",
         "/assets/registry-Fb27gfFh.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 loaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 loaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 loaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 34,
-        "octets": 1510715,
-        "distant": 5
+        "requêtes": 33,
+        "octets": 1510861,
+        "distant": 1,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
-          "requêtes": 4,
+        "font": {
+          "requêtes": 3,
           "échecs": 0,
-          "octets": 280257,
-          "gzip": 40452,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 23,
           "échecs": 1,
           "octets": 1019406,
-          "gzip": 307678,
+          "gzip": 307680,
           "distant": 1
+        },
+        "css": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 280068,
+          "gzip": 40728,
+          "distant": 0
         },
         "autre": {
           "requêtes": 1,
@@ -340,20 +249,13 @@
           "octets": 9824,
           "gzip": 0,
           "distant": 0
-        },
-        "font": {
-          "requêtes": 3,
-          "échecs": 0,
-          "octets": 198236,
-          "gzip": 0,
-          "distant": 3
         }
       },
       "js": {
         "morceaux": 22,
         "initiaux": 12,
         "octetsBruts": 1014420,
-        "gzip": 307678,
+        "gzip": 307680,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -387,9 +289,9 @@
           "initial": true
         },
         {
-          "file": "RegistryApp-C3TR73o8.js",
+          "file": "RegistryApp-CHGozIKj.js",
           "raw": 37201,
-          "gzip": 10699,
+          "gzip": 10702,
           "icône": false,
           "initial": false
         },
@@ -408,9 +310,9 @@
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -422,7 +324,7 @@
           "initial": false
         },
         {
-          "file": "AccountAccessPage-TaYgyBnd.js",
+          "file": "AccountAccessPage-BOLs8Mpg.js",
           "raw": 11773,
           "gzip": 4218,
           "icône": false,
@@ -515,52 +417,29 @@
       ],
       "remote": [
         {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1150,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        },
-        {
           "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
           "status": null,
           "bytes": 0,
           "failed": true,
           "error": "net::ERR_NAME_NOT_RESOLVED"
         }
-      ]
+      ],
+      "tiers": []
     },
     {
       "surface": "demo-cover",
       "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
       "viewport": "desktop-1440",
       "ready": true,
-      "readyAfterMs": 505,
-      "domContentLoaded": 34,
-      "load": 35,
-      "lcp": 372,
+      "readyAfterMs": 506,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 360,
       "title": "Cartulaire Rolex Submariner · Cartularia",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/App-Diikh_Cd.js",
+        "/assets/App-CBFhLMjQ.js",
         "/assets/index.esm-avlOvUzk.js",
         "/assets/icons-CaennByB.js",
         "/assets/cartularyCreation-D_Pi9bPR.js",
@@ -580,89 +459,59 @@
         "/assets/collections-uoQiniEe.js",
         "/assets/projections-CcW_nv0s.js",
         "/assets/useDialogFocus-CM-lNfim.js",
-        "/assets/PrivateMediaImage-D1qUo6n-.js",
+        "/assets/PrivateMediaImage-BAFTM904.js",
         "/assets/publicMediaReference-BCsH0gmZ.js",
         "/assets/publication-DhP1lWPQ.js",
         "/assets/followUp-TgYMdKVm.js",
         "/assets/registryReturn-CesYsGbK.js",
         "/assets/foundations-CGY6cebR.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/App-BAUgnReO.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 loaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 loaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 loaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 loaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 42,
-        "octets": 1807748,
-        "distant": 5
+        "requêtes": 41,
+        "octets": 1807894,
+        "distant": 1,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
+        "font": {
           "requêtes": 3,
           "échecs": 0,
-          "octets": 135112,
-          "gzip": 20805,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 30,
           "échecs": 1,
           "octets": 1426241,
-          "gzip": 413706,
+          "gzip": 413696,
           "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 134923,
+          "gzip": 21081,
+          "distant": 0
         },
         "autre": {
           "requêtes": 1,
@@ -677,20 +526,13 @@
           "octets": 45167,
           "gzip": 0,
           "distant": 0
-        },
-        "font": {
-          "requêtes": 3,
-          "échecs": 0,
-          "octets": 198236,
-          "gzip": 0,
-          "distant": 3
         }
       },
       "js": {
         "morceaux": 29,
         "initiaux": 29,
         "octetsBruts": 1419667,
-        "gzip": 413706,
+        "gzip": 413696,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -703,9 +545,9 @@
           "initial": true
         },
         {
-          "file": "App-Diikh_Cd.js",
+          "file": "App-CBFhLMjQ.js",
           "raw": 327837,
-          "gzip": 88356,
+          "gzip": 88349,
           "icône": false,
           "initial": true
         },
@@ -752,16 +594,16 @@
           "initial": true
         },
         {
-          "file": "PrivateMediaImage-D1qUo6n-.js",
+          "file": "PrivateMediaImage-BAFTM904.js",
           "raw": 23864,
-          "gzip": 6099,
+          "gzip": 6097,
           "icône": false,
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -901,52 +743,29 @@
       ],
       "remote": [
         {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1150,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        },
-        {
           "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
           "status": null,
           "bytes": 0,
           "failed": true,
           "error": "net::ERR_NAME_NOT_RESOLVED"
         }
-      ]
+      ],
+      "tiers": []
     },
     {
       "surface": "registre",
       "path": "/registry",
       "viewport": "desktop-1440",
       "ready": true,
-      "readyAfterMs": 509,
-      "domContentLoaded": 26,
-      "load": 26,
-      "lcp": 360,
+      "readyAfterMs": 508,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 340,
       "title": "Registre · Cartularia",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/RegistryApp-C3TR73o8.js",
+        "/assets/RegistryApp-CHGozIKj.js",
         "/assets/icons-CaennByB.js",
         "/assets/demoCartularies-Dl9Sy6ps.js",
         "/assets/index.esm-DRo0ZM8h.js",
@@ -961,82 +780,52 @@
         "/assets/comparisonSelection-ToGQ0Qwa.js",
         "/assets/collections-uoQiniEe.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/registry-Fb27gfFh.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 28,
-        "octets": 1451684,
-        "distant": 5
+        "requêtes": 27,
+        "octets": 1451830,
+        "distant": 1,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
+        "font": {
           "requêtes": 3,
           "échecs": 0,
-          "octets": 249904,
-          "gzip": 34846,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 18,
           "échecs": 1,
           "octets": 990728,
-          "gzip": 297934,
+          "gzip": 297936,
           "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 249715,
+          "gzip": 35122,
+          "distant": 0
         },
         "autre": {
           "requêtes": 1,
@@ -1051,20 +840,13 @@
           "octets": 9824,
           "gzip": 0,
           "distant": 0
-        },
-        "font": {
-          "requêtes": 3,
-          "échecs": 0,
-          "octets": 198236,
-          "gzip": 0,
-          "distant": 3
         }
       },
       "js": {
         "morceaux": 17,
         "initiaux": 17,
         "octetsBruts": 986874,
-        "gzip": 297934,
+        "gzip": 297936,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -1098,9 +880,9 @@
           "initial": true
         },
         {
-          "file": "RegistryApp-C3TR73o8.js",
+          "file": "RegistryApp-CHGozIKj.js",
           "raw": 37201,
-          "gzip": 10699,
+          "gzip": 10702,
           "icône": false,
           "initial": true
         },
@@ -1119,9 +901,9 @@
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -1191,132 +973,79 @@
       ],
       "remote": [
         {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1150,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        },
-        {
           "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
           "status": null,
           "bytes": 0,
           "failed": true,
           "error": "net::ERR_NAME_NOT_RESOLVED"
         }
-      ]
+      ],
+      "tiers": []
     },
     {
       "surface": "accueil",
       "path": "/",
       "viewport": "mobile-390",
       "ready": true,
-      "readyAfterMs": 507,
-      "domContentLoaded": 42,
-      "load": 43,
-      "lcp": 400,
+      "readyAfterMs": 510,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 364,
       "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/HomePage-Db97xDrj.js",
+        "/assets/HomePage-CBTCy4yp.js",
         "/assets/icons-CaennByB.js",
         "/assets/demoCartularies-Dl9Sy6ps.js",
         "/assets/registryReturn-CesYsGbK.js",
         "/assets/registryCatalog-cNvFQ2G6.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/public-site-e8vVAg3S.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 loaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 loaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 loaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 loaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 20,
-        "octets": 691256,
-        "distant": 4
+        "requêtes": 19,
+        "octets": 691402,
+        "distant": 0,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
+        "font": {
           "requêtes": 3,
           "échecs": 0,
-          "octets": 164683,
-          "gzip": 26097,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 8,
           "échecs": 0,
           "octets": 305703,
-          "gzip": 95737,
+          "gzip": 95736,
+          "distant": 0
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 164494,
+          "gzip": 26373,
           "distant": 0
         },
         "autre": {
@@ -1332,20 +1061,13 @@
           "octets": 19642,
           "gzip": 0,
           "distant": 0
-        },
-        "font": {
-          "requêtes": 3,
-          "échecs": 0,
-          "octets": 198236,
-          "gzip": 0,
-          "distant": 3
         }
       },
       "js": {
         "morceaux": 8,
         "initiaux": 8,
         "octetsBruts": 303889,
-        "gzip": 95737,
+        "gzip": 95736,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -1358,7 +1080,7 @@
           "initial": true
         },
         {
-          "file": "HomePage-Db97xDrj.js",
+          "file": "HomePage-CBTCy4yp.js",
           "raw": 32309,
           "gzip": 9238,
           "icône": false,
@@ -1379,9 +1101,9 @@
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -1407,47 +1129,23 @@
           "initial": true
         }
       ],
-      "remote": [
-        {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1150,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        }
-      ]
+      "remote": [],
+      "tiers": []
     },
     {
       "surface": "connexion",
       "path": "/account/sign-in",
       "viewport": "mobile-390",
       "ready": true,
-      "readyAfterMs": 510,
-      "domContentLoaded": 24,
-      "load": 25,
-      "lcp": 360,
+      "readyAfterMs": 515,
+      "domContentLoaded": 23,
+      "load": 23,
+      "lcp": 348,
       "title": "Connexion · Cartularia",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/AccountAccessPage-TaYgyBnd.js",
+        "/assets/AccountAccessPage-BOLs8Mpg.js",
         "/assets/icons-CaennByB.js",
         "/assets/demoCartularies-Dl9Sy6ps.js",
         "/assets/personalDataBoundary-kRAOoDWj.js",
@@ -1456,8 +1154,8 @@
         "/assets/index.esm-DRo0ZM8h.js",
         "/assets/firebase-Cua6VH5-.js",
         "/assets/publicRoutes-DS-O10kQ.js",
-        "/assets/RegistryApp-C3TR73o8.js",
-        "/assets/index-254gF_q7.js",
+        "/assets/RegistryApp-CHGozIKj.js",
+        "/assets/index-CBFIhEXE.js",
         "/assets/registryCatalog-cNvFQ2G6.js",
         "/assets/projections-CcW_nv0s.js",
         "/assets/followUp-TgYMdKVm.js",
@@ -1468,83 +1166,53 @@
         "/assets/RegistryFilterPanel-Dqq1yx7c.js",
         "/assets/registryThumbnail-DPo4XDK7.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/public-site-e8vVAg3S.css",
         "/assets/registry-Fb27gfFh.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 loaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 loaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 loaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 34,
-        "octets": 1510715,
-        "distant": 5
+        "requêtes": 33,
+        "octets": 1510861,
+        "distant": 1,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
-          "requêtes": 4,
+        "font": {
+          "requêtes": 3,
           "échecs": 0,
-          "octets": 280257,
-          "gzip": 40452,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 23,
           "échecs": 1,
           "octets": 1019406,
-          "gzip": 307678,
+          "gzip": 307680,
           "distant": 1
+        },
+        "css": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 280068,
+          "gzip": 40728,
+          "distant": 0
         },
         "autre": {
           "requêtes": 1,
@@ -1559,20 +1227,13 @@
           "octets": 9824,
           "gzip": 0,
           "distant": 0
-        },
-        "font": {
-          "requêtes": 3,
-          "échecs": 0,
-          "octets": 198236,
-          "gzip": 0,
-          "distant": 3
         }
       },
       "js": {
         "morceaux": 22,
         "initiaux": 12,
         "octetsBruts": 1014420,
-        "gzip": 307678,
+        "gzip": 307680,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -1606,9 +1267,9 @@
           "initial": true
         },
         {
-          "file": "RegistryApp-C3TR73o8.js",
+          "file": "RegistryApp-CHGozIKj.js",
           "raw": 37201,
-          "gzip": 10699,
+          "gzip": 10702,
           "icône": false,
           "initial": false
         },
@@ -1627,9 +1288,9 @@
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -1641,7 +1302,7 @@
           "initial": false
         },
         {
-          "file": "AccountAccessPage-TaYgyBnd.js",
+          "file": "AccountAccessPage-BOLs8Mpg.js",
           "raw": 11773,
           "gzip": 4218,
           "icône": false,
@@ -1734,52 +1395,29 @@
       ],
       "remote": [
         {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1150,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        },
-        {
           "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
           "status": null,
           "bytes": 0,
           "failed": true,
           "error": "net::ERR_NAME_NOT_RESOLVED"
         }
-      ]
+      ],
+      "tiers": []
     },
     {
       "surface": "demo-cover",
       "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
       "viewport": "mobile-390",
       "ready": true,
-      "readyAfterMs": 509,
-      "domContentLoaded": 34,
-      "load": 35,
-      "lcp": 384,
+      "readyAfterMs": 511,
+      "domContentLoaded": 15,
+      "load": 15,
+      "lcp": 344,
       "title": "Cartulaire Rolex Submariner · Cartularia",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/App-Diikh_Cd.js",
+        "/assets/App-CBFhLMjQ.js",
         "/assets/index.esm-avlOvUzk.js",
         "/assets/icons-CaennByB.js",
         "/assets/cartularyCreation-D_Pi9bPR.js",
@@ -1799,89 +1437,59 @@
         "/assets/collections-uoQiniEe.js",
         "/assets/projections-CcW_nv0s.js",
         "/assets/useDialogFocus-CM-lNfim.js",
-        "/assets/PrivateMediaImage-D1qUo6n-.js",
+        "/assets/PrivateMediaImage-BAFTM904.js",
         "/assets/publicMediaReference-BCsH0gmZ.js",
         "/assets/publication-DhP1lWPQ.js",
         "/assets/followUp-TgYMdKVm.js",
         "/assets/registryReturn-CesYsGbK.js",
         "/assets/foundations-CGY6cebR.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/App-BAUgnReO.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 loaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 loaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 loaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 42,
-        "octets": 1807748,
-        "distant": 5
+        "requêtes": 41,
+        "octets": 1807894,
+        "distant": 1,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
+        "font": {
           "requêtes": 3,
           "échecs": 0,
-          "octets": 135112,
-          "gzip": 20805,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 30,
           "échecs": 1,
           "octets": 1426241,
-          "gzip": 413706,
+          "gzip": 413696,
           "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 134923,
+          "gzip": 21081,
+          "distant": 0
         },
         "autre": {
           "requêtes": 1,
@@ -1896,20 +1504,13 @@
           "octets": 45167,
           "gzip": 0,
           "distant": 0
-        },
-        "font": {
-          "requêtes": 3,
-          "échecs": 0,
-          "octets": 198236,
-          "gzip": 0,
-          "distant": 3
         }
       },
       "js": {
         "morceaux": 29,
         "initiaux": 29,
         "octetsBruts": 1419667,
-        "gzip": 413706,
+        "gzip": 413696,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -1922,9 +1523,9 @@
           "initial": true
         },
         {
-          "file": "App-Diikh_Cd.js",
+          "file": "App-CBFhLMjQ.js",
           "raw": 327837,
-          "gzip": 88356,
+          "gzip": 88349,
           "icône": false,
           "initial": true
         },
@@ -1971,16 +1572,16 @@
           "initial": true
         },
         {
-          "file": "PrivateMediaImage-D1qUo6n-.js",
+          "file": "PrivateMediaImage-BAFTM904.js",
           "raw": 23864,
-          "gzip": 6099,
+          "gzip": 6097,
           "icône": false,
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -2120,52 +1721,29 @@
       ],
       "remote": [
         {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1150,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        },
-        {
           "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
           "status": null,
           "bytes": 0,
           "failed": true,
           "error": "net::ERR_NAME_NOT_RESOLVED"
         }
-      ]
+      ],
+      "tiers": []
     },
     {
       "surface": "registre",
       "path": "/registry",
       "viewport": "mobile-390",
       "ready": true,
-      "readyAfterMs": 510,
-      "domContentLoaded": 30,
-      "load": 31,
-      "lcp": 360,
+      "readyAfterMs": 507,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 356,
       "title": "Registre · Cartularia",
       "modulepreload": [
         "/assets/rolldown-runtime-hePW80VL.js",
         "/assets/react-DHQQvKuQ.js",
-        "/assets/RegistryApp-C3TR73o8.js",
+        "/assets/RegistryApp-CHGozIKj.js",
         "/assets/icons-CaennByB.js",
         "/assets/demoCartularies-Dl9Sy6ps.js",
         "/assets/index.esm-DRo0ZM8h.js",
@@ -2180,82 +1758,52 @@
         "/assets/comparisonSelection-ToGQ0Qwa.js",
         "/assets/collections-uoQiniEe.js"
       ],
-      "preload": [],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
       "stylesheets": [
-        "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-        "/assets/index-BvNPbCKf.css",
+        "/assets/index-0etb8sXI.css",
         "/assets/registry-Fb27gfFh.css"
       ],
       "fontFaces": [
-        "Archivo 400 unloaded",
-        "Archivo 400 unloaded",
-        "Archivo 400 loaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 500 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 unloaded",
-        "Archivo 600 loaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "Archivo 700 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 400 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 500 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 unloaded",
-        "JetBrains Mono 600 loaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "JetBrains Mono 700 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 unloaded",
-        "Newsreader 500 loaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded",
-        "Newsreader 600 unloaded"
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
       ],
       "totals": {
-        "requêtes": 28,
-        "octets": 1451684,
-        "distant": 5
+        "requêtes": 27,
+        "octets": 1451830,
+        "distant": 1,
+        "tiers": 0
       },
       "byKind": {
         "html": {
           "requêtes": 1,
           "échecs": 0,
-          "octets": 2312,
+          "octets": 2088,
           "gzip": 0,
           "distant": 0
         },
-        "css": {
+        "font": {
           "requêtes": 3,
           "échecs": 0,
-          "octets": 249904,
-          "gzip": 34846,
-          "distant": 1
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
         },
         "js": {
           "requêtes": 18,
           "échecs": 1,
           "octets": 990728,
-          "gzip": 297934,
+          "gzip": 297936,
           "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 249715,
+          "gzip": 35122,
+          "distant": 0
         },
         "autre": {
           "requêtes": 1,
@@ -2270,20 +1818,13 @@
           "octets": 9824,
           "gzip": 0,
           "distant": 0
-        },
-        "font": {
-          "requêtes": 3,
-          "échecs": 0,
-          "octets": 198236,
-          "gzip": 0,
-          "distant": 3
         }
       },
       "js": {
         "morceaux": 17,
         "initiaux": 17,
         "octetsBruts": 986874,
-        "gzip": 297934,
+        "gzip": 297936,
         "icônes": 0,
         "octetsIcônesBruts": 0
       },
@@ -2317,9 +1858,9 @@
           "initial": true
         },
         {
-          "file": "RegistryApp-C3TR73o8.js",
+          "file": "RegistryApp-CHGozIKj.js",
           "raw": 37201,
-          "gzip": 10699,
+          "gzip": 10702,
           "icône": false,
           "initial": true
         },
@@ -2338,9 +1879,9 @@
           "initial": true
         },
         {
-          "file": "index-254gF_q7.js",
+          "file": "index-CBFIhEXE.js",
           "raw": 19518,
-          "gzip": 7143,
+          "gzip": 7142,
           "icône": false,
           "initial": true
         },
@@ -2410,37 +1951,14 @@
       ],
       "remote": [
         {
-          "url": "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
-          "status": 200,
-          "bytes": 1150,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
-          "status": 200,
-          "bytes": 31369,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2",
-          "status": 200,
-          "bytes": 131895,
-          "failed": false
-        },
-        {
-          "url": "https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxKsv4Rn.woff2",
-          "status": 200,
-          "bytes": 34972,
-          "failed": false
-        },
-        {
           "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
           "status": null,
           "bytes": 0,
           "failed": true,
           "error": "net::ERR_NAME_NOT_RESOLVED"
         }
-      ]
+      ],
+      "tiers": []
     }
   ],
   "sequence": [
@@ -2448,18 +1966,18 @@
       "step": "accueil",
       "path": "/",
       "ready": true,
-      "readyAfterMs": 508,
-      "requêtes": 20,
+      "readyAfterMs": 511,
+      "requêtes": 19,
       "servisParLeCache": 0,
-      "réseau": 20,
-      "octetsRéseau": 691256,
+      "réseau": 19,
+      "octetsRéseau": 691402,
       "jsRéseau": 8,
       "jsRéseauOctets": 305703,
       "jsRéseauFichiers": [
-        "index-254gF_q7.js",
+        "index-CBFIhEXE.js",
         "rolldown-runtime-hePW80VL.js",
         "react-DHQQvKuQ.js",
-        "HomePage-Db97xDrj.js",
+        "HomePage-CBTCy4yp.js",
         "icons-CaennByB.js",
         "demoCartularies-Dl9Sy6ps.js",
         "registryReturn-CesYsGbK.js",
@@ -2470,33 +1988,29 @@
         "octets": 0,
         "fichiers": []
       },
-      "distants": [
-        "fonts.googleapis.com 1150 o",
-        "fonts.gstatic.com 31369 o",
-        "fonts.gstatic.com 131895 o",
-        "fonts.gstatic.com 34972 o"
-      ]
+      "distants": [],
+      "tiers": []
     },
     {
       "step": "connexion",
       "path": "/account/sign-in",
       "ready": true,
-      "readyAfterMs": 515,
-      "requêtes": 33,
-      "servisParLeCache": 13,
+      "readyAfterMs": 517,
+      "requêtes": 32,
+      "servisParLeCache": 12,
       "réseau": 19,
-      "octetsRéseau": 873664,
+      "octetsRéseau": 873440,
       "jsRéseau": 15,
       "jsRéseauOctets": 746239,
       "jsRéseauFichiers": [
-        "AccountAccessPage-TaYgyBnd.js",
+        "AccountAccessPage-BOLs8Mpg.js",
         "personalDataBoundary-kRAOoDWj.js",
         "foundations-CGY6cebR.js",
         "index.esm-avlOvUzk.js",
         "index.esm-DRo0ZM8h.js",
         "firebase-Cua6VH5-.js",
         "publicRoutes-DS-O10kQ.js",
-        "RegistryApp-C3TR73o8.js",
+        "RegistryApp-CHGozIKj.js",
         "projections-CcW_nv0s.js",
         "followUp-TgYMdKVm.js",
         "comparisonSelection-ToGQ0Qwa.js",
@@ -2509,34 +2023,31 @@
         "requêtes": 9,
         "octets": 184390,
         "fichiers": [
-          "RegistryApp-C3TR73o8.js @1834 ms",
-          "projections-CcW_nv0s.js @1835 ms",
-          "followUp-TgYMdKVm.js @1835 ms",
-          "comparisonSelection-ToGQ0Qwa.js @1835 ms",
-          "collections-uoQiniEe.js @1835 ms",
-          "registry-Fb27gfFh.css @1835 ms",
-          "RegistryItems-_aed4Wbk.js @1835 ms",
-          "RegistryFilterPanel-Dqq1yx7c.js @1835 ms",
-          "registryThumbnail-DPo4XDK7.js @1836 ms"
+          "RegistryApp-CHGozIKj.js @1831 ms",
+          "projections-CcW_nv0s.js @1832 ms",
+          "followUp-TgYMdKVm.js @1832 ms",
+          "comparisonSelection-ToGQ0Qwa.js @1832 ms",
+          "collections-uoQiniEe.js @1832 ms",
+          "registry-Fb27gfFh.css @1832 ms",
+          "RegistryItems-_aed4Wbk.js @1833 ms",
+          "RegistryFilterPanel-Dqq1yx7c.js @1833 ms",
+          "registryThumbnail-DPo4XDK7.js @1833 ms"
         ]
       },
       "distants": [
-        "fonts.googleapis.com cache",
-        "fonts.gstatic.com cache",
-        "fonts.gstatic.com cache",
-        "fonts.gstatic.com cache",
         "www.google.com refusé"
-      ]
+      ],
+      "tiers": []
     },
     {
       "step": "registre-items",
       "path": "/registry/reg_cartularia_demo/items",
       "ready": true,
-      "readyAfterMs": 512,
-      "requêtes": 27,
-      "servisParLeCache": 23,
+      "readyAfterMs": 516,
+      "requêtes": 26,
+      "servisParLeCache": 22,
       "réseau": 3,
-      "octetsRéseau": 11851,
+      "octetsRéseau": 11627,
       "jsRéseau": 0,
       "jsRéseauOctets": 0,
       "jsRéseauFichiers": [],
@@ -2546,12 +2057,9 @@
         "fichiers": []
       },
       "distants": [
-        "fonts.googleapis.com cache",
-        "fonts.gstatic.com cache",
-        "fonts.gstatic.com cache",
-        "fonts.gstatic.com cache",
         "www.google.com refusé"
-      ]
+      ],
+      "tiers": []
     }
   ],
   "check": {
@@ -2559,7 +2067,8 @@
     "limits": {
       "accueil": {
         "requêtes": 22,
-        "js": 9
+        "js": 9,
+        "polices": 3
       },
       "connexion": {
         "jsInitiaux": 13
@@ -2575,6 +2084,11 @@
         "réseau": 3
       }
     },
+    "appCheckHosts": [
+      "www.google.com",
+      "www.gstatic.com",
+      "recaptchaenterprise.googleapis.com"
+    ],
     "violations": []
   }
 }

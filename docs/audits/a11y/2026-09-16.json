@@ -488,12 +488,12 @@
       "blocking": 0,
       "allowed": 0,
       "other": 3,
-      "toReview": 10,
+      "toReview": 11,
       "incomplete": [
         {
           "id": "color-contrast",
           "impact": "serious",
-          "nodes": 10,
+          "nodes": 11,
           "target": ".page-tabs__inner > button:nth-child(2)",
           "reason": "La couleur d’arrière-plan de l’élément n’a pu être déterminée à cause d’un dégradé d’arrière-plan"
         }
@@ -2758,7 +2758,7 @@
   ],
   "summary": {
     "blocking": 0,
-    "toReview": 419,
+    "toReview": 420,
     "failedChecks": [],
     "unusedAllowlist": []
   }

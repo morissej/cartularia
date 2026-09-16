@@ -186,24 +186,32 @@ test('D6 / K7 : measure:pf0 mesure initial, plafonne App à 340 000 o / 92 000 o
 });
 
 // ---------------------------------------------------------------- measure:surfaces
-test('V-B2 : measure-surfaces a les garde-fous de l’audit axe (Chrome installé, code 2, réseau coupé), observe le LCP par type, mesure les quatre surfaces et le parcours connexion → Registre, et contrôle des seuils sur --check', () => {
+test('V-B2 / V-B5 : measure-surfaces a les garde-fous de l’audit axe (Chrome installé, code 2, réseau coupé sans exception), observe le LCP par type, mesure les quatre surfaces et le parcours connexion → Registre, et contrôle des seuils sur --check (dont 0 requête tierce et 3 polices même origine)', () => {
   const source = read('scripts/measure-surfaces.mjs');
   assert.match(source, /process\.env\.CARTULARIA_CHROME/);
   assert.match(source, /if \(!existsSync\(chromePath\)\) \{ console\.error\(`Mesure non exécutée : Chrome introuvable[^\n]*process\.exit\(2\); \}/);
   assert.match(source, /if \(!existsSync\(join\(distDir, 'index\.html'\)\)\) \{ console\.error\(`Mesure non exécutée : build absent[^\n]*process\.exit\(2\); \}/);
-  assert.match(source, /\['MAP \* ~NOTFOUND', 'EXCLUDE 127\.0\.0\.1', \.\.\.\(allowFonts \? \['EXCLUDE fonts\.googleapis\.com', 'EXCLUDE fonts\.gstatic\.com'\] : \[\]\)\]/, 'réseau coupé hors 127.0.0.1 ; Google Fonts seulement avec --fonts (retiré au commit C4)');
+  // C4 (V-B5, K1/K9) : réseau coupé hors 127.0.0.1 sans exception — l'option --fonts (Google Fonts tolérées) n'existe plus, les polices viennent de dist/.
+  assert.match(source, /const resolverRules = 'MAP \* ~NOTFOUND, EXCLUDE 127\.0\.0\.1';/, 'réseau coupé hors 127.0.0.1, même règle qu’audit-accessibility.mjs');
+  assert.doesNotMatch(source, /--fonts|allowFonts|fonts\.googleapis|fonts\.gstatic/, 'aucune tolérance Google Fonts (C4)');
   assert.match(source, /`--host-resolver-rules=\$\{resolverRules\}`/);
   assert.match(source, /observer\.observe\(\{ type: 'largest-contentful-paint', buffered: true \}\);/);
   assert.doesNotMatch(source, /entryTypes/);
   assert.match(source, /const check = args\.includes\('--check'\);/);
-  assert.match(source, /const allowFonts = args\.includes\('--fonts'\);/);
   for (const path of ["{ name: 'accueil', path: '/' }", "{ name: 'connexion', path: '/account/sign-in' }", "{ name: 'demo-cover', path: `${DEMO}#cover` }", "{ name: 'registre', path: '/registry' }"]) assert.ok(source.includes(path), path);
   assert.match(source, /const REGISTRY_ITEMS = '\/registry\/reg_cartularia_demo\/items';/);
   assert.match(source, /\{ name: 'connexion', path: '\/account\/sign-in', settle: 3500 \}, \{ name: 'registre-items', path: REGISTRY_ITEMS, settle: 2000 \}/, 'parcours à chaud : la connexion attend 3,5 s d’inactivité avant l’étape Registre');
   assert.match(source, /width: 390, height: 844, mobile: true/);
   assert.match(source, /width: 1440, height: 900, mobile: false/);
   // C5 (K9) : seuils fixés depuis le relevé du build fusionné (accueil 20 requêtes / 8 JS, connexion 12 JS initiaux, démo 29, Registre 17), marge +2 requêtes / +1 JS.
-  assert.match(source, /const LIMITS = \{\n  accueil: \{ requêtes: 22, js: 9 \},\n  connexion: \{ jsInitiaux: 13 \},\n  'demo-cover': \{ js: 30 \},\n  registre: \{ js: 18 \},\n  'registre-items': \{ jsRéseau: 0, réseau: 3 \},\n\};/);
+  assert.match(source, /const LIMITS = \{\n  accueil: \{ requêtes: 22, js: 9, polices: 3 \},\n  connexion: \{ jsInitiaux: 13 \},\n  'demo-cover': \{ js: 30 \},\n  registre: \{ js: 18 \},\n  'registre-items': \{ jsRéseau: 0, réseau: 3 \},\n\};/);
+  // C4 (V-B5) : 0 requête tierce sur chaque surface et chaque étape du parcours, seule exception nommée = hôtes d'App Check / reCAPTCHA (résidu V-A2, D14) ;
+  // 3 requêtes de police même origine sur l'accueil (ni distante ni en échec) ; le champ « fonts » du relevé ne tolère plus rien.
+  assert.match(source, /const APP_CHECK_HOSTS = \['www\.google\.com', 'www\.gstatic\.com', 'recaptchaenterprise\.googleapis\.com'\];/);
+  assert.match(source, /if \(result\.tiers\.length > 0\) violations\.push\(`\$\{where\} : \$\{result\.tiers\.length\} requête\(s\) tierce\(s\) hors App Check \(attendu 0\)/);
+  assert.match(source, /if \(step\.tiers\.length > 0\) violations\.push\(`à chaud \$\{step\.step\} : \$\{step\.tiers\.length\} requête\(s\) tierce\(s\) hors App Check \(attendu 0\)/);
+  assert.match(source, /if \(limit\.polices !== undefined && \(fonts\.requêtes !== limit\.polices \|\| fonts\.distant !== 0 \|\| fonts\.échecs !== 0\)\) violations\.push\(/);
+  assert.match(source, /fonts: 'réseau coupé hors 127\.0\.0\.1 \(polices servies par dist\/\)'/);
   // C5 : aucun port éphémère dans le relevé (les liens injectés par Vite portent l'origine du serveur local : ramenés au chemin).
   assert.match(source, /const local = \(href\) => \(href && href\.startsWith\(location\.origin\) \? href\.slice\(location\.origin\.length\) : href\);/);
   assert.match(source, /const base = `http:\/\/127\.0\.0\.1:\$\{server\.address\(\)\.port\}`; \/\/ port éphémère : jamais écrit dans le relevé/);

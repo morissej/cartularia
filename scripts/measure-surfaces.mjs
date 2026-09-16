@@ -1,14 +1,14 @@
-// V7 (V-B2) — mesure reproductible des scripts chargés par surface sur le build (dist/), rattachée à verify:v7 par --check.
+// V7 (V-B2, V-B5) — mesure reproductible des scripts et des polices chargés par surface sur le build (dist/), rattachée à verify:v7 par --check.
 // Même socle que scripts/audit-accessibility.mjs : sert dist/ avec node:http (repli index.html comme la réécriture Hosting, en-têtes
 // de cache de firebase.json), pilote le Chrome installé par le protocole DevTools (WebSocket natif de Node ≥ 22, aucune dépendance),
-// réseau coupé hors 127.0.0.1 (aucun appel Firebase : Firestore, Auth et App Check échouent en DNS) — avec --fonts, Google Fonts est
-// toléré tant que V-B5 (polices hébergées avec le site, commit C4) n'est pas livrée.
+// réseau coupé hors 127.0.0.1 : aucun appel Firebase (Firestore, Auth et App Check échouent en DNS) et aucune police tierce — depuis
+// le commit C4 (V-B5), les trois .woff2 sont servis par dist/ ; toute requête distante hors App Check est un dépassement (--check).
 // À froid (cache désactivé et vidé), pour chaque surface × fenêtre : requêtes par type, octets transférés, morceaux JS (initiaux = demandés
 // avant le premier rendu utile), morceaux « icône seule » (signature : unique import statique ./createLucideIcon-*), modulepreload et
 // preload du document, polices résolues, DOMContentLoaded / load / LCP (observe({ type, buffered })). À chaud (un onglet, cache actif) :
 // accueil → connexion (inactivité 3,5 s, le temps d'un éventuel préchargement) → /registry/reg_cartularia_demo/items, avec pour chaque
 // étape les requêtes servies par le cache et ce que le réseau coûte encore.
-// Usage : node scripts/measure-surfaces.mjs --serve dist [--out docs/audits/perf] [--check] [--fonts] [--chrome <chemin>]
+// Usage : node scripts/measure-surfaces.mjs --serve dist [--out docs/audits/perf] [--check] [--chrome <chemin>]
 // Sorties : <out>/<date>.json (relevé complet) et <out>/<date>.md (résumé), sans port ni heure (seuls les temps mesurés varient d'une
 // exécution à l'autre). Codes : 0 sans dépassement, 1 seuil dépassé (--check), 2 non exécuté.
 import { spawn } from 'node:child_process';
@@ -23,7 +23,6 @@ const option = (name, fallback) => { const index = args.indexOf(name); return in
 const distDir = resolve(option('--serve', 'dist'));
 const outDir = resolve(option('--out', 'docs/audits/perf'));
 const check = args.includes('--check');
-const allowFonts = args.includes('--fonts');
 const chromePath = option('--chrome', process.env.CARTULARIA_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 if (!existsSync(chromePath)) { console.error(`Mesure non exécutée : Chrome introuvable (${chromePath}). Définir CARTULARIA_CHROME.`); process.exit(2); }
 if (!existsSync(join(distDir, 'index.html'))) { console.error(`Mesure non exécutée : build absent (${distDir}/index.html). Lancer npm run build.`); process.exit(2); }
@@ -46,15 +45,20 @@ const viewports = [
 // Google Fonts encore ; mesuré, identique à 1 440 et 390 : accueil 20 requêtes / 8 JS, connexion 12 JS initiaux, démo 29 JS, Registre 17 JS),
 // marge +2 requêtes / +1 morceau JS : tout morceau ajouté à une surface se voit et se décide ici. Le seuil du parcours à chaud (étape Registre :
 // 0 JS réseau, ≤ 3 requêtes) vient du commit C2 (préchargement à l'inactivité depuis la page de connexion, D10 : mesuré 3 requêtes réseau —
-// index.html, logo, manifeste, tous no-cache — et 0 JS) ; « 0 requête tierce » sera activé par le commit C4 (polices locales, −4 requêtes Google
-// +3 .woff2 même origine sur l'accueil : le seuil de 22 requêtes tient).
+// index.html, logo, manifeste, tous no-cache — et 0 JS). « 0 requête tierce » et « 3 polices même origine sur l'accueil » viennent du commit C4
+// (V-B5, polices hébergées avec le site : −4 requêtes Google, +3 .woff2 sous /assets/ ; mesuré le 16 septembre 2026 : accueil 19 requêtes / 8 JS,
+// 3 polices, 0 distante — le seuil de 22 requêtes tient). Une police de plus ou de moins sur l'accueil (fonts.css, unicode-range, preload) se voit ici.
 const LIMITS = {
-  accueil: { requêtes: 22, js: 9 },
+  accueil: { requêtes: 22, js: 9, polices: 3 },
   connexion: { jsInitiaux: 13 },
   'demo-cover': { js: 30 },
   registre: { js: 18 },
   'registre-items': { jsRéseau: 0, réseau: 3 },
 };
+// Seule exception au « 0 requête tierce » (C4) : App Check charge reCAPTCHA Enterprise sur toute surface connectée (résidu V-A2, reporté à V8,
+// décision D14 : App Check après connexion seulement). Ces hôtes sont refusés par le résolveur (DNS coupé) et comptés comme distants dans le
+// relevé, jamais comme dépassement ; tout autre hôte (une police tierce, un CDN, une image distante) est un dépassement nommé.
+const APP_CHECK_HOSTS = ['www.google.com', 'www.gstatic.com', 'recaptchaenterprise.googleapis.com'];
 
 // Anatomie statique de dist/assets : gzip (niveau 9) et signature des morceaux d'icônes (unique import statique, vers ./createLucideIcon-*).
 // Signature calibrée sur V6 (36 morceaux sur a4ce595) : témoin de la disparition du groupe icons de vite.config.ts. Une icône sortie du
@@ -85,8 +89,8 @@ const server = createServer((request, response) => {
 await new Promise((ready) => server.listen(0, '127.0.0.1', ready));
 const base = `http://127.0.0.1:${server.address().port}`; // port éphémère : jamais écrit dans le relevé
 
-// Chrome headless : port DevTools éphémère lu dans DevToolsActivePort ; toute résolution DNS échoue sauf 127.0.0.1 (et Google Fonts avec --fonts).
-const resolverRules = ['MAP * ~NOTFOUND', 'EXCLUDE 127.0.0.1', ...(allowFonts ? ['EXCLUDE fonts.googleapis.com', 'EXCLUDE fonts.gstatic.com'] : [])].join(', ');
+// Chrome headless : port DevTools éphémère lu dans DevToolsActivePort ; toute résolution DNS échoue sauf 127.0.0.1 (même socle qu'audit-accessibility.mjs).
+const resolverRules = 'MAP * ~NOTFOUND, EXCLUDE 127.0.0.1';
 const profile = mkdtempSync(join(tmpdir(), 'cartularia-surfaces-'));
 const chrome = spawn(chromePath, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--hide-scrollbars', '--disable-extensions', '--disable-background-networking', '--disable-sync', '--disable-component-update', `--host-resolver-rules=${resolverRules}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -110,13 +114,14 @@ class Cdp {
 
 const kindOf = (type, url, mime) => {
   if (type === 'Script' || /\.js(\?|$)/.test(url)) return 'js';
-  if (type === 'Stylesheet' || /\.css(\?|$)/.test(url) || /fonts\.googleapis\.com\/css/.test(url)) return 'css';
-  if (type === 'Font' || /\.(woff2?|ttf|otf)(\?|$)/.test(url) || /fonts\.gstatic\.com/.test(url)) return 'font';
+  if (type === 'Stylesheet' || /\.css(\?|$)/.test(url)) return 'css';
+  if (type === 'Font' || /\.(woff2?|ttf|otf)(\?|$)/.test(url)) return 'font';
   if (type === 'Image' || /^image\//.test(mime ?? '')) return 'image';
   if (type === 'Document') return 'html';
   return 'autre';
 };
 const isLocal = (url) => new URL(url).hostname === '127.0.0.1';
+const isAppCheck = (url) => APP_CHECK_HOSTS.includes(new URL(url).hostname);
 const fileOf = (url) => new URL(url).pathname.split('/').pop();
 const shortName = (file) => file.replace(/-[A-Za-z0-9_-]{8}\.(js|css)$/, '.$1');
 // Premier rendu utile : onglets d'un Cartulaire, coquille ou formulaire du Registre, ou page publique (main hors coquille applicative).
@@ -146,7 +151,7 @@ const METRICS = `(() => new Promise((done) => {
 }))()`;
 
 const day = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10); // date locale : un relevé par jour
-const report = { date: day, chrome: chromePath, fonts: allowFonts ? 'Google Fonts tolérées (--fonts)' : 'réseau coupé hors 127.0.0.1', cache: 'désactivé et vidé avant chaque surface', results: [], sequence: [] };
+const report = { date: day, chrome: chromePath, fonts: 'réseau coupé hors 127.0.0.1 (polices servies par dist/)', cache: 'désactivé et vidé avant chaque surface', results: [], sequence: [] };
 
 // Une page pilotée par CDP : requêtes observées (avec cache et échecs), rendu prêt, réseau au repos.
 const openPage = async (browser, { cacheDisabled, viewport }) => {
@@ -213,15 +218,17 @@ try {
       }
       const icons = chunks.filter((chunk) => chunk.icône);
       const remote = entries.filter((entry) => !isLocal(entry.url)).map((entry) => ({ url: entry.url, status: entry.status, bytes: entry.bytes, failed: entry.failed, error: entry.error }));
+      const tiers = remote.filter((entry) => !isAppCheck(entry.url)).map((entry) => new URL(entry.url).host); // distants hors App Check : attendu vide (C4)
       report.results.push({
         surface: surface.name, path: surface.path, viewport: viewport.name, ready, readyAfterMs, ...metrics,
-        totals: { requêtes: entries.length, octets: entries.reduce((sum, entry) => sum + entry.bytes, 0), distant: remote.length },
+        totals: { requêtes: entries.length, octets: entries.reduce((sum, entry) => sum + entry.bytes, 0), distant: remote.length, tiers: tiers.length },
         byKind,
         js: { morceaux: chunks.length, initiaux: chunks.filter((chunk) => chunk.initial).length, octetsBruts: chunks.reduce((sum, chunk) => sum + chunk.raw, 0), gzip: chunks.reduce((sum, chunk) => sum + (chunk.gzip ?? 0), 0), icônes: icons.length, octetsIcônesBruts: icons.reduce((sum, chunk) => sum + chunk.raw, 0) },
         chunks: chunks.sort((left, right) => right.raw - left.raw),
         remote,
+        tiers,
       });
-      process.stderr.write(`${viewport.name} ${surface.name} : ${entries.length} requêtes (${remote.length} distantes), ${chunks.length} morceaux JS dont ${icons.length} icône(s) seule(s), prêt en ${readyAfterMs} ms\n`);
+      process.stderr.write(`${viewport.name} ${surface.name} : ${entries.length} requêtes (${remote.length} distantes dont ${tiers.length} hors App Check, ${byKind.font?.requêtes ?? 0} polices), ${chunks.length} morceaux JS dont ${icons.length} icône(s) seule(s), prêt en ${readyAfterMs} ms\n`);
       await page.close();
     }
   }
@@ -242,6 +249,7 @@ try {
         jsRéseauFichiers: js(network).map((entry) => fileOf(entry.url)),
         aprèsPrêt: { requêtes: late.length, octets: late.reduce((sum, entry) => sum + entry.bytes, 0), fichiers: late.map((entry) => `${fileOf(entry.url)} @${entry.at} ms`) },
         distants: entries.filter((entry) => !isLocal(entry.url)).map((entry) => `${new URL(entry.url).host} ${entry.failed ? 'refusé' : entry.cached ? 'cache' : `${entry.bytes} o`}`),
+        tiers: entries.filter((entry) => !isLocal(entry.url) && !isAppCheck(entry.url)).map((entry) => new URL(entry.url).host),
       });
       process.stderr.write(`à chaud ${step.name} : ${entries.length} requêtes, ${network.length} réseau (${js(network).length} JS, ${(network.reduce((sum, entry) => sum + entry.bytes, 0) / 1024).toFixed(1)} ko), ${entries.filter((entry) => entry.cached).length} cache, ${late.length} après prêt\n`);
     }
@@ -264,23 +272,28 @@ if (check) {
     if (limit.js !== undefined && result.js.morceaux > limit.js) violations.push(`${where} : ${result.js.morceaux} morceaux JS (seuil ${limit.js})`);
     if (limit.jsInitiaux !== undefined && result.js.initiaux > limit.jsInitiaux) violations.push(`${where} : ${result.js.initiaux} morceaux JS initiaux (seuil ${limit.jsInitiaux})`);
     if (limit.requêtes !== undefined && result.totals.requêtes > limit.requêtes) violations.push(`${where} : ${result.totals.requêtes} requêtes (seuil ${limit.requêtes})`);
+    // C4 (V-B5) : 0 requête tierce sur chaque surface (les hôtes d'App Check sont la seule exception, nommée dans APP_CHECK_HOSTS).
+    if (result.tiers.length > 0) violations.push(`${where} : ${result.tiers.length} requête(s) tierce(s) hors App Check (attendu 0) : ${[...new Set(result.tiers)].join(', ')}`);
+    const fonts = result.byKind.font ?? { requêtes: 0, échecs: 0, distant: 0 };
+    if (limit.polices !== undefined && (fonts.requêtes !== limit.polices || fonts.distant !== 0 || fonts.échecs !== 0)) violations.push(`${where} : ${fonts.requêtes} requête(s) de police dont ${fonts.distant} distante(s) et ${fonts.échecs} en échec (attendu ${limit.polices} même origine, servies par dist/assets/ : Archivo, JetBrains Mono, Newsreader)`);
   }
   for (const step of report.sequence) {
     const limit = LIMITS[step.step] ?? {};
     if (!step.ready) violations.push(`à chaud ${step.step} : surface non rendue`);
+    if (step.tiers.length > 0) violations.push(`à chaud ${step.step} : ${step.tiers.length} requête(s) tierce(s) hors App Check (attendu 0) : ${[...new Set(step.tiers)].join(', ')}`);
     if (limit.jsRéseau !== undefined && step.jsRéseau > limit.jsRéseau) violations.push(`à chaud ${step.step} : ${step.jsRéseau} morceau(x) JS demandé(s) au réseau (seuil ${limit.jsRéseau}) : ${step.jsRéseauFichiers.join(', ')}`);
     if (limit.réseau !== undefined && step.réseau > limit.réseau) violations.push(`à chaud ${step.step} : ${step.réseau} requêtes réseau (seuil ${limit.réseau})`);
   }
 }
-report.check = { enabled: check, limits: LIMITS, violations };
+report.check = { enabled: check, limits: LIMITS, appCheckHosts: APP_CHECK_HOSTS, violations };
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(1)} ko`;
 const lines = [`# Mesure des surfaces sur le build — ${day}`, '', `Chrome headless (${chromePath}), ${report.fonts}, cache ${report.cache}, serveur node:http sans compression (gzip recalculé depuis dist/). ${surfaces.length} surfaces × ${viewports.length} fenêtres, puis un parcours à chaud.`, '',
-  '| Fenêtre | Surface | Prêt (ms) | DCL | load | LCP | Requêtes | Distantes | Octets | JS morceaux | JS initiaux | JS brut | JS gzip | Icônes seules | CSS (req) | Polices (req / octets) |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|'];
+  '| Fenêtre | Surface | Prêt (ms) | DCL | load | LCP | Requêtes | Distantes | Tierces hors App Check | Octets | JS morceaux | JS initiaux | JS brut | JS gzip | Icônes seules | CSS (req) | Polices (req / octets) |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|'];
 for (const result of report.results) {
   const fonts = result.byKind.font ?? { requêtes: 0, octets: 0 };
   const css = result.byKind.css ?? { requêtes: 0 };
-  lines.push(`| ${result.viewport} | ${result.surface} | ${result.readyAfterMs} | ${result.domContentLoaded ?? '—'} | ${result.load ?? '—'} | ${result.lcp ?? '—'} | ${result.totals.requêtes} | ${result.totals.distant} | ${kb(result.totals.octets)} | ${result.js.morceaux} | ${result.js.initiaux} | ${kb(result.js.octetsBruts)} | ${kb(result.js.gzip)} | ${result.js.icônes} | ${css.requêtes} | ${fonts.requêtes} / ${kb(fonts.octets)} |`);
+  lines.push(`| ${result.viewport} | ${result.surface} | ${result.readyAfterMs} | ${result.domContentLoaded ?? '—'} | ${result.load ?? '—'} | ${result.lcp ?? '—'} | ${result.totals.requêtes} | ${result.totals.distant} | ${result.totals.tiers} | ${kb(result.totals.octets)} | ${result.js.morceaux} | ${result.js.initiaux} | ${kb(result.js.octetsBruts)} | ${kb(result.js.gzip)} | ${result.js.icônes} | ${css.requêtes} | ${fonts.requêtes} / ${kb(fonts.octets)} |`);
 }
 lines.push('', '## Parcours à chaud (un onglet, cache actif, en-têtes Hosting) : accueil → connexion → Registre démo', '', '| Étape | Requêtes | Cache | Réseau | Octets réseau | JS réseau | Fichiers JS réseau | Après prêt |', '|---|---|---|---|---|---|---|---|');
 for (const step of report.sequence) lines.push(`| ${step.step} | ${step.requêtes} | ${step.servisParLeCache} | ${step.réseau} | ${kb(step.octetsRéseau)} | ${step.jsRéseau} (${kb(step.jsRéseauOctets)}) | ${step.jsRéseauFichiers.map(shortName).join(', ') || '—'} | ${step.aprèsPrêt.requêtes} |`);

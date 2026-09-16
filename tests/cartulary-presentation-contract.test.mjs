@@ -1101,10 +1101,11 @@ test('V7 (fusion) : barrières test:v7 / verify:v7 figées, 13 dépendances, rel
   const packageJson = JSON.parse(readSource('../package.json'));
   // K8 : test:v7 = test:v6 + hygiène des API de performance + performance-v7 + hygiene-v7 + les onze tests orphelins hors émulateur (D24 de la lecture
   // barrières, absorbés à la relecture V7 : 40 tests, ≈ 1,5 s) ; interface-state est déjà dans test:v3 ; aucune suite d'émulateur.
-  // verify:v7 : audit:a11y construit dist/ que measure:pf0 et measure:surfaces lisent ; --fonts tolère Google Fonts tant que C4 (polices hébergées) n'est pas livré — C4 réécrit cette ligne.
-  assert.equal(packageJson.scripts['test:v7'], 'npm run test:v6 && npm run test:performance-hygiene && node --test tests/performance-v7.test.mjs tests/hygiene-v7.test.mjs tests/file-validation.test.mjs tests/generic-editing.test.mjs tests/generic-media-command.test.mjs tests/isolated-vault-configuration.test.mjs tests/media-download-wiring.test.mjs tests/media-presentation-runtime.test.mjs tests/pdf-export.test.mjs tests/personal-recovery.test.mjs tests/public-text-policy.test.mjs tests/registry-navigation.test.mjs tests/security-wave1.test.mjs');
+  // C4 (polices hébergées, V-B5) : tests/fonts-contract.test.mjs entre dans test:v7 ; verify:v7 : audit:a11y construit dist/ que measure:pf0 et measure:surfaces
+  // lisent, measure:surfaces --check sans --fonts (réseau coupé hors 127.0.0.1, 0 requête tierce hors App Check, 3 polices même origine sur l'accueil).
+  assert.equal(packageJson.scripts['test:v7'], 'npm run test:v6 && npm run test:performance-hygiene && node --test tests/performance-v7.test.mjs tests/hygiene-v7.test.mjs tests/fonts-contract.test.mjs tests/file-validation.test.mjs tests/generic-editing.test.mjs tests/generic-media-command.test.mjs tests/isolated-vault-configuration.test.mjs tests/media-download-wiring.test.mjs tests/media-presentation-runtime.test.mjs tests/pdf-export.test.mjs tests/personal-recovery.test.mjs tests/public-text-policy.test.mjs tests/registry-navigation.test.mjs tests/security-wave1.test.mjs');
   assert.equal(packageJson.scripts['measure:pf0'], 'node scripts/measure-pf0-build.mjs');
-  assert.equal(packageJson.scripts['measure:surfaces'], 'node scripts/measure-surfaces.mjs --serve dist --out docs/audits/perf --check --fonts');
+  assert.equal(packageJson.scripts['measure:surfaces'], 'node scripts/measure-surfaces.mjs --serve dist --out docs/audits/perf --check');
   assert.equal(packageJson.scripts['verify:v7'], 'npm run test:v7 && npm run audit:a11y && npm run measure:pf0 && npm run measure:surfaces');
   assert.equal(Object.keys(packageJson.dependencies).length, 13, 'aucune dépendance d’exécution ajoutée par V7 (test:v6, audit:a11y et verify:v6 restent ceux du test « V6 (fusion) »)');
   // Relevé du build fusionné (C5), produit par measure:surfaces --check : daté au jour, sans port éphémère, quatre surfaces × deux fenêtres, aucun dépassement,
