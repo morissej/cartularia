@@ -56,7 +56,9 @@ const LIMITS = {
   'registre-items': { jsRéseau: 0, réseau: 3 },
 };
 
-// Anatomie statique de dist/assets : gzip et signature des morceaux d'icônes (unique import statique, vers ./createLucideIcon-*).
+// Anatomie statique de dist/assets : gzip (niveau 9) et signature des morceaux d'icônes (unique import statique, vers ./createLucideIcon-*).
+// Signature calibrée sur V6 (36 morceaux sur a4ce595) : témoin de la disparition du groupe icons de vite.config.ts. Une icône sortie du
+// groupe importe ./icons-* et n'est pas vue ici ; le contrôle effectif est iconDefinitionFiles === 1 de measure:pf0, exécuté avant (verify:v7).
 const NUMBERED_COPY = / \d+\.[^/]+$/;
 const assetsDir = join(distDir, 'assets');
 const anatomy = new Map();

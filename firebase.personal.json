@@ -9,7 +9,7 @@
   },
   "hosting": {
     "public": "dist-personal",
-    "ignore": ["firebase.personal.json", "**/.*", "**/node_modules/**", "**/* [0-9].*"],
+    "ignore": ["firebase.personal.json", "**/.*", "**/node_modules/**", "**/* +([0-9]).*"],
     "headers": [
       {
         "source": "**",

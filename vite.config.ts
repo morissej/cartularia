@@ -8,7 +8,8 @@ import { createRfc3161Middleware } from './scripts/lib/rfc3161-timestamp.mjs'
 // V7, décision (c) : les copies de conflit « nom N.ext » que la synchronisation du poste dépose dans public/ (124 le 16 septembre 2026,
 // toutes sous public/assets/IWC/derivatives/) sont recopiées telles quelles dans dist/ puis livrées à Hosting (128 en ligne). Elles sont
 // retirées de dist/ après l'écriture du bundle, récursivement (fichiers « nom N.ext », puis dossiers « nom N » vides) ; l'opération est
-// journalisée, jamais bloquante. Seconde garde, indépendante : hosting.ignore "**/* [0-9].*" dans firebase.json et firebase.personal.json.
+// journalisée, jamais bloquante. Seconde garde, indépendante : hosting.ignore "**/* +([0-9]).*" dans firebase.json et firebase.personal.json
+// (extglob de minimatch, équivalent du « \d+ » ci-dessous : le motif « [0-9] » d'une classe laissait livrer « nom 12.ext », relecture V7).
 // Verrous : tests/performance-v7.test.mjs (greffon exercé sur un dossier témoin), scripts/measure-pf0-build.mjs (numberedCopies === 0).
 const NUMBERED_COPY_FILE = / \d+\.[^/]+$/
 const NUMBERED_COPY_DIRECTORY = / \d+$/

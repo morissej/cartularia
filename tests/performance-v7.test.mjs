@@ -56,7 +56,6 @@ test('D8 (c) : le greffon cartularia-copies-numerotees est dans les plugins, ne 
   assert.equal(plugin.apply, 'build');
   assert.equal(typeof plugin.configResolved, 'function');
   assert.equal(typeof plugin.closeBundle, 'function');
-  assert.match(read('vite.config.ts'), /name: 'cartularia-copies-numerotees'/, 'nom exact (assertion partagée avec tests/hygiene-v7.test.mjs)');
   assert.match(read('vite.config.ts'), /outDir = resolve\(config\.root, config\.build\.outDir\)/, 'resolve, pas join : un --outDir absolu ne doit pas être concaténé');
   // Chemin relatif au root, puis chemin absolu (usage vite build --outDir <absolu>) : le greffon vise le même dossier dans les deux cas.
   for (const outDir of ['dist-temoin', join(scratch, 'dist-absolu')]) {
@@ -97,17 +96,20 @@ test('D8 (c) : removeNumberedCopies retire récursivement les fichiers « nom N.
 });
 
 // ---------------------------------------------------------------- D8 / K3 : hosting.ignore des deux sites
-test('D8 (c) : firebase.json et firebase.personal.json ignorent « **/* [0-9].* » au déploiement, et listFiles de firebase-tools exclut bien ces copies', () => {
+test('D8 (c) : firebase.json et firebase.personal.json ignorent « **/* +([0-9]).* » au déploiement (un ou plusieurs chiffres, comme le greffon), et listFiles de firebase-tools exclut bien ces copies', () => {
   const require = createRequire(import.meta.url);
   const { listFiles } = require('firebase-tools/lib/listFiles.js');
   const site = join(scratch, 'site');
-  seed(site, { 'index.html': 'x', 'assets/index-abc12345.js': 'x', 'assets/IWC/derivatives/_DSC1019-3.768.avif': 'x', 'assets/IWC/derivatives/_DSC1019-3.768 2.avif': 'copie', 'cartularia-logo-monochrome 2.svg': 'copie', 'browserconfig 3.xml': 'copie' });
+  // Relecture V7 : « _DSC1019-3.768 12.webp » (deux chiffres) était livré par l'ancien motif « **/* [0-9].* » ; « logo 2x.png » n'est pas une copie.
+  seed(site, { 'index.html': 'x', 'assets/index-abc12345.js': 'x', 'assets/IWC/derivatives/_DSC1019-3.768.avif': 'x', 'assets/IWC/derivatives/_DSC1019-3.768 2.avif': 'copie', 'assets/IWC/derivatives/_DSC1019-3.768 12.webp': 'copie à deux chiffres', 'assets/logo 2x.png': 'x', 'cartularia-logo-monochrome 2.svg': 'copie', 'browserconfig 3.xml': 'copie' });
   for (const [file, publicDir] of [['firebase.json', 'dist'], ['firebase.personal.json', 'dist-personal']]) {
     const { hosting } = JSON.parse(read(file));
     assert.equal(hosting.public, publicDir, file);
-    assert.ok(hosting.ignore.includes('**/* [0-9].*'), `${file} : hosting.ignore exclut les copies numérotées`);
-    assert.deepEqual(listFiles(site, hosting.ignore).sort(), ['assets/IWC/derivatives/_DSC1019-3.768.avif', 'assets/index-abc12345.js', 'index.html'], `${file} : la liste de déploiement ne contient aucune copie`);
-    assert.ok(listFiles(site, hosting.ignore.filter((pattern) => pattern !== '**/* [0-9].*')).length === 6, `${file} : sans le motif, les copies seraient livrées (témoin)`);
+    assert.ok(hosting.ignore.includes('**/* +([0-9]).*'), `${file} : hosting.ignore exclut les copies numérotées (extglob : un ou plusieurs chiffres)`);
+    assert.ok(!hosting.ignore.includes('**/* [0-9].*'), `${file} : l’ancien motif à un chiffre ne suffit pas (« nom 12.ext » serait livré)`);
+    assert.deepEqual(listFiles(site, hosting.ignore).sort(), ['assets/IWC/derivatives/_DSC1019-3.768.avif', 'assets/index-abc12345.js', 'assets/logo 2x.png', 'index.html'], `${file} : la liste de déploiement ne contient aucune copie`);
+    assert.ok(listFiles(site, hosting.ignore.filter((pattern) => pattern !== '**/* +([0-9]).*')).length === 8, `${file} : sans le motif, les copies seraient livrées (témoin)`);
+    assert.ok(listFiles(site, [...hosting.ignore.filter((pattern) => pattern !== '**/* +([0-9]).*'), '**/* [0-9].*']).includes('assets/IWC/derivatives/_DSC1019-3.768 12.webp'), `${file} : témoin — le motif à un chiffre livre la copie à deux chiffres`);
   }
   // Hypothèses de measure-surfaces (serveur local) et du parcours à chaud : réécriture unique vers index.html, assets immuables.
   const { hosting } = JSON.parse(read('firebase.json'));
@@ -131,7 +133,7 @@ test('V-B5 (D11) : les deux configurations Vite refusent d’incorporer une poli
 test('D6 / K7 : measure:pf0 mesure initial, plafonne App à 340 000 o / 92 000 o gzip, compte les morceaux, exige un seul icons-*.js et un seul react-*.js préchargé, et refuse toute copie numérotée', () => {
   const source = read('scripts/measure-pf0-build.mjs');
   assert.match(source, /\n  app: 340_000,\n  appGzip: 92_000,\n/, 'budget relevé (D6) avec sa cause datée');
-  assert.match(source, /320 000 dépassé depuis V3/, 'cause datée en commentaire');
+  assert.match(source, /320 000 dépassé depuis V5 point 1 \(c078b2d, 15 septembre 2026/, 'cause datée en commentaire (relecture V7 : le franchissement date de V5 point 1, 313 273 → 323 275 o, pas de V3)');
   for (const key of ['initial', 'javascriptFiles', 'reactChunk', 'iconsChunk', 'iconsImports', 'iconDefinitionFiles', 'numberedCopies']) assert.match(source, new RegExp(`\\n  ${key}: `), `contrôle ${key}`);
   // Dossier témoin conforme : tout est vert ; puis une copie numérotée profonde, puis une seconde définition d'icône : chacune fait échouer.
   const dist = join(scratch, 'pf0');
@@ -167,6 +169,20 @@ test('D6 / K7 : measure:pf0 mesure initial, plafonne App à 340 000 o / 92 000 o
   const leaked = run();
   assert.notEqual(leaked.status, 0, 'une définition d’icône hors icons-*.js doit faire échouer measure:pf0');
   assert.deepEqual(JSON.parse(leaked.stdout).iconDefinitionFiles.sort(), ['App-eeeeeeee.js', 'icons-dddddddd.js']);
+  // Relecture V7 (F4) : témoins rouges des deux contrôles du découpage — icons-*.js important l'entrée applicative (cas réel de la
+  // récursion désactivée), puis react-*.js absent des modulepreload de index.html ; chacun est le seul contrôle en échec.
+  const failing = (result) => Object.entries(JSON.parse(result.stdout).checks).filter(([, ok]) => !ok).map(([key]) => key);
+  seed(dist, { 'assets/App-eeeeeeee.js': 'import{k}from"./icons-dddddddd.js";', 'assets/icons-dddddddd.js': `import{a}from"./rolldown-runtime-bbbbbbbb.js";import{b}from"./react-cccccccc.js";import{c}from"./App-eeeeeeee.js";${icon}` });
+  const iconsImportingApp = run();
+  assert.notEqual(iconsImportingApp.status, 0, 'icons-*.js important App-*.js doit faire échouer measure:pf0');
+  assert.deepEqual(failing(iconsImportingApp), ['iconsImports']);
+  seed(dist, {
+    'assets/icons-dddddddd.js': `import{a}from"./rolldown-runtime-bbbbbbbb.js";import{b}from"./react-cccccccc.js";${icon}`,
+    'index.html': '<script type="module" crossorigin src="/assets/index-aaaaaaaa.js"></script><link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-bbbbbbbb.js">',
+  });
+  const reactNotPreloaded = run();
+  assert.notEqual(reactNotPreloaded.status, 0, 'react-*.js absent des modulepreload de index.html doit faire échouer measure:pf0');
+  assert.deepEqual(failing(reactNotPreloaded), ['reactChunk']);
 });
 
 // ---------------------------------------------------------------- measure:surfaces

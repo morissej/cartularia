@@ -69,8 +69,10 @@ const woff2 = files.filter((file) => file.endsWith('.woff2') && !NUMBERED_COPY.t
 const budgets = {
   entry: 250_000,
   initial: 250_000,
-  // V7 (D6) : 320 000 dépassé depuis V3 (features/cartulary, 330 028 o le 15 septembre 2026, hors de toute barrière) ; relevé à 340 000 o
-  // et 92 000 o gzip (mesuré 327 838 / 88 597 après regroupement des icônes le 16 septembre 2026), rattaché à verify:v7.
+  // V7 (D6) : 320 000 dépassé depuis V5 point 1 (c078b2d, 15 septembre 2026 : lecture en texte pur et édition par crayon, App.tsx +
+  // features/cartulary, 313 273 → 323 275 o ; 331 485 o à la clôture V5, 330 028 o en V6 ; 309 236 o à la clôture V3), hors de toute
+  // barrière ; relevé à 340 000 o et 92 000 o gzip (mesuré 327 837 / 88 621 sur le build fusionné C1-C3 du 16 septembre 2026, zlib au
+  // niveau par défaut — le budget se lit à ce niveau, le relevé docs/audits/perf recalcule au niveau 9), rattaché à verify:v7.
   app: 340_000,
   appGzip: 92_000,
   registry: 60_000,

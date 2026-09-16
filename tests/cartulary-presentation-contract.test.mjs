@@ -1093,31 +1093,20 @@ test('V6 relecture : audit axe mesuré contre clientWidth, nœuds à vérifier c
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\n  \*, \*::before, \*::after \{ scroll-behavior: auto !important;/, 'la feuille couvre toujours les défilements `auto`');
 });
 
-// V7 — fusion (journal docs/audits/2026-09-16-execution-v7.md ; cohérence K8 barrières, K13 définitions exactes, D6-D8 découpage et gardes de
-// livraison, D13 exceptions axe). Une assertion par invariant : les configurations Vite sont exercées par tests/performance-v7.test.mjs (groupes,
-// greffon, hosting.ignore par listFiles, measure:pf0 sur dossier témoin) et les décisions par tests/hygiene-v7.test.mjs ; ce bloc fige ce que la
-// vague livre — scripts npm, dépendances, noms des mécanismes, relevé daté — et ce que V8 hérite (six exceptions axe reportées, datées).
-test('V7 (fusion) : barrières test:v7 / verify:v7 figées, 13 dépendances, groupes react + icons et greffon dans vite.config.ts, aucune copie numérotée servie (greffon, hosting.ignore, measure:pf0), relevé perf daté sans port, exceptions axe reportées à V8 avec motif daté', () => {
+// V7 — fusion (journal docs/audits/2026-09-16-execution-v7.md ; cohérence K8 barrières, K13 définitions exactes, D13 exceptions axe). Une assertion
+// par invariant (K6, K13) : les configurations Vite, le greffon, hosting.ignore (listFiles) et measure:pf0 sont exercés par tests/performance-v7.test.mjs
+// seulement, les décisions par tests/hygiene-v7.test.mjs ; ce bloc fige ce que la vague livre — scripts npm, dépendances, relevé daté — et ce que V8
+// hérite (six exceptions axe reportées, datées). Relecture V7 : les doublons de forme sur vite.config.ts, firebase*.json et measure-pf0 sont retirés.
+test('V7 (fusion) : barrières test:v7 / verify:v7 figées, 13 dépendances, relevé perf daté sans port, exceptions axe reportées à V8 avec motif daté', () => {
   const packageJson = JSON.parse(readSource('../package.json'));
-  // K8 : test:v7 = test:v6 + hygiène des API de performance + performance-v7 + hygiene-v7 (interface-state est déjà dans test:v3) ; aucune suite d'émulateur.
+  // K8 : test:v7 = test:v6 + hygiène des API de performance + performance-v7 + hygiene-v7 + les onze tests orphelins hors émulateur (D24 de la lecture
+  // barrières, absorbés à la relecture V7 : 40 tests, ≈ 1,5 s) ; interface-state est déjà dans test:v3 ; aucune suite d'émulateur.
   // verify:v7 : audit:a11y construit dist/ que measure:pf0 et measure:surfaces lisent ; --fonts tolère Google Fonts tant que C4 (polices hébergées) n'est pas livré — C4 réécrit cette ligne.
-  assert.equal(packageJson.scripts['test:v7'], 'npm run test:v6 && npm run test:performance-hygiene && node --test tests/performance-v7.test.mjs tests/hygiene-v7.test.mjs');
+  assert.equal(packageJson.scripts['test:v7'], 'npm run test:v6 && npm run test:performance-hygiene && node --test tests/performance-v7.test.mjs tests/hygiene-v7.test.mjs tests/file-validation.test.mjs tests/generic-editing.test.mjs tests/generic-media-command.test.mjs tests/isolated-vault-configuration.test.mjs tests/media-download-wiring.test.mjs tests/media-presentation-runtime.test.mjs tests/pdf-export.test.mjs tests/personal-recovery.test.mjs tests/public-text-policy.test.mjs tests/registry-navigation.test.mjs tests/security-wave1.test.mjs');
   assert.equal(packageJson.scripts['measure:pf0'], 'node scripts/measure-pf0-build.mjs');
   assert.equal(packageJson.scripts['measure:surfaces'], 'node scripts/measure-surfaces.mjs --serve dist --out docs/audits/perf --check --fonts');
   assert.equal(packageJson.scripts['verify:v7'], 'npm run test:v7 && npm run audit:a11y && npm run measure:pf0 && npm run measure:surfaces');
   assert.equal(Object.keys(packageJson.dependencies).length, 13, 'aucune dépendance d’exécution ajoutée par V7 (test:v6, audit:a11y et verify:v6 restent ceux du test « V6 (fusion) »)');
-  // D7 / D8 (c) : deux groupes de découpage nommés et le greffon de fin de build, dans la configuration principale seulement (D11 : le Coffre n'en reçoit pas).
-  const vite = readSource('../vite.config.ts');
-  assert.match(vite, /codeSplitting: \{\n\s*groups: \[/, 'découpage par groupes rolldown');
-  for (const name of ['react', 'icons']) assert.match(vite, new RegExp(`name: '${name}'`), `groupe ${name}`);
-  assert.match(vite, /name: 'cartularia-copies-numerotees'/);
-  assert.match(vite, /closeBundle\(\) \{/, 'les copies numérotées sont retirées de dist/ après l’écriture du bundle');
-  assert.doesNotMatch(readSource('../vite.personal.config.ts'), /codeSplitting|cartularia-copies-numerotees/);
-  // D8 : aucune copie numérotée servie — trois gardes indépendantes : le greffon (build), hosting.ignore des deux sites (liste de déploiement), measure:pf0 (verify:v7, bloquant).
-  for (const file of ['firebase.json', 'firebase.personal.json']) assert.ok(JSON.parse(readSource(`../${file}`)).hosting.ignore.includes('**/* [0-9].*'), `${file} : hosting.ignore`);
-  const pf0 = readSource('../scripts/measure-pf0-build.mjs');
-  assert.match(pf0, /\n  numberedCopies: /, 'measure:pf0 compte les copies numérotées de dist/');
-  assert.match(pf0, /numberedCopies === 0/, 'et refuse la première');
   // Relevé du build fusionné (C5), produit par measure:surfaces --check : daté au jour, sans port éphémère, quatre surfaces × deux fenêtres, aucun dépassement,
   // aucun morceau « icône seule », étape Registre du parcours à chaud sans JS réseau.
   const surveySource = readSource('../docs/audits/perf/2026-09-16.json');
