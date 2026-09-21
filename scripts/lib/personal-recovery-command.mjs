@@ -1,4 +1,5 @@
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto';
+import { assertActiveAccount, assertActiveAccountSession } from './account-access-command.mjs';
 
 export class RecoveryCommandError extends Error {
   constructor(code, message = 'La récupération n’a pas pu être autorisée.') {
@@ -49,6 +50,17 @@ export const verifyRecoverySignature = ({ signingPublicKeyJwk, message, signatur
   } catch { return false; }
 };
 
+/** A kit may survive reactivation; a challenge issued before revocation must not. */
+export const assertRecoveryChallengeCurrent = (account, issuedAt) => {
+  const guardCutoff = account.validAfter || 0;
+  const authCutoff = account.authValidAfter || 0;
+  if (!guardCutoff && !authCutoff) return;
+  const issuedSeconds = Number.isSafeInteger(issuedAt) ? Math.floor(issuedAt / 1000) : NaN;
+  if (!Number.isFinite(issuedSeconds)
+    || (guardCutoff && issuedSeconds <= guardCutoff)
+    || (authCutoff && issuedSeconds < authCutoff)) fail('permission-denied', 'Cette demande de secours est périmée. Recommencez avec votre kit.');
+};
+
 /** Generic proof-of-possession engine. Its database and namespace must belong to one trust boundary. */
 export const createRecoveryProofCommands = ({
   db, recordCollection, namespace, issueSession, assertEnabled,
@@ -75,19 +87,20 @@ export const createRecoveryProofCommands = ({
       const snapshot = await transaction.get(ref);
       const state = snapshot.exists ? snapshot.data() : null;
       if (!state || state.revokedAt || state.credentialId !== credentialId) fail('permission-denied');
+      await assertEnabled(ownerUid, state, { transaction, issuedAt });
       const bucket = state.challengeWindowEndsAt > issuedAt ? {
         challengeWindowEndsAt: state.challengeWindowEndsAt, challengeCount: Number(state.challengeCount || 0),
       } : { challengeWindowEndsAt: issuedAt + rateWindowMs, challengeCount: 0 };
       if (bucket.challengeCount >= maxChallenges) fail('resource-exhausted', 'Trop de demandes. Réessayez dans quelques minutes.');
       transaction.update(ref, { ...bucket, challengeCount: bucket.challengeCount + 1 });
       transaction.set(db.doc(`${recordCollection}/${ownerUid}/challenges/${challengeId}`), {
-        credentialId, message, expiresAt, attempts: 0, usedAt: null,
+        credentialId, message, issuedAt, expiresAt, attempts: 0, usedAt: null,
         // Firestore TTL can remove expired records; authorization never relies on that cleanup.
         expiresAtTimestamp: new Date(expiresAt),
       });
       return state;
     });
-    await assertEnabled(ownerUid, record);
+    await assertEnabled(ownerUid, record, { issuedAt });
     return { challengeId, message, expiresAt: new Date(expiresAt).toISOString() };
   };
   const complete = async (input) => {
@@ -106,17 +119,18 @@ export const createRecoveryProofCommands = ({
       if (!record || record.revokedAt || record.credentialId !== credentialId
         || !challenge || challenge.credentialId !== credentialId || challenge.usedAt
         || challenge.expiresAt <= now() || challenge.attempts >= maxAttempts) fail('permission-denied');
+      await assertEnabled(ownerUid, record, { transaction, issuedAt: challenge.issuedAt });
       if (!verifyRecoverySignature({ signingPublicKeyJwk: record.signingPublicKeyJwk, message: challenge.message, signature })) {
         transaction.update(challengeRef, { attempts: challenge.attempts + 1 });
         return null;
       }
       transaction.update(challengeRef, { usedAt: now() });
-      return record;
+      return { record, issuedAt: challenge.issuedAt };
     });
     if (!result) fail('permission-denied');
     // Recheck suspensions after the transaction and before minting sessions.
-    await assertEnabled(ownerUid, result);
-    return issueSession(ownerUid, result);
+    await assertEnabled(ownerUid, result.record, { issuedAt: result.issuedAt });
+    return issueSession(ownerUid, result.record);
   };
   return { begin, complete };
 };
@@ -130,7 +144,8 @@ const validEnvelope = (envelope) => envelope && envelope.version === 2 && envelo
 const validWrappedPassword = (value) => typeof value === 'string' && value.length <= 16_384 && /^[A-Za-z0-9+/]{512,}={0,2}$/.test(value);
 
 /** These commands never receive passwords, recovery private keys or decrypted personal content. */
-export const createPersonalRecoveryCommands = ({ personalDb, personalAuth, bridgeAuth, now = () => Date.now() }) => {
+export const createPersonalRecoveryCommands = ({ personalDb, personalAuth, bridgeDb, bridgeAuth, now = () => Date.now() }) => {
+  if (!personalDb || !personalAuth || !bridgeDb || !bridgeAuth) fail('failed-precondition', 'Les services indépendants du Coffre et du pont sont requis.');
   const verifySessions = async (input, requireRecent = true, maximumBytes = 65_536) => {
     validateRecoveryInput(input, maximumBytes);
     if (typeof input.personalIdToken !== 'string' || typeof input.bridgeIdToken !== 'string') fail('unauthenticated');
@@ -142,25 +157,36 @@ export const createPersonalRecoveryCommands = ({ personalDb, personalAuth, bridg
       ]);
     } catch { fail('unauthenticated'); }
     if (requireRecent && [personalToken, bridgeToken].some((token) => !token.auth_time || now() / 1000 - token.auth_time > 900 || now() / 1000 - token.auth_time < -60)) fail('unauthenticated', 'Reconnectez-vous avant de modifier vos moyens de secours.');
-    const [personalUser, bridgeUser] = await Promise.all([personalAuth.getUser(personalToken.uid), bridgeAuth.getUser(bridgeToken.uid)]);
-    if (personalUser.disabled || bridgeUser.disabled) fail('permission-denied');
-    return { personalUser, bridgeUser };
+    const assertCurrent = async (transaction) => {
+      const [personal, bridge] = await Promise.all([
+        assertActiveAccountSession({ auth: personalAuth, firestore: personalDb, requestAuth: { uid: personalToken.uid, token: personalToken }, allowMissingProfile: true, nowSeconds: now() / 1000, transaction }),
+        // Firestore cannot transact across projects: always inspect the bridge's own current guard.
+        assertActiveAccountSession({ auth: bridgeAuth, firestore: bridgeDb, requestAuth: { uid: bridgeToken.uid, token: bridgeToken }, allowMissingProfile: true, nowSeconds: now() / 1000 }),
+      ]);
+      return { personalUser: personal.user, bridgeUser: bridge.user };
+    };
+    return { ...await assertCurrent(), assertCurrent };
   };
-  const assertEnabled = async (uid, record) => {
-    const [personalUser, bridgeUser] = await Promise.all([personalAuth.getUser(uid), bridgeAuth.getUser(record.bridgeUid)]);
-    if (personalUser.disabled || bridgeUser.disabled) fail('permission-denied');
+  const assertEnabled = async (uid, record, context = {}) => {
+    if (!validId(record?.bridgeUid)) fail('permission-denied');
+    const accounts = await Promise.all([
+      assertActiveAccount({ auth: personalAuth, firestore: personalDb, uid, allowMissingProfile: true, transaction: context.transaction }),
+      assertActiveAccount({ auth: bridgeAuth, firestore: bridgeDb, uid: record.bridgeUid, allowMissingProfile: true }),
+    ]);
+    if (Object.hasOwn(context, 'issuedAt')) accounts.forEach((account) => assertRecoveryChallengeCurrent(account, context.issuedAt));
   };
   const proof = createRecoveryProofCommands({
     db: personalDb, recordCollection: 'vaultRecovery', namespace: 'personal-vault', now, assertEnabled,
     issueSession: async (uid, record) => {
+      const claims = { cartulariaRecoveryIssuedAt: Math.floor(now() / 1000) };
       const [personalToken, bridgeToken] = await Promise.all([
-        personalAuth.createCustomToken(uid), bridgeAuth.createCustomToken(record.bridgeUid),
+        personalAuth.createCustomToken(uid, claims), bridgeAuth.createCustomToken(record.bridgeUid, claims),
       ]);
       return { personalToken, bridgeToken, wrappedPassword: record.wrappedPassword, credentialId: record.credentialId, wrappingPublicKeyJwk: record.wrappingPublicKeyJwk };
     },
   });
   const enroll = async (input) => {
-    const { personalUser, bridgeUser } = await verifySessions(input);
+    const { personalUser, bridgeUser, assertCurrent } = await verifySessions(input);
     const alias = normalizeAlias(input.userAlias);
     if (alias.length < 3 || !validCredential(input.credentialId) || !validWrappedPassword(input.wrappedPassword)
       || !/^[a-f0-9]{64}$/.test(input.expectedCiphertextHash || '')) fail('invalid-argument');
@@ -172,6 +198,7 @@ export const createPersonalRecoveryCommands = ({ personalDb, personalAuth, bridg
     const wrappingPublicKeyJwk = validateWrappingKey(input.wrappingPublicKeyJwk);
     const createdAt = new Date(now()).toISOString();
     await personalDb.runTransaction(async (transaction) => {
+      await assertCurrent(transaction);
       const profile = await transaction.get(personalDb.doc(`vaultUsers/${personalUser.uid}/vault/profile`));
       if (!profile.exists || profile.data().accountId !== accountId || profile.data().ownerUid !== personalUser.uid) fail('failed-precondition', 'Enregistrez le Coffre avant d’activer le kit.');
       if (sha256(profile.data().ciphertext) !== input.expectedCiphertextHash) fail('aborted', 'Le Coffre a changé. Rouvrez-le avant d’activer le kit.');
@@ -185,17 +212,21 @@ export const createPersonalRecoveryCommands = ({ personalDb, personalAuth, bridg
     return { credentialId: input.credentialId, createdAt };
   };
   const status = async (input) => {
-    const { personalUser, bridgeUser } = await verifySessions(input, false);
-    const snapshot = await personalDb.doc(`vaultRecovery/${personalUser.uid}`).get();
+    const { personalUser, bridgeUser, assertCurrent } = await verifySessions(input, false);
+    const snapshot = await personalDb.runTransaction(async (transaction) => {
+      await assertCurrent(transaction);
+      return transaction.get(personalDb.doc(`vaultRecovery/${personalUser.uid}`));
+    });
     if (!snapshot.exists || snapshot.data().revokedAt) return { active: false };
     const record = snapshot.data();
     if (record.bridgeUid !== bridgeUser.uid) fail('permission-denied');
     return { active: true, credentialId: record.credentialId, createdAt: record.createdAt };
   };
   const revoke = async (input) => {
-    const { personalUser, bridgeUser } = await verifySessions(input);
+    const { personalUser, bridgeUser, assertCurrent } = await verifySessions(input);
     const ref = personalDb.doc(`vaultRecovery/${personalUser.uid}`);
     await personalDb.runTransaction(async (transaction) => {
+      await assertCurrent(transaction);
       const snapshot = await transaction.get(ref);
       if (!snapshot.exists || snapshot.data().bridgeUid !== bridgeUser.uid) fail('permission-denied');
       transaction.update(ref, { revokedAt: new Date(now()).toISOString() });
@@ -203,13 +234,14 @@ export const createPersonalRecoveryCommands = ({ personalDb, personalAuth, bridg
     return { revoked: true };
   };
   const commitPasswordRotation = async (input) => {
-    const { personalUser, bridgeUser } = await verifySessions(input, true, 1_100_000);
+    const { personalUser, bridgeUser, assertCurrent } = await verifySessions(input, true, 1_100_000);
     if (!validCredential(input.operationId) || !validCredential(input.credentialId)
       || !validEnvelope(input.envelope) || !validWrappedPassword(input.wrappedPassword)
       || !/^[a-f0-9]{64}$/.test(input.expectedCiphertextHash || '')) fail('invalid-argument');
     const recoveryRef = personalDb.doc(`vaultRecovery/${personalUser.uid}`);
     const profileRef = personalDb.doc(`vaultUsers/${personalUser.uid}/vault/profile`);
     return personalDb.runTransaction(async (transaction) => {
+      await assertCurrent(transaction);
       const [recoverySnapshot, profileSnapshot] = await Promise.all([transaction.get(recoveryRef), transaction.get(profileRef)]);
       if (!recoverySnapshot.exists || !profileSnapshot.exists) fail('failed-precondition');
       const record = recoverySnapshot.data();

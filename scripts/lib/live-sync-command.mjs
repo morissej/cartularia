@@ -2,7 +2,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { CANONICALIZATION_VERSION, sha256Digest } from './canonical-json.mjs';
 import { verifyAuditChain, ZERO_AUDIT_HASH } from './audit-verifier.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
-import { privateBinaryIsVerified } from './private-upload-command.mjs';
+import { assertPrivateBinaryOriginal, privateBinaryIsVerified } from './private-upload-command.mjs';
 import { loadGenericSectionPatches } from './generic-sections-command.mjs';
 import { assertNewCollectionAssignments } from './collection-command.mjs';
 import { applyGenericMediaChanges } from './generic-media-command.mjs';
@@ -152,20 +152,27 @@ const loadDraft = async (firestore, ownerUid, cartularyId) => {
   return { draftRef, states, binaries, digest };
 };
 
-const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organizationId, ownerUid }) => {
+const buildAssetPatch = async ({ storage, asset, existing, binary, digest, cartularyId, organizationId, ownerUid }) => {
+  const binaryId = typeof asset.binaryId === 'string' ? asset.binaryId : existing?.binaryId || null;
+  const sameOriginal = existing && (existing.binaryId || null) === binaryId;
   const trustedBinary = privateBinaryIsVerified(binary) ? binary : null;
+  // An existing imported reference can retain its original; adopting a new reference
+  // or any newly verified manifest requires the attested object to still exist.
+  if (trustedBinary || (binaryId && !sameOriginal)) {
+    await assertPrivateBinaryOriginal({ storage, manifest: binary, uid: ownerUid, cartularyId, binaryId });
+  }
+  const retained = sameOriginal ? existing : null;
   const storagePath = trustedBinary && typeof trustedBinary.storagePath === 'string'
     ? trustedBinary.storagePath
-    : existing?.storagePath || null;
+    : retained?.storagePath || null;
   const sha256 = trustedBinary && /^sha256:[a-f0-9]{64}$/.test(trustedBinary.sha256 || '')
     ? trustedBinary.sha256
-    : existing?.sha256 || null;
-  const binaryId = typeof asset.binaryId === 'string' ? asset.binaryId : existing?.binaryId || null;
+    : retained?.sha256 || null;
   // Miroir des variantes v3 (contrat K3) : manifeste vérifié du binaire, sinon miroir existant du même binaire.
   const privatePresentation = assetPrivatePresentationFor({
     binary: trustedBinary,
     identity: { uid: ownerUid, cartularyId, binaryId },
-    existing,
+    existing: retained,
   });
   return {
     id: asset.id,
@@ -175,7 +182,7 @@ const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organiz
     displayName: asText(asset.name, asset.id),
     originalFileName: typeof asset.originalFileName === 'string' ? asset.originalFileName : null,
     mimeDeclared: trustedBinary?.mimeType || asset.mimeType || existing?.mimeDeclared || null,
-    sizeBytes: Number.isInteger(trustedBinary?.size) ? trustedBinary.size : existing?.sizeBytes || null,
+    sizeBytes: Number.isInteger(trustedBinary?.size) ? trustedBinary.size : retained?.sizeBytes || null,
     sha256,
     storagePath,
     binaryId,
@@ -197,6 +204,7 @@ const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organiz
 
 export const processCartularySyncRequest = async ({
   firestore,
+  storage,
   requestDocumentId,
   occurredAt = new Date().toISOString(),
   rateLimitPerHour = SYNC_RATE_LIMIT_PER_HOUR,
@@ -265,7 +273,7 @@ export const processCartularySyncRequest = async ({
   const genericContext = Boolean(pendingGenericOperation || sectionPatches.length || applyGenericMedia);
   const legacyMedia = stateValue(draft.states, 'cartularia-media-assets-v3');
   const legacyMediaDigest = Array.isArray(legacyMedia) ? sha256Digest(legacyMedia) : null;
-  const media = applyGenericMedia ? applyGenericMediaChanges({ draft: genericMediaDraft, root: { ...rootData, id: cartularyId },
+  const media = applyGenericMedia ? await applyGenericMediaChanges({ storage, draft: genericMediaDraft, root: { ...rootData, id: cartularyId },
     existingAssets: new Map(existingAssetsSnapshot.docs.map((document) => [document.id, document.data()])), binaries: draft.binaries }) : !genericContext && legacyMediaDigest !== rootData.legacyMediaDigest ? legacyMedia : null;
   const legacyCollectionId = stateValue(draft.states, 'cartularia-collection-id');
   const legacyCollectionIds = stateValue(draft.states, 'cartularia-publication-collection-ids');
@@ -329,15 +337,15 @@ export const processCartularySyncRequest = async ({
       updatedAt: FieldValue.serverTimestamp(),
     }];
   });
-  const assetPatches = mediaAssets.map((asset) => buildAssetPatch({
-    asset,
+  const assetPatches = await Promise.all(mediaAssets.map((asset) => buildAssetPatch({
+    storage, asset,
     existing: existingAssets.get(asset.id),
     binary: typeof asset.binaryId === 'string' ? draft.binaries.get(asset.binaryId) : null,
     digest: draft.digest,
     cartularyId,
     organizationId: rootData.organizationId,
     ownerUid,
-  }));
+  })));
   // Asset primaire tel qu'il sera écrit (ou tel qu'il existe quand les médias ne changent pas) : source de la vignette.
   const primaryAsset = primaryAssetId
     ? assetPatches.find((patch) => patch.id === primaryAssetId) ?? existingAssets.get(primaryAssetId) ?? null

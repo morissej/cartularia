@@ -389,7 +389,11 @@ test('V3 tour 4 : original du rapport à la préparation seulement, getDownloadU
   assert.equal((privateMedia.match(/getDownloadURL\(/g) ?? []).length, 1);
   assert.equal((privateMedia.match(/downloadPrivateStorageBlob\(/g) ?? []).length, 1, 'un seul appelant : l’original explicite');
   const originalSection = privateMedia.slice(privateMedia.indexOf('export const acquirePrivateMediaObjectUrl'), privateMedia.indexOf('export interface PrivatePresentationRequest'));
-  assert.match(originalSection, /downloadPrivateStorageBlob\(record\.cloudStoragePath\)/);
+  assert.match(originalSection, /downloadPrivateStorageBlob\(record\.cloudStoragePath, session\)/);
+  // P1 : l’original explicite garde l’identité capturée pendant le transfert et avant de créer son URL.
+  // Les courses déconnexion/réauthentification sont exercées par private-media-service.test.ts.
+  assert.match(originalSection, /const session = captureMediaSession\(\)/);
+  assert.match(originalSection, /session\.assertCurrent\(\);\s*const url = URL\.createObjectURL\(blob\)/);
   assert.deepEqual(usersOf(/getDownloadURL/), ['src/persistence/cloudDraft.ts', 'src/services/privateMedia.ts']);
   assert.deepEqual(usersOf(/loadPrivateStorageObjectUrl/), [], 'aucun appelant ne subsiste');
   // Point 5 : aucun rôle implicite — chaque PrivateMediaImage d'App.tsx, de ProjectedPublicBlock.tsx et du lecteur
@@ -413,8 +417,9 @@ test('V3 tour 4 : original du rapport à la préparation seulement, getDownloadU
   // Point 1 : un seul prédicat « binaire vérifié », défini une fois et réutilisé par les miroirs.
   const variants = readSource('../scripts/lib/presentation-variants.mjs');
   assert.equal((variants.match(/export const privateBinaryIsVerified/g) ?? []).length, 1);
-  assert.doesNotMatch(variants, /verificationStatus !== 'accepted'/);
-  assert.match(readSource('../scripts/lib/private-upload-command.mjs'), /export \{ PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS, privateBinaryIsVerified \};/);
+  assert.match(variants, /identity\?\.schemaVersion !== PRIVATE_BINARY_IDENTITY_VERSION/);
+  assert.match(variants, /identity\.sha256 === data\.sha256 && identity\.size === data\.size/);
+  assert.match(readSource('../scripts/lib/private-upload-command.mjs'), /export \{[^}]*privateBinaryIsVerified[^}]*\};/);
 });
 
 test('V3 tour 5 : dans renderWatchWebsiteBlock, toute image imprimée passe par ReportPrintImage — jamais une PrivateMediaImage nue sous forPrint', () => {
@@ -605,10 +610,11 @@ test('V5 P-D3 : la page Médias ne présente jamais l’absence de vidéo ou de 
   }
   assert.doesNotMatch(app, /const digestFile = async|const newId = \(prefix/);
   assert.match(app, /import \{ newId \} from '\.\/utils\/identifiers';/);
-  assert.match(app, /import \{ digestFile \} from '\.\/utils\/fileDigest';/);
-  assert.equal((app.match(/buildImportedAssets\(/g) ?? []).length, 1, 'un seul pipeline d’import dans App.tsx');
-  // Le corps d'import des médias (mimeType déclaré par le navigateur) ne vit plus dans App.tsx ; le dépôt des rapports
-  // (mimeType canonique de l'inspection) reste, d'où la clause `mimeType: file\.type` qui distingue les deux corps.
+  assert.match(app, /import \{ prepareImportedAssets, prepareConditionAttachments \} from '\.\/features\/cartulary\/media\/importMediaFiles';/);
+  assert.equal((app.match(/prepareImportedAssets\(/g) ?? []).length, 1, 'un seul pipeline de préparation pour les médias et rapports');
+  assert.match(app, /\(vault, prepared\) => mediaCommands\.importAssets\(vault, prepared\)/, 'les références et les originaux sont confiés au commit atomique');
+  assert.match(app, /return fileImport\.run\(/, 'l’orchestration partage la protection contre les soumissions simultanées');
+  // Préparation et commit sont communs aux médias, emplacements vides et rapports.
   assert.doesNotMatch(app, /putValidatedBinary\(\{\s*binaryId,\s*kind: 'media',\s*fileName: file\.name,\s*mimeType: file\.type,/, 'l’import média ne passe plus par un corps local dans App.tsx');
   const slot = readSource('../src/features/cartulary/components/EmptyMediaSlot.tsx');
   assert.doesNotMatch(slot, /Lock|Accès restreint|Restricted access|isDemoCartulary|firebase/i);
@@ -617,7 +623,8 @@ test('V5 P-D3 : la page Médias ne présente jamais l’absence de vidéo ou de 
   assert.match(slot, /type="file"/); assert.match(slot, /className="sr-only"/);
   const pipeline = readSource('../src/features/cartulary/media/importMediaFiles.ts');
   assert.doesNotMatch(pipeline, /firebase|firestore|isDemoCartulary|from 'react'/i);
-  assert.match(pipeline, /export const buildImportedAssets/);
+  assert.match(pipeline, /export const prepareImportedAssets/);
+  assert.doesNotMatch(pipeline, /putValidatedBinary|\.putBinary\(/, 'la préparation ne persiste aucun original');
   assert.match(pipeline, /export const MEDIA_SLOT_TAGS: Record<MediaSlotKind, MediaTag> = \{ 'main-video': 'main-video', 'spin-3d': 'spin-3d' \};/);
   assert.match(readSource('../src/utils/fileDigest.ts'), /globalThis\.crypto\.subtle\.digest\('SHA-256'/);
   assert.match(readSource('../src/index.css'), /\.empty-media-slot \{[^}]*border: 1px dashed var\(--rule\)/s);

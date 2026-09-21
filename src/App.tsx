@@ -44,7 +44,8 @@ import { WebsiteDraftWarnings } from './components/WebsiteDraftWarnings';
 import { ReportMediaItem, ReportPrintImage } from './components/ReportMediaItem';
 import { SpinSequence } from './components/SpinSequence.tsx';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
-import { computeHash, IntegrityJournal, isRfc3161Receipt } from './utils/integrityJournal';
+import { computeHash, isRfc3161Receipt } from './utils/integrityJournal';
+import { createCartularyJournal } from './persistence/cartularyJournal';
 import { downloadTextPdf } from './utils/pdfExport';
 import { AI_SCHEMA_VERSION, aiFieldProps } from './ai/fieldCatalog';
 import { ProjectedPublicBlock } from './components/ProjectedPublicBlock';
@@ -53,11 +54,9 @@ import type { LoadedPublicProjection } from './domain/projections';
 import {
   cartulariaLocalVault,
   cartulariaStorage,
-  mirrorCartulariaLocalStorage,
   persistCartulariaJson,
 } from './persistence/localVault';
 import { readValidatedStoredJson } from './persistence/storedStateValidation';
-import { validateFileForUpload } from './security/fileValidation';
 import {
   CLOUD_PULL_APPLIED_EVENT,
   useHybridPersistence,
@@ -89,13 +88,13 @@ import { mediaDownloadFileName } from './utils/mediaDownload';
 import {
   formatDate,
   formatDateTime,
-  formatFileSize,
   formatMoney,
   formatPercent,
 } from './utils/formatting';
 import { newId } from './utils/identifiers';
-import { digestFile } from './utils/fileDigest';
-import { buildImportedAssets } from './features/cartulary/media/importMediaFiles';
+import { prepareImportedAssets, prepareConditionAttachments } from './features/cartulary/media/importMediaFiles';
+import { useAtomicFileImport } from './features/cartulary/media/useAtomicFileImport';
+import { useLocalMediaHydration } from './features/cartulary/media/useLocalMediaHydration';
 import { EmptyMediaSlot } from './features/cartulary/components/EmptyMediaSlot';
 import { CartularyAccessNotice } from './features/cartulary/components/CartularyAccessNotice';
 import {
@@ -148,7 +147,6 @@ import {
 import type {
   AssetKind,
   ComparableAnalysisEntry,
-  ConditionAttachment,
   ConditionEntry,
   DocumentationCategory,
   DocumentationItem,
@@ -219,12 +217,9 @@ interface EditableCopyData {
   };
 }
 
-const journal = new IntegrityJournal({
+const journal = createCartularyJournal({
   cartularyId: mockCartulary.id,
-  storage: cartulariaStorage ?? undefined,
-  onUpdate: () => {
-    void mirrorCartulariaLocalStorage().catch((error: unknown) => console.error('Miroir local du journal impossible', error));
-  },
+  demonstration: isDemoCartulary,
 });
 const LOCAL_ACCESS_REQUEST_ID = `access-${globalThis.crypto.randomUUID()}`;
 
@@ -635,6 +630,7 @@ const EMPTY_SCHEMA: VerticalSchema = { schemaId: '', assetType: '', version: '',
 function App() {
   const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
   const routeParameters = new URLSearchParams(window.location.search);
+  const openDemoProofs = isDemoCartulary && routeParameters.get('view') === 'proofs';
   const registryReturn = resolveRegistryReturn(routeParameters.get('returnTo'), { demo: isDemoCartulary });
   const registryReturnHref = registryReturn.href;
   // En démo sans returnTo, requestedRegistryId vaut le Registre démo : le contexte de Collection n'est
@@ -673,7 +669,7 @@ function App() {
   const canManagePublication = authoritative.canManage;
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
   const [eventTrigger, setEventTrigger] = useState(0);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(openDemoProofs);
   const [isSpinOpen, setIsSpinOpen] = useState(false);
   const [isMarketHistoryEditorOpen, setIsMarketHistoryEditorOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -688,7 +684,8 @@ function App() {
   const { mediaAssets, reloadMediaState, commands: mediaCommands } = mediaState;
   const setMediaAssets = mediaCommands.replaceAssets;
   const [mediaUploadTags, setMediaUploadTags] = useState<MediaTag[]>([]);
-  const [mediaImportBusy, setMediaImportBusy] = useState(false);
+  const fileImport = useAtomicFileImport({ vault: cartulariaLocalVault, enabled: canEdit, onError: setFileImportError });
+  const mediaImportBusy = fileImport.busy;
   // Perte du droit de gérer pendant une édition (déconnexion) : le bloc revient au texte, sans champ orphelin.
   useEffect(() => { if (!canEdit) { setEditingBlock(null); setPendingSpecificationGroupId(null); } }, [canEdit]);
   const conditionState = useCartularyConditionState({
@@ -1081,53 +1078,11 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [undoNotice]);
 
-  useEffect(() => {
-    if (!cartulariaLocalVault) return;
-    const vault = cartulariaLocalVault;
-    let active = true;
-    const createdUrls = new Set<string>();
-    const hydrateBinary = async (binaryId?: string) => {
-      if (!binaryId) return undefined;
-      const record = await vault.getBinary(binaryId);
-      if (!record?.blob || record.deleted) return undefined;
-      const url = URL.createObjectURL(record.blob);
-      if (!active) {
-        URL.revokeObjectURL(url);
-        return undefined;
-      }
-      createdUrls.add(url);
-      return { record, url };
-    };
-
-    void Promise.all(mediaAssets.map(async (asset) => {
-      if (!asset.binaryId || (asset.url && asset.url !== LOCAL_MEDIA_PLACEHOLDER)) return asset;
-      const hydrated = await hydrateBinary(asset.binaryId);
-      return {
-        ...asset,
-        url: hydrated?.url ?? '',
-        hash: asset.hash || hydrated?.record.sha256 || '',
-        mimeType: asset.mimeType || hydrated?.record.mimeType,
-        fileSize: asset.fileSize || (hydrated ? formatFileSize(hydrated.record.size) : undefined),
-        localAvailability: hydrated ? 'available' as const : 'missing' as const,
-      };
-    })).then((hydrated) => active && setMediaAssets(hydrated));
-
-    void Promise.all(conditionEntries.map(async (entry) => ({
-      ...entry,
-      attachments: await Promise.all(entry.attachments.map(async (attachment) => (
-        !attachment.binaryId || attachment.url
-          ? attachment
-          : { ...attachment, url: (await hydrateBinary(attachment.binaryId))?.url }
-      ))),
-    }))).then((hydrated) => active && setConditionEntries(hydrated));
-
-    return () => {
-      active = false;
-      createdUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-    // A remote pull increments cloudRefreshVersion so only media object URLs are rehydrated.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudRefreshVersion]);
+  useLocalMediaHydration({
+    vault: cartulariaLocalVault, mediaAssets, conditionEntries, setMediaAssets, setConditionEntries,
+    refreshVersion: cloudRefreshVersion, placeholderUrl: LOCAL_MEDIA_PLACEHOLDER,
+    preserveUnreferenced: Boolean(undoNotice),
+  });
 
   useEffect(() => {
     setSelectedAsset((current) => current ? mediaAssets.find((asset) => asset.id === current.id) ?? null : null);
@@ -1631,61 +1586,32 @@ function App() {
     const title = String(formData.get('title') || '').trim();
     const note = String(formData.get('note') || '').trim();
     const files = formData.getAll('documents').filter(
-      (value): value is File => value instanceof File && value.size > 0,
+      (value): value is File => value instanceof File && Boolean(value.name),
     );
     if (!note && files.length === 0) return;
-    setFileImportError(null);
-    let attachments: ConditionAttachment[];
-    try {
-      attachments = await Promise.all(files.map(async (file): Promise<ConditionAttachment> => {
-      const binaryId = newId('condition-binary');
-      const sha256 = await digestFile(file);
-      await cartulariaLocalVault?.putValidatedBinary({
-        binaryId,
-        kind: 'condition_attachment',
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sha256,
-        blob: file,
-      });
-        return { id: newId('attachment'), name: file.name, size: file.size, type: file.type, binaryId, sha256, url: URL.createObjectURL(file) };
-      }));
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
-      return;
-    }
-    const entry: ConditionEntry = {
-      id: newId('condition'),
-      date,
-      title: title || 'Note d’état',
-      note,
-      attachments,
-    };
-    conditionCommands.addEntry(entry);
-    form.reset();
+    const imported = await fileImport.run(
+      () => prepareConditionAttachments({ files }),
+      (vault, prepared) => conditionCommands.importEntry(vault, prepared, {
+        id: newId('condition'), date, title: title || 'Note d’état', note, attachments: prepared.items,
+      }),
+    );
+    if (imported) form.reset();
   };
 
-  /** Pipeline unique d'import des médias (V5 P-D3) : Bibliothèque (tags cochés) et emplacements vides (tag imposé). */
-  const importMediaFiles = async (files: File[], tags: MediaTag[]) => {
-    if (files.length === 0) return false;
-    setFileImportError(null);
-    setMediaImportBusy(true);
-    try {
-      mediaCommands.appendAssets(await buildImportedAssets({ files, tags, vault: cartulariaLocalVault }));
-      return true;
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
-      return false;
-    } finally {
-      setMediaImportBusy(false);
-    }
+  /** Same atomic import for the library, media slots and reference reports. */
+  const importMediaFiles = (files: File[], tags: MediaTag[], referenceReport = false) => {
+    if (files.length === 0) return Promise.resolve(false);
+    return fileImport.run(
+      () => prepareImportedAssets({ files, tags, referenceReport }),
+      (vault, prepared) => mediaCommands.importAssets(vault, prepared),
+    );
   };
 
   const addMediaAssets = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const files = new FormData(form).getAll('media-files').filter(
-      (value): value is File => value instanceof File && value.size > 0,
+      (value): value is File => value instanceof File && Boolean(value.name),
     );
     if (!(await importMediaFiles(files, mediaUploadTags))) return;
     form.reset();
@@ -1696,56 +1622,9 @@ function App() {
     event.preventDefault();
     const form = event.currentTarget;
     const files = new FormData(form).getAll('reference-report-files').filter(
-      (value): value is File => value instanceof File && value.size > 0,
+      (value): value is File => value instanceof File && Boolean(value.name),
     );
-    if (files.length === 0) return;
-    setFileImportError(null);
-    try {
-      const reports = await Promise.all(files.map(async (file): Promise<Asset> => {
-        const inspection = await validateFileForUpload({
-          blob: file,
-          fileName: file.name,
-          declaredMimeType: file.type,
-          expectedKind: 'document',
-        });
-        const hash = await digestFile(file);
-        const binaryId = newId('reference-report-binary');
-        await cartulariaLocalVault?.putValidatedBinary({
-          binaryId,
-          kind: 'media',
-          fileName: file.name,
-          mimeType: inspection.canonicalMimeType,
-          sha256: hash,
-          blob: file,
-        });
-        return {
-          id: newId('reference-report'),
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          originalFileName: file.name,
-          url: URL.createObjectURL(file),
-          type: 'document',
-          ratio: '4:5',
-          hash,
-          status: 'Archived',
-          visibility: 'Secret',
-          tags: ['documentation'],
-          category: 'documentation',
-          capturedAt: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
-          metadataTimestamp: new Date(file.lastModified || Date.now()).toISOString(),
-          timestampSource: 'file.lastModified',
-          fileSize: formatFileSize(file.size),
-          mimeType: inspection.canonicalMimeType,
-          binaryId,
-          localAvailability: 'available',
-          derivativeStatus: 'not-required',
-          sourceSection: 'reference-report',
-        };
-      }));
-      mediaCommands.appendAssets(reports);
-      form.reset();
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Rapport refusé.', 'Report rejected.'));
-    }
+    if (await importMediaFiles(files, ['documentation'], true)) form.reset();
   };
 
   const updateDocumentationItem = <K extends keyof DocumentationItem>(
@@ -1982,7 +1861,7 @@ function App() {
               : <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" eager role="stage" />)}
             <div>
               <span className="eyebrow">{watch.reference.reference}</span>
-              <h2>{watch.reference.brand}<br />{watch.reference.model}</h2>
+              <h2>{watch.reference.brand}{' '}{watch.reference.model}</h2>
               <p>{editableCopy.heroSummary}</p>
               <dl className="hero-facts">
                 <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
@@ -2708,7 +2587,7 @@ function App() {
                       <span>{tx('Charger des rapports', 'Upload reports')}</span>
                       <input type="file" name="reference-report-files" accept=".pdf,.doc,.docx,.odt,.rtf,.md,.markdown,.txt,.xls,.xlsx,.csv,.ppt,.pptx" multiple />
                     </label>
-                    <button type="submit" className="button button--primary">{tx('Ajouter les fichiers', 'Add files')}</button>
+                    <button type="submit" className="button button--primary" disabled={mediaImportBusy}>{tx('Ajouter les fichiers', 'Add files')}</button>
                   </form>
                 )}
                 {referenceReportAssets.length > 0 ? (
@@ -2942,7 +2821,7 @@ function App() {
                         <label>{tx('Titre', 'Title')}<input {...aiFieldProps('condition.reports[].title', 'new')} type="text" name="title" placeholder={tx('Rapport, constat, note…', 'Report, observation, note…')} /></label>
                         <label>Note<AutoResizeTextarea {...aiFieldProps('condition.reports[].note', 'new')} name="note" rows={7} placeholder={tx('Saisir un texte libre', 'Enter free text')} /></label>
                         <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter des documents', 'Add documents')}</span><input {...aiFieldProps('condition.reports[].documents', 'new')} type="file" name="documents" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple /></label>
-                        <button type="submit" className="button button--primary">{tx('Enregistrer', 'Save')}</button>
+                        <button type="submit" className="button button--primary" disabled={mediaImportBusy}>{tx('Enregistrer', 'Save')}</button>
                       </form>
                     )}
                   </div>
@@ -3337,7 +3216,7 @@ function App() {
           <header className="report-print-view__header">
             <BrandLogo className="report-print-view__logo" variant="monochrome" />
             <span className="eyebrow">{tx('Rapport Cartularia', 'Cartularia report')} · {cartularyPublicCode}</span>
-            <h1>{specificationValue('Marque', watch.reference.brand)}{' '}<br />{specificationValue('Modèle', watch.reference.model)}</h1>
+            <h1>{specificationValue('Marque', watch.reference.brand)}{' '}{specificationValue('Modèle', watch.reference.model)}</h1>
             <dl>
               <div><dt>{tx('Référence', 'Reference')}</dt><dd>{specificationValue('Numéro de référence', watch.reference.reference)}</dd></div>
               <div><dt>{tx('Date du rapport', 'Report date')}</dt><dd>{new Intl.DateTimeFormat(interfaceLocale, { dateStyle: 'long' }).format(new Date())}</dd></div>
@@ -3463,7 +3342,9 @@ function App() {
         onDismiss={async () => { await undoNotice.onExpire?.(); setUndoNotice(null); }}
       />}
       {deletionError && !pendingDeletion && <div className="deletion-error-toast no-print" role="alert">{deletionError}</div>}
-      {fileImportError && <div className="deletion-error-toast no-print" role="alert">{fileImportError}</div>}
+      {(fileImportError || mediaState.persistenceError || conditionState.persistenceError) && (
+        <div className="deletion-error-toast no-print" role="alert">{fileImportError || mediaState.persistenceError || conditionState.persistenceError}</div>
+      )}
     </div>
   );
 }

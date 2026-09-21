@@ -40,11 +40,15 @@ export const waitForPrivateUploadVerification = ({
   cartularyId,
   binaryId,
   timeoutMs = 180_000,
+  expectedOriginal,
+  assertActive = () => undefined,
 }: {
   uid: string;
   cartularyId: string;
   binaryId: string;
   timeoutMs?: number;
+  expectedOriginal?: { storagePath: string; sha256: string; size: number; generation: string };
+  assertActive?: () => void;
 }) => new Promise<PrivateUploadVerificationResult>((resolve, reject) => {
   const reference = doc(db, 'privateDrafts', uid, 'cartularies', cartularyId, 'binaries', binaryId);
   let unsubscribe: () => void = () => undefined;
@@ -61,8 +65,15 @@ export const waitForPrivateUploadVerification = ({
     finish(undefined, new Error('La vérification du fichier tarde à se terminer. Le brouillon privé reste conservé.'));
   }, timeoutMs);
   unsubscribe = onSnapshot(reference, (snapshot) => {
+    try { assertActive(); } catch (error) { finish(undefined, error as Error); return; }
     if (!snapshot.exists()) return;
     const data = snapshot.data();
+    if (expectedOriginal && (data.deleted === true || data.ownerUid !== uid || data.cartularyId !== cartularyId
+      || data.binaryId !== binaryId || data.storagePath !== expectedOriginal.storagePath
+      || data.sha256 !== expectedOriginal.sha256 || data.size !== expectedOriginal.size)) {
+      finish(undefined, new Error('Le fichier a changé pendant sa vérification. Une nouvelle synchronisation est nécessaire.'));
+      return;
+    }
     if (data.verificationStatus === 'rejected' || data.uploadStatus === 'failed') {
       finish(undefined, new Error(
         typeof data.verificationMessage === 'string'
@@ -72,6 +83,16 @@ export const waitForPrivateUploadVerification = ({
       return;
     }
     if (data.verificationStatus !== 'accepted' || data.uploadStatus !== 'ready') return;
+    if (expectedOriginal && (data.verificationIdentity?.schemaVersion !== 'private-binary-identity@1.0.0'
+      || data.verificationIdentity?.ownerUid !== uid || data.verificationIdentity?.cartularyId !== cartularyId
+      || data.verificationIdentity?.binaryId !== binaryId
+      || data.verificationIdentity?.storagePath !== expectedOriginal.storagePath
+      || data.verificationIdentity?.sha256 !== expectedOriginal.sha256
+      || data.verificationIdentity?.size !== expectedOriginal.size
+      || data.verificationIdentity?.generation !== expectedOriginal.generation)) {
+      finish(undefined, new Error('L’attestation du fichier ne correspond pas à l’original transféré.'));
+      return;
+    }
     finish({
       detectedMimeType: typeof data.detectedMimeType === 'string' ? data.detectedMimeType : 'application/octet-stream',
       detectedFormat: typeof data.detectedFormat === 'string' ? data.detectedFormat : 'unknown',
@@ -86,4 +107,5 @@ export const waitForPrivateUploadVerification = ({
       privatePresentation: presentationReferenceFromManifest(data, { uid, cartularyId, binaryId }),
     });
   }, (error) => finish(undefined, error));
+  if (settled) unsubscribe();
 });

@@ -19,6 +19,8 @@ import {
 } from 'firebase/firestore';
 import { auth, db, functions } from '../firebase';
 import { normalizeUserAlias } from '../domain/personalDataBoundary';
+import { requestPrivateSessionLock } from '../security/privateSessionEvents.ts';
+import { clearSessionLockAfterAuthentication } from '../security/sessionSecurity.ts';
 import type {
   AccountOrganizationContext,
   MembershipDocument,
@@ -51,6 +53,7 @@ export const registryAuthenticationEmail = async (identifier: string) => {
 
 export const signInToCartularia = async (identifier: string, password: string): Promise<User> => {
   const credential = await signInWithEmailAndPassword(auth, await registryAuthenticationEmail(identifier), password);
+  clearSessionLockAfterAuthentication();
   await ensureRegistryAccountActivation(credential.user, identifier);
   return credential.user;
 };
@@ -89,9 +92,11 @@ export const createCartulariaAccount = async (userName: string, password: string
   if (password.length < 12) throw new Error('weak_password');
   const email = await registryAuthenticationEmail(normalized);
   // Retry after Auth succeeded but activation failed: preserve the identity.
-  const user = auth.currentUser?.email === email
-    ? auth.currentUser
-    : (await createUserWithEmailAndPassword(auth, email, password)).user;
+  let user = auth.currentUser?.email === email ? auth.currentUser : null;
+  if (!user) {
+    user = (await createUserWithEmailAndPassword(auth, email, password)).user;
+    clearSessionLockAfterAuthentication();
+  }
   try {
     if (!user.displayName) await updateProfile(user, { displayName: normalized });
     await ensureRegistryAccountActivation(user, normalized);
@@ -101,7 +106,10 @@ export const createCartulariaAccount = async (userName: string, password: string
   return user;
 };
 
-export const signOutOfCartularia = () => signOut(auth);
+export const signOutOfCartularia = () => {
+  requestPrivateSessionLock();
+  return signOut(auth);
+};
 
 export const observeCartulariaSession = (observer: (user: User | null) => void) => onAuthStateChanged(auth, observer);
 

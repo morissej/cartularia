@@ -1,3 +1,4 @@
+import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { getBlob, getDownloadURL, ref } from 'firebase/storage';
 import { ACTIVE_CARTULARY_ID } from '../domain/cartularyIds.ts';
@@ -15,11 +16,50 @@ import { auth, db, storage } from '../firebase.ts';
 import { cartulariaLocalVault, type LocalBinaryRecord } from '../persistence/localVault.ts';
 import { ObjectUrlLeaseCache, type ObjectUrlLease } from '../utils/objectUrlLeaseCache.ts';
 import { MediaFailure } from '../utils/mediaFailure';
+import { PRIVATE_SESSION_LOCK_EVENT } from '../security/privateSessionEvents';
 
 const MAXIMUM_IDLE_OBJECT_URLS = 24;
 const objectUrlCache = new ObjectUrlLeaseCache(MAXIMUM_IDLE_OBJECT_URLS, (url) => URL.revokeObjectURL(url));
 /** Une variante de présentation pèse quelques dizaines à quelques centaines de ko : plafond défensif. */
 const MAXIMUM_PRESENTATION_VARIANT_BYTES = 8 * 1024 * 1024;
+let sessionGeneration = 0;
+let observedUser = auth.currentUser;
+
+/** Invalidate even pending acquisitions; the lease cache revokes late-created URLs. */
+export const clearPrivateMediaSession = () => {
+  sessionGeneration += 1;
+  objectUrlCache.clear();
+};
+onAuthStateChanged(auth, (user) => {
+  if (user !== observedUser) clearPrivateMediaSession();
+  observedUser = user;
+});
+
+const captureMediaSession = () => {
+  const user = auth.currentUser;
+  if (!user) throw new MediaFailure('session');
+  const epoch = sessionGeneration;
+  const assertCurrent = () => {
+    if (auth.currentUser !== user || sessionGeneration !== epoch) throw new MediaFailure('session');
+  };
+  const read = async <T,>(operation: Promise<T>): Promise<T> => {
+    assertCurrent();
+    try {
+      const value = await operation;
+      assertCurrent();
+      return value;
+    } catch (error) { assertCurrent(); throw error; }
+  };
+  const acquire = async (key: string, create: () => Promise<string | { url: string; byteSize: number }>) => {
+    assertCurrent();
+    const lease = await objectUrlCache.acquire(`${epoch}:${key}`, create);
+    try { assertCurrent(); return lease; }
+    catch (error) { lease.release(); throw error; }
+  };
+  return { uid: user.uid, assertCurrent, read, acquire };
+};
+type MediaSession = ReturnType<typeof captureMediaSession>;
+
 
 const sha256Hex = async (blob: Blob) => {
   const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
@@ -31,16 +71,16 @@ const sha256Hex = async (blob: Blob) => {
  * (« Afficher l'original », téléchargement, préparation du rapport). Les copies de présentation passent par getBlob
  * sous règles ; aucune autre voie vers Storage n'existe côté lecteur.
  */
-const downloadPrivateStorageBlob = async (storagePath: string) => {
-  const downloadUrl = await getDownloadURL(ref(storage, storagePath));
-  const response = await fetch(downloadUrl, {
+const downloadPrivateStorageBlob = async (storagePath: string, session: MediaSession) => {
+  const downloadUrl = await session.read(getDownloadURL(ref(storage, storagePath)));
+  const response = await session.read(fetch(downloadUrl, {
     cache: 'no-store',
     credentials: 'omit',
-  });
+  }));
   if (!response.ok) {
     throw new Error(`Téléchargement du média privé refusé (${response.status}).`);
   }
-  return response.blob();
+  return session.read(response.blob());
 };
 
 const privateDraftBinaryPath = (uid: string, cartularyId: string, binaryId: string) => (
@@ -96,39 +136,41 @@ export const acquirePrivateMediaObjectUrl = async (
   binaryId: string,
   cartularyId = ACTIVE_CARTULARY_ID,
 ): Promise<ObjectUrlLease> => {
+  const requestedGeneration = sessionGeneration;
   await auth.authStateReady();
-  const user = auth.currentUser;
-  if (!user) throw new MediaFailure('session');
-  const cacheKey = `${user.uid}:${cartularyId}:${binaryId}`;
-  return objectUrlCache.acquire(cacheKey, async () => {
-
-    let record = cartulariaLocalVault?.cartularyId === cartularyId
-      ? await cartulariaLocalVault.getBinary(binaryId)
-      : null;
+  if (requestedGeneration !== sessionGeneration) throw new MediaFailure('session');
+  const session = captureMediaSession();
+  const uid = session.uid;
+  const vault = cartulariaLocalVault?.cartularyId === cartularyId ? cartulariaLocalVault : null;
+  const cacheKey = `${uid}:${cartularyId}:${binaryId}`;
+  return session.acquire(cacheKey, async () => {
+    const expectedLocal = vault ? await session.read(vault.getBinary(binaryId)) : null;
+    let record = expectedLocal;
     if (!record || record.deleted || !record.cloudStoragePath) {
-      try { record = await loadCloudBinaryRecord(user.uid, cartularyId, binaryId); }
+      try { record = await session.read(loadCloudBinaryRecord(uid, cartularyId, binaryId)); }
       catch (failure) {
-        if ((failure as { code?: string })?.code === 'permission-denied') await explainUnavailableGuestCopy(user.uid, cartularyId);
+        if ((failure as { code?: string })?.code === 'permission-denied') await session.read(explainUnavailableGuestCopy(uid, cartularyId));
         throw failure;
       }
     }
     if (!record) {
-      await explainUnavailableGuestCopy(user.uid, cartularyId);
+      await session.read(explainUnavailableGuestCopy(uid, cartularyId));
     }
     if (
       !record
       || record.deleted
-      || !validPrivateStoragePath(record.cloudStoragePath, user.uid, cartularyId, binaryId)
+      || !validPrivateStoragePath(record.cloudStoragePath, uid, cartularyId, binaryId)
     ) throw new MediaFailure('missing');
 
-    const blob = record.blob ?? await downloadPrivateStorageBlob(record.cloudStoragePath);
+    const blob = record.blob ?? await downloadPrivateStorageBlob(record.cloudStoragePath, session);
     const expectedHash = record.sha256.replace(/^sha256[:-]/, '').toLowerCase();
     if (/^[a-f0-9]{64}$/.test(expectedHash)) {
-      if (await sha256Hex(blob) !== expectedHash) throw new MediaFailure('integrity');
+      if (await session.read(sha256Hex(blob)) !== expectedHash) throw new MediaFailure('integrity');
     }
-    if (!record.blob && cartulariaLocalVault?.cartularyId === cartularyId) {
-      await cartulariaLocalVault.applyCloudBinary({ ...record, blob });
+    if (!record.blob && vault) {
+      await session.read(vault.applyCloudBinary({ ...record, blob }, expectedLocal));
     }
+    session.assertCurrent();
     const url = URL.createObjectURL(blob);
     return url;
   });
@@ -177,18 +219,19 @@ export const acquirePrivatePresentationObjectUrl = async ({
   asset = null,
   role,
 }: PrivatePresentationRequest): Promise<ObjectUrlLease> => {
+  const requestedGeneration = sessionGeneration;
   await auth.authStateReady();
-  const user = auth.currentUser;
-  if (!user) throw new MediaFailure('session');
-  const uid = user.uid;
+  if (requestedGeneration !== sessionGeneration) throw new MediaFailure('session');
+  const session = captureMediaSession();
+  const uid = session.uid;
   const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const explainDenied = async (failure: unknown) => {
-    await explainUnavailableGuestCopy(uid, cartularyId);
+    await session.read(explainUnavailableGuestCopy(uid, cartularyId));
     throw failure;
   };
   const readManifest = async () => {
     try {
-      return await loadPresentationFromManifest(uid, cartularyId, binaryId);
+      return await session.read(loadPresentationFromManifest(uid, cartularyId, binaryId));
     } catch (failure) {
       if (storageErrorCode(failure) === 'permission-denied') await explainDenied(failure);
       throw failure;
@@ -202,7 +245,7 @@ export const acquirePrivatePresentationObjectUrl = async ({
     const manifest = await readManifest();
     manifestRead = true;
     if (!manifest.exists) {
-      await explainUnavailableGuestCopy(uid, cartularyId);
+      await session.read(explainUnavailableGuestCopy(uid, cartularyId));
       throw new MediaFailure('missing');
     }
     presentation = manifest.presentation;
@@ -214,10 +257,10 @@ export const acquirePrivatePresentationObjectUrl = async ({
     const variant = pickPresentationVariantForRole(candidate, role, devicePixelRatio);
     if (!variant || !validPrivateDerivativePath(variant.storagePath, uid, cartularyId, binaryId)) throw derivativeUnavailable(derivativeState);
     const cacheKey = `${uid}:${cartularyId}:${binaryId}:${variant.storagePath.split('/').at(-1)}`;
-    return objectUrlCache.acquire(cacheKey, async () => {
+    return session.acquire(cacheKey, async () => {
       let blob: Blob;
       try {
-        blob = await getBlob(ref(storage, variant.storagePath), MAXIMUM_PRESENTATION_VARIANT_BYTES);
+        blob = await session.read(getBlob(ref(storage, variant.storagePath), MAXIMUM_PRESENTATION_VARIANT_BYTES));
       } catch (failure) {
         const code = storageErrorCode(failure);
         if (/unauthorized|permission-denied/.test(code)) await explainDenied(failure);
@@ -225,7 +268,8 @@ export const acquirePrivatePresentationObjectUrl = async ({
         throw failure;
       }
       const expectedHash = variant.sha256.replace(/^sha256[:-]/, '').toLowerCase();
-      if (await sha256Hex(blob) !== expectedHash) throw new MediaFailure('integrity');
+      if (await session.read(sha256Hex(blob)) !== expectedHash) throw new MediaFailure('integrity');
+      session.assertCurrent();
       return { url: URL.createObjectURL(blob), byteSize: blob.size };
     });
   };
@@ -244,7 +288,6 @@ export const acquirePrivatePresentationObjectUrl = async ({
 export const releasePrivateMediaObjectUrl = (url: string) => objectUrlCache.releaseByUrl(url);
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', (event) => {
-    if (!event.persisted) objectUrlCache.clear();
-  });
+  window.addEventListener(PRIVATE_SESSION_LOCK_EVENT, clearPrivateMediaSession);
+  window.addEventListener('pagehide', clearPrivateMediaSession);
 }

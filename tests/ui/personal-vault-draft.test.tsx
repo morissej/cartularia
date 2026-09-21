@@ -4,6 +4,7 @@ import { PersonalVaultApp } from '../../src/personalVault/PersonalVaultApp';
 import { emptyPersonalVaultPayload } from '../../src/personalVault/types';
 
 const mocks = vi.hoisted(() => ({ authenticate: vi.fn(), load: vi.fn(), save: vi.fn(), lock: vi.fn(), codes: vi.fn(), configured: true }));
+vi.mock('../../src/personalVault/sessionSecurity', () => ({ observePersonalVaultSession: () => () => {}, personalVaultSessionMatches: () => true }));
 vi.mock('../../src/personalVault/firebase', () => ({ get personalVaultIsConfigured() { return mocks.configured; } }));
 vi.mock('../../src/personalVault/repository', () => ({ authenticatePersonalVault: mocks.authenticate, loadPersonalVault: mocks.load, savePersonalVault: mocks.save, lockPersonalVault: mocks.lock }));
 vi.mock('../../src/personalVault/codeBridgeRepository', () => ({ loadOwnerObjectCodes: async () => new Map(), saveCodeCorrespondences: mocks.codes }));

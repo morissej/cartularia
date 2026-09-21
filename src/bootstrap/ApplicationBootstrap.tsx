@@ -1,21 +1,16 @@
-import { Component, Suspense, useEffect, useState } from 'react';
+import { Component, Suspense, lazy, useEffect } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { BrandLogo } from '../components/BrandLogo.tsx';
 import { RootPage } from '../RootPage.tsx';
 import { applicationRouteLabel } from '../utils/interfaceState.ts';
 import {
   requiresPrivateCartularyHydration,
-  runPrivateCartularyBootstrap,
-  type PrivateBootstrapOutcome,
 } from './applicationBootstrap.ts';
 
-type BootState =
-  | { status: 'hydrating' }
-  | { status: 'ready'; outcome?: PrivateBootstrapOutcome };
+const PrivateCartularyGate = lazy(() => import('./PrivateCartularyGate.tsx'));
 
 interface ApplicationBootstrapProps {
   location?: Pick<Location, 'pathname' | 'search'>;
-  bootstrap?: () => Promise<PrivateBootstrapOutcome>;
   PageComponent?: ComponentType;
 }
 
@@ -55,13 +50,6 @@ class ApplicationErrorBoundary extends Component<{ children: ReactNode }, { hasE
   }
 }
 
-let defaultPrivateBootstrap: Promise<PrivateBootstrapOutcome> | null = null;
-
-const startDefaultPrivateBootstrap = () => {
-  defaultPrivateBootstrap ??= runPrivateCartularyBootstrap();
-  return defaultPrivateBootstrap;
-};
-
 function ApplicationShell({ label, context }: { label: string; context: string }) {
   return (
     <main className="application-shell" role="status" aria-live="polite" aria-label={label}>
@@ -77,67 +65,17 @@ function ApplicationShell({ label, context }: { label: string; context: string }
 
 export function ApplicationBootstrap({
   location = window.location,
-  bootstrap = runPrivateCartularyBootstrap,
   PageComponent = RootPage,
 }: ApplicationBootstrapProps) {
   const needsPrivateHydration = requiresPrivateCartularyHydration(location);
   const context = applicationRouteLabel(location.pathname);
-  const [bootState, setBootState] = useState<BootState>(() => (
-    needsPrivateHydration ? { status: 'hydrating' } : { status: 'ready' }
-  ));
-  const [noticeDismissed, setNoticeDismissed] = useState(false);
   useEffect(() => { document.title = `${context} · Cartularia`; }, [context]);
-
-  useEffect(() => {
-    if (!needsPrivateHydration) return undefined;
-    let active = true;
-    const operation = bootstrap === runPrivateCartularyBootstrap
-      ? startDefaultPrivateBootstrap()
-      : bootstrap();
-    void operation.then((outcome) => {
-      if (active) setBootState({ status: 'ready', outcome });
-    }, () => {
-      if (active) setBootState({
-        status: 'ready',
-        outcome: {
-          status: 'degraded',
-          reason: 'local_unavailable',
-          message: 'Le démarrage privé a rencontré une erreur. Les données présentes dans ce navigateur restent inchangées.',
-        },
-      });
-    });
-    return () => { active = false; };
-  }, [bootstrap, needsPrivateHydration]);
-
-  if (bootState.status === 'hydrating') {
-    return <ApplicationShell context={context} label="Restauration sécurisée de votre carnet local…" />;
-  }
-
-  const degraded = bootState.outcome?.status === 'degraded' ? bootState.outcome : null;
-  const signedOut = bootState.outcome?.status === 'ready' && bootState.outcome.reason === 'signed_out';
-  const signInHref = `/account/sign-in?returnTo=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
   return (
     <ApplicationErrorBoundary>
-      {degraded && !noticeDismissed && (
-        <aside className="application-bootstrap-notice" role="status" aria-live="polite">
-          <div>
-            <strong>Démarrage en mode local</strong>
-            <span>{degraded.message}</span>
-          </div>
-          <button type="button" onClick={() => setNoticeDismissed(true)} aria-label="Masquer l’avertissement de démarrage">Fermer</button>
-        </aside>
-      )}
-      {signedOut && (
-        <aside className="application-bootstrap-notice application-bootstrap-notice--session" role="status" aria-live="polite">
-          <div>
-            <strong>Originaux distants verrouillés</strong>
-            <span>Le Cartulaire local reste consultable. Connectez-vous au Registre pour charger les JPEG, vidéos et documents privés.</span>
-          </div>
-          <a href={signInHref}>Se connecter</a>
-        </aside>
-      )}
       <Suspense fallback={<ApplicationShell context={context} label={`Ouverture : ${context}…`} />}>
-        <PageComponent />
+        {needsPrivateHydration
+          ? <PrivateCartularyGate location={location} PageComponent={PageComponent} />
+          : <PageComponent />}
       </Suspense>
     </ApplicationErrorBoundary>
   );

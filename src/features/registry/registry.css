@@ -232,6 +232,7 @@
 .registry-sidebar__security svg { width: 15px; color: var(--positive); }
 
 .registry-main {
+  min-width: 0;
   width: min(100%, 1260px);
   padding: clamp(32px, 5vw, 72px);
 }
@@ -254,7 +255,7 @@
   margin-bottom: var(--s5);
 }
 
-.registry-page-heading > div { display: grid; gap: var(--s2); }
+.registry-page-heading > div { display: grid; min-width: 0; gap: var(--s2); }
 .registry-page-heading h1,
 .registry-planned-section h1,
 .registry-chooser h1,
@@ -1260,7 +1261,7 @@
 .registry-administration-state--error > svg { color: var(--negative); }
 .registry-administration-member-list { display: grid; border-top: 1px solid var(--ink); }
 .registry-administration-member-list article { display: grid; min-height: 86px; grid-template-columns: minmax(160px, .75fr) minmax(260px, 1.4fr) 100px 100px; align-items: center; border-bottom: 1px solid var(--rule); }
-.registry-administration-member-list article > div { display: flex; min-height: 100%; align-items: center; gap: var(--s2); padding: var(--s3); border-right: 1px solid var(--rule); }
+.registry-administration-member-list article > div { display: flex; min-width: 0; min-height: 100%; align-items: center; gap: var(--s2); padding: var(--s3); border-right: 1px solid var(--rule); }
 .registry-administration-member-list article > div:last-child { border-right: 0; }
 .registry-administration-member-id { justify-content: space-between; }
 .registry-administration-member-id > span { font-size: 10px; font-weight: 600; }
@@ -1355,7 +1356,7 @@
 .registry-access-item__body,
 .registry-access-item__expiry,
 .registry-access-item__consultation,
-.registry-access-item > a { padding: var(--s4); border-right: 1px solid var(--rule); }
+.registry-access-item > a { min-width: 0; padding: var(--s4); border-right: 1px solid var(--rule); }
 .registry-access-item__kind { display: grid; align-content: center; justify-items: start; gap: var(--s2); }
 .registry-access-item__kind > svg { width: 24px; color: var(--mark); }
 .registry-access-item__kind > span { color: var(--muted); font-family: var(--font-mono); font-size: 8px; line-height: 1.45; text-transform: uppercase; }
@@ -1527,7 +1528,7 @@
 .registry-choice:hover { border-color: var(--mark); transform: translateX(4px); }
 .registry-choice__icon { display: grid; width: 48px; height: 48px; place-items: center; background: var(--fill); color: var(--mark); }
 .registry-choice__icon svg { width: 20px; }
-.registry-choice > div:nth-child(2) { display: grid; gap: var(--s1); }
+.registry-choice > div:nth-child(2) { display: grid; min-width: 0; gap: var(--s1); }
 .registry-choice > div:nth-child(2) > span { color: var(--mark); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
 .registry-choice h2 { font-size: 22px; }
 .registry-choice p { color: var(--muted); font-size: 12px; }
@@ -1586,6 +1587,47 @@
   .registry-administration-member-tools label { grid-column: 1 / -1; }
   .registry-administration-member-tools button { justify-self: start; }
   .registry-administration-member-list article { grid-template-columns: minmax(150px, .75fr) minmax(220px, 1.25fr) repeat(2, 80px); }
+}
+
+@media (max-width: 820px) {
+  .registry-access-create { grid-template-columns: 1fr; }
+  .registry-topbar { position: static; min-height: auto; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "brand actions" "label label" "context context"; row-gap: 0; column-gap: var(--s3); padding: var(--s3) var(--s4); }
+  .registry-brand { grid-area: brand; width: 128px; align-self: center; }
+  .registry-product-label { grid-area: label; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: var(--s2); margin-top: var(--s2); padding: 0; border: 0; }
+  .registry-product-label span::after { content: ' ·' / ''; }
+  .registry-account-controls { display: contents; }
+  .registry-topbar__actions { grid-area: actions; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
+  .registry-home-link, .registry-signout { display: grid; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 2px; min-width: 56px; min-height: var(--control-size); padding: 4px 6px; font-size: 9px; letter-spacing: .02em; }
+  .registry-home-link svg, .registry-signout svg { width: 16px; height: 16px; }
+  .registry-topbar__label-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .registry-topbar__label-short { display: inline; }
+  .registry-context-select { grid-area: context; margin-top: var(--s2); }
+  .registry-context-select select { width: 100%; max-width: none; min-height: var(--control-size); }
+  .registry-layout { display: block; }
+  .registry-sidebar { position: static; display: block; border-right: 0; border-bottom: 1px solid var(--rule); }
+  .registry-sidebar__context, .registry-sidebar__security { display: none; }
+  .registry-sidebar nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0; }
+  .registry-sidebar nav a { min-height: 56px; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 4px; padding: 6px 4px; text-align: center; border-bottom: 2px solid transparent; border-left: 0; }
+  .registry-sidebar nav a span { font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
+  .registry-sidebar nav a[aria-current='page'] { border-bottom-color: var(--mark); border-left: 0; }
+  .registry-main { padding: var(--s5) var(--s4); }
+  .registry-page-heading { display: grid; gap: var(--s3); }
+  .registry-status { justify-self: start; }
+  .registry-access-item { grid-template-columns: 104px minmax(0, 1fr); }
+  .registry-access-item__kind,
+  .registry-access-item__body { padding: var(--s3); }
+  .registry-access-item__body { border-right: 0; }
+  .registry-access-item__expiry,
+  .registry-access-item__consultation { min-height: 104px; padding: var(--s3); border-top: 1px solid var(--rule); }
+  .registry-access-item__consultation { border-right: 0; }
+  .registry-access-item > a { grid-column: 1 / -1; justify-content: space-between; padding: var(--s3); }
+  .registry-access-item > a svg:last-child { display: block; }
+  .registry-administration-member-tools { grid-template-columns: 1fr; }
+  .registry-administration-member-tools label { grid-column: auto; }
+  .registry-administration-member-list article { grid-template-columns: minmax(0, 1fr) 68px 68px; }
+  .registry-administration-member-list article > div { min-height: 64px; }
+  .registry-administration-member-id { grid-column: 1 / -1; min-height: 52px !important; border-right: 0 !important; border-bottom: 1px solid var(--rule); }
+  .registry-administration-member-roles { border-right: 1px solid var(--rule); }
 }
 
 @media (max-width: 720px) {

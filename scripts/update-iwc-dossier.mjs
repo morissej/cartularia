@@ -7,7 +7,8 @@ import { getStorage } from 'firebase-admin/storage';
 import { IWC_CARTULARY_ID } from '../src/domain/cartularyIds.ts';
 import {
   processPrivateDraftUpload,
-  PRIVATE_UPLOAD_VERIFICATION_VERSION,
+  assertPrivateBinaryOriginal,
+  privateBinaryIsVerified,
 } from './lib/private-upload-command.mjs';
 import { processCartularySyncRequest } from './lib/live-sync-command.mjs';
 import {
@@ -289,10 +290,9 @@ for (const record of records.filter((candidate) => candidate.uploadSupported)) {
     existing.exists
     && existingData?.sha256 === record.sha256
     && existingData?.storagePath === storagePath
-    && existingData?.uploadStatus === 'ready'
-    && existingData?.verificationStatus === 'accepted'
-    && existingData?.verificationVersion === PRIVATE_UPLOAD_VERIFICATION_VERSION
+    && privateBinaryIsVerified(existingData)
   ) {
+    await assertPrivateBinaryOriginal({ bucket, manifest: existingData, uid: OWNER_UID, cartularyId: IWC_CARTULARY_ID, binaryId: record.binaryId });
     reused += 1;
     acceptedBinaryIds.add(record.binaryId);
     console.log(JSON.stringify({ event: 'IWC_FILE_REUSED', path: record.relativePath, size: record.size }));
@@ -317,23 +317,27 @@ for (const record of records.filter((candidate) => candidate.uploadSupported)) {
     verificationStatus: 'processing',
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
-  console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_STARTED', path: record.relativePath, size: record.size }));
-  await bucket.upload(record.path, {
-    destination: storagePath,
-    resumable: false,
-    metadata: {
-      contentType: record.mimeType,
+  const [originalExists] = await bucket.file(storagePath).exists();
+  if (!originalExists) {
+    console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_STARTED', path: record.relativePath, size: record.size }));
+    await bucket.upload(record.path, {
+      destination: storagePath,
+      preconditionOpts: { ifGenerationMatch: 0 },
+      resumable: false,
       metadata: {
-        ownerUid: OWNER_UID,
-        cartularyId: IWC_CARTULARY_ID,
-        binaryId: record.binaryId,
-        sha256: record.sha256,
-        kind,
-        sourceRelativePath: record.relativePath,
+        contentType: record.mimeType,
+        metadata: {
+          ownerUid: OWNER_UID,
+          cartularyId: IWC_CARTULARY_ID,
+          binaryId: record.binaryId,
+          sha256: record.sha256,
+          kind,
+          sourceRelativePath: record.relativePath,
+        },
       },
-    },
-  });
-  console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_FINISHED', path: record.relativePath, size: record.size }));
+    });
+    console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_FINISHED', path: record.relativePath, size: record.size }));
+  }
   const [objectMetadata] = await bucket.file(storagePath).getMetadata();
   console.log(JSON.stringify({ event: 'IWC_FILE_VERIFICATION_STARTED', path: record.relativePath }));
   const verification = await processPrivateDraftUpload({ firestore, storage, object: objectMetadata });
@@ -341,7 +345,8 @@ for (const record of records.filter((candidate) => candidate.uploadSupported)) {
     throw new Error(`Fichier refusé après contrôle : ${record.relativePath} (${verification.reason || 'motif inconnu'}).`);
   }
   acceptedBinaryIds.add(record.binaryId);
-  uploaded += 1;
+  if (originalExists) reused += 1;
+  else uploaded += 1;
   console.log(JSON.stringify({ event: 'IWC_FILE_ACCEPTED', path: record.relativePath, format: verification.format }));
 }
 
@@ -510,7 +515,7 @@ await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
   requestedAt: FieldValue.serverTimestamp(),
   updatedAt: FieldValue.serverTimestamp(),
 });
-const sync = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID });
+const sync = await processCartularySyncRequest({ firestore, storage, requestDocumentId: IWC_CARTULARY_ID });
 
 console.log(JSON.stringify({
   event: 'IWC_DOSSIER_UPDATED',

@@ -1,5 +1,7 @@
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
+import { processCartularySyncRequest } from './lib/live-sync-command.mjs';
 import { runRolexDossierCli } from './lib/rolex-dossier-command.mjs';
 
 /**
@@ -12,12 +14,20 @@ import { runRolexDossierCli } from './lib/rolex-dossier-command.mjs';
  * explicite (GCLOUD_PROJECT ou FIREBASE_PROJECT_ID, sinon project_required avant toute
  * initialisation), aucun projet distant n'est choisi par défaut ici.
  */
+let storage;
 const { exitCode } = await runRolexDossierCli({
   argv: process.argv.slice(2),
   env: process.env,
   firestore: ({ projectId, usesEmulator }) => {
-    const app = getApps()[0] || initializeApp({ projectId, ...(usesEmulator ? {} : { credential: applicationDefault() }) });
+    const app = getApps()[0] || initializeApp({ projectId, storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`, ...(usesEmulator ? {} : { credential: applicationDefault() }) });
+    storage = getStorage(app);
     return getFirestore(app);
+  },
+  processSyncRequest: (options) => {
+    if (Boolean(process.env.FIRESTORE_EMULATOR_HOST) !== Boolean(process.env.STORAGE_EMULATOR_HOST || process.env.FIREBASE_STORAGE_EMULATOR_HOST)) {
+      throw new Error('Configurez ensemble les émulateurs Firestore et Storage avant la synchronisation.');
+    }
+    return processCartularySyncRequest({ ...options, storage });
   },
 });
 process.exitCode = exitCode;

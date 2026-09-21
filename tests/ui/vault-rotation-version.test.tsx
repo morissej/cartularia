@@ -34,16 +34,16 @@ beforeEach(async () => {
   state.profile = { ...await encryptPersonalPayload({ payload, password: 'original-test-password', userAlias: 'atlas' }), ownerUid: 'owner', accountId: kit.accountId };
   state.opened = String(state.profile.ciphertext);
   state.recovery = { credentialId: kit.credentialId, bridgeUid: 'bridge', wrappedPassword: await wrapRecoveryPassword('original-test-password', kit.wrappingPublicKeyJwk, kit.credentialId) };
-  const db = { doc: (path: string) => ({ path, get: async () => ({ exists: true, data: () => path.startsWith('vaultRecovery/') ? state.recovery : state.profile }) }), runTransaction: async (task: (transaction: unknown) => Promise<unknown>) => {
+  const db = { doc: (path: string) => ({ path, get: async () => ({ exists: path.startsWith('vaultRecovery/') || path.startsWith('vaultUsers/'), data: () => path.startsWith('vaultRecovery/') ? state.recovery : state.profile }) }), runTransaction: async (task: (transaction: unknown) => Promise<unknown>) => {
     const nextProfile = { ...state.profile }; const nextRecovery = { ...state.recovery };
     const result = await task({
-      get: async ({ path }: { path: string }) => ({ exists: true, data: () => path.startsWith('vaultRecovery/') ? nextRecovery : nextProfile }),
+      get: async ({ path }: { path: string }) => ({ exists: path.startsWith('vaultRecovery/') || path.startsWith('vaultUsers/'), data: () => path.startsWith('vaultRecovery/') ? nextRecovery : nextProfile }),
       update: ({ path }: { path: string }, value: Record<string, unknown>) => { Object.assign(path.startsWith('vaultRecovery/') ? nextRecovery : nextProfile, value); },
     });
     state.profile = nextProfile; state.recovery = nextRecovery; return result;
   } };
-  const auth = (uid: string) => ({ verifyIdToken: async () => ({ uid, auth_time: Date.now() / 1000 }), getUser: async () => ({ uid, disabled: false }) });
-  state.command = createPersonalRecoveryCommands({ personalDb: db, personalAuth: auth('owner'), bridgeAuth: auth('bridge') });
+  const auth = (uid: string) => ({ verifyIdToken: async () => ({ uid, auth_time: Math.floor(Date.now() / 1000) }), getUser: async () => ({ uid, disabled: false }) });
+  state.command = createPersonalRecoveryCommands({ personalDb: db, personalAuth: auth('owner'), bridgeDb: { doc: () => ({ get: async () => ({ exists: false }) }) }, bridgeAuth: auth('bridge') });
 });
 afterEach(() => vi.unstubAllGlobals());
 const newer = async () => {

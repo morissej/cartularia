@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { ProjectionCommandError, PUBLIC_BLOCK_ALLOWLIST, recordProjectionApproval, publishPublicBlocks, revokePublicPublication, validatePublicProjectionBlocks } from './projection-command.mjs';
-import { detectTrustedFileFormat } from './private-upload-command.mjs';
+import { assertPrivateBinaryOriginal, detectTrustedFileFormat, privateBinaryIsVerified } from './private-upload-command.mjs';
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{5,127}$/.test(value);
@@ -92,21 +93,37 @@ export function validateWebsiteRequest(input) {
   return input;
 }
 
-/** Copies only a verified, metadata-stripped presentation derivative. The original never moves. */
-async function prepareDerivative({ firestore, bucket, uid, state, requestId, asset }) {
+async function verifiedPublicationBinary({ firestore, bucket, uid, state, asset }) {
   const manifest = await firestore.doc(`privateDrafts/${uid}/cartularies/${state.cartularyId}/binaries/${asset.binaryId}`).get();
   const record = manifest.exists ? manifest.data() : null;
+  if (!['media', 'condition_attachment'].includes(record?.kind)) throw new ProjectionCommandError('personal_document', 'Les documents personnels et les fichiers non classés restent privés.');
+  if (!privateBinaryIsVerified(record)) throw new ProjectionCommandError('derivative_not_ready', 'L’original doit être vérifié par le serveur avant publication.');
+  try {
+    await assertPrivateBinaryOriginal({ bucket, manifest: record, uid, cartularyId: state.cartularyId, binaryId: asset.binaryId });
+  } catch {
+    throw new ProjectionCommandError('derivative_not_ready', 'L’original vérifié est absent ou son identité ne peut plus être confirmée.');
+  }
+  return record;
+}
+
+function publicationDerivativeFor({ record, uid, state, asset }) {
   const derivative = record?.presentationDerivative;
   const privatePrefix = `private-derivatives/${uid}/${state.cartularyId}/${asset.binaryId}/`;
   const mediaKind = derivative?.mimeType === 'image/webp' ? 'image' : derivative?.mimeType === 'video/mp4' ? 'video' : derivative?.mimeType === 'application/pdf' ? 'document' : null;
   const safeProcessing = mediaKind === 'image' || (mediaKind === 'document' && derivative.processingMethod === 'pdf_rasterized_v1' && derivative.pageCount > 0 && derivative.pageCount <= 30)
     || (mediaKind === 'video' && derivative.processingMethod === 'video_transcoded_v1' && record?.mediaDecodeStatus === 'decoded_transcoded_verified' && derivative.duration > 0 && derivative.duration <= 180);
-  if (!['media', 'condition_attachment'].includes(record?.kind)) throw new ProjectionCommandError('personal_document', 'Les documents personnels et les fichiers non classés restent privés.');
   if (record?.deleted || record?.verificationStatus !== 'accepted' || record?.publicationEligible !== true
     || derivative?.metadataStripped !== true || !derivative.storagePath?.startsWith(privatePrefix)
     || !safeProcessing || !record.sha256 || derivative.sourceSha256 !== record.sha256) {
     throw new ProjectionCommandError('derivative_not_ready', 'Un média sélectionné n’a pas encore de copie publique vérifiée. Les originaux restent privés.');
   }
+  return { derivative, mediaKind };
+}
+
+/** Copies only a verified, metadata-stripped presentation derivative. The original never moves. */
+async function prepareDerivative({ firestore, bucket, uid, state, requestId, asset }) {
+  const record = await verifiedPublicationBinary({ firestore, bucket, uid, state, asset });
+  const { derivative, mediaKind } = publicationDerivativeFor({ record, uid, state, asset });
   const [bytes] = await bucket.file(derivative.storagePath).download();
   const digest = `sha256:${hash(bytes)}`;
   const detected = detectTrustedFileFormat(bytes.subarray(0, 32));
@@ -124,7 +141,7 @@ async function prepareDerivative({ firestore, bucket, uid, state, requestId, ass
     assetId: asset.assetId, derivativeId, publicCode: state.publicCode, visibility: 'public', processingState: 'ready',
     mediaKind, mimeDetected: derivative.mimeType, storagePath, sha256: digest,
   });
-  return { assetId: asset.assetId, derivativeId, byteSize: bytes.length };
+  return { assetId: asset.assetId, binaryId: asset.binaryId, derivativeId, byteSize: bytes.length, verificationIdentity: record.verificationIdentity };
 }
 
 export async function publishWebsite({ firestore, bucket, requestAuth, input }) {
@@ -149,7 +166,9 @@ export async function publishWebsite({ firestore, bucket, requestAuth, input }) 
   if (uniqueAssets.length > 100) throw new ProjectionCommandError('invalid_assets', 'Sélectionnez au maximum 100 médias.');
   const refs = new Map();
   // Sequential preparation keeps image memory bounded in the callable runtime.
-  if (saved.data().refs) for (const ref of saved.data().refs) refs.set(ref.assetId, ref);
+  if (saved.data().refs) {
+    for (const ref of saved.data().refs) refs.set(ref.assetId, ref);
+  }
   else {
     let totalBytes = 0;
     for (const asset of uniqueAssets) {
@@ -168,9 +187,25 @@ export async function publishWebsite({ firestore, bucket, requestAuth, input }) 
     refs.clear();
     for (const ref of stableRefs) refs.set(ref.assetId, ref);
   }
+  // A cached public copy is bound to the exact original inspected when it was
+  // prepared. Recheck after resolving concurrent preparations as well as on retries.
+  for (const asset of uniqueAssets) {
+    const prepared = refs.get(asset.assetId);
+    if (prepared?.binaryId !== asset.binaryId || !prepared?.verificationIdentity) {
+      throw new ProjectionCommandError('derivative_not_ready', 'Cette ancienne préparation ne permet plus de confirmer les fichiers. Relancez une nouvelle demande de publication.');
+    }
+    const current = await verifiedPublicationBinary({ firestore, bucket, uid: requestAuth.uid, state, asset });
+    if (!isDeepStrictEqual(prepared.verificationIdentity, current.verificationIdentity)) {
+      throw new ProjectionCommandError('derivative_not_ready', 'Un original a changé depuis la préparation. Relancez une nouvelle demande de publication.');
+    }
+    publicationDerivativeFor({ record: current, uid: requestAuth.uid, state, asset });
+  }
   const approval = await recordProjectionApproval({ firestore, cartularyId: input.cartularyId, approvalId,
     actorId: requestAuth.uid, requestId: `approve_${hash(input.requestId).slice(0, 24)}`, expectedRevision: input.expectedRevision, audience: 'public',
-    blocks: input.blocks.map((block) => ({ id: block.id, title: block.title, payload: block.payload, assetRefs: block.assets.map((asset) => refs.get(asset.assetId)) })),
+    blocks: input.blocks.map((block) => ({ id: block.id, title: block.title, payload: block.payload, assetRefs: block.assets.map((asset) => {
+      const prepared = refs.get(asset.assetId);
+      return { assetId: prepared.assetId, derivativeId: prepared.derivativeId };
+    }) })),
   });
   const result = await publishPublicBlocks({ firestore, cartularyId: input.cartularyId, approvalId, actorId: requestAuth.uid,
     requestId: input.requestId, expectedRevision: approval.revision });

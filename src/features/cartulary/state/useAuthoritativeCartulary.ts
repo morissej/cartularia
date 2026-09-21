@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth } from '../../../firebase';
+import { PRIVATE_SESSION_LOCK_EVENT, requestPrivateSessionLock } from '../../../security/privateSessionEvents';
 import { loadPrivateCartulary, type PrivateCartularySnapshot } from '../../../services/cartularies.ts';
 import { loadVerticalSchema } from '../../../services/schemaCatalog.ts';
 import type { VerticalSchema } from '../../../schema/schemaTypes.ts';
@@ -62,106 +63,164 @@ export function useAuthoritativeCartulary(cartularyId: string | null, { enabled 
   const [refreshError, setRefreshError] = useState(false);
   const [collectionName, setCollectionName] = useState('Collection privée');
 
-  useEffect(() => {
-    if (!enabled) return undefined;
-    let previousUid: string | null | undefined;
-    return onAuthStateChanged(auth, (user) => {
-      const nextUid = user?.uid || null;
-      if (previousUid !== undefined && previousUid !== nextUid) {
-        setSnapshot(null); setSchema(null); setCanManage(false); setCanPublish(false); setAssets([]);
-        setAttempt((value) => value + 1);
-      }
-      previousUid = nextUid;
-    });
-  }, [enabled]);
+  // A generation identifies one admission, including A → sign-out → A and unmounts.
+  const generation = useRef(0);
+  const admission = useRef<{ user: User; generation: number; cartularyId: string } | null>(null);
+  const clearPrivateState = useCallback((nextStatus: AuthoritativeCartularyStatus) => {
+    admission.current = null;
+    setSnapshot(null); setSchema(null); setAssets([]);
+    setCanManage(false); setCanPublish(false);
+    setMediaError(false); setRefreshError(false); setCollectionName('Collection privée');
+    setStatus(nextStatus);
+  }, []);
+  const permissionDenied = (error: unknown) => /permission-denied|unauthorized/.test(String((error as { code?: string })?.code || ''));
 
   useEffect(() => {
-    if (!enabled) { setStatus('idle'); return undefined; }
-    if (!cartularyId) { setStatus('empty'); return undefined; }
     let active = true;
-    setStatus('loading');
-    auth.authStateReady().then(async () => {
-      if (!auth.currentUser) { if (active) setStatus('signed-out'); return undefined; }
-      return loadPrivateCartulary(cartularyId);
-    })
-      .then(async (loadedSnapshot) => {
-        if (loadedSnapshot === undefined) return undefined;
-        if (!loadedSnapshot) return null;
-        const loadedSchema = await loadVerticalSchema(loadedSnapshot.envelope.schemaId, loadedSnapshot.envelope.schemaVersion);
-        return loadedSchema ? { loadedSnapshot, loadedSchema } : null;
-      })
-      .then((loaded) => {
-        if (!active || loaded === undefined) return;
-        if (!loaded) { setStatus('empty'); return; }
-        setSnapshot(loaded.loadedSnapshot);
-        setSchema(loaded.loadedSchema);
-        setStatus('ready');
-        const envelope = loaded.loadedSnapshot.envelope;
-        void canEditGenericCartulary(envelope).then((allowed) => active && setCanManage(allowed)).catch(() => active && setCanManage(false));
-        void canPublishGenericCartulary(envelope).then((allowed) => active && setCanPublish(allowed)).catch(() => active && setCanPublish(false));
-        void loadGenericCartularyAssets(envelope.id).then((media) => { if (active) { setAssets(media); setMediaError(false); } }).catch(() => active && setMediaError(true));
-        void loadRegistryCollections(envelope.registryId).then((collections) => active && setCollectionName(collections.find((entry) => entry.id === envelope.collectionId)?.name || 'Collection privée')).catch(() => {});
-      })
-      .catch((error: { code?: string }) => {
-        if (active) setStatus(error?.code === 'permission-denied' ? 'denied' : 'error');
-      });
-    return () => { active = false; };
-  }, [cartularyId, attempt, enabled]);
+    if (!enabled || !cartularyId) {
+      generation.current += 1;
+      clearPrivateState(enabled ? 'empty' : 'idle');
+      return () => { active = false; generation.current += 1; admission.current = null; };
+    }
+    clearPrivateState('loading');
+    let locked = false;
+    const lock = () => { locked = true; generation.current += 1; clearPrivateState('signed-out'); };
+    window.addEventListener(PRIVATE_SESSION_LOCK_EVENT, lock);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (locked) return;
+      const epoch = ++generation.current;
+      clearPrivateState(user ? 'loading' : 'signed-out');
+      if (!user) return;
+      const current = () => active && generation.current === epoch && auth.currentUser === user;
+      const fail = (error: unknown) => {
+        if (!current()) return;
+        if (permissionDenied(error)) { generation.current += 1; requestPrivateSessionLock(); }
+        clearPrivateState(permissionDenied(error) ? 'denied' : 'error');
+      };
+      void (async () => {
+        const loaded = await loadPrivateCartulary(cartularyId);
+        if (!current()) return;
+        if (!loaded) { clearPrivateState('empty'); return; }
+        const loadedSchema = await loadVerticalSchema(loaded.envelope.schemaId, loaded.envelope.schemaVersion);
+        if (!current()) return;
+        if (!loadedSchema) { clearPrivateState('empty'); return; }
+        admission.current = { user, generation: epoch, cartularyId };
+        setSnapshot(loaded); setSchema(loadedSchema); setStatus('ready');
+        const envelope = loaded.envelope;
+        const rightsFailure = (error: unknown, reset: () => void) => {
+          if (!current()) return;
+          if (permissionDenied(error)) fail(error);
+          else reset();
+        };
+        void canEditGenericCartulary(envelope).then((allowed) => { if (current()) setCanManage(allowed); }).catch((error) => rightsFailure(error, () => setCanManage(false)));
+        void canPublishGenericCartulary(envelope).then((allowed) => { if (current()) setCanPublish(allowed); }).catch((error) => rightsFailure(error, () => setCanPublish(false)));
+        void loadGenericCartularyAssets(envelope.id).then((media) => { if (current()) { setAssets(media); setMediaError(false); } }).catch((error) => rightsFailure(error, () => setMediaError(true)));
+        void loadRegistryCollections(envelope.registryId).then((collections) => { if (current()) setCollectionName(collections.find((entry) => entry.id === envelope.collectionId)?.name || 'Collection privée'); }).catch(() => { /* A dossier-scoped guest may not list the surrounding Registry's Collections. */ });
+      })().catch(fail);
+    }, (error) => {
+      if (!active) return;
+      generation.current += 1;
+      if (permissionDenied(error)) requestPrivateSessionLock();
+      clearPrivateState(permissionDenied(error) ? 'denied' : 'error');
+    });
+    return () => {
+      active = false;
+      generation.current += 1;
+      admission.current = null;
+      unsubscribe();
+      window.removeEventListener(PRIVATE_SESSION_LOCK_EVENT, lock);
+    };
+  }, [cartularyId, attempt, enabled, clearPrivateState]);
 
+  const captureAdmission = useCallback(() => {
+    const captured = admission.current;
+    const current = () => Boolean(captured && admission.current === captured
+      && generation.current === captured.generation && auth.currentUser === captured.user);
+    const assertCurrent = () => { if (!current()) throw new Error(SESSION_CHANGED); };
+    assertCurrent();
+    return { current, assertCurrent };
+  }, []);
+  const handleOperationError = useCallback((error: unknown, current: () => boolean) => {
+    if (current() && permissionDenied(error)) {
+      generation.current += 1;
+      requestPrivateSessionLock();
+      clearPrivateState('denied');
+    }
+  }, [clearPrivateState]);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
   const reloadAssets = useCallback(() => {
-    if (!snapshot) return;
-    const uid = auth.currentUser?.uid;
+    if (!snapshot || !admission.current) return;
+    const session = captureAdmission();
     void loadGenericCartularyAssets(snapshot.envelope.id)
-      .then((media) => { if (uid === auth.currentUser?.uid) { setAssets(media); setMediaError(false); } })
-      .catch(() => { if (uid === auth.currentUser?.uid) setMediaError(true); });
-  }, [snapshot]);
+      .then((media) => { if (session.current()) { setAssets(media); setMediaError(false); } })
+      .catch((error) => {
+        handleOperationError(error, session.current);
+        if (session.current()) setMediaError(true);
+      });
+  }, [snapshot, captureAdmission, handleOperationError]);
 
   const refresh = useCallback(() => {
-    if (!snapshot) return;
-    const uid = auth.currentUser?.uid;
+    if (!snapshot || !admission.current) return;
+    const session = captureAdmission();
     void Promise.all([loadPrivateCartulary(snapshot.envelope.id), loadGenericCartularyAssets(snapshot.envelope.id)]).then(([reloaded, media]) => {
-      if (uid !== auth.currentUser?.uid) return;
-      if (!reloaded) throw new Error('Relecture indisponible');
+      if (!session.current()) return;
+      if (!reloaded) { generation.current += 1; clearPrivateState('empty'); return; }
       setSnapshot(reloaded); setAssets(media); setMediaError(false); setRefreshError(false);
-    }).catch(() => { if (uid === auth.currentUser?.uid) setRefreshError(true); });
-  }, [snapshot]);
+    }).catch((error) => {
+      handleOperationError(error, session.current);
+      if (session.current()) setRefreshError(true);
+    });
+  }, [snapshot, captureAdmission, clearPrivateState, handleOperationError]);
 
   const saveFields = useCallback(async (edits: GenericFieldEdit[]) => {
     if (!snapshot) throw new Error('Le Cartulaire n’est pas chargé.');
-    const uid = auth.currentUser?.uid;
-    await saveGenericCartularyFields(snapshot.envelope, edits);
-    const reloaded = await loadPrivateCartulary(snapshot.envelope.id);
-    if (uid !== auth.currentUser?.uid) throw new Error(SESSION_CHANGED);
-    if (!reloaded) throw new Error('La sauvegarde a été traitée, mais la relecture est indisponible. Rechargez le Cartulaire.');
-    setSnapshot(reloaded);
-  }, [snapshot]);
+    const session = captureAdmission();
+    try {
+      await saveGenericCartularyFields(snapshot.envelope, edits);
+      session.assertCurrent();
+      const reloaded = await loadPrivateCartulary(snapshot.envelope.id);
+      session.assertCurrent();
+      if (!reloaded) { generation.current += 1; clearPrivateState('empty'); throw new Error('La sauvegarde a été traitée, mais la relecture est indisponible. Rechargez le Cartulaire.'); }
+      setSnapshot(reloaded);
+    } catch (error) { handleOperationError(error, session.current); throw error; }
+  }, [snapshot, captureAdmission, clearPrivateState, handleOperationError]);
 
   const confirmReview = useCallback(async (level: CartularyReviewLevel) => {
     if (!snapshot) throw new Error('Le Cartulaire n’est pas chargé.');
-    const uid = auth.currentUser?.uid;
-    await confirmCartularyReview(snapshot.envelope, { level });
-    const reloaded = await loadPrivateCartulary(snapshot.envelope.id);
-    if (uid !== auth.currentUser?.uid) throw new Error(SESSION_CHANGED);
-    if (!reloaded) throw new Error('La revue a été traitée, mais la relecture est indisponible. Rechargez le Cartulaire.');
-    setSnapshot(reloaded);
-  }, [snapshot]);
+    const session = captureAdmission();
+    try {
+      await confirmCartularyReview(snapshot.envelope, { level });
+      session.assertCurrent();
+      const reloaded = await loadPrivateCartulary(snapshot.envelope.id);
+      session.assertCurrent();
+      if (!reloaded) { generation.current += 1; clearPrivateState('empty'); throw new Error('La revue a été traitée, mais la relecture est indisponible. Rechargez le Cartulaire.'); }
+      setSnapshot(reloaded);
+    } catch (error) { handleOperationError(error, session.current); throw error; }
+  }, [snapshot, captureAdmission, clearPrivateState, handleOperationError]);
 
   const saveMedia = useCallback(async (mutation: GenericMediaMutation) => {
     if (!snapshot) throw new Error('Le Cartulaire n’est pas chargé.');
-    const uid = auth.currentUser?.uid;
-    await saveGenericCartularyMedia(snapshot.envelope, mutation);
-    const [reloaded, media] = await Promise.all([loadPrivateCartulary(snapshot.envelope.id), loadGenericCartularyAssets(snapshot.envelope.id)]);
-    if (uid !== auth.currentUser?.uid) throw new Error(SESSION_CHANGED);
-    if (!reloaded) throw new Error('Le média a été traité, mais sa relecture est indisponible. Rechargez le Cartulaire avant une nouvelle modification.');
-    setSnapshot(reloaded); setAssets(media); setMediaError(false);
-  }, [snapshot]);
+    const session = captureAdmission();
+    try {
+      await saveGenericCartularyMedia(snapshot.envelope, mutation);
+      session.assertCurrent();
+      const [reloaded, media] = await Promise.all([loadPrivateCartulary(snapshot.envelope.id), loadGenericCartularyAssets(snapshot.envelope.id)]);
+      session.assertCurrent();
+      if (!reloaded) { generation.current += 1; clearPrivateState('empty'); throw new Error('Le média a été traité, mais sa relecture est indisponible. Rechargez le Cartulaire avant une nouvelle modification.'); }
+      setSnapshot(reloaded); setAssets(media); setMediaError(false);
+    } catch (error) { handleOperationError(error, session.current); throw error; }
+  }, [snapshot, captureAdmission, clearPrivateState, handleOperationError]);
 
   const uploadMedia = useCallback(async (file: File, progress: (message: string) => void) => {
     if (!snapshot) throw new Error('Le Cartulaire n’est pas chargé.');
-    return uploadGenericCartularyMedia(snapshot.envelope, file, progress);
-  }, [snapshot]);
+    const session = captureAdmission();
+    try {
+      const media = await uploadGenericCartularyMedia(snapshot.envelope, file, (message) => { if (session.current()) progress(message); });
+      session.assertCurrent();
+      return media;
+    } catch (error) { handleOperationError(error, session.current); throw error; }
+  }, [snapshot, captureAdmission, handleOperationError]);
 
   return { status, snapshot, schema, assets, mediaError, refreshError, canManage, canPublish, collectionName, retry, refresh, reloadAssets, saveFields, confirmReview, saveMedia, uploadMedia };
 }

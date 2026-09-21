@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   pendingVerifications: 0,
   maxPendingVerifications: 0,
   localSetItem: vi.fn(),
+  localScope: vi.fn(),
 }));
 vi.mock('../../src/firebase.ts', () => ({ db: {}, storage: {} }));
 vi.mock('firebase/firestore', () => ({
@@ -53,7 +54,7 @@ vi.mock('../../src/security/fileValidation.ts', () => ({
       : { kind: 'image', format: 'jpeg', canonicalMimeType: 'image/jpeg', extension: 'jpg', maximumBytes: 1 },
 }));
 vi.mock('../../src/services/schemaCatalog.ts', () => ({ loadCreationSchemaVersion: async () => '1.6.0' }));
-vi.mock('../../src/persistence/localVault.ts', () => ({ scopedStorageForCartulary: () => ({ setItem: api.localSetItem }) }));
+vi.mock('../../src/persistence/localVault.ts', () => ({ scopedStorageForIdentity: (_storage: unknown, uid: string, cartularyId: string) => { api.localScope(uid, cartularyId); return { setItem: api.localSetItem }; } }));
 
 import { MAXIMUM_CONCURRENT_CREATION_UPLOADS, createCartulary, type CartularyCreationProgress } from '../../src/services/cartularyCreation.ts';
 
@@ -141,6 +142,7 @@ describe('pipeline de création borné', () => {
     settle('clip.mp4');
     const result = await creation;
     expect(api.maxPendingVerifications).toBe(2);
+    expect(api.localScope).toHaveBeenCalledWith(UID, result.cartularyId);
     expect(result).toMatchObject({ uploadedFileCount: 5, uploadedBytes: TOTAL_BYTES, media: { total: 5, imagesPending: 3, videosOnDemand: 1, documents: 1 } });
     expect(result.cartularyId).toMatch(/^cart_marque_pipeline_modele_pipeline_ref_pipe_5_[0-9a-f]{12}$/);
   });

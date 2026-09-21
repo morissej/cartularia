@@ -16,6 +16,8 @@ import {
   registryThumbnailStatusFor,
 } from '../scripts/lib/registry-thumbnail.mjs';
 import { createMemoryFirestore } from './helpers/memory-firestore.mjs';
+import { createPrivateOriginalStorage, verifiedPrivateBinary } from './helpers/private-original-fixture.mjs';
+const storageByFirestore = new WeakMap();
 
 /**
  * Lot serveur B (contrat V3, K3) en mémoire, propriétaire et identifiants distincts des fixtures :
@@ -40,7 +42,7 @@ const originalPath = (binaryId, digest) => `private-drafts/${UID}/${CARTULARY}/$
 const variant = (width, height) => ({
   width, height, storagePath: presentationVariantPath(UID, CARTULARY, BINARY, width), sha256: digestOf(`v${width}`), size: 100 + width, mimeType: 'image/webp',
 });
-const acceptedManifest = (binaryId, digest, overrides = {}) => ({
+const acceptedManifest = (binaryId, digest, overrides = {}) => verifiedPrivateBinary({
   ownerUid: UID, cartularyId: CARTULARY, binaryId, kind: 'media', fileName: 'cover.jpg', mimeType: 'image/jpeg', size: 4_321, sha256: digest,
   storagePath: originalPath(binaryId, digest), deleted: false, revision: 1, clientUpdatedAt: 10, uploadStatus: 'ready',
   verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION, ...overrides,
@@ -86,7 +88,9 @@ const seed = async ({ withVariants = true } = {}) => {
       requestDocumentId: CARTULARY, requestId: REQUEST, ownerUid: UID, cartularyId: CARTULARY, organizationId: ORGANIZATION, registryId: REGISTRY, publicCode: 'V3-VIGN01', status: 'pending',
     },
   });
-  return { firestore, draftPath };
+  const storage = createPrivateOriginalStorage([await read(firestore, `${draftPath}/binaries/${BINARY}`)]);
+  storageByFirestore.set(firestore, storage);
+  return { firestore, draftPath, storage };
 };
 
 const itemPath = `registries/${REGISTRY}/items/${CARTULARY}`;
@@ -94,7 +98,7 @@ const assetPath = (assetId) => `cartularies/${CARTULARY}/assets/${assetId}`;
 const read = async (firestore, path) => (await firestore.doc(path).get()).data();
 const requestSync = async (firestore, requestId) => {
   await firestore.doc(`cartularySyncRequests/${CARTULARY}`).set({ requestDocumentId: CARTULARY, requestId, ownerUid: UID, cartularyId: CARTULARY, reason: 'test', status: 'pending' });
-  return processCartularySyncRequest({ firestore, requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:05:00.000Z' });
+  return processCartularySyncRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:05:00.000Z' });
 };
 const projectionOf = (item) => {
   const { thumbnail, primaryMediaKind, thumbnailStatus, contentHash, ...projection } = item;
@@ -154,9 +158,9 @@ test('le miroir privatePresentation suit le binaire vérifié et ne survit pas �
   assert.deepEqual(assetPrivatePresentationFor({ binary: acceptedManifest(BINARY, ORIGINAL_DIGEST), identity, existing: { privatePresentation: mirror } }), mirror);
   assert.equal(assetPrivatePresentationFor({ binary: null, identity: { ...identity, binaryId: 'bin_replaced' }, existing: { privatePresentation: mirror } }), null);
   assert.equal(assetPrivatePresentationFor({ binary: acceptedManifest(BINARY, ORIGINAL_DIGEST, { verificationStatus: 'rejected', presentationDerivative: presentationDerivative() }), identity, existing: null }), null);
-  // Tour 4, point 1 : binaire accepté d'époque (aucune version, clientUpdatedAt antérieur au seuil) → même miroir (prédicat partagé).
+  // Un statut historique et une date client ne constituent plus une attestation serveur.
   const legacy = acceptedManifest(BINARY, ORIGINAL_DIGEST, { verificationStatus: undefined, verificationVersion: null, clientUpdatedAt: 10, presentationDerivative: presentationDerivative() });
-  assert.deepEqual(assetPrivatePresentationFor({ binary: legacy, identity, existing: null }), mirror);
+  assert.equal(assetPrivatePresentationFor({ binary: legacy, identity, existing: null }), null);
   assert.equal(assetPrivatePresentationFor({ binary: { ...legacy, uploadStatus: 'verifying' }, identity, existing: null }), null);
   const foreign = { ...presentationDerivative(), variants: [{ ...variant(240, 160), storagePath: presentationVariantPath('owner_v3_stranger', CARTULARY, BINARY, 240) }] };
   assert.equal(assetPrivatePresentationFor({ binary: acceptedManifest(BINARY, ORIGINAL_DIGEST, { presentationDerivative: foreign }), identity, existing: null }), null);
@@ -164,7 +168,7 @@ test('le miroir privatePresentation suit le binaire vérifié et ne survit pas �
 
 test('création puis synchronisation : miroir sur l’asset, vignette inline sur l’item, hors contentHash, sans mot interdit', async () => {
   const { firestore } = await seed();
-  const created = await processCartularyCreateRequest({ firestore, requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
+  const created = await processCartularyCreateRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
   assert.equal(created.status, 'processed');
 
   const assetAfterCreate = await read(firestore, assetPath(ASSET));
@@ -200,7 +204,7 @@ test('création puis synchronisation : miroir sur l’asset, vignette inline sur
 
 test('une synchronisation sans changement de média conserve la vignette posée par le script ou le backlog', async () => {
   const { firestore, draftPath } = await seed({ withVariants: false });
-  await processCartularyCreateRequest({ firestore, requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
+  await processCartularyCreateRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
   assert.equal((await read(firestore, assetPath(ASSET))).privatePresentation, null);
   let item = await read(firestore, itemPath);
   assert.equal(item.thumbnail, null);
@@ -235,7 +239,7 @@ test('une synchronisation sans changement de média conserve la vignette posée 
 
 test('échec définitif de la copie de présentation : synchronisation et projection posent thumbnailStatus « failed » (jamais « en préparation » perpétuel)', async () => {
   const { firestore, draftPath } = await seed({ withVariants: false });
-  await processCartularyCreateRequest({ firestore, requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
+  await processCartularyCreateRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
   assert.equal((await read(firestore, itemPath)).thumbnailStatus, 'pending');
   // Le rattrapage (ou le backlog) consigne l'échec sharp dans le manifeste ; la synchronisation suivante le reflète.
   await firestore.doc(`${draftPath}/binaries/${BINARY}`).set({ presentationDerivative: { variantsVersion: null, variants: [], thumbnail: null, variantsFailure: 'invalid_dimensions' } }, { merge: true });
@@ -266,12 +270,14 @@ test('échec définitif de la copie de présentation : synchronisation et projec
 
 test('une couverture vidéo n’hérite d’aucune vignette et se déclare comme telle', async () => {
   const { firestore, draftPath } = await seed();
-  await processCartularyCreateRequest({ firestore, requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
+  await processCartularyCreateRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
   await requestSync(firestore, 'sync_v3_vignettes_00000000000020');
   assert.deepEqual((await read(firestore, itemPath)).thumbnail, inlineThumbnail());
 
   const videoDigest = digestOf('original-video-bytes');
-  await firestore.doc(`${draftPath}/binaries/${VIDEO_BINARY}`).set(acceptedManifest(VIDEO_BINARY, videoDigest, { fileName: 'tour.mp4', mimeType: 'video/mp4', derivativeStatus: 'pending' }));
+  const video = acceptedManifest(VIDEO_BINARY, videoDigest, { fileName: 'tour.mp4', mimeType: 'video/mp4', derivativeStatus: 'pending' });
+  await firestore.doc(`${draftPath}/binaries/${VIDEO_BINARY}`).set(video);
+  storageByFirestore.get(firestore).register(video);
   await firestore.doc(`${draftPath}/state/cartularia-media-assets-v3`).set(stateDocument('cartularia-media-assets-v3', [
     { ...media()[0], tags: ['slideshow'] },
     { id: VIDEO_ASSET, name: 'Tour vidéo', type: 'video', mimeType: 'video/mp4', binaryId: VIDEO_BINARY, tags: ['main-video', 'main-photo'], visibility: 'Secret' },
@@ -291,7 +297,7 @@ test('une couverture vidéo n’hérite d’aucune vignette et se déclare comme
 test('tour 5 point 2 (K3) : la synchronisation conserve une vignette bundle posée sur l’item quand l’asset primaire n’a aucun miroir (IWC après P4)', async () => {
   // Sans `existingItem` (item en cours réécrit), la vignette bundle serait remise à null et thumbnailStatus à 'pending'.
   const { firestore, draftPath } = await seed({ withVariants: false });
-  await processCartularyCreateRequest({ firestore, requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
+  await processCartularyCreateRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
   assert.equal((await read(firestore, assetPath(ASSET))).privatePresentation, null);
   await firestore.doc(itemPath).set({ thumbnail: bundleThumbnail(), thumbnailStatus: 'ready' }, { merge: true });
   await firestore.doc(`${draftPath}/state/cartularia-user-alias`).set(stateDocument('cartularia-user-alias', 'Alias bundle', 2));
@@ -307,23 +313,77 @@ test('tour 5 point 2 (K3) : la synchronisation conserve une vignette bundle pos�
 // Tour 5 — couverture relevée par les relecteurs (mutant M1c : binaire accepté d’époque, miroir posé par la synchronisation).
 // ---------------------------------------------------------------------------------------------------------------------
 
-test('tour 5 M1c : synchronisation d’un binaire accepté d’époque (sans verificationStatus, version null) dont le manifeste porte des variantes → miroir sur l’asset et vignette inline sur l’item', async () => {
+test('un ancien binaire ready ne crée ni Cartulaire ni miroir avant réattestation serveur', async () => {
   const { firestore, draftPath } = await seed({ withVariants: false });
-  const legacy = acceptedManifest(BINARY, ORIGINAL_DIGEST, { verificationStatus: undefined, verificationVersion: null, clientUpdatedAt: PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS - 1 });
+  const legacy = acceptedManifest(BINARY, ORIGINAL_DIGEST, { verificationVersion: null, clientUpdatedAt: PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS - 1 });
   delete legacy.verificationStatus;
+  delete legacy.verificationIdentity;
   await firestore.doc(`${draftPath}/binaries/${BINARY}`).set(legacy);
-  await processCartularyCreateRequest({ firestore, requestDocumentId: CARTULARY, occurredAt: '2026-09-14T10:01:00.000Z' });
-  assert.equal((await read(firestore, assetPath(ASSET))).privatePresentation, null, 'création sans variantes : aucun miroir');
-  assert.equal((await read(firestore, itemPath)).thumbnailStatus, 'pending');
-  // P3 a régénéré les variantes (manifeste), le miroir n'est pas encore posé : la synchronisation suivante doit le poser.
-  await firestore.doc(`${draftPath}/binaries/${BINARY}`).set({ presentationDerivative: presentationDerivative() }, { merge: true });
-  await firestore.doc(`${draftPath}/state/cartularia-user-alias`).set(stateDocument('cartularia-user-alias', 'Alias legacy', 2));
-  const result = await requestSync(firestore, 'sync_v3_vignettes_tour5_00000001');
-  assert.equal(result.outcome, 'updated');
-  const asset = await read(firestore, assetPath(ASSET));
-  assert.equal(asset.privatePresentation?.binaryId, BINARY, 'miroir posé par la synchronisation pour un binaire accepté d’époque');
-  assert.equal(asset.storagePath, originalPath(BINARY, ORIGINAL_DIGEST));
-  const item = await read(firestore, itemPath);
-  assert.deepEqual(item.thumbnail, inlineThumbnail());
-  assert.equal(item.thumbnailStatus, 'ready');
+  await assert.rejects(processCartularyCreateRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY }), { code: 'unverified_binary' });
+  assert.equal((await firestore.doc(`cartularies/${CARTULARY}`).get()).exists, false);
+  // Une réinspection serveur a validé l'original avant d'écrire l'attestation.
+  await firestore.doc(`${draftPath}/binaries/${BINARY}`).set(acceptedManifest(BINARY, ORIGINAL_DIGEST, { presentationDerivative: presentationDerivative() }));
+  await firestore.doc(`cartularyCreateRequests/${CARTULARY}`).update({ status: 'pending', requestId: 'create_reverified_attempt0000001' });
+  await processCartularyCreateRequest({ firestore, storage: storageByFirestore.get(firestore), requestDocumentId: CARTULARY });
+  assert.deepEqual((await read(firestore, itemPath)).thumbnail, inlineThumbnail());
+});
+
+for (const scenario of ['stale identity', 'foreign path', 'missing original', 'changed generation']) {
+  test(`la création refuse ${scenario} avant toute écriture du Cartulaire`, async () => {
+    const { firestore, draftPath, storage } = await seed();
+    const ref = firestore.doc(`${draftPath}/binaries/${BINARY}`);
+    const manifest = (await ref.get()).data();
+    if (scenario === 'stale identity') await ref.update({ sha256: digestOf('changed original') });
+    if (scenario === 'foreign path') await ref.update({ storagePath: manifest.storagePath.replace(UID, 'foreign_owner') });
+    if (scenario === 'missing original') storage.objects.clear();
+    if (scenario === 'changed generation') storage.objects.get(manifest.storagePath).generation = '1002';
+    await assert.rejects(processCartularyCreateRequest({ firestore, storage, requestDocumentId: CARTULARY }),
+      { code: scenario === 'missing original' ? 'original_missing' : scenario === 'changed generation' ? 'generation_mismatch' : 'unverified_binary' });
+    assert.equal((await firestore.doc(`cartularies/${CARTULARY}`).get()).exists, false);
+    assert.equal((await firestore.doc(itemPath).get()).exists, false);
+  });
+}
+
+for (const scenario of ['stale identity', 'foreign path', 'missing original', 'changed generation']) {
+  test(`la synchronisation refuse un nouveau binaire avec ${scenario} sans hériter du chemin existant`, async () => {
+    const { firestore, draftPath, storage } = await seed();
+    await processCartularyCreateRequest({ firestore, storage, requestDocumentId: CARTULARY });
+    const before = await read(firestore, assetPath(ASSET));
+    const replacement = acceptedManifest(VIDEO_BINARY, digestOf('replacement original'));
+    storage.register(replacement);
+    if (scenario === 'stale identity') replacement.sha256 = digestOf('changed original');
+    if (scenario === 'foreign path') replacement.storagePath = replacement.storagePath.replace(UID, 'foreign_owner');
+    if (scenario === 'missing original') storage.objects.delete(replacement.storagePath);
+    if (scenario === 'changed generation') storage.objects.get(replacement.storagePath).generation = '1002';
+    await firestore.doc(`${draftPath}/binaries/${VIDEO_BINARY}`).set(replacement);
+    await firestore.doc(`${draftPath}/state/cartularia-media-assets-v3`).set(stateDocument('cartularia-media-assets-v3', [{ ...media()[0], binaryId: VIDEO_BINARY }], 2));
+    await assert.rejects(requestSync(firestore, 'sync_invalid_binary_attempt0001'),
+      { code: scenario === 'missing original' ? 'original_missing' : scenario === 'changed generation' ? 'generation_mismatch' : 'unverified_binary' });
+    assert.deepEqual(await read(firestore, assetPath(ASSET)), before);
+  });
+}
+
+
+test('une édition de nom conserve un original importé sans propriété binaryId', async () => {
+  const { firestore, draftPath, storage } = await seed();
+  await processCartularyCreateRequest({ firestore, storage, requestDocumentId: CARTULARY });
+  const before = await read(firestore, assetPath(ASSET));
+  delete before.binaryId;
+  before.storagePath = 'imports/existing-original.jpg';
+  before.sha256 = digestOf('imported original');
+  before.privatePresentation = null;
+  await firestore.doc(assetPath(ASSET)).set(before);
+  const root = await read(firestore, `cartularies/${CARTULARY}`);
+  await firestore.doc(`${draftPath}/state/cartularia-generic-operation`).set(stateDocument('cartularia-generic-operation', { kind: 'media', token: 'rename_imported_00001' }));
+  await firestore.doc(`${draftPath}/state/cartularia-generic-media`).set(stateDocument('cartularia-generic-media', {
+    version: 1, baseRevision: root.revision, changes: [{ id: ASSET, name: 'Original importé renommé' }], removeIds: [],
+  }));
+  storage.reads.length = 0;
+  await requestSync(firestore, 'sync_rename_imported_0001');
+  const after = await read(firestore, assetPath(ASSET));
+  assert.equal(after.displayName, 'Original importé renommé');
+  assert.equal(after.storagePath, before.storagePath);
+  assert.equal(after.sha256, before.sha256);
+  assert.equal(after.binaryId, null);
+  assert.equal(storage.reads.length, 0);
 });

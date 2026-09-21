@@ -1,6 +1,34 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Storage permits only two Firestore documents per evaluation. The server mirrors
+    // accountAccess atomically into users and communityMemberships; clients cannot edit it.
+    function accountSessionIsCurrent(account) {
+      return !('accountAccess' in account)
+        || (account.accountAccess is map
+          && account.accountAccess.status == 'active'
+          && account.accountAccess.validAfter is int
+          && account.accountAccess.validAfter >= 0
+          && request.auth.token.auth_time is int
+          && request.auth.token.auth_time > account.accountAccess.validAfter
+          && (request.auth.token.firebase.sign_in_provider != 'custom'
+            || (request.auth.token.cartulariaRecoveryIssuedAt is int
+              && request.auth.token.cartulariaRecoveryIssuedAt > account.accountAccess.validAfter)));
+    }
+
+    function accountCanRead(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && firestore.exists(/databases/(default)/documents/users/$(uid))
+        && firestore.get(/databases/(default)/documents/users/$(uid)).data.status == 'active'
+        && accountSessionIsCurrent(firestore.get(/databases/(default)/documents/users/$(uid)).data);
+    }
+
+    function accountCanWrite(uid) {
+      return accountCanRead(uid)
+        && firestore.get(/databases/(default)/documents/users/$(uid)).data.get('accountPurpose', '') != 'public_read_only_demo';
+    }
+
     function publicationIsActive(publicCode) {
       return firestore.exists(
           /databases/(default)/documents/publications/$(publicCode)
@@ -23,6 +51,9 @@ service firebase.storage {
         && firestore.get(
           /databases/(default)/documents/communityMemberships/$(request.auth.uid)
         ).data.status == 'active'
+        && accountSessionIsCurrent(firestore.get(
+          /databases/(default)/documents/communityMemberships/$(request.auth.uid)
+        ).data)
         && 'community.read' in firestore.get(
           /databases/(default)/documents/communityMemberships/$(request.auth.uid)
         ).data.permissions;
@@ -41,14 +72,7 @@ service firebase.storage {
     }
 
     function ownsPrivateDraft(uid, cartularyId) {
-      return request.auth != null
-        && request.auth.uid == uid
-        && firestore.exists(
-          /databases/(default)/documents/users/$(uid)
-        )
-        && firestore.get(
-          /databases/(default)/documents/users/$(uid)
-        ).data.status == 'active'
+      return accountCanRead(uid)
         && firestore.exists(
           /databases/(default)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)
         )
@@ -83,7 +107,8 @@ service firebase.storage {
         && resource.metadata.binaryId == binaryId
         && resource.metadata.sha256 == 'sha256:' + digest
         && resource.metadata.kind in ['media', 'condition_attachment'];
-      allow create: if ownsPrivateDraft(uid, cartularyId)
+      allow create: if accountCanWrite(uid)
+        && ownsPrivateDraft(uid, cartularyId)
         && resource == null
         && validPrivateOriginalContent()
         && request.resource.metadata.ownerUid == uid
@@ -93,7 +118,7 @@ service firebase.storage {
         && request.resource.metadata.kind in ['media', 'condition_attachment'];
       // Le chemin contient l'empreinte : un original accepté n'est jamais remplacé.
       allow update: if false;
-      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow delete: if accountCanWrite(uid);
     }
 
     match /private-derivatives/{uid}/{cartularyId}/{binaryId}/{derivativeId} {

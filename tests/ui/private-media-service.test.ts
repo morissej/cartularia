@@ -8,9 +8,10 @@ import type { PrivatePresentation } from '../../src/domain/presentationVariants.
  * jamais presentation-v2, empreinte vérifiée, « Aperçu en préparation » sans variante, relecture du manifeste une fois (G12),
  * cache d'Object URL partagé (MAXIMUM_IDLE_OBJECT_URLS conservé).
  */
-const api = vi.hoisted(() => ({ blob: vi.fn(), downloadUrl: vi.fn(), getDoc: vi.fn(), createUrl: vi.fn(), revokeUrl: vi.fn(), fetch: vi.fn() }));
-vi.mock('../../src/firebase.ts', () => ({ db: {}, storage: {}, auth: { authStateReady: async () => undefined, currentUser: { uid: 'owner_v3_client' } } }));
-vi.mock('../../src/persistence/localVault.ts', () => ({ cartulariaLocalVault: null }));
+const api = vi.hoisted(() => ({ auth: { currentUser: { uid: 'owner_v3_client' } as { uid: string } | null, authStateReady: async () => undefined }, authObservers: new Set<(user: { uid: string } | null) => void>(), vault: null as any, blob: vi.fn(), downloadUrl: vi.fn(), getDoc: vi.fn(), createUrl: vi.fn(), revokeUrl: vi.fn(), fetch: vi.fn() }));
+vi.mock('../../src/firebase.ts', () => ({ db: {}, storage: {}, auth: api.auth }));
+vi.mock('firebase/auth', () => ({ onAuthStateChanged: (_auth: unknown, observer: (user: { uid: string } | null) => void) => { api.authObservers.add(observer); return () => api.authObservers.delete(observer); } }));
+vi.mock('../../src/persistence/localVault.ts', () => ({ get cartulariaLocalVault() { return api.vault; } }));
 vi.mock('firebase/storage', () => ({ getBlob: api.blob, getDownloadURL: api.downloadUrl, ref: (_storage: unknown, path: string) => path }));
 vi.mock('firebase/firestore', () => ({ doc: (_db: unknown, ...path: string[]) => path.join('/'), getDoc: api.getDoc }));
 
@@ -32,6 +33,7 @@ const hidePage = () => { const event = new Event('pagehide'); Object.definePrope
 
 beforeEach(() => {
   vi.resetModules();
+  api.auth.currentUser = { uid: UID }; api.authObservers.clear(); api.vault = null;
   api.blob.mockReset(); api.downloadUrl.mockReset(); api.getDoc.mockReset(); api.createUrl.mockReset(); api.revokeUrl.mockReset(); api.fetch.mockReset();
   api.blob.mockImplementation(async (path: string) => {
     const match = /presentation-v3-(\d+)\.webp$/.exec(path);
@@ -150,4 +152,69 @@ it('membre non propriétaire : refus Storage traduit en copie partagée indispon
   api.getDoc.mockResolvedValue({ exists: () => true, data: () => ({ accountHolderId: 'owner_actual' }) });
   await expect(acquirePrivatePresentationObjectUrl({ binaryId: BINARY, cartularyId: CARTULARY, asset: { privatePresentation: { ...presentation(), variants: [variant(240, 'v240', { storagePath: variantPath(240, BINARY, UID) })] } }, role: 'thumbnail' })).rejects.toMatchObject({ kind: 'shared-unavailable' });
   expect(api.getDoc).toHaveBeenCalledWith(`cartularies/${CARTULARY}`);
+});
+
+
+const switchUser = (user: { uid: string } | null) => {
+  api.auth.currentUser = user;
+  api.authObservers.forEach((observer) => observer(user));
+};
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
+it('révoque une copie déjà affichée dès la déconnexion et ne réutilise pas son URL après reconnexion', async () => {
+  const service = await import('../../src/services/privateMedia.ts');
+  const request = { binaryId: BINARY, cartularyId: CARTULARY, asset: { privatePresentation: presentation() }, role: 'thumbnail' as const };
+  const lease = await service.acquirePrivatePresentationObjectUrl(request);
+  switchUser(null);
+  expect(api.revokeUrl).toHaveBeenCalledWith(lease.url);
+  await expect(service.acquirePrivatePresentationObjectUrl(request)).rejects.toMatchObject({ kind: 'session' });
+  switchUser({ uid: UID });
+  const reopened = await service.acquirePrivatePresentationObjectUrl(request);
+  expect(reopened.url).not.toBe(lease.url);
+  expect(api.blob).toHaveBeenCalledTimes(2);
+});
+
+it('ignore un téléchargement tardif après A → déconnexion → A sans recréer de blob URL', async () => {
+  const transfer = deferred<Blob>();
+  api.blob.mockReturnValueOnce(transfer.promise);
+  const { acquirePrivatePresentationObjectUrl } = await import('../../src/services/privateMedia.ts');
+  const operation = acquirePrivatePresentationObjectUrl({ binaryId: BINARY, cartularyId: CARTULARY, asset: { privatePresentation: presentation() }, role: 'thumbnail' });
+  const result = expect(operation).rejects.toMatchObject({ kind: 'session' });
+  await vi.waitFor(() => expect(api.blob).toHaveBeenCalledOnce());
+  switchUser(null); switchUser({ uid: UID });
+  transfer.resolve(blobOf('v240') as unknown as Blob);
+  await result;
+  expect(api.createUrl).not.toHaveBeenCalled();
+});
+
+it('un original tardif ne repeuple ni le coffre précédent ni celui du nouveau compte', async () => {
+  const transfer = deferred<Blob>();
+  const original = `private-drafts/${UID}/${CARTULARY}/${BINARY}/${'a'.repeat(64)}/original`;
+  const firstVault = { cartularyId: CARTULARY, getBinary: vi.fn(async () => ({ binaryId: BINARY, cloudStoragePath: original, sha256: digestOf('original'), blob: null })), applyCloudBinary: vi.fn() };
+  const secondVault = { ...firstVault, applyCloudBinary: vi.fn() };
+  api.vault = firstVault;
+  api.downloadUrl.mockResolvedValue('https://example.invalid/private-original');
+  api.fetch.mockResolvedValue({ ok: true, blob: () => transfer.promise });
+  const { acquirePrivateMediaObjectUrl } = await import('../../src/services/privateMedia.ts');
+  const operation = acquirePrivateMediaObjectUrl(BINARY, CARTULARY);
+  const result = expect(operation).rejects.toMatchObject({ kind: 'session' });
+  await vi.waitFor(() => expect(api.fetch).toHaveBeenCalledOnce());
+  switchUser({ uid: 'owner_other' }); api.vault = secondVault;
+  transfer.resolve(blobOf('original') as unknown as Blob);
+  await result;
+  expect(firstVault.applyCloudBinary).not.toHaveBeenCalled();
+  expect(secondVault.applyCloudBinary).not.toHaveBeenCalled();
+  expect(api.createUrl).not.toHaveBeenCalled();
+});
+
+it('le verrou applicatif invalide aussi les médias quand Firebase conserve encore le même UID', async () => {
+  const { PRIVATE_SESSION_LOCK_EVENT } = await import('../../src/security/privateSessionEvents');
+  const service = await import('../../src/services/privateMedia.ts');
+  const lease = await service.acquirePrivatePresentationObjectUrl({ binaryId: BINARY, cartularyId: CARTULARY, asset: { privatePresentation: presentation() }, role: 'thumbnail' });
+  window.dispatchEvent(new Event(PRIVATE_SESSION_LOCK_EVENT));
+  expect(api.revokeUrl).toHaveBeenCalledWith(lease.url);
 });

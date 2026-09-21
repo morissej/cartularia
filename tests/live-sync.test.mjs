@@ -12,12 +12,14 @@ import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { sha256Digest } from '../scripts/lib/canonical-json.mjs';
 import { presentationVariantPath } from '../scripts/lib/presentation-variants.mjs';
 import { registryItemAuditText } from '../scripts/lib/registry-thumbnail.mjs';
+import { createPrivateOriginalStorage, verifiedPrivateBinary } from './helpers/private-original-fixture.mjs';
 
 const projectId = 'cartularia-live-sync-test';
 const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
 const port = Number(portValue);
 let adminApp;
 let firestore;
+let storage;
 let testEnvironment;
 
 const seedFoundations = async () => {
@@ -62,6 +64,7 @@ const livePresentationDerivative = () => ({
 const expectedLiveThumbnail = () => ({ kind: 'inline', dataUrl: LIVE_THUMBNAIL_DATA_URL, width: 240, height: 160, assetId: 'asset-live-photo', sha256: liveVariant(240, 160).sha256 });
 
 const writeDraftAndRequest = async (requestId) => {
+  storage = createPrivateOriginalStorage();
   const draftPath = `privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}`;
   const specifications = [{
     id: 'basic', title: 'Données de base', items: [
@@ -95,14 +98,14 @@ const writeDraftAndRequest = async (requestId) => {
     firestore.doc(`${draftPath}/state/cartularia-owner-fields`).set({ key: 'cartularia-owner-fields', value: JSON.stringify([{ id: 'owner-name', value: 'Nom historique à filtrer' }]), deleted: false, revision: 1, clientUpdatedAt: 19 }),
     firestore.doc(`${draftPath}/state/cartularia-transmission-recipients`).set({ key: 'cartularia-transmission-recipients', value: JSON.stringify([{ id: 'recipient-1', name: 'Bénéficiaire à filtrer' }]), deleted: false, revision: 1, clientUpdatedAt: 20 }),
     firestore.doc(`${draftPath}/state/cartularia-storage-locations`).set({ key: 'cartularia-storage-locations', value: JSON.stringify([{ id: 'storage-1', address: 'Adresse à filtrer' }]), deleted: false, revision: 1, clientUpdatedAt: 21 }),
-    firestore.doc(`${draftPath}/binaries/media-binary-live-0001`).set({
+    firestore.doc(`${draftPath}/binaries/media-binary-live-0001`).set(verifiedPrivateBinary({
       ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, binaryId: 'media-binary-live-0001',
       deleted: false, revision: 1, fileName: 'live.jpg', mimeType: 'image/jpeg', size: 128,
       sha256: `sha256:${'a'.repeat(64)}`, kind: 'media',
       storagePath: `private-drafts/wave1-owner/${IWC_CARTULARY_ID}/media-binary-live-0001/${'a'.repeat(64)}/original`,
       clientUpdatedAt: 11, uploadStatus: 'ready', verificationStatus: 'accepted',
       presentationDerivative: livePresentationDerivative(),
-    }),
+    })),
     firestore.doc(`${draftPath}/binaries/owner-document-live-0001`).set({
       ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, binaryId: 'owner-document-live-0001',
       deleted: false, revision: 1, fileName: 'identite.pdf', mimeType: 'application/pdf', size: 128,
@@ -111,6 +114,7 @@ const writeDraftAndRequest = async (requestId) => {
       clientUpdatedAt: 12, uploadStatus: 'ready',
     }),
   ]);
+  storage.register((await firestore.doc(`${draftPath}/binaries/media-binary-live-0001`).get()).data());
   await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
     requestDocumentId: IWC_CARTULARY_ID,
     requestId,
@@ -141,14 +145,14 @@ test('une Collection supprimée bloque une nouvelle affectation sans modifier le
   await writeDraftAndRequest('sync_test_removed_collection_0001');
   await firestore.doc('registries/reg_collection_privee/collections/col_archive').delete();
   const before = (await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data();
-  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' }), { code: 'failed-precondition' });
+  await assert.rejects(processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' }), { code: 'failed-precondition' });
   const after = (await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data();
   assert.equal(after.revision, before.revision); assert.equal(after.collectionId, before.collectionId);
 });
 
 test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d’intégrité', async () => {
   await writeDraftAndRequest('sync_test_live_0000000000000001');
-  const result = await processCartularySyncRequest({
+  const result = await processCartularySyncRequest({ storage,
     firestore,
     requestDocumentId: IWC_CARTULARY_ID,
     occurredAt: '2026-08-16T08:02:00.000Z',
@@ -213,7 +217,7 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
     requestId: 'sync_test_live_0000000000000002',
     ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'manual_retry', status: 'pending',
   });
-  const replay = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID });
+  const replay = await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID });
   assert.equal(replay.outcome, 'no_change');
   assert.equal((await firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get()).data().revision, 2);
 });
@@ -236,7 +240,7 @@ const writeReviewAndRequest = async ({ level, token, requestId, baseRevision, re
 
 test('revue du propriétaire : statut, palier et date serveur, projection et contentHash, événement dédié, rejeu no_change, conflit de révision, cycle inactif', async () => {
   await writeDraftAndRequest('sync_test_review_000000000000001');
-  await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' });
+  await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' });
   const rootRef = firestore.doc(`cartularies/${IWC_CARTULARY_ID}`);
   const itemRef = firestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`);
   const before = (await rootRef.get()).data();
@@ -245,7 +249,7 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   const token = 'e7a4c1d2-3b5f-4a6e-9c8d-0f1e2d3c4b5a';
   const requestId = 'sync_test_review_000000000000010';
   await writeReviewAndRequest({ level: 'partial', token, requestId, baseRevision: before.revision });
-  const result = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:03:00.000Z' });
+  const result = await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:03:00.000Z' });
   assert.deepEqual([result.outcome, result.revision], ['updated', 3]);
   const [root, item, audits] = await Promise.all([rootRef.get(), itemRef.get(), firestore.collection(`cartularies/${IWC_CARTULARY_ID}/auditEvents`).orderBy('sequence').get()]);
   assert.deepEqual([root.data().lifecycleStatus, root.data().completenessLevel, root.data().lastVerifiedAt, root.data().lastGenericOperationToken], ['active', 'partial', '2026-08-16T08:03:00.000Z', token]);
@@ -268,13 +272,13 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
     requestDocumentId: IWC_CARTULARY_ID, requestId: 'sync_test_review_000000000000002', ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'manual_retry', status: 'pending',
   });
-  const replay = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:04:00.000Z' });
+  const replay = await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:04:00.000Z' });
   assert.equal(replay.outcome, 'no_change');
   assert.deepEqual([(await rootRef.get()).data().revision, (await rootRef.get()).data().lastVerifiedAt], [3, '2026-08-16T08:03:00.000Z']);
 
   // baseRevision périmée : rejet revision_conflict, racine intacte (comportement persistant jusqu'au rejeu, motif cartulary-create.test.mjs).
   await writeReviewAndRequest({ level: 'complete', token: 'op_review_stale_00000000000003', requestId: 'sync_test_review_000000000000011', baseRevision: 2, revision: 2 });
-  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:05:00.000Z' }), (error) => error.code === 'revision_conflict');
+  await assert.rejects(processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:05:00.000Z' }), (error) => error.code === 'revision_conflict');
   const intact = (await rootRef.get()).data();
   assert.deepEqual([intact.revision, intact.completenessLevel, intact.lastVerifiedAt, intact.lastGenericOperationToken], [3, 'partial', '2026-08-16T08:03:00.000Z', token]);
 
@@ -286,7 +290,7 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   await firestore.doc(`privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}/state/cartularia-generic-sections`).set({ key: 'cartularia-generic-sections', value: JSON.stringify({ version: 1, schemaId: 'watch', schemaVersion: '1.3.0', baseRevision: 3, edits: [{ fieldId: 'cover.watch.model', value: 'Flieger UTC revue puis corrigée' }] }), deleted: false, revision: 1, clientUpdatedAt: 300 });
   await firestore.doc(`privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}/state/cartularia-generic-operation`).set({ key: 'cartularia-generic-operation', value: JSON.stringify({ kind: 'sections', token: 'op_sections_after_review_00004' }), deleted: false, revision: 3, clientUpdatedAt: 301 });
   await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({ requestDocumentId: IWC_CARTULARY_ID, requestId: 'op_sections_after_review_00004', ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'private_draft_synchronized', status: 'pending' });
-  const sections = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:06:00.000Z' });
+  const sections = await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:06:00.000Z' });
   assert.deepEqual([sections.outcome, sections.revision], ['updated', 4]);
   const afterSections = (await rootRef.get()).data();
   assert.deepEqual([afterSections.modelName, afterSections.lifecycleStatus, afterSections.completenessLevel, afterSections.lastVerifiedAt], ['Flieger UTC revue puis corrigée', 'active', 'partial', '2026-08-16T08:03:00.000Z'], 'opération sections ultérieure : lastVerifiedAt inchangé');
@@ -296,14 +300,14 @@ test('revue du propriétaire : statut, palier et date serveur, projection et con
   await rootRef.update({ lifecycleStatus: 'suspended' });
   const suspended = (await rootRef.get()).data();
   await writeReviewAndRequest({ level: 'complete', token: 'op_review_denied_0000000000005', requestId: 'sync_test_review_000000000000012', baseRevision: suspended.revision, revision: 3 });
-  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:07:00.000Z' }), (error) => error.code === 'review_not_allowed');
+  await assert.rejects(processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:07:00.000Z' }), (error) => error.code === 'review_not_allowed');
   const denied = (await rootRef.get()).data();
   assert.deepEqual([denied.revision, denied.lifecycleStatus, denied.completenessLevel, denied.lastVerifiedAt], [suspended.revision, 'suspended', 'partial', '2026-08-16T08:03:00.000Z']);
 });
 
 test('une resynchronisation conserve le miroir et la vignette quand le manifeste ne porte plus de variantes', async () => {
   await writeDraftAndRequest('sync_test_live_0000000000000030');
-  await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' });
+  await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' });
   const draftPath = `privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}`;
   const itemRef = firestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`);
   const assetRef = firestore.doc(`cartularies/${IWC_CARTULARY_ID}/assets/asset-live-photo`);
@@ -314,7 +318,7 @@ test('une resynchronisation conserve le miroir et la vignette quand le manifeste
   await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
     requestDocumentId: IWC_CARTULARY_ID, requestId: 'sync_test_live_0000000000000031', ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'manual_retry', status: 'pending',
   });
-  const result = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:03:00.000Z' });
+  const result = await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:03:00.000Z' });
   assert.equal(result.outcome, 'updated');
   const item = (await itemRef.get()).data();
   assert.equal(item.userAlias, 'Alias raccordé');
@@ -327,12 +331,12 @@ test('une resynchronisation conserve le miroir et la vignette quand le manifeste
 test('deux exécutions concurrentes ne produisent qu’une seule révision utile', async () => {
   await writeDraftAndRequest('sync_test_live_0000000000000010');
   const results = await Promise.all([
-    processCartularySyncRequest({
+    processCartularySyncRequest({ storage,
       firestore,
       requestDocumentId: IWC_CARTULARY_ID,
       occurredAt: '2026-08-16T08:05:00.000Z',
     }),
-    processCartularySyncRequest({
+    processCartularySyncRequest({ storage,
       firestore,
       requestDocumentId: IWC_CARTULARY_ID,
       occurredAt: '2026-08-16T08:05:00.000Z',
@@ -346,7 +350,7 @@ test('deux exécutions concurrentes ne produisent qu’une seule révision utile
 
 test('le quota serveur bloque une succession de requêtes distinctes', async () => {
   await writeDraftAndRequest('sync_test_live_0000000000000020');
-  await processCartularySyncRequest({
+  await processCartularySyncRequest({ storage,
     firestore,
     requestDocumentId: IWC_CARTULARY_ID,
     occurredAt: '2026-08-16T08:10:00.000Z',
@@ -361,7 +365,7 @@ test('le quota serveur bloque une succession de requêtes distinctes', async () 
     status: 'pending',
   });
   await assert.rejects(
-    processCartularySyncRequest({
+    processCartularySyncRequest({ storage,
       firestore,
       requestDocumentId: IWC_CARTULARY_ID,
       occurredAt: '2026-08-16T08:11:00.000Z',

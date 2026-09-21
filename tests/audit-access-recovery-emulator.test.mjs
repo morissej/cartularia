@@ -29,7 +29,7 @@ const adminApps = [];
 const clientApps = [];
 const createdUsers = [];
 const cleanupDocuments = [];
-let registryDb, personalDb, adminAuth;
+let registryDb, personalDb, bridgeDb, adminAuth;
 const ownedDoc = (db, path) => { const ref = db.doc(path); cleanupDocuments.push({ db, ref }); return ref; };
 const client = (label) => {
   const app = initializeApp({ projectId, apiKey: 'audit-emulator-public-api-key', appId: `audit-${runId}-${label}` }, `audit-${runId}-${label}`);
@@ -58,15 +58,16 @@ before(() => {
   const authentication = initializeAdmin({ projectId, credential }, `audit-admin-${runId}-auth`);
   const registry = initializeAdmin({ projectId: dataProjectId, credential }, `audit-admin-${runId}-registry`);
   const personal = initializeAdmin({ projectId: `${dataProjectId}-personal`, credential }, `audit-admin-${runId}-personal`);
-  adminApps.push(authentication, registry, personal);
-  registryDb = getFirestore(registry); personalDb = getFirestore(personal); adminAuth = getAdminAuth(authentication);
+  const bridge = initializeAdmin({ projectId: `${dataProjectId}-bridge`, credential }, `audit-admin-${runId}-bridge`);
+  adminApps.push(authentication, registry, personal, bridge);
+  registryDb = getFirestore(registry); personalDb = getFirestore(personal); bridgeDb = getFirestore(bridge); adminAuth = getAdminAuth(authentication);
 });
 after(async () => {
   // Only exact, generated test-owned documents/users are removed. No namespace flush.
   for (const { db, ref } of cleanupDocuments.reverse()) await db.recursiveDelete(ref);
   for (const uid of createdUsers) await adminAuth.deleteUser(uid);
   await Promise.all(clientApps.map((app) => deleteApp(app)));
-  await Promise.all([registryDb?.terminate(), personalDb?.terminate()]);
+  await Promise.all([registryDb?.terminate(), personalDb?.terminate(), bridgeDb?.terminate()]);
   await Promise.all(adminApps.map((app) => deleteAdmin(app)));
 });
 
@@ -158,7 +159,7 @@ test('V03 Coffre — identité liée vérifiée, récupération et reprise aprè
   const profile = personalDb.doc(`vaultUsers/${identity.uid}/vault/profile`);
   await profile.set({ ...envelope, ownerUid: identity.uid, accountId: await vaultAccountDocumentId(alias), schemaVersion: 'encrypted-personal-account@2.0.0' });
   ownedDoc(personalDb, `vaultRecovery/${identity.uid}`);
-  const commands = createPersonalRecoveryCommands({ personalDb, personalAuth: adminAuth, bridgeAuth: adminAuth });
+  const commands = createPersonalRecoveryCommands({ personalDb, personalAuth: adminAuth, bridgeDb, bridgeAuth: adminAuth });
   const kit = await createPersonalRecoveryKit({ personalUid: identity.uid, personalProjectId: projectId, userAlias: alias });
   const enrollment = {
     personalIdToken: personalSession.token, bridgeIdToken: bridgeSession.token,

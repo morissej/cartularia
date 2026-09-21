@@ -15,6 +15,7 @@ const fakeFirestore = () => {
       const result = await callback({
         getAll: async (...references) => references.map(({ path }) => ({ exists: records.has(path), data: () => records.get(path) })),
         create: (reference, data) => pending.push({ operation: 'create', path: reference.path, data }),
+        update: (reference, data) => pending.push({ operation: 'update', path: reference.path, data: { ...records.get(reference.path), ...data } }),
       });
       for (const write of pending) records.set(write.path, write.data);
       writes.push(...pending);

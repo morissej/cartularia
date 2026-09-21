@@ -36,31 +36,8 @@ import { createMemoryFirestore } from './helpers/memory-firestore.mjs';
 
 const digestOf = (bytes) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 
-/** Faux bucket Storage mémoire : file().save/download/exists/getMetadata, getFiles({ prefix }), journal des écritures. */
-const createMemoryStorage = (bucketName = 'cartularia-v3-test.appspot.com') => {
-  const blobs = new Map();
-  const journal = [];
-  const bucket = {
-    name: bucketName,
-    file: (path) => ({
-      name: path,
-      save: async (bytes, options) => { blobs.set(path, { bytes: Buffer.from(bytes), options }); journal.push(`save:${path}`); },
-      download: async (options) => {
-        if (!blobs.has(path)) throw Object.assign(new Error(`No such object: ${path}`), { code: 404 });
-        if (options?.destination) { await writeFile(options.destination, blobs.get(path).bytes); return []; }
-        return [blobs.get(path).bytes];
-      },
-      exists: async () => [blobs.has(path)],
-      getMetadata: async () => {
-        const blob = blobs.get(path);
-        return [{ name: path, bucket: bucketName, size: blob.bytes.length, contentType: blob.options?.metadata?.contentType, metadata: blob.options?.metadata?.metadata ?? {} }];
-      },
-      delete: async () => { blobs.delete(path); },
-    }),
-    getFiles: async ({ prefix }) => [[...blobs.keys()].filter((name) => name.startsWith(prefix)).sort().map((name) => bucket.file(name))],
-  };
-  return { blobs, journal, bucket, storage: { bucket: () => bucket } };
-};
+import { createMemoryStorage, attestStoredManifest } from './helpers/verified-original-storage.mjs';
+import { verifiedPrivateBinary } from './helpers/private-original-fixture.mjs';
 
 const UID = 'owner_v3_pipeline';
 const CARTULARY = 'cart_v3_pipeline_object';
@@ -79,6 +56,14 @@ const withFile = async (bytes, callback) => {
   try { await writeFile(path, bytes); return await callback(path); } finally { await rm(directory, { recursive: true, force: true }); }
 };
 
+const failRegenerationDecoder = (context) => {
+  const toBuffer = sharp.prototype.toBuffer;
+  context.mock.method(sharp.prototype, 'toBuffer', function (...args) {
+    if (String(this.options?.input?.file || '').includes('cartularia-regenerate-')) return Promise.reject(new Error('Simulated decoder failure.'));
+    return toBuffer.apply(this, args);
+  });
+};
+
 const originalPath = (digest) => `private-drafts/${UID}/${CARTULARY}/${BINARY}/${digest.replace('sha256:', '')}/original`;
 
 const seedObject = async ({ firestore, storage }, original, manifestOverrides = {}) => {
@@ -90,11 +75,13 @@ const seedObject = async ({ firestore, storage }, original, manifestOverrides = 
   await firestore.doc(`cartularies/${CARTULARY}/assets/${ASSET}`).set({ id: ASSET, binaryId: BINARY, mediaKind: 'image', displayName: 'Photo', projectionStatus: 'active', liveSyncManaged: true });
   await firestore.doc(`cartularies/${CARTULARY}/assets/asset_v3_other`).set({ id: 'asset_v3_other', binaryId: 'bin_v3_other', mediaKind: 'image' });
   await firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).set({ cartularyId: CARTULARY, registryId: REGISTRY, primaryAssetId: ASSET, contentHash: 'sha256:item', revision: 4, updatedAt: 'avant', generatedAt: 'avant' });
-  await firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/${BINARY}`).set({
+  const manifest = {
     ownerUid: UID, cartularyId: CARTULARY, binaryId: BINARY, kind: 'media', fileName: 'photo.jpg', mimeType: 'image/jpeg',
     size: original.length, sha256: digest, storagePath: path, deleted: false, revision: 2, clientUpdatedAt: 1_700_000_000_000,
     uploadStatus: 'ready', ...manifestOverrides,
-  });
+  };
+  await firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/${BINARY}`).set(manifest.verificationStatus === 'accepted'
+    ? await attestStoredManifest(storage.bucket(), manifest) : manifest);
   return { digest, path };
 };
 
@@ -217,14 +204,12 @@ test('processPrivateDraftUpload : variantes d’abord (derivativeId = nom comple
   const { digest, path } = await seedObject({ firestore, storage }, original);
   const before = Object.keys(await manifestOf(firestore)).sort();
   const setCalls = [];
-  const realDoc = firestore.doc;
-  firestore.doc = (documentPath) => {
-    const ref = realDoc(documentPath);
-    if (!documentPath.endsWith(`/binaries/${BINARY}`)) return ref;
-    return { ...ref, set: async (data, options) => { setCalls.push({ journalLength: journal.length, status: data.verificationStatus }); return ref.set(data, options); } };
-  };
+  const realTransaction = firestore.runTransaction;
+  firestore.runTransaction = (operation) => realTransaction((transaction) => operation({ ...transaction,
+    update: (ref, data) => { setCalls.push({ journalLength: journal.length, status: data.verificationStatus }); transaction.update(ref, data); },
+  }));
   const [objectMetadata] = await storage.bucket().file(path).getMetadata();
-  const result = await processPrivateDraftUpload({ firestore, storage, object: { name: path, bucket: 'cartularia-v3-test.appspot.com', size: original.length, contentType: 'image/jpeg', metadata: objectMetadata.metadata } });
+  const result = await processPrivateDraftUpload({ firestore, storage, object: objectMetadata });
   assert.equal(result.status, 'accepted');
   assert.equal(result.derivativeCreated, true);
 
@@ -247,7 +232,7 @@ test('processPrivateDraftUpload : variantes d’abord (derivativeId = nom comple
     assert.equal(blob.options.resumable, false);
   }
   const manifest = await manifestOf(firestore);
-  const knownKeys = [...before, 'capturedAtExtracted', 'capturedAtSource', 'derivativeStatus', 'detectedFormat', 'detectedMimeType', 'imageHeight', 'imageWidth', 'malwareScanStatus', 'mediaDecodeStatus', 'metadataPolicy', 'presentationDerivative', 'publicationEligible', 'updatedAt', 'verificationMessage', 'verificationReason', 'verificationStartedAt', 'verificationStatus', 'verificationVersion', 'verifiedAt', 'verifiedSize'];
+  const knownKeys = [...before, 'capturedAtExtracted', 'capturedAtSource', 'derivativeStatus', 'detectedFormat', 'detectedMimeType', 'imageHeight', 'imageWidth', 'malwareScanStatus', 'mediaDecodeStatus', 'metadataPolicy', 'presentationDerivative', 'publicationEligible', 'updatedAt', 'verificationMessage', 'verificationReason', 'verificationStartedAt', 'verificationStatus', 'verificationVersion', 'verificationIdentity', 'verificationAttemptId', 'verifiedAt', 'verifiedSize'];
   assert.deepEqual(Object.keys(manifest).sort(), [...new Set(knownKeys)].sort(), 'variantes et vignette restent imbriquées sous presentationDerivative (règle R4)');
   const derivative = manifest.presentationDerivative;
   assert.equal(derivative.storagePath, `private-derivatives/${UID}/${CARTULARY}/${BINARY}/presentation-v2.webp`);
@@ -267,11 +252,11 @@ test('processPrivateDraftUpload : variantes d’abord (derivativeId = nom comple
   assert.equal(presentationVariantsFromManifest(manifest, { uid: UID, cartularyId: CARTULARY, binaryId: BINARY }).length, 3);
 });
 
-test('regeneratePresentationDerivatives : binaire accepté d’époque (sans version, sans dérivé) → variantes + v2, acceptation intacte, puis already_current', async () => {
+test('regeneratePresentationDerivatives : binaire attesté (sans version de pipeline, sans dérivé) → variantes + v2, acceptation intacte, puis already_current', async () => {
   const firestore = createMemoryFirestore();
   const { storage, blobs, journal } = createMemoryStorage();
   const original = await syntheticJpeg(1400, 900);
-  await seedObject({ firestore, storage }, original, { verificationVersion: null, clientUpdatedAt: 1_700_000_000_000 });
+  await seedObject({ firestore, storage }, original, { verificationStatus: 'accepted', verificationVersion: null, clientUpdatedAt: 1_700_000_000_000 });
   const identity = { firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY };
 
   const planned = await regeneratePresentationDerivatives({ ...identity, dryRun: true });
@@ -284,7 +269,7 @@ test('regeneratePresentationDerivatives : binaire accepté d’époque (sans ver
   assert.equal(generated.primaryRewritten, true);
   assert.deepEqual(generated.variants, [240, 480, 768, 1200].map((width) => presentationVariantPath(UID, CARTULARY, BINARY, width)));
   const manifest = await manifestOf(firestore);
-  assert.equal(manifest.verificationStatus, undefined, 'verificationStatus jamais posé par la régénération');
+  assert.equal(manifest.verificationStatus, 'accepted', 'verificationStatus conservé par la régénération');
   assert.equal(manifest.uploadStatus, 'ready');
   assert.equal(manifest.verificationVersion, null, 'verificationVersion jamais touché');
   assert.equal(manifest.derivativeStatus, 'ready');
@@ -299,7 +284,7 @@ test('regeneratePresentationDerivatives : binaire accepté d’époque (sans ver
 
   // Tour 4, point 1 : les miroirs suivent le même prédicat que le classement → un binaire accepté d'époque reçoit
   // assets.privatePresentation, items.thumbnail et thumbnailStatus 'ready' (le rattrapage Rolex pose bien la vignette).
-  const mirrored = await applyPresentationMirrors({ firestore, uid: UID, cartularyId: CARTULARY, binaryId: BINARY });
+  const mirrored = await applyPresentationMirrors({ firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY });
   assert.equal(mirrored.status, 'mirrored');
   assert.deepEqual(mirrored.assets, [ASSET]);
   assert.equal(mirrored.itemThumbnail, true);
@@ -312,7 +297,7 @@ test('regeneratePresentationDerivatives : binaire accepté d’époque (sans ver
   assert.equal(legacyItem.thumbnail.assetId, ASSET);
   assert.equal(legacyItem.thumbnailStatus, 'ready');
   assert.equal(legacyItem.updatedAt, 'avant');
-  assert.equal((await manifestOf(firestore)).verificationStatus, undefined, 'les miroirs ne promeuvent jamais le manifeste');
+  assert.equal((await manifestOf(firestore)).verificationStatus, 'accepted', 'les miroirs préservent le manifeste');
 
   const journalBefore = journal.length;
   const again = await regeneratePresentationDerivatives(identity);
@@ -346,7 +331,7 @@ test('regeneratePresentationDerivatives : accepté 1.1.0 avec presentation-v2 ma
   assert.equal((await manifestOf(firestore)).verificationStatus, 'accepted');
 });
 
-test('regeneratePresentationDerivatives : refus sans écriture (digest_mismatch, supprimé, rejeté, PDF, original absent) et échec sharp sans dégradation', async () => {
+test('regeneratePresentationDerivatives : refus sans écriture (digest_mismatch, supprimé, rejeté, PDF, original absent) et échec sharp sans dégradation', async (t) => {
   const cases = [
     ['deleted', { deleted: true, verificationStatus: 'accepted' }, { status: 'skipped', reason: 'deleted' }],
     ['rejected', { verificationStatus: 'rejected', uploadStatus: 'failed' }, { status: 'skipped', reason: 'not_accepted' }],
@@ -367,7 +352,8 @@ test('regeneratePresentationDerivatives : refus sans écriture (digest_mismatch,
     const { storage, journal, blobs } = createMemoryStorage();
     const original = await syntheticJpeg(400, 300);
     const { path } = await seedObject({ firestore, storage }, original, { verificationStatus: 'accepted' });
-    blobs.set(path, { bytes: await syntheticJpeg(400, 300, { background: '#112233' }), options: blobs.get(path).options });
+    const corrupted = Buffer.from(blobs.get(path).bytes); corrupted[corrupted.length - 10] ^= 1;
+    blobs.set(path, { ...blobs.get(path), bytes: corrupted });
     const result = await regeneratePresentationDerivatives({ firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY });
     assert.equal(result.status, 'digest_mismatch');
     assert.equal(journal.length, 1);
@@ -385,8 +371,9 @@ test('regeneratePresentationDerivatives : refus sans écriture (digest_mismatch,
   {
     const firestore = createMemoryFirestore();
     const { storage, journal } = createMemoryStorage();
-    const corrupt = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(200, 7)]);
-    await seedObject({ firestore, storage }, corrupt, { verificationStatus: 'accepted', detectedFormat: 'jpeg' });
+    const original = await syntheticJpeg(400, 300);
+    await seedObject({ firestore, storage }, original, { verificationStatus: 'accepted', detectedFormat: 'jpeg' });
+    failRegenerationDecoder(t);
     const result = await regeneratePresentationDerivatives({ firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY });
     assert.equal(result.status, 'failed');
     assert.equal(journal.length, 1, 'aucune écriture Storage après échec sharp');
@@ -403,7 +390,7 @@ test('applyPresentationMirrors : assets.privatePresentation et items.thumbnail (
   const firestore = createMemoryFirestore();
   const { storage } = createMemoryStorage();
   await seedObject({ firestore, storage }, await syntheticJpeg(800, 500), { verificationStatus: 'accepted' });
-  const identity = { firestore, uid: UID, cartularyId: CARTULARY, binaryId: BINARY };
+  const identity = { firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY };
   const before = await applyPresentationMirrors(identity);
   assert.equal(before.status, 'skipped');
   assert.equal(before.reason, 'no_current_variants');
@@ -455,7 +442,7 @@ test('applyPresentationMirrors : échec définitif consigné → thumbnailStatus
     verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION,
     presentationDerivative: { variantsVersion: null, variants: [], thumbnail: null, variantsFailure: 'invalid_dimensions', variantsGeneratedAt: '2026-09-15T00:00:00.000Z' },
   });
-  const identity = { firestore, uid: UID, cartularyId: CARTULARY, binaryId: BINARY };
+  const identity = { firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY };
   const recorded = await applyPresentationMirrors(identity);
   assert.equal(recorded.status, 'failure_recorded');
   assert.equal(recorded.thumbnailStatus, 'failed');
@@ -484,11 +471,11 @@ test('backlog : la seconde passe régénère les binaires acceptés sans variant
   const otherDigest = digestOf(Buffer.from('other'));
   const otherPath = `private-drafts/${UID}/${CARTULARY}/bin_v3_second/${otherDigest.replace('sha256:', '')}/original`;
   const second = await syntheticJpeg(500, 300, { background: '#224466' });
-  await storage.bucket().file(otherPath.replace(otherDigest.replace('sha256:', ''), digestOf(second).replace('sha256:', ''))).save(second, { metadata: { contentType: 'image/jpeg', metadata: {} } });
-  await firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_v3_second`).set({
+  await storage.bucket().file(otherPath.replace(otherDigest.replace('sha256:', ''), digestOf(second).replace('sha256:', ''))).save(second, { metadata: { contentType: 'image/jpeg', metadata: { ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_v3_second', sha256: digestOf(second), kind: 'media' } } });
+  await firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_v3_second`).set(await attestStoredManifest(storage.bucket(), {
     ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_v3_second', kind: 'media', fileName: 'second.jpg', mimeType: 'image/jpeg', size: second.length, sha256: digestOf(second),
     storagePath: otherPath.replace(otherDigest.replace('sha256:', ''), digestOf(second).replace('sha256:', '')), deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION,
-  });
+  }));
   const first = await regenerateMissingPresentationVariants({ firestore, storage, limit: 1 });
   assert.deepEqual(first, { variantsRegenerated: 1, variantsFailed: 0, mirrored: 1 });
   const statuses = [BINARY, 'bin_v3_second'].map(async (binaryId) => (await firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/${binaryId}`).get()).data());
@@ -505,7 +492,7 @@ test('backlog : la seconde passe régénère les binaires acceptés sans variant
   assert.deepEqual(await regenerateMissingPresentationVariants({ firestore, storage, limit: 10 }), { variantsRegenerated: 0, variantsFailed: 0, mirrored: 0 });
 });
 
-test('backlog, première passe (G5 tranché, tour 4 point 8) : un binaire accepté en 1.0.0 ou rejeté n’est jamais repassé par processPrivateDraftUpload ; seuls les jamais vérifiés le sont', async () => {
+test('backlog, première passe (G5 tranché, tour 4 point 8) : un binaire attesté sous pipeline 1.0.0 ou rejeté n’est jamais repassé par processPrivateDraftUpload ; seuls les jamais vérifiés le sont', async () => {
   const firestore = createMemoryFirestore();
   const { storage, bucket } = createMemoryStorage();
   // A : accepté sous private-upload@1.0.0, sans variantes (parc Rolex) — seconde passe seulement.
@@ -525,14 +512,11 @@ test('backlog, première passe (G5 tranché, tour 4 point 8) : un binaire accept
   // C : jamais vérifié (transfert terminé, aucune vérification) — première passe.
   await seedOther('bin_v3_never', await syntheticJpeg(400, 300, { background: '#003311' }), { uploadStatus: 'ready', verificationStatus: null, verificationVersion: null });
   const verifying = [];
-  const realDoc = firestore.doc;
-  firestore.doc = (documentPath) => {
-    const ref = realDoc(documentPath);
-    if (!documentPath.includes('/binaries/')) return ref;
-    return { ...ref, set: async (data, options) => { if (data.verificationStatus === 'processing') verifying.push(documentPath.split('/').at(-1)); return ref.set(data, options); } };
-  };
+  const realTransaction = firestore.runTransaction;
+  firestore.runTransaction = (operation) => realTransaction((transaction) => operation({ ...transaction,
+    update: (ref, data) => { if (data.verificationStatus === 'processing') verifying.push(ref.path.split('/').at(-1)); transaction.update(ref, data); },
+  }));
   const result = await processPrivateDraftUploadBacklog({ firestore, storage, limit: 10 });
-  firestore.doc = realDoc;
   assert.equal(result.inspected, 1, 'seul le binaire jamais vérifié passe par la première passe');
   assert.equal(result.accepted, 1);
   assert.deepEqual(verifying, ['bin_v3_never'], 'A (accepté 1.0.0) et B (rejeté) ne passent jamais par « verifying »');
@@ -557,16 +541,16 @@ test('fonctions pures : chemins v3 seulement, miroirs et vignettes valides, v2 j
   assert.equal(validPresentationVariantPath('private-derivatives/u/c/b/presentation-v3-999.webp', 'u', 'c', 'b'), false);
   const thumbnail = { dataUrl: 'data:image/webp;base64,UklGRg==', width: 240, height: 160, sha256: `sha256:${'a'.repeat(64)}` };
   const variants = [{ width: 240, height: 160, storagePath: presentationVariantPath('u', 'c', 'b', 240), sha256: `sha256:${'b'.repeat(64)}`, size: 1200, mimeType: 'image/webp' }];
-  const manifest = { binaryId: 'b', deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', presentationDerivative: { storagePath: 'private-derivatives/u/c/b/presentation-v2.webp', variantsVersion: 'presentation-v3', variants, thumbnail } };
+  const manifest = verifiedPrivateBinary({ ownerUid: 'u', cartularyId: 'c', size: 100, sha256: `sha256:${'a'.repeat(64)}`, storagePath: `private-drafts/u/c/b/${'a'.repeat(64)}/original`, binaryId: 'b', deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', presentationDerivative: { storagePath: 'private-derivatives/u/c/b/presentation-v2.webp', variantsVersion: 'presentation-v3', variants, thumbnail } });
   assert.deepEqual(assetPresentationMirror(manifest, { uid: 'u', cartularyId: 'c', binaryId: 'b' }), { binaryId: 'b', version: 'presentation-v3', variants, thumbnail });
   assert.equal(assetPresentationMirror({ ...manifest, verificationStatus: 'rejected' }), null);
   assert.equal(assetPresentationMirror({ ...manifest, deleted: true }), null);
   // Tour 4, point 1 : un seul prédicat « binaire vérifié » (privateBinaryIsVerified) pour le rattrapage ET les miroirs :
-  // accepté d'époque (aucune version, prêt, antérieur au seuil) → miroir et vignette d'item ; transfert inachevé → rien.
+  // une date ancienne sans acceptation serveur ne suffit jamais, même avec des variantes préexistantes.
   const legacy = { ...manifest, verificationStatus: undefined, verificationVersion: null, clientUpdatedAt: PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS - 1 };
-  assert.equal(privateBinaryIsVerified(legacy), true);
-  assert.deepEqual(assetPresentationMirror(legacy, { uid: 'u', cartularyId: 'c', binaryId: 'b' }), { binaryId: 'b', version: 'presentation-v3', variants, thumbnail });
-  assert.deepEqual(registryThumbnailFromManifest(legacy, { assetId: 'a1' }), { kind: 'inline', ...thumbnail, assetId: 'a1' });
+  assert.equal(privateBinaryIsVerified(legacy), false);
+  assert.equal(assetPresentationMirror(legacy, { uid: 'u', cartularyId: 'c', binaryId: 'b' }), null);
+  assert.equal(registryThumbnailFromManifest(legacy, { assetId: 'a1' }), null);
   assert.equal(assetPresentationMirror({ ...legacy, clientUpdatedAt: PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS + 1 }), null, 'sans version et postérieur au seuil : jamais vérifié');
   assert.equal(assetPresentationMirror({ ...manifest, uploadStatus: 'verifying' }), null, 'transfert inachevé : même prédicat que le rattrapage');
   assert.equal(registryThumbnailFromManifest({ ...manifest, uploadStatus: 'verifying' }, { assetId: 'a1' }), null);
@@ -589,27 +573,27 @@ test('fonctions pures : chemins v3 seulement, miroirs et vignettes valides, v2 j
   assert.equal(validRegistryThumbnail({ kind: 'inline', ...thumbnail, dataUrl: `data:image/webp;base64,${'A'.repeat(INLINE_THUMBNAIL_MAXIMUM_CHARACTERS)}`, assetId: 'a1' }), false);
 });
 
-test('tour 5 point 1 (G5) : binaire accepté d’époque (aucun verificationStatus, version null, antérieur au seuil) jamais repassé par la première passe', async () => {
-  // Cas « null » du parc Rolex : la garde de backlogNeedsVerification passe par privateBinaryIsVerified ; sans elle,
-  // processPrivateDraftUpload (aucune garde interne) reposerait 'verifying' puis pourrait rejeter → dégradation.
+test('un ancien manifeste sans attestation est réinspecté, quelle que soit sa date déclarée', async () => {
   const firestore = createMemoryFirestore();
   const { storage } = createMemoryStorage();
   await seedObject({ firestore, storage }, await syntheticJpeg(600, 400), { verificationStatus: undefined, verificationVersion: null, clientUpdatedAt: PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS - 1 });
-  assert.equal(privateBinaryIsVerified(await manifestOf(firestore)), true);
+  assert.equal(privateBinaryIsVerified(await manifestOf(firestore)), false);
   const result = await processPrivateDraftUploadBacklog({ firestore, storage, limit: 10 });
-  assert.equal(result.inspected, 0, 'accepté d’époque : jamais re-vérifié');
+  assert.equal(result.inspected, 1);
+  assert.equal(result.accepted, 1);
   const manifest = await manifestOf(firestore);
-  assert.equal(manifest.verificationStatus, undefined, 'jamais re-vérifié ni dégradé');
-  assert.equal(manifest.verificationVersion, null);
-  assert.equal(manifest.uploadStatus, 'ready');
-  assert.equal(result.variantsRegenerated, 1, 'la seconde passe produit ses variantes');
+  assert.equal(manifest.verificationStatus, 'accepted');
+  assert.equal(manifest.verificationVersion, PRIVATE_UPLOAD_VERIFICATION_VERSION);
+  assert.equal(privateBinaryIsVerified(manifest), true);
+  assert.equal(result.variantsRegenerated, 0, 'la première inspection produit déjà les variantes');
 });
 
-test('tour 5 point 3 (K7) : seconde passe du backlog, sharp refuse l’original → thumbnailStatus failed sur l’item, jamais « en préparation » perpétuel', async () => {
+test('tour 5 point 3 (K7) : seconde passe du backlog, sharp refuse l’original → thumbnailStatus failed sur l’item, jamais « en préparation » perpétuel', async (t) => {
   const firestore = createMemoryFirestore();
   const { storage } = createMemoryStorage();
-  const corrupt = Buffer.from('pas une image');
-  await seedObject({ firestore, storage }, corrupt, { verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION });
+  const original = await syntheticJpeg(400, 300);
+  await seedObject({ firestore, storage }, original, { verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION });
+  failRegenerationDecoder(t);
   const result = await regenerateMissingPresentationVariants({ firestore, storage, limit: 10 });
   assert.deepEqual(result, { variantsRegenerated: 0, variantsFailed: 1, mirrored: 0 });
   const manifest = await manifestOf(firestore);
@@ -670,11 +654,44 @@ test('tour 5 M2s : échec consigné sur le binaire mais vignette bundle valide s
   });
   const bundle = { kind: 'bundle', path: '/assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp', width: 240, height: 160, assetId: ASSET, sha256: digestOf(Buffer.from('bundle')) };
   await firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).set({ thumbnail: bundle, thumbnailStatus: 'ready' }, { merge: true });
-  const result = await applyPresentationMirrors({ firestore, uid: UID, cartularyId: CARTULARY, binaryId: BINARY });
+  const result = await applyPresentationMirrors({ firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY });
   assert.equal(result.status, 'failure_recorded');
   assert.equal(result.thumbnailStatus, 'ready', 'une vignette bundle valide sur l’asset primaire prime sur l’échec du binaire');
   assert.equal(result.writes, 0);
   const item = (await firestore.doc(`registries/${REGISTRY}/items/${CARTULARY}`).get()).data();
   assert.deepEqual(item.thumbnail, bundle);
   assert.equal(item.thumbnailStatus, 'ready');
+});
+
+test('des variantes présentes ne suffisent pas : original absent bloque classification, régénération et miroirs sans écriture', async () => {
+  const firestore = createMemoryFirestore();
+  const { storage, blobs, journal } = createMemoryStorage();
+  const { path } = await seedObject({ firestore, storage }, await syntheticJpeg(600, 400), { verificationStatus: 'accepted' });
+  const identity = { firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY };
+  assert.equal((await regeneratePresentationDerivatives(identity)).status, 'generated');
+  const before = firestore.dump();
+  const writes = journal.length;
+  blobs.delete(path);
+  assert.equal((await regeneratePresentationDerivatives(identity)).status, 'original_missing');
+  await assert.rejects(applyPresentationMirrors(identity), { code: 'original_missing' });
+  assert.deepEqual(firestore.dump(), before);
+  assert.equal(journal.length, writes);
+});
+
+test('un ancien statut accepted sans attestation reste inutilisable jusqu’à son inspection complète', async () => {
+  const firestore = createMemoryFirestore();
+  const { storage } = createMemoryStorage();
+  await seedObject({ firestore, storage }, await syntheticJpeg(600, 400), { verificationStatus: 'accepted' });
+  const ref = firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/${BINARY}`);
+  const manifest = (await ref.get()).data();
+  delete manifest.verificationIdentity;
+  manifest.verificationVersion = 'private-upload@1.0.0';
+  await ref.set(manifest);
+  const identity = { firestore, storage, uid: UID, cartularyId: CARTULARY, binaryId: BINARY };
+  assert.equal((await regeneratePresentationDerivatives(identity)).reason, 'not_accepted');
+  assert.equal(privateBinaryIsVerified(manifest), false);
+  const backlog = await processPrivateDraftUploadBacklog({ firestore, storage });
+  assert.equal(backlog.inspected, 1);
+  assert.equal(backlog.accepted, 1);
+  assert.equal(privateBinaryIsVerified((await ref.get()).data()), true);
 });

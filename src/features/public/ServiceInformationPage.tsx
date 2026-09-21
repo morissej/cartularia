@@ -13,16 +13,6 @@ const INFORMATION = {
       ['Informations à compléter avant une offre définitive', 'Les conditions commerciales définitives et les mentions juridiques complètes de l’éditeur ne sont pas publiées à ce stade. Cette page décrit le fonctionnement du pilote ; elle ne vaut pas validation juridique de conditions générales définitives. Pour toute précision, utilisez le contact indiqué ci-dessous.'],
     ],
   },
-  '/confidentialite': {
-    title: 'Confidentialité et données',
-    sections: [
-      ['Trois espaces distincts', 'Le Registre contient les dossiers d’objets et leurs droits. Le Coffre personnel conserve le contenu personnel sous forme chiffrée dans un projet séparé. Le pont de correspondance conserve des références codées. La séparation ne dispense pas de vérifier vos pièces jointes : une facture ou une photographie peut elle-même contenir des données personnelles.'],
-      ['Connexion et conservation locale', 'L’authentification et le stockage distant utilisent Firebase. Le navigateur peut conserver l’état de connexion et des données nécessaires au fonctionnement des dossiers. Le contenu personnel du Coffre est déchiffré pendant son utilisation ; verrouillez-le sur un appareil partagé.'],
-      ['Publication', 'Les contenus explicitement publiés deviennent accessibles selon le mode de partage choisi. Ils sont distincts des données privées. Retirer une publication ne retire pas les fichiers déjà obtenus par un destinataire.'],
-      ['Contact', 'Le formulaire de contact prépare un email dans votre messagerie : le site n’envoie pas lui-même votre demande. Les champs ne sont transmis à l’équipe que si vous envoyez cet email. Ne joignez pas d’identité sensible, de secret ou de dossier patrimonial confidentiel.'],
-      ['Demandes et limites du pilote', 'Pour une question concernant vos données, un export ou une suppression, contactez l’équipe sans communiquer vos secrets. Les identités juridiques complètes du responsable, les durées de conservation définitives et les informations réglementaires détaillées restent à finaliser avant une offre définitive. N’utilisez pas ce pilote comme unique dépositaire de documents importants.'],
-    ],
-  },
   '/accessibilite': {
     title: 'Accessibilité',
     sections: [
@@ -51,7 +41,7 @@ export function ServiceInformationPage() {
     <main id="main-content">
       <p className="public-kicker">Information du pilote · 6 septembre 2026</p>
       <h1>{page.title}</h1>
-      <nav aria-label="Informations sur le service">{Object.entries(INFORMATION).map(([href, item]) => <a key={href} href={href} aria-current={item === page ? 'page' : undefined}>{item.title}</a>)}</nav>
+      <nav aria-label="Informations sur le service"><a href="/confidentialite">Politique de confidentialité</a>{Object.entries(INFORMATION).map(([href, item]) => <a key={href} href={href} aria-current={item === page ? 'page' : undefined}>{item.title}</a>)}</nav>
       {page.sections.map(([title, text]) => <section key={title}><h2>{title}</h2><p>{text}</p></section>)}
       <p>Contact : <a href="mailto:contact@cartularia.com">contact@cartularia.com</a> — <a href="/#contact">préparer un message</a>.</p>
       <a href="/account/create">Revenir à la création d’accès</a>

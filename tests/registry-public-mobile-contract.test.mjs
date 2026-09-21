@@ -120,26 +120,17 @@ test('V-D5 — DOM de la coque : un composant d’actions partagé, un seul lien
   assert.match(shell, /onSignOut=\{\(\) => \{ if \(confirmUnsavedNavigation\(\)\) void signOutOfCartularia\(\); \}\}/, 'déconnexion gardée');
 });
 
-test('V-D6 — accueil mobile : bandeau court conservé, onglets de la maquette défilants avec fondu d’indice', () => {
+test('C03/C07 — accueil mobile : en-tête compact et capture réelle fluide', () => {
   // Le logo (980 × 240 en attributs) ne reprend jamais sa hauteur d'attribut ; en-tête 70 px, hero à 48 px.
   assert.match(ruleBody(readSource('src/index.css'), '.brand-logo'), /height: auto/);
   assert.match(ruleBody(publicCss, '.public-header .brand-logo'), /height: auto/);
   assert.match(ruleBody(publicMobile, '.public-header'), /min-height: 70px/);
   assert.match(ruleBody(publicMobile, '.public-hero'), /padding-block: 48px/);
-  // L'aside ne défile plus : l'enveloppe interne porte le défilement, le fondu et l'espace de fin.
-  const aside = ruleBody(publicMobile, '.public-product-window__body aside');
-  assert.doesNotMatch(aside, /overflow-x: auto/);
-  // L'aside est un élément de grille : sans `min-width: 0`, sa largeur min-content (six onglets nowrap) élargit la colonne à 722 px (mesuré).
-  assert.match(aside, /min-width: 0/);
-  const tabs = ruleBody(publicMobile, '.public-product-window__tabs');
-  assert.match(tabs, /overflow-x: auto/);
-  assert.match(tabs, /(^|[^-])mask-image: linear-gradient\(90deg, #000 calc\(100% - 40px\), transparent\)/);
-  assert.match(tabs, /-webkit-mask-image: linear-gradient\(90deg, #000 calc\(100% - 40px\), transparent\)/);
-  assert.match(ruleBody(publicMobile, '.public-product-window__tabs::after'), /flex: 0 0 32px/);
-  assert.match(ruleBody(publicMobile, '.public-tab-btn'), /white-space: nowrap/);
-  // Bureau : l'enveloppe reprend la colonne de l'aside (rendu 1 280 inchangé).
-  assert.match(ruleBody(publicCss, '.public-product-window__tabs'), /display: grid/);
-  assert.match(homePage, /<div className="public-product-window__tabs">\s*\{HERO_DEMO_TABS\.map/);
+  assert.match(ruleBody(publicCss, '.public-hero__product'), /min-width: 0/);
+  assert.match(ruleBody(publicCss, '.public-hero-capture img'), /width: 100%/);
+  assert.match(ruleBody(publicCss, '.public-hero-capture img'), /height: auto/);
+  assert.match(homePage, /src="\/assets\/public\/captures\/cartulaire-accueil\.webp"/);
+  assert.doesNotMatch(homePage, /HERO_DEMO_TABS|public-tab-btn/);
 });
 
 test('a11y accueil — lien d’évitement lisible au focus, contrastes de la bande sombre, rôle du groupe, main focalisable', () => {

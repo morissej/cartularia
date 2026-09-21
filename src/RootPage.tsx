@@ -8,6 +8,8 @@ const CommunityPage = lazy(() => import('./components/CommunityPage.tsx').then((
 const RegistryApp = lazy(() => import('./features/registry/RegistryApp.tsx').then((module) => ({ default: module.RegistryApp })));
 const RegistryInvitationPage = lazy(() => import('./features/registry/RegistryInvitationPage.tsx'));
 const HomePage = lazy(() => import('./features/public/HomePage.tsx').then((module) => ({ default: module.HomePage })));
+const PublicEditorialPage = lazy(() => import('./features/public/PublicEditorialPage.tsx').then((module) => ({ default: module.PublicEditorialPage })));
+const PrivacyPolicyPage = lazy(() => import('./features/public/PrivacyPolicyPage.tsx').then((module) => ({ default: module.PrivacyPolicyPage })));
 const AccountAccessPage = lazy(() => import('./features/public/AccountAccessPage.tsx').then((module) => ({ default: module.AccountAccessPage })));
 const ServiceInformationPage = lazy(() => import('./features/public/ServiceInformationPage.tsx').then((module) => ({ default: module.ServiceInformationPage })));
 const RegistryRecoveryPage = lazy(() => import('./features/public/RegistryRecoveryPage.tsx').then((module) => ({ default: module.RegistryRecoveryPage })));
@@ -33,6 +35,10 @@ export function RootPage() {
   }
   const Page = route === 'home'
     ? HomePage
+    : route === 'public-editorial'
+      ? PublicEditorialPage
+    : route === 'privacy-policy'
+      ? PrivacyPolicyPage
     : route === 'code-handoff-return'
       ? CodeHandoffReturnPage
     : route === 'service-information'

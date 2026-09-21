@@ -23,9 +23,9 @@ test('V-D8 (a) : le h1 de couverture sépare la marque du modèle par une espace
   assert.doesNotMatch(app, /<h1[^\n]*<button[^\n]*editable-click-target[^\n]*canEdit &&/);
 });
 
-test('V-D8 (b) : le h1 du rapport imprimé porte une espace avant le saut de ligne (version texte du PDF « Rolex Submariner »)', () => {
-  assert.match(app, new RegExp(`<h1>${BRAND}\\{' '\\}<br />${MODEL}</h1>`));
-  assert.doesNotMatch(app, new RegExp(`<h1>${BRAND}<br />${MODEL}</h1>`));
+test('C07 : le h1 du rapport imprimé laisse le titre suivre le flux naturel', () => {
+  assert.match(app, new RegExp(`<h1>${BRAND}\\{' '\\}${MODEL}</h1>`));
+  assert.doesNotMatch(app, new RegExp(`<h1>${BRAND}[^<]*<br />${MODEL}</h1>`));
 });
 
 test('V-D8 (c) : un seul h1 dans le document imprimé — le repli cover-watch (mini-site, rapport) est un h2, ses deux sélecteurs suivent', () => {
@@ -37,7 +37,7 @@ test('V-D8 (c) : un seul h1 dans le document imprimé — le repli cover-watch (
   // CSS : la règle typographique et sa variante mobile ciblent le h2 ; plus aucune règle sur le h1 du repli.
   assert.equal(count(css, /\.cover-sheet__published-title > h2 \{/g), 2);
   assert.doesNotMatch(css, /\.cover-sheet__published-title > h1/);
-  assert.match(css, /\.cover-sheet__editable-title strong,\n\.cover-sheet__published-title > h2 \{ margin-top: var\(--s1\); font-family: var\(--font-display\); font-size: clamp\(48px, 7vw, 86px\); font-weight: 500; letter-spacing: -\.04em; line-height: \.92; \}/);
+  assert.match(css, /\.cover-sheet__editable-title strong,\n\.cover-sheet__published-title > h2 \{ margin-top: var\(--s1\); overflow-wrap: anywhere; font-family: var\(--font-display\); font-size: clamp\(48px, 7vw, 86px\); font-weight: 500; letter-spacing: -\.04em; line-height: \.92; \}/);
 });
 
 test('Coque du Cartulaire : trois h1 seulement (sr-only en édition, couverture, héros de la page 01 « Submariner » seul — D12 (i)) ; pages 02-05 par PageIntroduction', () => {

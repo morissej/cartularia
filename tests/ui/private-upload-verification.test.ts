@@ -118,3 +118,23 @@ describe('référence des variantes de présentation à la création', () => {
     expect(api.unsubscribe).toHaveBeenCalledOnce();
   });
 });
+
+it('une attente liée à un original ne peut accepter une attestation d’une autre génération', async () => {
+  const expectedOriginal = { storagePath: acceptedManifest().storagePath, sha256: digest('b'), size: 100, generation: '5' };
+  const pending = waitForPrivateUploadVerification({ uid: UID, cartularyId: CARTULARY, binaryId: BINARY, expectedOriginal });
+  const rejected = expect(pending).rejects.toThrow('attestation');
+  emit(acceptedManifest({ sha256: digest('b'), size: 100, verificationIdentity: {
+    schemaVersion: 'private-binary-identity@1.0.0', ownerUid: UID, cartularyId: CARTULARY, binaryId: BINARY,
+    ...expectedOriginal, generation: '6',
+  } }));
+  await rejected;
+  expect(api.unsubscribe).toHaveBeenCalledOnce();
+});
+
+it('une attente abandonne le résultat si le manifeste a été remplacé', async () => {
+  const expectedOriginal = { storagePath: acceptedManifest().storagePath, sha256: digest('b'), size: 100, generation: '5' };
+  const pending = waitForPrivateUploadVerification({ uid: UID, cartularyId: CARTULARY, binaryId: BINARY, expectedOriginal });
+  const rejected = expect(pending).rejects.toThrow('changé');
+  emit(acceptedManifest({ sha256: digest('c'), size: 100 }));
+  await rejected;
+});

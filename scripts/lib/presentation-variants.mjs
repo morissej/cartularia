@@ -25,34 +25,33 @@ import sharp from 'sharp';
  * Miroirs (écrits par le serveur Admin seulement, K3) :
  *   cartularies/{id}/assets/{assetId}.privatePresentation = { binaryId, version, variants, thumbnail }
  *   registries/{r}/items/{id}.thumbnail = { kind: 'inline', dataUrl, width, height, assetId, sha256 }
- * Un SEUL prédicat « binaire vérifié » (`privateBinaryIsVerified`, tour 4 point 1) gouverne à la fois le classement
- * du rattrapage et les miroirs : un binaire accepté d'époque (verificationVersion absente ou 1.0.0, clientUpdatedAt
- * antérieur au seuil de transition) reçoit ses miroirs comme un binaire accepté en 1.1.0 ; sinon le rattrapage Rolex
- * régénérait les variantes sans jamais poser assets.privatePresentation ni items.thumbnail (faux état permanent).
+ * Un SEUL prédicat « binaire vérifié » gouverne le classement et les miroirs : une acceptation serveur doit porter
+ * l'identité exacte de l'original inspecté et sa génération Storage. Une date fournie par le client ne vaut jamais
+ * vérification. Les anciennes acceptations sans attestation doivent être inspectées à nouveau côté serveur.
  * Ce module ne fait aucune écriture : fonctions pures + génération sharp.
  */
 
 export const PRESENTATION_VARIANT_VERSION = 'presentation-v3';
-/** Seuil de transition (private-upload@1.1.0) : un manifeste sans version, prêt et antérieur, est accepté d'époque. */
+/** Date historique conservée pour les outils de diagnostic ; elle n'accorde aucun droit ni acceptation. */
 export const PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS = Date.parse('2026-08-18T10:45:00.000Z');
+export const PRIVATE_BINARY_IDENTITY_VERSION = 'private-binary-identity@1.0.0';
 
 /**
- * Prédicat unique « binaire vérifié » : non supprimé, transfert terminé, accepté par la vérification OU accepté d'époque
- * (aucune version de vérification, clientUpdatedAt antérieur au seuil). Partagé par le rattrapage, la création, la
- * synchronisation et les miroirs K3 : jamais deux définitions.
+ * Attestation serveur pure : elle ne prouve pas que l'objet existe encore. Les consommateurs serveur ajoutent
+ * assertPrivateBinaryOriginal pour vérifier l'existence et les métadonnées actuelles de la génération attestée.
  */
-export const privateBinaryIsVerified = (data) => (
-  data?.deleted === false
-  && data?.uploadStatus === 'ready'
-  && (
-    data?.verificationStatus === 'accepted'
-    || (
-      data?.verificationVersion == null
-      && Number(data?.clientUpdatedAt || 0) > 0
-      && Number(data.clientUpdatedAt) < PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS
-    )
-  )
-);
+export const privateBinaryIsVerified = (data) => {
+  const identity = data?.verificationIdentity;
+  if (data?.deleted !== false || data.uploadStatus !== 'ready' || data.verificationStatus !== 'accepted'
+    || identity?.schemaVersion !== PRIVATE_BINARY_IDENTITY_VERSION) return false;
+  if (![data.ownerUid, data.cartularyId, data.binaryId].every((value) => typeof value === 'string' && value.length > 0 && !value.includes('/'))
+    || !/^sha256:[a-f0-9]{64}$/.test(data.sha256 ?? '') || !Number.isSafeInteger(data.size) || data.size <= 0) return false;
+  const path = `private-drafts/${data.ownerUid}/${data.cartularyId}/${data.binaryId}/${data.sha256.slice(7)}/original`;
+  return data.storagePath === path && identity.ownerUid === data.ownerUid && identity.cartularyId === data.cartularyId
+    && identity.binaryId === data.binaryId && identity.storagePath === path && identity.sha256 === data.sha256 && identity.size === data.size
+    && typeof identity.bucket === 'string' && identity.bucket.length > 0 && !identity.bucket.includes('/')
+    && typeof identity.generation === 'string' && /^[1-9][0-9]*$/.test(identity.generation);
+};
 
 /**
  * Vrai si la copie de présentation de ce binaire ne sera PAS produite (état définitif, décision (d)) :
@@ -234,7 +233,7 @@ export const manifestHasCurrentPresentationVariants = (manifest) => Boolean(
 
 /**
  * Miroir pour cartularies/{id}/assets/{assetId}.privatePresentation (K3) : { binaryId, version, variants, thumbnail } ou null.
- * Exige un binaire vérifié (`privateBinaryIsVerified` : accepté, ou accepté d'époque) avec variantes v3 ; la vignette
+ * Exige un binaire vérifié avec attestation serveur et variantes v3 ; la vignette
  * est omise si invalide.
  */
 export const assetPresentationMirror = (manifest, identity = null) => {

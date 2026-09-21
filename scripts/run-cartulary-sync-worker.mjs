@@ -1,5 +1,6 @@
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { readFileSync } from 'node:fs';
 import { markCartularySyncRequestFailed, processCartularySyncRequest } from './lib/live-sync-command.mjs';
 
@@ -13,6 +14,9 @@ const localProjectId = (() => {
 })();
 const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || localProjectId || 'cartularia-wave1-local';
 const usesEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+if (usesEmulator !== Boolean(process.env.STORAGE_EMULATOR_HOST || process.env.FIREBASE_STORAGE_EMULATOR_HOST)) {
+  throw new Error('Configurez ensemble les émulateurs Firestore et Storage, ou aucun des deux.');
+}
 const allowRemote = process.argv.includes('--allow-remote');
 if (!usesEmulator && !allowRemote) {
   throw new Error('Worker interrompu : utilisez l’émulateur Firestore ou passez explicitement --allow-remote.');
@@ -20,9 +24,11 @@ if (!usesEmulator && !allowRemote) {
 
 const app = getApps()[0] || initializeApp({
   projectId,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`,
   ...(usesEmulator ? {} : { credential: applicationDefault() }),
 });
 const firestore = getFirestore(app);
+const storage = getStorage(app);
 const active = new Set();
 
 const processDocument = async (document) => {
@@ -30,7 +36,7 @@ const processDocument = async (document) => {
   if (active.has(document.id)) return;
   active.add(document.id);
   try {
-    const result = await processCartularySyncRequest({ firestore, requestDocumentId: document.id });
+    const result = await processCartularySyncRequest({ firestore, storage, requestDocumentId: document.id });
     console.log(JSON.stringify({ event: 'CARTULARY_SYNC', ...result }));
   } catch (error) {
     console.error(JSON.stringify({ event: 'CARTULARY_SYNC_FAILED', requestDocumentId: document.id, code: error?.code, message: error?.message }));

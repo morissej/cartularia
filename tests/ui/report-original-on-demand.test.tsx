@@ -16,6 +16,7 @@ import type { Asset } from '../../src/types';
 const api = vi.hoisted(() => ({ blob: vi.fn(), downloadUrl: vi.fn(), getDoc: vi.fn(), fetch: vi.fn() }));
 const UID = 'owner_report_v3';
 vi.mock('../../src/firebase.ts', () => ({ db: {}, storage: {}, auth: { authStateReady: async () => undefined, currentUser: { uid: 'owner_report_v3' } } }));
+vi.mock('firebase/auth', () => ({ onAuthStateChanged: (_auth: unknown, observer: (user: unknown) => void) => { observer((_auth as { currentUser: unknown }).currentUser); return () => {}; } }));
 vi.mock('../../src/persistence/localVault.ts', () => ({ cartulariaLocalVault: null }));
 vi.mock('firebase/storage', () => ({ getBlob: api.blob, getDownloadURL: api.downloadUrl, ref: (_storage: unknown, path: string) => path }));
 vi.mock('firebase/firestore', () => ({ doc: (_db: unknown, ...path: string[]) => path.join('/'), getDoc: api.getDoc }));

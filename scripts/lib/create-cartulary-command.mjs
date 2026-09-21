@@ -2,7 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { importCartularyBundle } from './import-cartulary-command.mjs';
 import { projectRegistryItem } from './projection-command.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
-import { privateBinaryIsVerified } from './private-upload-command.mjs';
+import { assertPrivateBinaryOriginal } from './private-upload-command.mjs';
 import { assetPresentationMirror } from './presentation-variants.mjs';
 import { CREATION_PROFILE_DEFINITIONS, mappedSchemaSections, materializeCreationSections } from './creation-profile-map.mjs';
 
@@ -262,7 +262,7 @@ export const buildCreationBundle = ({ requestData, profile, media, schemaVersion
   };
 };
 
-const loadCreationDraft = async (firestore, requestData) => {
+const loadCreationDraft = async (firestore, storage, requestData) => {
   const draftRef = firestore.doc(`privateDrafts/${requestData.ownerUid}/cartularies/${requestData.cartularyId}`);
   const [draft, profileState, mediaState, binaries] = await Promise.all([
     draftRef.get(),
@@ -275,33 +275,29 @@ const loadCreationDraft = async (firestore, requestData) => {
   }
   const profile = parseStateValue(profileState, 'cartularia-creation-profile');
   const media = parseStateValue(mediaState, 'cartularia-media-assets-v3');
-  const readyBinaries = new Map(binaries.docs
-    .filter((snapshot) => privateBinaryIsVerified(snapshot.data()))
-    .map((snapshot) => [snapshot.id, snapshot.data()]));
-  if (!Array.isArray(media) || media.some((asset) => !readyBinaries.has(asset.binaryId))) {
+  const draftBinaries = new Map(binaries.docs.map((snapshot) => [snapshot.id, snapshot.data()]));
+  if (!Array.isArray(media) || media.some((asset) => !asset || !draftBinaries.has(asset.binaryId))) {
     throw new CreateCartularyCommandError('draft_not_ready', 'Tous les fichiers du brouillon doivent être vérifiés avant la création.');
   }
-  const mediaWithStoragePaths = media.map((asset) => {
-    const binary = readyBinaries.get(asset.binaryId);
-    const expectedPrefix = `private-drafts/${requestData.ownerUid}/${requestData.cartularyId}/${asset.binaryId}/`;
-    if (
-      typeof binary.storagePath !== 'string'
-      || !binary.storagePath.startsWith(expectedPrefix)
-      || !binary.storagePath.endsWith('/original')
-    ) {
-      throw new CreateCartularyCommandError('draft_not_ready', `Chemin Storage privé invalide pour ${asset.binaryId}.`);
+  const mediaWithStoragePaths = await Promise.all(media.map(async (asset) => {
+    const binary = draftBinaries.get(asset.binaryId);
+    if (!['media', 'condition_attachment'].includes(binary.kind)) {
+      throw new CreateCartularyCommandError('draft_not_ready', 'Ce fichier privé ne peut pas devenir un média du Cartulaire.');
     }
+    await assertPrivateBinaryOriginal({ storage, manifest: binary, uid: requestData.ownerUid,
+      cartularyId: requestData.cartularyId, binaryId: asset.binaryId });
     return {
       ...asset,
       storagePath: binary.storagePath,
       privatePresentation: assetPresentationMirror(binary, { uid: requestData.ownerUid, cartularyId: requestData.cartularyId, binaryId: asset.binaryId }),
     };
-  });
+  }));
   return { profile, media: mediaWithStoragePaths };
 };
 
 export const processCartularyCreateRequest = async ({
   firestore,
+  storage,
   requestDocumentId,
   occurredAt = new Date().toISOString(),
   rateLimitPerDay = CREATE_RATE_LIMIT_PER_DAY,
@@ -335,7 +331,7 @@ export const processCartularyCreateRequest = async ({
   });
   if (!claim.claimed) return { requestDocumentId, status: 'ignored', reason: claim.reason };
 
-  const { profile, media } = await loadCreationDraft(firestore, requestData);
+  const { profile, media } = await loadCreationDraft(firestore, storage, requestData);
   const { schemaVersion } = await resolveCreationSchemaVersion({ firestore, schemaId: profile?.schemaId, requestedVersion: profile?.schemaVersion });
   const bundle = buildCreationBundle({ requestData, profile, media, schemaVersion });
   const imported = await importCartularyBundle({
@@ -400,7 +396,32 @@ export const processCartularyCreateRequest = async ({
   };
 };
 
-export const markCartularyCreateRequestFailed = async ({ firestore, requestDocumentId, requestId, error }) => {
+const requestTimestampParts = (value) => {
+  if (Number.isInteger(value?.seconds) && Number.isInteger(value?.nanoseconds)
+    && value.nanoseconds >= 0 && value.nanoseconds < 1_000_000_000) {
+    return [value.seconds, value.nanoseconds];
+  }
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    const milliseconds = value.getTime();
+    const seconds = Math.floor(milliseconds / 1_000);
+    return [seconds, (milliseconds - seconds * 1_000) * 1_000_000];
+  }
+  return null;
+};
+
+const isSameCreateAttempt = (current, expected) => {
+  const currentTimestamp = requestTimestampParts(current.requestedAt);
+  const expectedTimestamp = requestTimestampParts(expected.requestedAt);
+  return typeof expected.ownerUid === 'string'
+    && current.ownerUid === expected.ownerUid
+    && current.requestId === expected.requestId
+    && currentTimestamp !== null
+    && expectedTimestamp !== null
+    && currentTimestamp[0] === expectedTimestamp[0]
+    && currentTimestamp[1] === expectedTimestamp[1];
+};
+
+export const markCartularyCreateRequestFailed = async ({ firestore, requestDocumentId, requestId, error, expectedRequestDocument }) => {
   const requestRef = firestore.doc(`cartularyCreateRequests/${requestDocumentId}`);
   await firestore.runTransaction(async (transaction) => {
     const request = await transaction.get(requestRef);
@@ -408,6 +429,9 @@ export const markCartularyCreateRequestFailed = async ({ firestore, requestDocum
       !request.exists
       || !['pending', 'processing'].includes(request.data().status)
       || request.data().requestId !== requestId
+      // Retries keep requestId, but receive a new requestedAt. Compare inside the
+      // transaction so a delayed event cannot fail a newer attempt after a retry.
+      || (expectedRequestDocument !== undefined && !isSameCreateAttempt(request.data(), expectedRequestDocument))
     ) return;
     transaction.update(requestRef, {
       status: 'failed',

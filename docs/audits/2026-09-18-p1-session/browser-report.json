@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-18T08:51:56.974Z",
+  "environment": "Local Vite, anonymous isolated Chrome profile, synthetic fixture; external DNS blocked; no real Firebase authentication",
+  "cases": [
+    {
+      "path": "/cartulary?cartularyId=cart-private-p1",
+      "locked": true,
+      "appMounted": false,
+      "leaked": false,
+      "preserved": true,
+      "appModuleLoaded": false
+    },
+    {
+      "path": "/cartulary-view?cartularyId=cart-private-p1",
+      "locked": true,
+      "appMounted": false,
+      "leaked": false,
+      "preserved": true,
+      "appModuleLoaded": false
+    },
+    {
+      "path": "/watch-website?preview=local&cartularyId=cart-private-p1",
+      "locked": true,
+      "appMounted": false,
+      "leaked": false,
+      "preserved": true,
+      "appModuleLoaded": false
+    },
+    {
+      "path": "/cartulary?cartularyId=cart_demo_fake_not_public",
+      "locked": true,
+      "appMounted": false,
+      "leaked": false,
+      "preserved": true,
+      "appModuleLoaded": false
+    },
+    {
+      "path": "/cartulary-demo",
+      "appMounted": true,
+      "locked": false,
+      "leaked": false,
+      "preserved": true
+    }
+  ],
+  "uncaughtExceptions": []
+}

@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import {
@@ -8,11 +9,14 @@ import {
 import {
   collection,
   collectionGroup,
+  deleteField,
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   query,
+  onSnapshot,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -68,6 +72,7 @@ beforeEach(async () => {
     await Promise.all([
       setDoc(doc(firestore, 'users', ownerUid), { uid: ownerUid, status: 'active' }),
       setDoc(doc(firestore, 'users', outsiderUid), { uid: outsiderUid, status: 'active' }),
+      setDoc(doc(firestore, 'users', payerUid), { uid: payerUid, status: 'active' }),
       setDoc(doc(firestore, 'users', registryReaderUid), { uid: registryReaderUid, status: 'active' }),
       setDoc(doc(firestore, 'users', invitedUid), { uid: invitedUid, status: 'active' }),
       setDoc(doc(firestore, 'organizations', ownerOrganizationId), {
@@ -466,6 +471,7 @@ test('le client peut déclarer un fichier en attente sans pouvoir usurper la vé
   }));
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), binary.path), {
+      uploadStatus: 'ready',
       verificationStatus: 'accepted',
       verificationVersion: 'private-upload@1.0.0',
       publicationEligible: true,
@@ -479,6 +485,147 @@ test('le client peut déclarer un fichier en attente sans pouvoir usurper la vé
   }, { merge: true }));
   await assertFails(setDoc(binary, { publicationEligible: false }, { merge: true }));
 });
+
+const privateBinaryManifest = (binaryId = 'binary-identity-a1') => ({
+  ownerUid,
+  cartularyId: 'cart-a',
+  binaryId,
+  deleted: false,
+  revision: 1,
+  fileName: 'preuve.jpg',
+  mimeType: 'image/jpeg',
+  size: 128,
+  sha256: `sha256:${'a'.repeat(64)}`,
+  kind: 'media',
+  storagePath: `private-drafts/${ownerUid}/cart-a/${binaryId}/${'a'.repeat(64)}/original`,
+  clientUpdatedAt: 100,
+  uploadStatus: 'pending_upload',
+  updatedAt: serverTimestamp(),
+});
+
+const privateBinaryIdentity = (manifest) => ({
+  schemaVersion: 'private-binary-identity@1.0.0',
+  ownerUid: manifest.ownerUid,
+  cartularyId: manifest.cartularyId,
+  binaryId: manifest.binaryId,
+  storagePath: manifest.storagePath,
+  sha256: manifest.sha256,
+  size: manifest.size,
+  bucket: 'cartularia-private-test.firebasestorage.app',
+  generation: '123456789',
+});
+
+async function createPrivateBinaryFixture(manifest = privateBinaryManifest()) {
+  const firestore = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const root = doc(firestore, 'privateDrafts', ownerUid, 'cartularies', manifest.cartularyId);
+  await assertSucceeds(setDoc(root, {
+    ownerUid,
+    cartularyId: manifest.cartularyId,
+    status: 'active',
+    retentionPolicyVersion: 'inactive-plus-2y-v1',
+    updatedAt: serverTimestamp(),
+  }));
+  const binary = doc(root, 'binaries', manifest.binaryId);
+  await assertSucceeds(setDoc(binary, manifest));
+  return binary;
+}
+
+test('un ready client antidaté ne crée aucune acceptation ni attestation serveur', async () => {
+  const manifest = { ...privateBinaryManifest(), uploadStatus: 'ready', clientUpdatedAt: 0 };
+  const binary = await createPrivateBinaryFixture(manifest);
+  const stored = (await assertSucceeds(getDoc(binary))).data();
+  assert.equal(stored.uploadStatus, 'ready');
+  assert.equal(stored.verificationStatus, undefined);
+  assert.equal(stored.verificationIdentity, undefined);
+  await assertFails(updateDoc(binary, { verificationStatus: 'accepted' }));
+  await assertFails(updateDoc(binary, { verificationIdentity: privateBinaryIdentity(manifest) }));
+  await assertFails(updateDoc(binary, { verificationAttemptId: 'client-attempt' }));
+  const forged = { ...privateBinaryManifest('binary-forged-a1'), uploadStatus: 'ready' };
+  await assertFails(setDoc(doc(binary.parent, forged.binaryId), {
+    ...forged,
+    verificationIdentity: privateBinaryIdentity(forged),
+  }));
+});
+
+test('le chemin du manifeste désigne exactement son propriétaire, son cartulaire, son binaire et son hash', async () => {
+  const manifest = privateBinaryManifest();
+  const binary = await createPrivateBinaryFixture(manifest);
+  const invalidPaths = [
+    manifest.storagePath.replace(ownerUid, outsiderUid),
+    manifest.storagePath.replace('cart-a', 'cart-b'),
+    manifest.storagePath.replace(manifest.binaryId, 'another-binary'),
+    manifest.storagePath.replace('a'.repeat(64), 'b'.repeat(64)),
+    manifest.storagePath.replace('a'.repeat(64), manifest.sha256),
+    `${manifest.storagePath}/extra`,
+    `prefix/${manifest.storagePath}`,
+  ];
+  for (const storagePath of invalidPaths) await assertFails(updateDoc(binary, { storagePath }));
+  const next = privateBinaryManifest('binary-invalid-create');
+  await assertFails(setDoc(doc(binary.parent, next.binaryId), { ...next, storagePath: manifest.storagePath }));
+  await assertSucceeds(updateDoc(binary, {
+    sha256: `sha256:${'b'.repeat(64)}`,
+    storagePath: manifest.storagePath.replace('a'.repeat(64), 'b'.repeat(64)),
+  }));
+});
+
+test('un manifeste non vérifié reste supprimable physiquement par son propriétaire', async () => {
+  const binary = await createPrivateBinaryFixture();
+  await assertSucceeds(deleteDoc(binary));
+  assert.equal((await assertSucceeds(getDoc(binary))).exists(), false);
+});
+
+for (const mode of ['accepted-attested', 'accepted-legacy', 'identity-without-acceptance']) {
+  test(`l’identité binaire ${mode} est immuable et sa suppression logique ne réactive pas l’attestation`, async () => {
+    const manifest = privateBinaryManifest();
+    const binary = await createPrivateBinaryFixture(manifest);
+    const attested = mode !== 'accepted-legacy';
+    const verification = {
+      verificationStatus: mode === 'identity-without-acceptance' ? 'processing' : 'accepted',
+      uploadStatus: mode === 'identity-without-acceptance' ? 'pending_upload' : 'ready',
+      verificationAttemptId: 'server-attempt',
+      ...(attested ? { verificationIdentity: privateBinaryIdentity(manifest) } : {}),
+    };
+    await testEnvironment.withSecurityRulesDisabled((context) => setDoc(
+      doc(context.firestore(), binary.path), verification, { merge: true },
+    ));
+    const substitutions = [
+      { ownerUid: outsiderUid },
+      { cartularyId: 'cart-b' },
+      { binaryId: 'another-binary' },
+      { sha256: `sha256:${'b'.repeat(64)}`, storagePath: manifest.storagePath.replace('a'.repeat(64), 'b'.repeat(64)) },
+      { size: 256 },
+      { mimeType: 'application/pdf' },
+      { kind: 'condition_attachment' },
+      { storagePath: manifest.storagePath.replace('a'.repeat(64), 'b'.repeat(64)) },
+      { uploadStatus: verification.uploadStatus === 'ready' ? 'pending_upload' : 'ready' },
+    ];
+    for (const patch of substitutions) await assertFails(updateDoc(binary, patch));
+    await assertFails(updateDoc(binary, { verificationStatus: deleteField() }));
+    await assertFails(updateDoc(binary, { verificationAttemptId: 'client-attempt' }));
+    if (attested) {
+      await assertFails(updateDoc(binary, { 'verificationIdentity.generation': '999999999' }));
+      await assertFails(updateDoc(binary, { verificationIdentity: deleteField() }));
+    }
+    await assertFails(deleteDoc(binary));
+    await assertFails(setDoc(binary, {
+      ...manifest,
+      sha256: `sha256:${'b'.repeat(64)}`,
+      storagePath: manifest.storagePath.replace('a'.repeat(64), 'b'.repeat(64)),
+    }));
+    await assertSucceeds(updateDoc(binary, { revision: 2, clientUpdatedAt: 101, fileName: 'renommé.jpg' }));
+    await assertSucceeds(updateDoc(binary, { deleted: true, storagePath: null, uploadStatus: 'deleted', revision: 3 }));
+    const tombstone = (await assertSucceeds(getDoc(binary))).data();
+    assert.equal(tombstone.deleted, true);
+    assert.equal(tombstone.sha256, manifest.sha256);
+    assert.equal(tombstone.size, manifest.size);
+    assert.deepEqual(tombstone.verificationIdentity, verification.verificationIdentity);
+    await assertFails(deleteDoc(binary));
+    await assertFails(updateDoc(binary, { deleted: false, storagePath: manifest.storagePath, uploadStatus: 'ready' }));
+    await assertFails(updateDoc(binary, { sha256: `sha256:${'b'.repeat(64)}` }));
+    const clone = privateBinaryManifest('binary-reused-attestation');
+    await assertFails(setDoc(doc(binary.parent, clone.binaryId), { ...clone, ...verification }));
+  });
+}
 
 test('un propriétaire éditeur peut demander une création seulement depuis son brouillon et son Registre', async () => {
   const ownerFirestore = testEnvironment.authenticatedContext(ownerUid).firestore();
@@ -658,4 +805,128 @@ test('le schéma watch est lisible par un compte authentifié mais pas anonymeme
   const anonymousFirestore = testEnvironment.unauthenticatedContext().firestore();
   await assertSucceeds(getDoc(doc(authenticatedFirestore, 'schemaCatalog', 'watch')));
   await assertFails(getDoc(doc(anonymousFirestore, 'schemaCatalog', 'watch')));
+});
+
+const setAccountAccess = (value, uid = ownerUid) => testEnvironment.withSecurityRulesDisabled((context) => (
+  setDoc(doc(context.firestore(), 'accountAccess', uid), value)
+));
+
+const seedRevocationSurfaces = async () => {
+  let paths = [];
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
+    const records = {
+      [`users/${ownerUid}/private/profile`]: { privateNote: 'confidentiel' },
+      [`privateDrafts/${ownerUid}/cartularies/cart-a`]: { ownerUid, cartularyId: 'cart-a', status: 'active', retentionPolicyVersion: 'inactive-plus-2y-v1' },
+      [`privateDrafts/${ownerUid}/cartularies/cart-a/state/cartularia-test`]: { value: 'private' },
+      [`privateDrafts/${ownerUid}/cartularies/cart-a/binaries/binary-a`]: { fileName: 'private.pdf' },
+      'cartularySyncRequests/request-a': { ownerUid },
+      'cartularyCreateRequests/request-a': { ownerUid },
+      'timestampRequests/request-a': { ownerUid },
+      'cartularyTransferRequests/request-a': { ownerUid },
+      'cartularyTransfers/transfer-a': { participantUids: [ownerUid] },
+      'transferPrivateArchives/transfer-a': { sellerUid: ownerUid },
+      'integrityBatches/batch-a': { readerUids: [ownerUid] },
+      [`communityMemberships/${ownerUid}`]: { uid: ownerUid, status: 'active', permissions: ['community.read'] },
+      'communityPublications/community-a': { status: 'published', moderationStatus: 'approved' },
+      [`vaultUsers/${ownerUid}/vault/profile`]: { ownerUid, ciphertext: 'opaque' },
+      [`codeAccounts/${ownerUid}/account/profile`]: { ownerUid, primaryClientNumber: 'CLI-ABCDEF12' },
+    };
+    await Promise.all(Object.entries(records).map(([path, value]) => setDoc(doc(firestore, path), value)));
+    paths = Object.keys(records);
+  });
+  return paths;
+};
+
+test('F02 : la suspension serveur ferme toutes les lectures privées et écritures d’une session déjà ouverte', async () => {
+  const paths = await seedRevocationSurfaces();
+  const firestore = testEnvironment.authenticatedContext(ownerUid, { firebase: { sign_in_provider: 'password' }, auth_time: 1_000 }).firestore();
+  const reads = [
+    ...paths, `organizations/${ownerOrganizationId}/memberships/${ownerUid}`,
+    `registries/${ownerRegistryId}`, 'cartularies/cart-a', 'schemaCatalog/watch',
+  ];
+  for (const path of reads) await assertSucceeds(getDocFromServer(doc(firestore, path)));
+  await setAccountAccess({ status: 'suspended', validAfter: 1_000 });
+  for (const path of reads) await assertFails(getDocFromServer(doc(firestore, path)));
+  await assertSucceeds(getDocFromServer(doc(firestore, 'users', ownerUid)));
+  await assertFails(getDocs(query(collectionGroup(firestore, 'memberships'), where('uid', '==', ownerUid))));
+  await assertFails(updateDoc(doc(firestore, 'cartularies/cart-a/reminders/rem-a'), { title: 'Refusé', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(firestore, 'users', ownerUid), { lastActiveAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+  for (const path of paths.filter((path) => path.startsWith('privateDrafts/'))) await assertFails(deleteDoc(doc(firestore, path)));
+});
+
+test('F02 : une écoute déjà admise ne reçoit pas de nouvelles données après suspension', { timeout: 10_000 }, async () => {
+  await setAccountAccess({ status: 'active', validAfter: 0 });
+  const firestore = testEnvironment.authenticatedContext(ownerUid, { firebase: { sign_in_provider: 'password' }, auth_time: 1_000 }).firestore();
+  let firstSnapshot;
+  const admitted = new Promise((resolve) => { firstSnapshot = resolve; });
+  let deny;
+  const rejected = new Promise((resolve) => { deny = resolve; });
+  const unsubscribe = onSnapshot(doc(firestore, 'cartularies/cart-a'), () => firstSnapshot(), (error) => deny(error));
+  try {
+    await admitted;
+    await setAccountAccess({ status: 'suspended', validAfter: 1_000 });
+    // The emulator re-evaluates a live listener on a resource event, not on guard changes alone.
+    await testEnvironment.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), 'cartularies/cart-a'), { revision: 2 }));
+    const error = await rejected;
+    if (error.code !== 'permission-denied') throw error;
+  } finally { unsubscribe(); }
+});
+
+test('F02 : réactiver ne réadmet ni le vieux jeton ni son renouvellement, seule une auth_time strictement ultérieure passe', async () => {
+  const old = testEnvironment.authenticatedContext(ownerUid, { firebase: { sign_in_provider: 'password' }, auth_time: 1_000 }).firestore();
+  const refreshed = testEnvironment.authenticatedContext(ownerUid, { firebase: { sign_in_provider: 'password' }, auth_time: 1_000, iat: 2_000 }).firestore();
+  const fresh = testEnvironment.authenticatedContext(ownerUid, { firebase: { sign_in_provider: 'password' }, auth_time: 1_001 }).firestore();
+  await setAccountAccess({ status: 'suspended', validAfter: 1_000 });
+  await assertFails(getDocFromServer(doc(fresh, 'cartularies/cart-a')));
+  await setAccountAccess({ status: 'active', validAfter: 1_000 });
+  await assertFails(getDocFromServer(doc(old, 'cartularies/cart-a')));
+  await assertFails(getDocFromServer(doc(refreshed, 'cartularies/cart-a')));
+  await assertSucceeds(getDocFromServer(doc(fresh, 'cartularies/cart-a')));
+  await assertSucceeds(updateDoc(doc(fresh, 'cartularies/cart-a/reminders/rem-a'), { title: 'Session fraîche', updatedAt: serverTimestamp() }));
+  await testEnvironment.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), 'users', ownerUid), { status: 'suspended' }));
+  await assertFails(getDocFromServer(doc(fresh, 'cartularies/cart-a')));
+});
+
+test('F02 : un guard malformé ferme l’accès et aucun client ne peut lire, créer, modifier ou supprimer le guard', async () => {
+  const firestore = testEnvironment.authenticatedContext(ownerUid, { firebase: { sign_in_provider: 'password' }, auth_time: 1_001 }).firestore();
+  const guard = doc(firestore, 'accountAccess', ownerUid);
+  await assertFails(setDoc(guard, { status: 'active', validAfter: 0 }));
+  for (const invalid of [{ status: 'active' }, { status: 'active', validAfter: '1000' }, { status: 'active', validAfter: -1 }, { status: 'unknown', validAfter: 0 }]) {
+    await setAccountAccess(invalid);
+    await assertFails(getDocFromServer(doc(firestore, 'cartularies/cart-a')));
+  }
+  await assertFails(getDocFromServer(guard));
+  await assertFails(updateDoc(guard, { status: 'active', validAfter: 0 }));
+  await assertFails(deleteDoc(guard));
+  await assertFails(setDoc(doc(firestore, 'accountAccess', ownerUid, 'memberships', ownerUid), { uid: ownerUid }));
+  await assertFails(updateDoc(doc(firestore, 'users', ownerUid), { accountAccess: { status: 'active', validAfter: 0 } }));
+});
+
+test('F02 : un compte démo actif conserve les lectures autorisées mais pas les écritures même si son membership est trop large', async () => {
+  const firestore = testEnvironment.authenticatedContext(ownerUid, { firebase: { sign_in_provider: 'password' }, auth_time: 1_001 }).firestore();
+  await testEnvironment.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), 'users', ownerUid), { accountPurpose: 'public_read_only_demo' }));
+  await setAccountAccess({ status: 'active', validAfter: 1_000 });
+  await assertSucceeds(getDocFromServer(doc(firestore, 'registries', ownerRegistryId)));
+  await assertSucceeds(getDocFromServer(doc(firestore, 'cartularies/cart-a')));
+  await assertFails(updateDoc(doc(firestore, 'cartularies/cart-a/reminders/rem-a'), { title: 'Démo interdite', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(firestore, 'users', ownerUid), { lastActiveAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(firestore, 'privateDrafts', ownerUid, 'cartularies', 'cart-demo'), { ownerUid, cartularyId: 'cart-demo', status: 'active', retentionPolicyVersion: 'inactive-plus-2y-v1' }));
+  await setAccountAccess({ status: 'suspended', validAfter: 1_001 });
+  await assertFails(getDocFromServer(doc(firestore, 'cartularies/cart-a')));
+});
+
+test('F02 : un custom token émis avant le cutoff reste refusé même échangé après la réactivation', async () => {
+  await setAccountAccess({ status: 'active', validAfter: 1_000 });
+  for (const issuedAt of [undefined, 999, 1_000, '1001']) {
+    const db = testEnvironment.authenticatedContext(ownerUid, {
+      firebase: { sign_in_provider: 'custom' }, auth_time: 1_005,
+      ...(issuedAt === undefined ? {} : { cartulariaRecoveryIssuedAt: issuedAt }),
+    }).firestore();
+    await assertFails(getDocFromServer(doc(db, 'cartularies/cart-a')));
+  }
+  const fresh = testEnvironment.authenticatedContext(ownerUid, {
+    firebase: { sign_in_provider: 'custom' }, auth_time: 1_005, cartulariaRecoveryIssuedAt: 1_001,
+  }).firestore();
+  await assertSucceeds(getDocFromServer(doc(fresh, 'cartularies/cart-a')));
 });

@@ -8,6 +8,8 @@ import { personalVaultIsConfigured } from './firebase';
 import { loadOwnerObjectCodes, saveCodeCorrespondences } from './codeBridgeRepository';
 import { authenticatePersonalVault, loadPersonalVault, lockPersonalVault, savePersonalVault } from './repository';
 import { useVaultDraft } from './useVaultDraft';
+import { observePersonalVaultSession, personalVaultSessionMatches, type PersonalVaultLockReason } from './sessionSecurity';
+import { forgetLockedVaultDraft, preserveLockedVaultDraft, readLockedVaultDraft } from './lockedDraft';
 import { saveVaultAndCodes } from './vaultSaveWorkflow';
 import { CodeHandoffSender } from './CodeHandoffSender';
 import { PersonalRecoveryPanel, RecoveryAccessForm, type RecoveredPersonalSession } from './PersonalRecovery';
@@ -46,7 +48,12 @@ export function PersonalVaultApp() {
   // Only a successfully authenticated/decrypted secret may encrypt a save.
   // The login draft must never become the unlocked session's key.
   const [sessionSecret, setSessionSecret] = useState<{ uid: string; password: string } | null>(null);
+  const activeSecret = useRef<{ uid: string; password: string } | null>(null);
+  const [lockedDraft, setLockedDraft] = useState<PersonalVaultPayload | null>(null);
+  const [draftProblem, setDraftProblem] = useState('');
   const opening = useRef(false);
+  const openingGeneration = useRef<number | null>(null);
+  const openingUid = useRef<string | null>(null);
   const accessGeneration = useRef(0);
   const [confirmation, setConfirmation] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -57,8 +64,9 @@ export function PersonalVaultApp() {
   const saving = useRef(false);
   const [message, setMessage] = useState('');
   const [saveFailed, setSaveFailed] = useState(false);
+  const recoveringAccess = useRef(false);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const recoverySnapshot = useRef<{ payload: PersonalVaultPayload | null } | null>(null);
+  const recoverySnapshot = useRef<{ payload: PersonalVaultPayload | null; generation: number } | null>(null);
   const [codeSyncPending, setCodeSyncPending] = useState(false);
   const [codeSyncProblem, setCodeSyncProblem] = useState('');
   const [recoveryConflict, setRecoveryConflict] = useState(false);
@@ -71,6 +79,14 @@ export function PersonalVaultApp() {
     return () => { document.title = previousTitle; accessGeneration.current += 1; };
   }, []);
 
+  const lockSession = useRef<(reason: PersonalVaultLockReason) => void>(() => {});
+  useEffect(() => observePersonalVaultSession({
+    getUid: () => activeSecret.current?.uid || openingUid.current,
+    getGeneration: () => accessGeneration.current,
+    isOpening: () => opening.current || recoveringAccess.current,
+    onLock: (reason) => lockSession.current(reason),
+  }), [user?.uid]);
+
   const authenticateVault = async (createAccount = false) => {
     if (busy || recoveryBusy || opening.current) return;
     if (!personalVaultIsConfigured) return setMessage('Le Coffre est temporairement indisponible. Son accès séparé doit être rétabli.');
@@ -80,6 +96,7 @@ export function PersonalVaultApp() {
     if (createAccount && password !== confirmation) return setMessage('Les deux mots de passe du Coffre ne correspondent pas.');
     opening.current = true;
     const generation = ++accessGeneration.current;
+    openingGeneration.current = generation;
     const confirmedPassword = password;
     const normalizedName = normalizeUserAlias(userName);
     const assertCurrent = () => {
@@ -90,10 +107,19 @@ export function PersonalVaultApp() {
     try {
       const session = await authenticatePersonalVault({ userAlias: normalizedName, password: confirmedPassword, createAccount });
       assertCurrent();
-      const existing = await loadPersonalVault({ user: session.personalUser, userAlias: normalizedName, password: confirmedPassword });
+      if (!personalVaultSessionMatches(session.personalUser.uid)) throw Object.assign(new Error('Session remplacée.'), { code: 'vault-opening-stale' });
+      openingUid.current = session.personalUser.uid;
+      const existing = await loadPersonalVault({ user: session.personalUser, userAlias: normalizedName, password: confirmedPassword, isCurrent: () => generation === accessGeneration.current && personalVaultSessionMatches(session.personalUser.uid) });
       assertCurrent();
       const bridgeCodes = await loadOwnerObjectCodes(session.bridgeUser);
       assertCurrent();
+      if (!personalVaultSessionMatches(session.personalUser.uid)) throw Object.assign(new Error('Session remplacée.'), { code: 'vault-opening-stale' });
+      let preserved: PersonalVaultPayload | null = null;
+      let preservedProblem = '';
+      try { preserved = await readLockedVaultDraft(session.personalUser.uid, confirmedPassword, normalizedName); }
+      catch { preservedProblem = 'Un brouillon local chiffré existe peut-être, mais sa lecture a échoué. Il a été conservé ; ne le supprimez pas avant de vérifier le mot de passe utilisé lors du verrouillage.'; }
+      assertCurrent();
+      if (!personalVaultSessionMatches(session.personalUser.uid)) throw Object.assign(new Error('Session remplacée.'), { code: 'vault-opening-stale' });
       const restored = existing ? {
         ...existing,
         owners: existing.owners.map((owner) => ({
@@ -102,7 +128,10 @@ export function PersonalVaultApp() {
         })),
       } : emptyPersonalVaultPayload(normalizedName);
       setUser(session.personalUser);
-      setSessionSecret({ uid: session.personalUser.uid, password: confirmedPassword });
+      activeSecret.current = { uid: session.personalUser.uid, password: confirmedPassword };
+      setSessionSecret(activeSecret.current);
+      setLockedDraft(preserved);
+      setDraftProblem(preservedProblem);
       setPassword('');
       setBridgeUser(session.bridgeUser);
       setUserName(normalizedName);
@@ -115,6 +144,7 @@ export function PersonalVaultApp() {
       setRecoveryConflict(false);
       setMessage(existing ? 'Coffre patrimonial déchiffré dans cette session.' : 'Nouveau coffre patrimonial prêt à être enregistré.');
     } catch (error) {
+      if (openingGeneration.current !== generation) return;
       if ((error as { code?: string }).code === 'vault-opening-stale') {
         setMessage('Les identifiants ont changé pendant l’ouverture. Réessayez avec les identifiants affichés.');
         return;
@@ -122,13 +152,16 @@ export function PersonalVaultApp() {
       if (import.meta.env.DEV) console.error('[Coffre personnel] Ouverture impossible.', error);
       setMessage('Ouverture impossible. Vérifiez le nom utilisateur et le mot de passe dédiés.');
     } finally {
-      opening.current = false;
-      setBusy(false);
+      if (openingGeneration.current === generation) { opening.current = false; openingUid.current = null; openingGeneration.current = null; setBusy(false); }
     }
   };
 
   const save = async (andLock = false) => {
-    if (!user || !sessionSecret || sessionSecret.uid !== user.uid || !current.current || saving.current || recoveryBusy || rotationUncertain) return;
+    if (!user || !sessionSecret || sessionSecret.uid !== user.uid || !current.current || saving.current || recoveryBusy || rotationUncertain || lockedDraft || draftProblem) return;
+    const generation = accessGeneration.current;
+    const isCurrent = () => generation === accessGeneration.current && activeSecret.current?.uid === user.uid && personalVaultSessionMatches(user.uid);
+    const assertCurrent = () => { if (!isCurrent()) throw Object.assign(new Error('Session verrouillée.'), { code: 'vault-session-stale' }); };
+    if (!isCurrent()) return;
     saving.current = true;
     setBusy(true);
     setSaveFailed(false);
@@ -137,16 +170,23 @@ export function PersonalVaultApp() {
     try {
       const updated = { ...captured, updatedAt: new Date().toISOString() };
       const saved = await saveVaultAndCodes(updated,
-        (value) => savePersonalVault({ user, payload: value, password: sessionSecret.password }),
+        (value) => { assertCurrent(); return savePersonalVault({ user, payload: value, password: sessionSecret.password, isCurrent }); },
         async (value, receipt) => {
+          assertCurrent();
           if (!bridgeUser) throw new Error('Session de correspondance absente.');
           await saveCodeCorrespondences(bridgeUser, value, receipt);
         }, (error) => {
+          if (!isCurrent()) return;
           const code = (error as { code?: string }).code;
           if (code?.startsWith('code-sync-') && error instanceof Error) setCodeSyncProblem(error.message);
           else if (code === 'vault-conflict') setCodeSyncProblem('Une autre session a enregistré le Coffre. Rouvrez sa dernière version ; l’ancienne confirmation n’a rien écrasé.');
         });
+      assertCurrent();
       acknowledge(saved);
+      if (current.current === captured) {
+        try { forgetLockedVaultDraft(user.uid); } catch { /* A retained encrypted copy is safe to keep. */ }
+        setLockedDraft(null);
+      }
       setCodeSyncPending(saved.codeSyncPending === true);
       setMessage(saved.codeSyncPending
         ? 'Coffre chiffré enregistré. La synchronisation des codes reste à confirmer ; consultez l’attente ci-dessus avant de poursuivre.'
@@ -157,32 +197,80 @@ export function PersonalVaultApp() {
       }
       else if (andLock) setMessage('La sauvegarde est terminée. De nouvelles saisies restent à enregistrer avant de verrouiller.');
     } catch (error) {
+      if (!isCurrent()) return;
+      if (['permission-denied', 'unauthenticated', 'auth/user-disabled', 'auth/user-token-expired', 'auth/invalid-user-token'].includes((error as { code?: string }).code || '')) {
+        lockSession.current('authentication');
+        return;
+      }
       setSaveFailed(true);
       setMessage((error as { code?: string }).code === 'vault-conflict'
         ? 'Le Coffre a changé dans une autre session. Vos saisies restent affichées. Conservez-les avant de rouvrir la dernière version ; aucune modification distante n’a été écrasée.'
         : 'Enregistrement chiffré impossible. Vos saisies restent affichées et vous pouvez réessayer.');
     } finally {
-      saving.current = false;
-      setBusy(false);
+      if (isCurrent()) { saving.current = false; setBusy(false); }
     }
   };
 
-  const performLock = async (pending = codeSyncPending) => {
-    await lockPersonalVault();
-    setUser(null);
+  const clearUnlockedSession = () => {
     accessGeneration.current += 1;
+    activeSecret.current = null;
+    opening.current = false;
+    openingUid.current = null;
+    openingGeneration.current = null;
+    saving.current = false;
+    recoverySnapshot.current = null;
+    recoveringAccess.current = false;
+    setUser(null);
     setSessionSecret(null);
     setBridgeUser(null);
     restore(null, true);
+    setLockedDraft(null);
+    setDraftProblem('');
     setPassword('');
     setConfirmation('');
+    setPasswordVisible(false);
     setRecoveryKit(null);
     setCodeSyncProblem('');
+    setCodeSyncPending(false);
     setRotationUncertain(false);
     setRecoveryConflict(false);
+    setRecoveryBusy(false);
+    setBusy(false);
+  };
+
+  const performLock = async (pending = codeSyncPending) => {
+    clearUnlockedSession();
     setMessage(pending
       ? 'Coffre enregistré et verrouillé. Vérifiez la synchronisation des codes dans la dernière version à la prochaine ouverture.'
       : 'Coffre verrouillé. La clé de déchiffrement a été retirée de la session.');
+    const generation = accessGeneration.current;
+    setBusy(true);
+    try { await lockPersonalVault(); }
+    catch { if (generation === accessGeneration.current) setMessage('Coffre verrouillé localement. La déconnexion du service n’a pas été confirmée ; reconnectez-vous explicitement pour le rouvrir.'); }
+    finally { if (generation === accessGeneration.current) setBusy(false); }
+  };
+
+  lockSession.current = (reason) => {
+    const secret = activeSecret.current;
+    const draft = current.current;
+    const mustPreserve = Boolean(secret && draft && (dirty || saving.current));
+    clearUnlockedSession();
+    const generation = accessGeneration.current;
+    const reasonText = reason === 'authentication' ? 'La session du Coffre a changé.' : reason === 'hidden' ? 'Le Coffre est resté masqué trop longtemps.' : 'La session du Coffre était inactive.';
+    setMessage(`${reasonText} Coffre verrouillé.${mustPreserve ? ' Protection du brouillon en cours…' : ''}`);
+    // Auth changes belong to the SDK. Do not sign out a newly selected identity.
+    if (reason !== 'authentication') {
+      setBusy(true);
+      void lockPersonalVault().catch(() => undefined).finally(() => { if (generation === accessGeneration.current) setBusy(false); });
+    }
+    if (mustPreserve && secret && draft) {
+      void preserveLockedVaultDraft(secret.uid, secret.password, draft).then((durable) => {
+        if (generation !== accessGeneration.current) return;
+        setMessage(`${reasonText} Coffre verrouillé. ${durable ? 'Votre brouillon a été conservé chiffré sur cet appareil ; reconnectez-vous au même Coffre pour le reprendre.' : 'Le brouillon est chiffré dans cet onglet seulement : le stockage local est indisponible. Ne fermez pas cet onglet avant de le reprendre.'}`);
+      }).catch(() => {
+        if (generation === accessGeneration.current) setMessage(`${reasonText} Coffre verrouillé. La protection du brouillon a échoué ; ses dernières saisies n’ont pas pu être conservées.`);
+      });
+    }
   };
 
   const lock = async () => {
@@ -198,16 +286,25 @@ export function PersonalVaultApp() {
     const button = event.target instanceof Element ? event.target.closest('button[aria-label^="Supprimer"]') : null;
     if (button && !confirmRemoval()) { event.preventDefault(); event.stopPropagation(); }
   };
-  const recovered = (session: RecoveredPersonalSession) => {
-    if (!recoverySnapshot.current || current.current !== recoverySnapshot.current.payload) {
+  const recovered = async (session: RecoveredPersonalSession) => {
+    if (!recoverySnapshot.current || recoverySnapshot.current.generation !== accessGeneration.current || !personalVaultSessionMatches(session.personalUser.uid)) return;
+    if (current.current !== recoverySnapshot.current.payload) {
       setRotationUncertain(true);
       setRecoveryConflict(true);
       setMessage('Vos saisies ont changé pendant le secours : elles ont été conservées et aucune réponse ancienne ne les remplace. Conservez-les avant de verrouiller et rouvrir le Coffre.');
       return;
     }
+    const generation = accessGeneration.current;
+    let preserved: PersonalVaultPayload | null = null;
+    let problem = '';
+    try { preserved = await readLockedVaultDraft(session.personalUser.uid, session.password, session.kit.userAlias); }
+    catch { problem = 'Le brouillon local chiffré n’a pas pu être ouvert avec cet accès. Conservez le mot de passe utilisé lors de son verrouillage pour le reprendre.'; }
+    if (generation !== accessGeneration.current || !personalVaultSessionMatches(session.personalUser.uid)) return;
+    setLockedDraft(preserved); setDraftProblem(problem);
     setUser(session.personalUser); setBridgeUser(session.bridgeUser);
     setUserName(session.kit.userAlias); setPassword(''); setConfirmation('');
-    setSessionSecret({ uid: session.personalUser.uid, password: session.password });
+    activeSecret.current = { uid: session.personalUser.uid, password: session.password };
+    setSessionSecret(activeSecret.current);
     setRecoveryKit(session.kit); setRotationUncertain(false); setSaveFailed(false);
     restore(session.payload, true);
     setCodeSyncPending(session.payload.codeSyncPending === true);
@@ -216,9 +313,13 @@ export function PersonalVaultApp() {
     setMessage('Coffre récupéré et déchiffré. Vous pouvez choisir un nouveau mot de passe avec ce kit.');
   };
   const setRecoveryAccessBusy = (active: boolean) => {
-    if (active) recoverySnapshot.current = { payload: current.current };
+    recoveringAccess.current = active;
+    if (active) recoverySnapshot.current = { payload: current.current, generation: accessGeneration.current };
     setRecoveryBusy(active);
   };
+
+  const renderedGeneration = accessGeneration.current;
+  const sessionCallback = <T,>(callback: (value: T) => void | Promise<void>) => (value: T) => { if (renderedGeneration === accessGeneration.current) return callback(value); };
 
   const replaceOwner = (id: string, patch: Partial<PersonalOwnerProfile>) => setPayload((current) => current ? ({
     ...current,
@@ -276,7 +377,7 @@ export function PersonalVaultApp() {
       {payload && <button type="button" onClick={() => void lock()} disabled={busy || recoveryBusy}><LockKeyhole size={16} /> Verrouiller</button>}</nav>
     </header>
     <main>
-      <CodeHandoffSender user={user} bridgeUser={bridgeUser} payload={payload} syncPending={codeSyncPending} blocked={busy || recoveryBusy || dirty || rotationUncertain || codeSyncPending} onBusy={setRecoveryBusy} />
+      <CodeHandoffSender key={accessGeneration.current} user={user} bridgeUser={bridgeUser} payload={payload} syncPending={codeSyncPending} blocked={busy || recoveryBusy || dirty || rotationUncertain || codeSyncPending || Boolean(lockedDraft || draftProblem)} onBusy={sessionCallback(setRecoveryBusy)} />
       {!payload ? <section key="vault-login" className="vault-login-card">
         <div><span className="eyebrow">Identité séparée</span><h1>{creationMode ? 'Créez votre Coffre personnel.' : 'Votre patrimoine privé reste à part.'}</h1><p>Utilisez le même nom utilisateur que dans le Registre, avec un mot de passe différent. Le Coffre centralise propriétaires, transmissions, lieux réels et gestionnaires.</p></div>
         {!personalVaultIsConfigured && <p className="vault-message" role="alert">Le Coffre est temporairement indisponible : son accès séparé doit être rétabli. Vos identifiants ne seront pas envoyés à un autre espace.</p>}
@@ -288,7 +389,7 @@ export function PersonalVaultApp() {
           <div><button className="vault-primary" disabled={busy || recoveryBusy || !personalVaultIsConfigured} type="submit">{busy ? 'Ouverture…' : creationMode ? 'Créer l’accès au Coffre' : 'Entrer dans le Coffre'}</button><button disabled={busy || recoveryBusy} type="button" onClick={() => { setCreationMode((mode) => !mode); setConfirmation(''); setMessage(''); }}>{creationMode ? 'J’ai déjà un accès' : 'Créer l’accès'}</button></div>
           <small><ShieldCheck size={14} /> Les données personnelles sont chiffrées avant envoi. La troisième base ne reçoit que des codes.</small>
         </form>
-        <RecoveryAccessForm disabled={busy || !personalVaultIsConfigured} onRecovered={recovered} onBusy={setRecoveryAccessBusy} />
+        <RecoveryAccessForm key={`recovery-${accessGeneration.current}`} disabled={busy || !personalVaultIsConfigured} onRecovered={sessionCallback(recovered)} onBusy={sessionCallback(setRecoveryAccessBusy)} />
       </section> : <>
         <section className="vault-context">
           <div><span className="eyebrow">Compte patrimonial privé</span><h1>Coffre personnel</h1></div>
@@ -299,12 +400,14 @@ export function PersonalVaultApp() {
           <p>Un seul propriétaire est lié au nom utilisateur. Les codes objets sont fournis en lecture seule par la base de correspondance.</p>
         </section>
 
+        {draftProblem && <section className="vault-note"><p role="alert">{draftProblem} Les modifications sont suspendues pour ne pas remplacer ce brouillon.</p><button type="button" onClick={() => { if (!user || !window.confirm('Supprimer définitivement le brouillon local illisible ? Ses saisies non enregistrées seront perdues.')) return; try { forgetLockedVaultDraft(user.uid); setDraftProblem(''); } catch { /* Keep the warning and protect the draft. */ } }}>Supprimer le brouillon illisible</button></section>}
+        {lockedDraft && <section className="vault-note" aria-label="Brouillon local chiffré"><p>Un brouillon non enregistré a été conservé lors du verrouillage. La version du service est affichée ci-dessous. Reprendre le brouillon remplace le formulaire, sans enregistrer ni écraser la version distante.</p><button type="button" disabled={busy || recoveryBusy || dirty} onClick={() => { restore(lockedDraft, false); setLockedDraft(null); }}>Reprendre mon brouillon</button><button type="button" disabled={busy || recoveryBusy} onClick={() => { if (!user || !window.confirm('Supprimer définitivement ce brouillon local chiffré ?')) return; try { forgetLockedVaultDraft(user.uid); setLockedDraft(null); } catch { setDraftProblem('Le brouillon local n’a pas pu être supprimé.'); } }}>Supprimer ce brouillon</button></section>}
         {rotationUncertain && <p role="alert" className="vault-message">{recoveryConflict ? 'Vos saisies ont changé pendant le secours : elles sont conservées ci-dessous. Aucune réponse ancienne ne les remplace. Conservez-les avant de verrouiller et rouvrir le Coffre ; les modifications sont suspendues.' : 'Le changement d’accès reste à confirmer. Conservez vos saisies, l’ancien et le nouveau mot de passe. Les modifications sont suspendues. Seul un kit encore actif peut permettre une reprise ; un kit remplacé ou révoqué ne le peut pas.'}</p>}
-        <RecoveryAccessForm disabled={busy || recoveryBusy || dirty} onRecovered={recovered} onBusy={setRecoveryAccessBusy} />
+        <RecoveryAccessForm key={`recovery-${accessGeneration.current}`} disabled={busy || recoveryBusy || dirty || Boolean(lockedDraft || draftProblem)} onRecovered={sessionCallback(recovered)} onBusy={sessionCallback(setRecoveryAccessBusy)} />
         {codeSyncPending && <section className="vault-note" aria-label="Synchronisation des codes en attente"><p role="alert">Le Coffre chiffré est enregistré, mais la synchronisation de ses codes n’est pas confirmée dans cette session. Une attente inscrite dans votre dernière sauvegarde chiffrée reste visible après réouverture.</p>{codeSyncProblem && <p role="alert">{codeSyncProblem}</p>}<button type="button" disabled={busy || recoveryBusy || rotationUncertain || dirty} onClick={() => void save()}>Réessayer la synchronisation des codes</button>{dirty && <p>Enregistrez d’abord vos nouvelles saisies.</p>}</section>}
-        {bridgeUser && sessionSecret && <PersonalRecoveryPanel key={`${user!.uid}:${recoveryKit?.credentialId || 'password'}`} user={user!} bridgeUser={bridgeUser} password={sessionSecret.password} payload={{ ...payload, codeSyncPending }} dirty={dirty} kit={recoveryKit} blocked={busy || rotationUncertain} onBusy={setRecoveryBusy} onUncertain={() => setRotationUncertain(true)} onPasswordChanged={(nextPassword, kit) => { setSessionSecret({ uid: user!.uid, password: nextPassword }); setRecoveryKit(kit); setRotationUncertain(false); }} />}
+        {bridgeUser && sessionSecret && <PersonalRecoveryPanel key={`${user!.uid}:${recoveryKit?.credentialId || 'password'}`} user={user!} bridgeUser={bridgeUser} password={sessionSecret.password} payload={{ ...payload, codeSyncPending }} dirty={dirty} kit={recoveryKit} blocked={busy || rotationUncertain || Boolean(lockedDraft || draftProblem)} onBusy={sessionCallback(setRecoveryBusy)} onUncertain={() => { if (renderedGeneration === accessGeneration.current) setRotationUncertain(true); }} onPasswordChanged={(nextPassword, kit) => { if (renderedGeneration !== accessGeneration.current || activeSecret.current?.uid !== user!.uid) return; activeSecret.current = { uid: user!.uid, password: nextPassword }; setSessionSecret(activeSecret.current); setRecoveryKit(kit); setRotationUncertain(false); }} />}
 
-        <fieldset className="vault-editable-sections" disabled={recoveryBusy || rotationUncertain} onClickCapture={guardRemoval}>
+        <fieldset className="vault-editable-sections" disabled={recoveryBusy || rotationUncertain || Boolean(lockedDraft || draftProblem)} onClickCapture={guardRemoval}>
         <section className="vault-section">
           <header><div><span className="eyebrow">Identités et coordonnées</span><h2>Propriétaires des biens</h2></div><strong>{payload.owners.length}</strong></header>
           <div className="vault-entity-list">{payload.owners.map((owner, ownerIndex) => <article className="vault-entity-card" key={owner.id}>
@@ -349,7 +452,7 @@ export function PersonalVaultApp() {
         <section className="vault-bridge-summary"><Link2 size={20} /><div><strong>Base de correspondance indépendante</strong><p>Elle ne conserve que numéros clients, codes objets, codes transmission, codes lieux et codes gestionnaires. Aucun nom, adresse, email ou instruction.</p></div></section>
         </fieldset>
 
-        <div className="vault-savebar"><div><span role="status">{busy ? 'Enregistrement en cours…' : recoveryBusy ? 'Moyens de secours : opération en cours…' : dirty ? 'Modifications non enregistrées. Pensez à enregistrer avant de quitter.' : message || 'Toutes les modifications sont enregistrées.'}</span>{saveFailed && <p role="alert">{message}</p>}</div><div className="vault-savebar__actions"><button className="vault-primary" type="button" disabled={busy || recoveryBusy || rotationUncertain} onClick={() => void save()}><Save size={16} /> Chiffrer et enregistrer</button><button type="button" disabled={busy || recoveryBusy || rotationUncertain} onClick={() => void save(true)}><LockKeyhole size={16} /> Enregistrer et verrouiller</button></div></div>
+        <div className="vault-savebar"><div><span role="status">{busy ? 'Enregistrement en cours…' : recoveryBusy ? 'Moyens de secours : opération en cours…' : dirty ? 'Modifications non enregistrées. Pensez à enregistrer avant de quitter.' : message || 'Toutes les modifications sont enregistrées.'}</span>{saveFailed && <p role="alert">{message}</p>}</div><div className="vault-savebar__actions"><button className="vault-primary" type="button" disabled={busy || recoveryBusy || rotationUncertain || Boolean(lockedDraft || draftProblem)} onClick={() => void save()}><Save size={16} /> Chiffrer et enregistrer</button><button type="button" disabled={busy || recoveryBusy || rotationUncertain || Boolean(lockedDraft || draftProblem)} onClick={() => void save(true)}><LockKeyhole size={16} /> Enregistrer et verrouiller</button></div></div>
       </>}
       {!payload && message && <p className="vault-message" role="status">{message}</p>}
     </main>

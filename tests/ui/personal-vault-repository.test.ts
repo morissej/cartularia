@@ -43,6 +43,15 @@ describe('Coffre : les sessions anciennes ne réécrivent pas une nouvelle envel
     expect(state.writes).toBe(0);
     expect(state.document.ciphertext).toBe(rotated.ciphertext);
   });
+  it('annule avant la transaction si la session est verrouillée pendant le chiffrement', async () => {
+    const payload = emptyPersonalVaultPayload('Atlas');
+    await loadPersonalVault({ user, userAlias: 'Atlas', password });
+    let active = true;
+    const save = savePersonalVault({ user, payload, password, isCurrent: () => active });
+    active = false;
+    await expect(save).rejects.toMatchObject({ code: 'vault-session-stale' });
+    expect(state.writes).toBe(0);
+  });
   it('AC04 : ne donne jamais au pont le timestamp d’une version remplacée avant la confirmation', async () => {
     const payload = emptyPersonalVaultPayload('Atlas');
     await loadPersonalVault({ user, userAlias: 'Atlas', password });

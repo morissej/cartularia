@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PersonalVaultApp } from '../../src/personalVault/PersonalVaultApp';
 import { emptyPersonalVaultPayload } from '../../src/personalVault/types';
 
-const mocks = vi.hoisted(() => ({ recover: vi.fn(), save: vi.fn(), authenticate: vi.fn(), load: vi.fn(), lock: vi.fn() }));
+const mocks = vi.hoisted(() => ({ sessionLock: null as null | ((reason: string) => void), recover: vi.fn(), save: vi.fn(), authenticate: vi.fn(), load: vi.fn(), lock: vi.fn() }));
+vi.mock('../../src/personalVault/sessionSecurity', () => ({ observePersonalVaultSession: ({ onLock }: { onLock: (reason: string) => void }) => { mocks.sessionLock = onLock; return () => {}; }, personalVaultSessionMatches: () => true }));
 vi.mock('../../src/personalVault/firebase', () => ({ personalVaultIsConfigured: true, personalVaultProjectId: 'vault-test' }));
 vi.mock('../../src/personalVault/repository', () => ({ authenticatePersonalVault: mocks.authenticate, loadPersonalVault: mocks.load, savePersonalVault: mocks.save, lockPersonalVault: mocks.lock }));
 vi.mock('../../src/personalVault/codeBridgeRepository', () => ({ loadOwnerObjectCodes: async () => new Map(), saveCodeCorrespondences: async () => undefined }));
@@ -37,6 +38,15 @@ describe('récupération du Coffre et réponses retardées', () => {
     expect((screen.getByRole('button', { name: 'Verrouiller', exact: true }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => resolve({ personalUser: { uid: 'owner' }, bridgeUser: null, payload: emptyPersonalVaultPayload('atlas'), password: 'test-only', kit: { userAlias: 'atlas', credentialId: 'kit-test' } }));
     expect(screen.getByLabelText('Nom', { exact: true }).closest('fieldset')?.disabled).toBe(false);
+  });
+  it('écarte une récupération terminée après le verrouillage de la session', async () => {
+    let resolve!: (value: unknown) => void; mocks.recover.mockImplementation(() => new Promise((done) => { resolve = done; }));
+    await open(); await begin();
+    act(() => mocks.sessionLock?.('authentication'));
+    expect(screen.queryByLabelText('Nom', { exact: true })).toBeNull();
+    await act(async () => resolve({ personalUser: { uid: 'owner' }, bridgeUser: null, payload: emptyPersonalVaultPayload('atlas'), password: 'test-only', kit: { userAlias: 'atlas', credentialId: 'kit-test' } }));
+    expect(screen.queryByLabelText('Nom', { exact: true })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Entrer dans le Coffre' }) as HTMLButtonElement).disabled).toBe(false);
   });
   it('refuse malgré tout une réponse ancienne si une saisie a changé programmatiquement', async () => {
     let resolve!: (value: unknown) => void; mocks.recover.mockImplementation(() => new Promise((done) => { resolve = done; }));

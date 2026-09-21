@@ -26,7 +26,12 @@ vi.mock('firebase/functions', () => ({
       beginRegistryRecovery: () => state.commands!.begin(data),
       completeRegistryRecovery: () => state.commands!.complete(data),
     };
-    return { data: await handlers[name]() };
+    try { return { data: await handlers[name]() }; }
+    catch (error) {
+      // Match the callable boundary's normalization of shared command errors.
+      if (error && typeof error === 'object' && 'code' in error) error.code = String(error.code).replaceAll('_', '-');
+      throw error;
+    }
   },
 }));
 
@@ -52,7 +57,7 @@ let tokensValidAfterTime: string | undefined;
 let database: ReturnType<typeof makeDb>;
 beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto);
-  state.auth.currentUser = user; state.context = { uid: user.uid, token: { auth_time: Date.now() / 1000 } };
+  state.auth.currentUser = user; state.context = { uid: user.uid, token: { auth_time: Math.floor(Date.now() / 1000) } };
   state.calls = []; state.passwords = []; suspended = false; tokensValidAfterTime = undefined;
   database = makeDb();
   state.commands = createRegistryRecoveryCommands({ db: database, projectId: 'registry-test', auth: {

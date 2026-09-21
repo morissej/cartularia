@@ -9,6 +9,7 @@ import { buildCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY }
 import { CAR_SCHEMA_FIELDS } from '../src/schema/carSchema.ts';
 import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { presentationVariantPath } from '../scripts/lib/presentation-variants.mjs';
+import { createPrivateOriginalStorage, verifiedPrivateBinary } from './helpers/private-original-fixture.mjs';
 
 const projectId = 'cartularia-create-test';
 const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
@@ -33,8 +34,10 @@ const expectedCoverThumbnail = () => ({ kind: 'inline', dataUrl: COVER_THUMBNAIL
 let testEnvironment;
 let adminApp;
 let firestore;
+let storage;
 
 const seed = async () => {
+  storage = createPrivateOriginalStorage();
   const profile = {
     profileVersion: '1.0.0',
     assetType: 'watch',
@@ -111,14 +114,14 @@ const seed = async () => {
     firestore.doc(`${draftPath}/state/cartularia-specification-groups`).set({
       key: 'cartularia-specification-groups', value: JSON.stringify(specifications), deleted: false, revision: 1, clientUpdatedAt: 11,
     }),
-    firestore.doc(`${draftPath}/binaries/bin_rolex_cover_0000000001`).set({
-      binaryId: 'bin_rolex_cover_0000000001', deleted: false, revision: 1,
+    firestore.doc(`${draftPath}/binaries/bin_rolex_cover_0000000001`).set(verifiedPrivateBinary({
+      ownerUid, cartularyId, binaryId: 'bin_rolex_cover_0000000001', deleted: false, revision: 1,
       fileName: 'L1210082.jpg', mimeType: 'image/jpeg', size: 3456789,
       sha256: `sha256:${'a'.repeat(64)}`, kind: 'media',
       storagePath: `private-drafts/${ownerUid}/${cartularyId}/bin_rolex_cover_0000000001/${'a'.repeat(64)}/original`,
       uploadStatus: 'ready', clientUpdatedAt: 10, verificationStatus: 'accepted',
       presentationDerivative: coverPresentationDerivative(),
-    }),
+    })),
     firestore.doc(`cartularyCreateRequests/${cartularyId}`).set({
       requestDocumentId: cartularyId,
       requestId,
@@ -130,6 +133,7 @@ const seed = async () => {
       status: 'pending',
     }),
   ]);
+  storage.register((await firestore.doc(`${draftPath}/binaries/bin_rolex_cover_0000000001`).get()).data());
 };
 
 before(async () => {
@@ -149,7 +153,7 @@ after(async () => {
 });
 
 test('la demande privée crée un Cartulaire secret, une projection minimale puis raccorde le média', async () => {
-  const created = await processCartularyCreateRequest({
+  const created = await processCartularyCreateRequest({ storage,
     firestore,
     requestDocumentId: cartularyId,
     occurredAt: '2026-08-16T09:01:00.000Z',
@@ -189,7 +193,7 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
   assert.equal(requestAfterCreate.data().status, 'processed');
   assert.equal(syncRequest.data().status, 'pending');
 
-  const synchronized = await processCartularySyncRequest({
+  const synchronized = await processCartularySyncRequest({ storage,
     firestore,
     requestDocumentId: cartularyId,
     occurredAt: '2026-08-16T09:02:00.000Z',
@@ -215,15 +219,15 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
 });
 
 test('une demande déjà traitée est ignorée sans créer de doublon', async () => {
-  await processCartularyCreateRequest({ firestore, requestDocumentId: cartularyId });
-  const replay = await processCartularyCreateRequest({ firestore, requestDocumentId: cartularyId });
+  await processCartularyCreateRequest({ storage, firestore, requestDocumentId: cartularyId });
+  const replay = await processCartularyCreateRequest({ storage, firestore, requestDocumentId: cartularyId });
   assert.deepEqual(replay, { requestDocumentId: cartularyId, status: 'ignored', reason: 'not_pending' });
   assert.equal((await firestore.collection(`cartularies/${cartularyId}/ownerRelations`).get()).size, 1);
 });
 
 test('une collection archivée bloque la création avant toute écriture du Cartulaire', async () => {
   await firestore.doc('registries/reg_collection_privee/collections/col_pilots').update({ status: 'archived' });
-  await assert.rejects(processCartularyCreateRequest({ firestore, requestDocumentId: cartularyId }), (error) => error.code === 'collection_not_ready');
+  await assert.rejects(processCartularyCreateRequest({ storage, firestore, requestDocumentId: cartularyId }), (error) => error.code === 'collection_not_ready');
   assert.equal((await firestore.doc(`cartularies/${cartularyId}`).get()).exists, false);
 });
 
@@ -239,8 +243,8 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
     batch.set(section.collection('fields').doc(field.fieldId), JSON.parse(JSON.stringify(field)));
   }
   await batch.commit();
-  await processCartularyCreateRequest({ firestore, requestDocumentId: cartularyId });
-  await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId });
+  await processCartularyCreateRequest({ storage, firestore, requestDocumentId: cartularyId });
+  await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId });
   const rootRef = firestore.doc(`cartularies/${cartularyId}`);
   const beforeEdit = (await rootRef.get()).data();
   assert.equal(beforeEdit.assetType, 'car'); assert.equal(beforeEdit.modelName, 'Voiture');
@@ -255,7 +259,7 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   await genericStateRef.set({ key: 'cartularia-generic-sections', value: JSON.stringify(payload), deleted: false, revision: 1, clientUpdatedAt: 20 });
   const syncRef = firestore.doc(`cartularySyncRequests/${cartularyId}`);
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_generic_edit_0001', ownerUid, cartularyId, status: 'pending' });
-  await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId });
+  await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId });
   const afterEdit = (await rootRef.get()).data();
   const itemAfterEdit = (await firestore.doc(`registries/reg_collection_privee/items/${cartularyId}`).get()).data();
   assert.equal(afterEdit.modelName, 'Voiture corrigée'); assert.equal(itemAfterEdit.modelName, 'Voiture corrigée');
@@ -270,15 +274,15 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   const audits = await rootRef.collection('auditEvents').orderBy('sequence').get();
   assert.equal(verifyAuditChain({ events: audits.docs.map((document) => document.data()), integrityHead: afterEdit.integrityHead, integritySequence: afterEdit.integritySequence }).valid, true);
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_generic_retry_0002', ownerUid, cartularyId, status: 'pending' });
-  assert.equal((await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
+  assert.equal((await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
   await genericStateRef.update({ value: JSON.stringify({ ...payload, edits: [{ fieldId: 'cover.car.model', value: 'Écrasement obsolète' }] }), revision: 2 });
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_generic_stale_0003', ownerUid, cartularyId, status: 'pending' });
-  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: cartularyId }), (error) => error.code === 'revision_conflict');
+  await assert.rejects(processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId }), (error) => error.code === 'revision_conflict');
   assert.equal((await rootRef.get()).data().modelName, 'Voiture corrigée');
   await genericStateRef.update({ value: JSON.stringify({ ...payload, baseRevision: afterEdit.revision, edits: [{ fieldId: 'cover.car.model', value: 'Accès retiré' }] }), revision: 3 });
   await firestore.doc(`organizations/org_demo/memberships/${ownerUid}`).update({ roles: ['read_only'], permissions: ['cartulary.read'] });
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_generic_denied_0004', ownerUid, cartularyId, status: 'pending' });
-  await assert.rejects(processCartularySyncRequest({ firestore, requestDocumentId: cartularyId }), (error) => error.code === 'permission_denied');
+  await assert.rejects(processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId }), (error) => error.code === 'permission_denied');
   assert.equal((await rootRef.get()).data().modelName, 'Voiture corrigée');
 
   // V5 lot B (§ 5.8) : revue « Dossier complet » par le propriétaire éditeur rétabli. Le marqueur review n'applique pas
@@ -291,7 +295,7 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   await firestore.doc(`${draftPath}/state/cartularia-generic-operation`).set({ key: 'cartularia-generic-operation', value: JSON.stringify({ kind: REVIEW_OPERATION_KIND, token: reviewToken }), deleted: false, revision: 1, clientUpdatedAt: 41 });
   // Relecture du lot B (F3) : la demande porte son propre identifiant (forme production `sync_…`), distinct du jeton.
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_review_complete_car_0001', ownerUid, cartularyId, status: 'pending' });
-  const reviewed = await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId, occurredAt: '2026-08-16T09:30:00.000Z' });
+  const reviewed = await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId, occurredAt: '2026-08-16T09:30:00.000Z' });
   assert.deepEqual([reviewed.outcome, reviewed.revision], ['updated', beforeReview.revision + 1]);
   const afterReview = (await rootRef.get()).data();
   const itemAfterReview = (await firestore.doc(`registries/reg_collection_privee/items/${cartularyId}`).get()).data();
@@ -306,24 +310,26 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   assert.equal(JSON.stringify(reviewAudits.docs.at(-1).data()).includes(reviewToken), false, 'le jeton d’opération n’entre pas dans la chaîne de preuves');
   assert.equal(verifyAuditChain({ events: reviewAudits.docs.map((document) => document.data()), integrityHead: afterReview.integrityHead, integritySequence: afterReview.integritySequence }).valid, true);
   await syncRef.set({ requestDocumentId: cartularyId, requestId: 'sync_review_replay_car_0002', ownerUid, cartularyId, status: 'pending' });
-  assert.equal((await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
+  assert.equal((await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
   assert.equal((await rootRef.get()).data().lastVerifiedAt, '2026-08-16T09:30:00.000Z');
 });
 
 test('enrichissement média explicite : ajout vérifié, autorisation, retrait et rejeu sans résurrection', async () => {
-  await processCartularyCreateRequest({ firestore, requestDocumentId: cartularyId });
-  await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId });
+  await processCartularyCreateRequest({ storage, firestore, requestDocumentId: cartularyId });
+  await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId });
   const rootRef = firestore.doc(`cartularies/${cartularyId}`);
   const mediaRef = firestore.doc(`${draftPath}/state/cartularia-generic-media`);
   const requestRef = firestore.doc(`cartularySyncRequests/${cartularyId}`);
-  await firestore.doc(`${draftPath}/binaries/bin_added_verified`).set({ ownerUid, cartularyId, binaryId: 'bin_added_verified', deleted: false, revision: 1, kind: 'media', mimeType: 'image/jpeg', fileName: 'ajout.jpg', size: 3,
+  const addedBinary = verifiedPrivateBinary({ ownerUid, cartularyId, binaryId: 'bin_added_verified', deleted: false, revision: 1, kind: 'media', mimeType: 'image/jpeg', fileName: 'ajout.jpg', size: 3,
     sha256: `sha256:${'b'.repeat(64)}`, storagePath: `private-drafts/${ownerUid}/${cartularyId}/bin_added_verified/${'b'.repeat(64)}/original`, uploadStatus: 'ready', verificationStatus: 'accepted' });
+  await firestore.doc(`${draftPath}/binaries/bin_added_verified`).set(addedBinary);
+  storage.register(addedBinary);
   const syncMutation = async (mutation, token) => {
     const current = (await rootRef.get()).data();
     await mediaRef.set({ key: 'cartularia-generic-media', value: JSON.stringify({ version: 1, baseRevision: current.revision, ...mutation }), deleted: false, revision: current.revision, clientUpdatedAt: 50 + current.revision });
     await firestore.doc(`${draftPath}/state/cartularia-generic-operation`).set({ key: 'cartularia-generic-operation', value: JSON.stringify({ kind: 'media', token }), deleted: false, revision: current.revision, clientUpdatedAt: 50 + current.revision });
     await requestRef.set({ requestDocumentId: cartularyId, requestId: token, ownerUid, cartularyId, status: 'pending' });
-    const result = await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId });
+    const result = await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId });
     assert.equal((await rootRef.get()).data().lastGenericOperationToken, token);
     return result;
   };
@@ -346,7 +352,7 @@ test('enrichissement média explicite : ajout vérifié, autorisation, retrait e
   assert.equal((await rootRef.collection('assets').doc('asset_added').get()).data().projectionStatus, 'withdrawn');
   await firestore.doc(`${draftPath}/state/cartularia-user-alias`).set({ key: 'cartularia-user-alias', value: JSON.stringify('Alias mis à jour'), deleted: false, revision: 1, clientUpdatedAt: 100 });
   await requestRef.set({ requestDocumentId: cartularyId, requestId: 'sync_media_later_005', ownerUid, cartularyId, status: 'pending' });
-  await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId });
+  await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId });
   assert.equal((await rootRef.collection('assets').doc('asset_added').get()).data().projectionStatus, 'withdrawn');
   await firestore.doc('registries/reg_collection_privee/collections/col_after_generic').set({ id: 'col_after_generic', registryId: 'reg_collection_privee', organizationId: 'org_demo', status: 'draft' });
   await firestore.doc(`${draftPath}/state/cartularia-collection-id`).set({ key: 'cartularia-collection-id', value: JSON.stringify('col_after_generic'), deleted: false, revision: 2, clientUpdatedAt: 101 });
@@ -354,11 +360,11 @@ test('enrichissement média explicite : ajout vérifié, autorisation, retrait e
   const legacyMedia = JSON.parse((await legacyMediaRef.get()).data().value);
   await legacyMediaRef.update({ value: JSON.stringify(legacyMedia.map((asset) => ({ ...asset, name: 'Nom changé dans le parcours normal' }))), revision: 2, clientUpdatedAt: 102 });
   await requestRef.set({ requestDocumentId: cartularyId, requestId: 'sync_legacy_after_generic_006', ownerUid, cartularyId, status: 'pending' });
-  await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId });
+  await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId });
   assert.equal((await rootRef.get()).data().collectionId, 'col_after_generic');
   assert.equal((await rootRef.collection('assets').doc('asset_rolex_cover').get()).data().displayName, 'Nom changé dans le parcours normal');
   assert.equal((await firestore.doc(`${draftPath}/binaries/bin_added_verified`).get()).data().deleted, false);
   await requestRef.set({ requestDocumentId: cartularyId, requestId: 'sync_media_replay_004', ownerUid, cartularyId, status: 'pending' });
-  assert.equal((await processCartularySyncRequest({ firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
+  assert.equal((await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId })).outcome, 'no_change');
   assert.equal((await rootRef.collection('assets').doc('asset_added').get()).data().projectionStatus, 'withdrawn');
 });

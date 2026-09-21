@@ -26,7 +26,7 @@ import {
   type WatchCartularyCreationProfile,
 } from '../domain/cartularyCreation.ts';
 import { db, storage } from '../firebase.ts';
-import { scopedStorageForCartulary } from '../persistence/localVault.ts';
+import { scopedStorageForIdentity } from '../persistence/localVault.ts';
 import { validateFileForUpload, type TrustedFileInspection } from '../security/fileValidation.ts';
 import { runBoundedPreloadQueue } from '../utils/boundedPreloadQueue.ts';
 import { waitForPrivateUploadVerification } from './privateUploadVerification.ts';
@@ -322,7 +322,7 @@ export const createCartulary = async ({
     writeState('cartularia-public-code', publicCode),
   ]);
 
-  const targetStorage = scopedStorageForCartulary(window.localStorage, cartularyId);
+  const targetStorage = scopedStorageForIdentity(window.localStorage, user.uid, cartularyId);
   targetStorage.setItem('cartularia-creation-profile', JSON.stringify(creationProfile));
   targetStorage.setItem('cartularia-specification-groups', JSON.stringify(specifications));
   targetStorage.setItem('cartularia-media-assets-v3', JSON.stringify(mediaAssets));

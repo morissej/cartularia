@@ -31,25 +31,33 @@ const DEMO = '/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060';
 const DEMO_TITLE = 'Cartulaire Rolex Submariner · Cartularia';
 // `title` : identité attendue de la scène (document.title exact) — une route cassée servirait la page 404 « Page introuvable » ou l'écran d'erreur, audités « sans erreur » sinon.
 // `openAbsentOn` : seule fenêtre où le déclencheur peut manquer (menu mobile de l'accueil) ; ailleurs, un déclencheur absent est une assertion en échec.
-const SERVICE_TITLES = { accessibilite: 'Accessibilité', conditions: 'Conditions d’utilisation du pilote', confidentialite: 'Confidentialité et données', service: 'Disponibilité et limites' };
+const SERVICE_TITLES = { accessibilite: 'Accessibilité', conditions: 'Conditions d’utilisation du pilote', service: 'Disponibilité et limites' };
 const scenes = [
-  { name: 'accueil', path: '/', title: 'Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers' },
-  { name: 'accueil-menu', path: '/', title: 'Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers', open: '.public-menu-trigger', openAbsentOn: 'desktop-1440' },
+  { name: 'accueil', path: '/', title: 'Cartularia · Le dossier vivant de vos objets patrimoniaux' },
+  { name: 'accueil-menu', path: '/', title: 'Cartularia · Le dossier vivant de vos objets patrimoniaux', open: '.public-menu-trigger', openAbsentOn: 'desktop-1440' },
+  { name: 'objets', path: '/objets', title: 'Les objets documentés dans Cartularia · Cartularia' },
+  { name: 'aide-documentaire', path: '/aide-documentaire', title: 'Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ? · Cartularia' },
+  { name: 'conseils-photo-video', path: '/conseils-photo-video', title: 'Prendre vos photos et vidéos vous-même · Cartularia' },
+  { name: 'livrable-cartulaire', path: '/livrables/cartulaire', title: 'Le Cartulaire · Cartularia' },
   ...['cover', 'media', 'reference', 'condition', 'value', 'publication'].map((anchor) => ({ name: `demo-${anchor}`, path: `${DEMO}#${anchor}`, title: DEMO_TITLE, demo: true })),
   { name: 'demo-preuves', path: `${DEMO}#cover`, title: DEMO_TITLE, demo: true, open: '.page-tabs__audit' },
   { name: 'demo-a-faire', path: `${DEMO}#cover`, title: DEMO_TITLE, demo: true, open: '.todo-trigger' },
-  ...['accessibilite', 'conditions', 'confidentialite', 'service'].map((page) => ({ name: page, path: `/${page}`, title: `${SERVICE_TITLES[page]} · Cartularia` })),
+  ...['accessibilite', 'conditions', 'service'].map((page) => ({ name: page, path: `/${page}`, title: `${SERVICE_TITLES[page]} · Cartularia` })),
+  { name: 'confidentialite', path: '/confidentialite', title: 'Politique de protection des données personnelles — Cartularia' },
   { name: 'sign-in', path: '/account/sign-in', title: 'Connexion · Cartularia' },
   { name: 'not-found', path: '/page-inexistante', title: 'Page introuvable · Cartularia' },
 ];
 const viewports = [
   { name: 'mobile-390', width: 390, height: 844, mobile: true, scale: 3 },
+  // Reflow équivalent au zoom navigateur 200 % d'une fenêtre physique 1440 × 900.
+  { name: 'desktop-zoom-200', width: 720, height: 450, mobile: false, scale: 2 },
   { name: 'desktop-1440', width: 1440, height: 900, mobile: false, scale: 1 },
 ];
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'best-practice'];
 const BLOCKING = new Set(['serious', 'critical']);
-// Règles dont un nœud « à vérifier » vaut échec : aria-label sur un div sans rôle porteur de texte (axe ne tranche pas quand l'élément a un contenu).
-const NEVER_INCOMPLETE = new Set(['aria-prohibited-attr']);
+// Règles dont un nœud « à vérifier » vaut échec : elles signalent ici un contrat ARIA objectivement invalide,
+// même lorsqu'axe classe le résultat dans son canal manuel `incomplete`.
+const NEVER_INCOMPLETE = new Set(['aria-prohibited-attr', 'aria-valid-attr-value']);
 // Motif construit par concaténation : la garde du contrat parcourt scripts/ et ne doit pas se lire elle-même (C4).
 const FAULTY_TITLE = 'mini' + ' -site';
 
@@ -165,7 +173,7 @@ try {
       }
       entry.checks = evaluateChecks(scene, viewport, await evaluate(CHECKS), ready);
       const neverIncomplete = results.incomplete.filter((rule) => NEVER_INCOMPLETE.has(rule.id));
-      entry.checks.push({ name: 'aucun nœud à vérifier sur aria-prohibited-attr', ok: neverIncomplete.length === 0, detail: neverIncomplete.map((rule) => `${rule.id} × ${rule.nodes} (${rule.target})`).join(' ; ') || 'aucun' });
+      entry.checks.push({ name: 'aucun contrat ARIA invalide dans les nœuds à vérifier', ok: neverIncomplete.length === 0, detail: neverIncomplete.map((rule) => `${rule.id} × ${rule.nodes} (${rule.target})`).join(' ; ') || 'aucun' });
       report.scenes.push(entry);
       await browser.send('Target.closeTarget', { targetId });
       console.error(`${viewport.name} ${scene.name} : ${entry.blocking} bloquante(s), ${entry.allowed} tolérée(s), ${entry.other} mineure(s), ${entry.toReview} à vérifier, assertions ${entry.checks.filter((c) => !c.ok).length} en échec`);

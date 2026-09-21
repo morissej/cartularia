@@ -58,18 +58,24 @@ export const loadPersonalVault = async ({
   user,
   userAlias,
   password,
+  isCurrent = () => true,
 }: {
   user: User;
   userAlias: string;
   password: string;
+  isCurrent?: () => boolean;
 }) => {
+  const assertCurrent = () => { if (!isCurrent()) throw Object.assign(new Error('Ouverture du Coffre remplacée.'), { code: 'vault-opening-stale' }); };
+  assertCurrent();
   const { db } = configuredServices();
   const accountId = await vaultAccountDocumentId(userAlias);
   const snapshot = await getDocFromServer(accountReference(db, user.uid));
+  assertCurrent();
   if (!snapshot.exists()) { rememberPersonalVaultCiphertext(user.uid, null); return null; }
   const document = snapshot.data() as EncryptedPersonalAccount;
   if (document.ownerUid !== user.uid || document.accountId !== accountId) throw new Error('Référence de coffre incohérente.');
   const decrypted = await decryptPersonalPayload<PersonalVaultPayload>({ envelope: document, password, userAlias });
+  assertCurrent();
   rememberPersonalVaultCiphertext(user.uid, document.ciphertext);
   return migratePersonalVaultPayload(decrypted, userAlias);
 };
@@ -78,22 +84,29 @@ export const savePersonalVault = async ({
   user,
   payload,
   password,
+  isCurrent = () => true,
 }: {
   user: User;
   payload: PersonalVaultPayload;
   password: string;
+  isCurrent?: () => boolean;
 }): Promise<PersonalVaultSaveReceipt> => {
+  const assertCurrent = () => { if (!isCurrent()) throw Object.assign(new Error('Session du Coffre verrouillée.'), { code: 'vault-session-stale' }); };
+  assertCurrent();
   const { db } = configuredServices();
   const accountId = await vaultAccountDocumentId(payload.userName);
   const expectedCiphertext = lastLoadedCiphertexts.get(user.uid);
   const envelope = await encryptPersonalPayload({ payload, password, userAlias: payload.userName });
+  assertCurrent();
   await runTransaction(db, async (transaction) => {
+    assertCurrent();
     const reference = accountReference(db, user.uid);
     const snapshot = await transaction.get(reference);
     const remoteCiphertext = snapshot.exists() ? snapshot.data().ciphertext : null;
     if (expectedCiphertext === undefined || remoteCiphertext !== expectedCiphertext) {
       throw Object.assign(new Error('Le Coffre a changé dans une autre session. Vos saisies restent affichées.'), { code: 'vault-conflict' });
     }
+    assertCurrent();
     transaction.set(reference, {
       schemaVersion: 'encrypted-personal-account@2.0.0',
       ownerUid: user.uid,
@@ -102,10 +115,12 @@ export const savePersonalVault = async ({
       updatedAt: serverTimestamp(),
     });
   });
+  assertCurrent();
   rememberPersonalVaultCiphertext(user.uid, envelope.ciphertext);
   // serverTimestamp is resolved only after the commit. Never publish codes
   // using a client clock or the timestamp of another session's later write.
   const confirmed = await getDocFromServer(accountReference(db, user.uid));
+  assertCurrent();
   if (!confirmed.exists() || confirmed.data().ciphertext !== envelope.ciphertext) {
     throw Object.assign(new Error('Le Coffre a changé avant confirmation de la sauvegarde.'), { code: 'vault-conflict' });
   }

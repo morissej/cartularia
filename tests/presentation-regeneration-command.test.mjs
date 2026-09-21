@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import sharp from 'sharp';
 import {
@@ -17,6 +17,7 @@ import {
 import { PRIVATE_UPLOAD_VERIFICATION_VERSION } from '../scripts/lib/private-upload-command.mjs';
 import { presentationVariantPath, validRegistryThumbnail } from '../scripts/lib/presentation-variants.mjs';
 import { createMemoryFirestore } from './helpers/memory-firestore.mjs';
+import { createMemoryStorage, attestStoredManifest } from './helpers/verified-original-storage.mjs';
 
 const digestOf = (bytes) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 const UID = 'owner_v3_regeneration';
@@ -27,26 +28,15 @@ const ORGANIZATION = 'org_v3_regeneration';
 const REMOTE_ENV = { GCLOUD_PROJECT: 'cartularia-prod-simule' };
 const EMULATOR_ENV = { FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080' };
 
-const createMemoryStorage = () => {
-  const blobs = new Map();
-  const journal = [];
-  const bucket = {
-    file: (path) => ({
-      name: path,
-      save: async (bytes, options) => { blobs.set(path, { bytes: Buffer.from(bytes), options }); journal.push(`save:${path}`); },
-      download: async (options) => {
-        if (!blobs.has(path)) throw Object.assign(new Error(`No such object: ${path}`), { code: 404 });
-        if (options?.destination) { await writeFile(options.destination, blobs.get(path).bytes); return []; }
-        return [blobs.get(path).bytes];
-      },
-      exists: async () => [blobs.has(path)],
-    }),
-    getFiles: async ({ prefix }) => [[...blobs.keys()].filter((name) => name.startsWith(prefix)).sort().map((name) => bucket.file(name))],
-  };
-  return { blobs, journal, storage: { bucket: () => bucket } };
+const image = (width, height, background = '#5a4a3a') => sharp({ create: { width, height, channels: 3, background } }).jpeg().toBuffer();
+const failRegenerationDecoding = (context) => {
+  const toBuffer = sharp.prototype.toBuffer;
+  context.mock.method(sharp.prototype, 'toBuffer', function (...args) {
+    if (String(this.options?.input?.file || '').includes('cartularia-regenerate-')) return Promise.reject(new Error('Simulated decoder failure.'));
+    return toBuffer.apply(this, args);
+  });
 };
 
-const image = (width, height, background = '#5a4a3a') => sharp({ create: { width, height, channels: 3, background } }).jpeg().toBuffer();
 
 /** Objet de recette : trois binaires image (un sans dérivé, un déjà courant, un rejeté), un PDF, deux assets, un item. */
 const seed = async () => {
@@ -57,11 +47,14 @@ const seed = async () => {
   const addBinary = async (binaryId, bytes, overrides = {}) => {
     const digest = digestOf(bytes);
     const storagePath = `private-drafts/${UID}/${CARTULARY}/${binaryId}/${digest.replace('sha256:', '')}/original`;
-    await bucket.file(storagePath).save(bytes, { metadata: { contentType: 'image/jpeg', metadata: { ownerUid: UID, cartularyId: CARTULARY, binaryId, sha256: digest, kind: 'media' } } });
-    await firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/${binaryId}`).set({
+    const manifest = {
       ownerUid: UID, cartularyId: CARTULARY, binaryId, kind: 'media', fileName: `${binaryId}.jpg`, mimeType: 'image/jpeg', size: bytes.length, sha256: digest, storagePath,
       deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION, ...overrides,
-    });
+    };
+    await bucket.file(storagePath).save(bytes, { metadata: { contentType: manifest.mimeType, metadata: {
+      ownerUid: UID, cartularyId: CARTULARY, binaryId, sha256: digest, kind: manifest.kind,
+    } } });
+    await firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/${binaryId}`).set(await attestStoredManifest(bucket, manifest));
     binaries[binaryId] = { digest, storagePath };
   };
   await addBinary('bin_missing', await image(900, 600));
@@ -203,14 +196,9 @@ const countWrites = (firestore) => {
   };
 };
 
-test('échec sharp sur l’asset primaire : variantsFailure consigné, thumbnailStatus « failed » sur l’item, acceptation intacte (décision (d))', async () => {
+test('échec sharp sur l’asset primaire : variantsFailure consigné, thumbnailStatus « failed » sur l’item, acceptation intacte (décision (d))', async (t) => {
   const env = await seed();
-  // L'original du binaire primaire est remplacé par des octets que sharp refuse (empreinte et taille cohérentes avec le manifeste).
-  const corrupt = Buffer.from('ceci n’est pas une image jpeg');
-  const digest = digestOf(corrupt);
-  const storagePath = `private-drafts/${UID}/${CARTULARY}/bin_missing/${digest.replace('sha256:', '')}/original`;
-  await env.storage.bucket().file(storagePath).save(corrupt, { metadata: { contentType: 'image/jpeg', metadata: {} } });
-  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_missing`).set({ size: corrupt.length, sha256: digest, storagePath }, { merge: true });
+  failRegenerationDecoding(t);
   const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_missing'] });
   assert.deepEqual(plan.toGenerate, ['bin_missing']);
   const applied = await applyPresentationRegeneration({ firestore: env.firestore, storage: env.storage, plan });
@@ -392,16 +380,17 @@ test('tour 5 M6g : vignette bundle identique mais thumbnailStatus ≠ ready sur 
   assert.equal(replay.count, 0);
 });
 
-test('tour 5 : rejeu du script sans --force sur un binaire dont sharp a refusé l’original → skipped:failure_recorded, aucune écriture ; --force le rejoue', async () => {
+test('tour 5 : rejeu du script sans --force sur un binaire dont sharp a refusé l’original → skipped:failure_recorded, aucune écriture ; --force le rejoue', async (t) => {
   const env = await seed();
-  const corrupt = Buffer.from('ceci n’est pas une image jpeg');
+  const corrupt = await image(320, 240);
+  failRegenerationDecoding(t);
   const digest = digestOf(corrupt);
   const storagePath = `private-drafts/${UID}/${CARTULARY}/bin_corrupt/${digest.replace('sha256:', '')}/original`;
-  await env.storage.bucket().file(storagePath).save(corrupt, { metadata: { contentType: 'image/jpeg', metadata: {} } });
-  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_corrupt`).set({
+  await env.storage.bucket().file(storagePath).save(corrupt, { metadata: { contentType: 'image/jpeg', metadata: { ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_corrupt', sha256: digest, kind: 'media' } } });
+  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_corrupt`).set(await attestStoredManifest(env.storage.bucket(), {
     ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_corrupt', kind: 'media', fileName: 'bin_corrupt.jpg', mimeType: 'image/jpeg', size: corrupt.length, sha256: digest, storagePath,
     deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION,
-  });
+  }));
   await env.firestore.doc(`cartularies/${CARTULARY}/assets/asset_missing`).set({ binaryId: 'bin_corrupt' }, { merge: true });
   const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_corrupt'] });
   assert.deepEqual(plan.toGenerate, ['bin_corrupt']);
@@ -493,16 +482,17 @@ test('P4 réel (IWC) rejoué sur l’état de production du 15/09 (bundle pollu�
   assert.equal(third.summary.firestoreWrites, 0);
 });
 
-test('bundle en repli : la génération de l’asset primaire échoue (sharp) → thumbnailStatus failed par les miroirs puis vignette bundle posée (ready), sans clé étrangère', async () => {
+test('bundle en repli : la génération de l’asset primaire échoue (sharp) → thumbnailStatus failed par les miroirs puis vignette bundle posée (ready), sans clé étrangère', async (t) => {
   const env = await seed();
-  const corrupt = Buffer.from('ceci n’est pas une image jpeg');
+  const corrupt = await image(320, 240);
+  failRegenerationDecoding(t);
   const digest = digestOf(corrupt);
   const storagePath = `private-drafts/${UID}/${CARTULARY}/bin_corrupt/${digest.replace('sha256:', '')}/original`;
-  await env.storage.bucket().file(storagePath).save(corrupt, { metadata: { contentType: 'image/jpeg', metadata: {} } });
-  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_corrupt`).set({
+  await env.storage.bucket().file(storagePath).save(corrupt, { metadata: { contentType: 'image/jpeg', metadata: { ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_corrupt', sha256: digest, kind: 'media' } } });
+  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_corrupt`).set(await attestStoredManifest(env.storage.bucket(), {
     ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_corrupt', kind: 'media', fileName: 'bin_corrupt.jpg', mimeType: 'image/jpeg', size: corrupt.length, sha256: digest, storagePath,
     deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION,
-  });
+  }));
   await env.firestore.doc(`cartularies/${CARTULARY}/assets/asset_missing`).update({ binaryId: 'bin_corrupt' });
   const bundleBytes = await sharp({ create: { width: 240, height: 160, channels: 3, background: '#357' } }).webp().toBuffer();
   const path = '/assets/IWC/derivatives/Focus%20Shift%20White%20Front.240.webp';
@@ -598,8 +588,8 @@ test('plan = exécution sous --limit : binaire de l’asset primaire au-delà de
   const other = await image(500, 300, '#246');
   const digest = digestOf(other);
   const storagePath = `private-drafts/${UID}/${CARTULARY}/bin_aaa/${digest.replace('sha256:', '')}/original`;
-  await env.storage.bucket().file(storagePath).save(other, { metadata: { contentType: 'image/jpeg', metadata: {} } });
-  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_aaa`).set({ ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_aaa', kind: 'media', fileName: 'a.jpg', mimeType: 'image/jpeg', size: other.length, sha256: digest, storagePath, deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION });
+  await env.storage.bucket().file(storagePath).save(other, { metadata: { contentType: 'image/jpeg', metadata: { ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_aaa', sha256: digest, kind: 'media' } } });
+  await env.firestore.doc(`privateDrafts/${UID}/cartularies/${CARTULARY}/binaries/bin_aaa`).set(await attestStoredManifest(env.storage.bucket(), { ownerUid: UID, cartularyId: CARTULARY, binaryId: 'bin_aaa', kind: 'media', fileName: 'a.jpg', mimeType: 'image/jpeg', size: other.length, sha256: digest, storagePath, deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', verificationVersion: PRIVATE_UPLOAD_VERIFICATION_VERSION }));
   await env.firestore.doc(`cartularies/${CARTULARY}/assets/asset_aaa`).set({ id: 'asset_aaa', binaryId: 'bin_aaa', mediaKind: 'image' });
   const plan = await planPresentationRegeneration({ firestore: env.firestore, storage: env.storage, cartularyId: CARTULARY, binaryIds: ['bin_aaa', 'bin_missing'], limit: 1, bundleThumbnailPath: path, readBundleFile });
   assert.deepEqual(plan.toGenerate, ['bin_aaa']);

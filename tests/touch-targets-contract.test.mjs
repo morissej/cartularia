@@ -79,7 +79,7 @@ const mediaSlice = (sheet, from, to) => {
   assert.ok(start >= 0 && end > start, `bloc « ${from} » introuvable`);
   return sheet.slice(start, end);
 };
-const publicTablet = mediaSlice(publicCss, '@media (max-width: 1100px) {', '@media (max-width: 720px) {');
+const publicTablet = mediaSlice(publicCss, '@media (max-width: 1180px) {', '@media (max-width: 720px) {');
 const publicMobile = mediaSlice(publicCss, '@media (max-width: 720px) {', '@media (prefers-reduced-motion: reduce) {');
 const expectControlSize = (sheet, selector) => {
   const body = ruleBody(sheet, selector);
@@ -88,7 +88,7 @@ const expectControlSize = (sheet, selector) => {
   return body;
 };
 
-test('V-D7 accueil : en-tête, liens texte, onglets de la maquette, aperçu, contact et pied de page offrent des cibles de 44 px', () => {
+test('V-D7 accueil : en-tête, liens texte et contact offrent des cibles de 44 px', () => {
   // Logo : règle scopée à l'en-tête public, jamais globale sur .brand-logo-link (logos du rapport, du mini-site et du pied non touchés).
   assert.match(publicCss, new RegExp(`\\n\\.public-header \\.brand-logo-link \\{ min-height: ${SIZE}; \\}\\n`));
   assert.doesNotMatch(publicCss, /\n\.brand-logo-link \{/);
@@ -96,30 +96,24 @@ test('V-D7 accueil : en-tête, liens texte, onglets de la maquette, aperçu, con
   const nav = expectControlSize(publicCss, '.public-header nav a');
   assert.match(nav, /display: inline-flex;/);
   assert.match(nav, /align-items: center;/);
-  for (const selector of ['.public-text-link', '.public-tab-btn', '.public-preview-direct-link', '.public-preview-action', '.public-copy-email-btn']) {
+  for (const selector of ['.public-text-link', '.public-copy-email-btn']) {
     expectControlSize(publicCss, selector);
   }
   // Case de consentement : le label est la cible (44 px), la case reste 16 px (exemption WCAG 2.5.8 : son label fait la taille).
   expectControlSize(publicCss, '.public-contact__consent');
   assert.match(ruleBody(publicCss, '.public-contact__consent input'), /width: 16px; min-height: 16px;/);
-  // Pied de page : neuf liens de 44 px ; l'écart vertical de 12 px devient 0 (la hauteur des liens porte l'espacement).
-  const footer = expectControlSize(publicCss, '.public-footer nav a');
-  assert.match(footer, /display: inline-flex;/);
-  assert.match(footer, /align-items: center;/);
-  assert.match(ruleBody(publicCss, '.public-footer nav'), /gap: 0 36px;/);
-  assert.doesNotMatch(ruleBody(publicCss, '.public-footer nav'), /gap: 12px 36px/);
+  // C13 : le bloc de neuf liens du pied de page est supprimé ; les liens légaux restent en texte lisible.
+  assert.doesNotMatch(readSource('../src/features/public/HomePage.tsx'), /Navigation de pied de page/);
+  assert.match(readSource('../src/features/public/PublicChrome.tsx'), /className="public-footer__legal"/);
 });
 
-test('V-D7 accueil mobile : menu ouvert à 4 px d’écart (sept liens de 44 px sous calc(100dvh - 84px)), pied de page en deux colonnes sans écart vertical', () => {
+test('V-D7 accueil mobile : menu ouvert à 4 px d’écart sous calc(100dvh - 84px)', () => {
   const nav = ruleBody(publicTablet, '  .public-header nav');
   assert.match(nav, /gap: 4px;/);
   assert.doesNotMatch(nav, /gap: 16px;/);
   assert.match(nav, /max-height: calc\(100dvh - 84px\);/);
   assert.match(nav, /overflow-y: auto;/);
-  const footer = ruleBody(publicMobile, '  .public-footer nav');
-  assert.match(footer, /grid-template-columns: 1fr 1fr; gap: 0 16px;/);
-  // Les onglets de la maquette gardent leur forme mobile (B1) : la hauteur 44 px vient de la règle de base, jamais annulée ici.
-  assert.doesNotMatch(ruleBody(publicMobile, '  .public-tab-btn'), /min-height/);
+  assert.match(ruleBody(publicMobile, '  .public-footer__legal'), /flex-direction: column/);
 });
 
 test('V-D7 pages d’information et d’accès : navigation, retours, « Mot de passe oublié » en 44 px, mailto en phrase inchangé', () => {

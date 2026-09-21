@@ -23,16 +23,23 @@ export const activateRegistryAccount = async ({ firestore, uid, email, userName,
   const organizationId = compactIdentifier('org', uid);
   const registryId = compactIdentifier('reg', uid);
   const userRef = firestore.doc(`users/${uid}`);
+  const accountAccessRef = firestore.doc(`accountAccess/${uid}`);
   const organizationRef = firestore.doc(`organizations/${organizationId}`);
   const membershipRef = firestore.doc(`organizations/${organizationId}/memberships/${uid}`);
   const registryRef = firestore.doc(`registries/${registryId}`);
   return firestore.runTransaction(async (transaction) => {
-  const [userSnapshot, organizationSnapshot, membershipSnapshot, registrySnapshot] = await transaction.getAll(
+  const [userSnapshot, organizationSnapshot, membershipSnapshot, registrySnapshot, accountAccessSnapshot] = await transaction.getAll(
     userRef,
     organizationRef,
     membershipRef,
     registryRef,
+    accountAccessRef,
   );
+  const access = accountAccessSnapshot.exists ? accountAccessSnapshot.data() : null;
+  if (accountAccessSnapshot.exists && (!access || access.status !== 'active' || !Number.isInteger(access.validAfter) || access.validAfter < 0)) {
+    throw new AccountCommandError('permission_denied', 'La barrière du compte ne permet pas son activation.');
+  }
+  const accountAccess = access ? { status: 'active', validAfter: access.validAfter } : null;
   const snapshots = [userSnapshot, organizationSnapshot, membershipSnapshot, registrySnapshot];
   if (snapshots.some((snapshot) => snapshot.exists && snapshot.data().status !== 'active')) {
     throw new AccountCommandError('permission_denied', 'Cet accès est suspendu ou retiré. La création ne peut pas rétablir ses droits.');
@@ -42,12 +49,18 @@ export const activateRegistryAccount = async ({ firestore, uid, email, userName,
   if (userSnapshot.exists && snapshots.some((snapshot) => !snapshot.exists)) {
     throw new AccountCommandError('failed_precondition', 'Cet espace existant nécessite une vérification de ses droits.');
   }
-  if (snapshots.every((snapshot) => snapshot.exists)) return { organizationId, registryId };
+  if (snapshots.every((snapshot) => snapshot.exists)) {
+    if (accountAccess && (userSnapshot.data().accountAccess?.status !== accountAccess.status || userSnapshot.data().accountAccess?.validAfter !== accountAccess.validAfter)) {
+      transaction.update(userRef, { accountAccess });
+    }
+    return { organizationId, registryId };
+  }
   if (snapshots.some((snapshot) => snapshot.exists)) {
     throw new AccountCommandError('failed_precondition', 'La configuration de cet espace nécessite une vérification.');
   }
   const userDocument = {
     uid,
+    ...(accountAccess ? { accountAccess } : {}),
     email: String(email || ''),
     displayName: normalizedUserName,
     status: 'active',

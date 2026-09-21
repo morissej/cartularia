@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 const api = vi.hoisted(() => ({ getDoc: vi.fn(), downloadUrl: vi.fn(), auth: { authStateReady: async () => {}, currentUser: { uid: 'guest' } as { uid: string } | null } }));
 vi.mock('../../src/firebase.ts', () => ({ db: {}, storage: {}, auth: api.auth }));
+vi.mock('firebase/auth', () => ({ onAuthStateChanged: (_auth: unknown, observer: (user: unknown) => void) => { observer((_auth as { currentUser: unknown }).currentUser); return () => {}; } }));
 vi.mock('../../src/persistence/localVault.ts', () => ({ cartulariaLocalVault: null }));
 vi.mock('firebase/firestore', () => ({ getDoc: api.getDoc, doc: (_db: unknown, ...path: string[]) => path.join('/') }));
 vi.mock('firebase/storage', () => ({ getDownloadURL: api.downloadUrl, ref: vi.fn() }));

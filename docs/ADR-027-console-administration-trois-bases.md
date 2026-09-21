@@ -48,3 +48,9 @@ Le raccordement de production utilise trois projets Firebase distincts :
 - correspondances codées : `cartularia-bridge-a3e51`.
 
 Les deux bases isolées sont situées en `eur3`, avec protection contre la suppression activée. Le compte d’exécution des Functions du Registre dispose des rôles `firebaseauth.admin` et `datastore.viewer` sur ces deux seuls projets secondaires.
+
+## Amendement local du 18 septembre 2026 — Prompt 2
+
+**Implémenté et testé localement, non déployé.** Le modèle de compensation décrit plus haut est remplacé, dans le code local, par une fermeture persistante : barrière `accountAccess/{uid}`, cutoff de session monotone, miroirs Storage atomiques, vérification de l’état Auth et des claims actuels. Un échec de suspension ou de réactivation ne rouvre plus le compte. La récupération et les jetons custom respectent également la date de révocation.
+
+Chaque base conserve son UID et son contrôle d’accès propres. Une reprise des comptes existants et des droits d’écriture Firestore pour les barrières des projets secondaires sont nécessaires avant mise en service ; le rôle historique `datastore.viewer` ne permet pas ces écritures. Aucun IAM n’a été modifié dans cette intervention. Voir le [compte rendu P2](audits/2026-09-18-p2-suspension-comptes.md) pour les tests, les limites, les opérations interrompues et la préparation du déploiement.

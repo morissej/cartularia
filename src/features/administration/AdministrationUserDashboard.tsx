@@ -52,8 +52,9 @@ export function AdministrationUserDashboard({ dashboard, onBack }: {
       </div>
       <div className="administration-dashboard__hero-state">
         <span className={`administration-user-status ${account.disabled ? 'is-suspended' : 'is-active'}`}>
-          {account.disabled ? 'Suspendu' : 'Actif'}
+          {account.accessOperationStatus === 'pending' ? 'Vérification en cours' : account.disabled ? 'Suspendu' : 'Actif'}
         </span>
+        {account.accessOperationStatus === 'pending' && <small>Réconciliation administrative requise avant réactivation.</small>}
         <small>Dernière connexion<br /><strong>{formatDate(account.lastSignInAt)}</strong></small>
       </div>
     </header>
@@ -73,7 +74,7 @@ export function AdministrationUserDashboard({ dashboard, onBack }: {
           return <article key={database.id} className={database.account ? 'is-present' : ''}>
             <Icon aria-hidden="true" />
             <div><strong>{database.label}</strong><small>{database.state === 'error' ? 'Indisponible' : database.account ? 'Compte rattaché' : 'Aucun compte rattaché'}</small></div>
-            {database.account && <span className={database.account.disabled ? 'is-suspended' : ''}>{database.account.disabled ? 'Suspendu' : <><CheckCircle2 aria-hidden="true" /> Actif</>}</span>}
+            {database.account && <span className={database.account.disabled ? 'is-suspended' : ''}>{database.account.accessOperationStatus === 'pending' ? 'Vérification en cours' : database.account.disabled ? 'Suspendu' : <><CheckCircle2 aria-hidden="true" /> Actif</>}</span>}
           </article>;
         })}
       </div>

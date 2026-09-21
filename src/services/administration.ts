@@ -10,6 +10,8 @@ export interface AdministrationUser {
   label: string;
   email: string | null;
   disabled: boolean;
+  authDisabled?: boolean;
+  accessOperationStatus?: 'pending' | 'failed' | 'completed' | null;
   emailVerified: boolean;
   createdAt: string | null;
   lastSignInAt: string | null;

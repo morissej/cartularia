@@ -25,6 +25,14 @@
   --text-lg: 18px;
   --text-xl: 24px;
 
+  /*
+   * Mesures typographiques : les titres et libellés suivent le flux naturel de
+   * leur conteneur. Ces plafonds sont réservés aux textes longs pour préserver
+   * la lisibilité ; ils ne servent pas à contraindre une colonne de mise en page.
+   */
+  --measure-display: 30ch;
+  --measure-prose: 70ch;
+
   /* Échelle d'espacement */
   --s1: 4px;
   --s2: 8px;

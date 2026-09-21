@@ -1,0 +1,1518 @@
+{
+  "captureVersion": "20260917",
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "dist": "dist",
+  "generatedAt": "2026-09-17T22:19:20.443Z",
+  "productAssets": [
+    {
+      "file": "public/assets/public/captures/cartulaire-accueil.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 1988,
+        "title": "Cartulaire Rolex Submariner · Cartularia",
+        "h1": [
+          "Rolex Submariner"
+        ],
+        "pathname": "/cartulary-demo",
+        "search": "?cartularyId=cart_demo_rolex_submariner_124060",
+        "hash": "#cover"
+      },
+      "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "scene": "cartulaire-cover",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 38558
+    },
+    {
+      "file": "public/assets/public/captures/cartulaire-publication.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2439,
+        "title": "Cartulaire Rolex Submariner · Cartularia",
+        "h1": [
+          "Publication"
+        ],
+        "pathname": "/cartulary-demo",
+        "search": "?cartularyId=cart_demo_rolex_submariner_124060",
+        "hash": "#publication"
+      },
+      "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#publication",
+      "scene": "cartulaire-publication",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 48560
+    },
+    {
+      "file": "public/assets/public/captures/mini-site-demo.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 1815,
+        "title": "Mini-site public · Cartularia",
+        "h1": [
+          "Accueil"
+        ],
+        "pathname": "/watch-website",
+        "search": "?publicCode=DEMO-ROL-124060&preview=local&cartularyId=cart_demo_rolex_submariner_124060&blocks=cover-watch%2Cmedia-hero%2Cmedia-library%2Creference-history%2Creference-specs%2Creference-checks%2Ccondition-description%2Ccondition-summary",
+        "hash": "#cover"
+      },
+      "path": "/watch-website?publicCode=DEMO-ROL-124060&preview=local&cartularyId=cart_demo_rolex_submariner_124060&blocks=cover-watch%2Cmedia-hero%2Cmedia-library%2Creference-history%2Creference-specs%2Creference-checks%2Ccondition-description%2Ccondition-summary",
+      "scene": "mini-site-demo",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 36732
+    },
+    {
+      "file": "public/assets/public/captures/sceau-integrite.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 1988,
+        "title": "Cartulaire Rolex Submariner · Cartularia",
+        "h1": [
+          "Rolex Submariner"
+        ],
+        "pathname": "/cartulary-demo",
+        "search": "?cartularyId=cart_demo_rolex_submariner_124060&view=proofs",
+        "hash": "#cover"
+      },
+      "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060&view=proofs#cover",
+      "scene": "sceau-integrite",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 49890
+    },
+    {
+      "file": "public/assets/public/captures/todo-demo.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 1988,
+        "title": "Cartulaire Rolex Submariner · Cartularia",
+        "h1": [
+          "Rolex Submariner"
+        ],
+        "pathname": "/cartulary-demo",
+        "search": "?cartularyId=cart_demo_rolex_submariner_124060",
+        "hash": "#cover"
+      },
+      "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "scene": "cartulaire-todo",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 40820
+    },
+    {
+      "file": "public/assets/public/captures/cercle-acces.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 900,
+        "title": "Cercle · Cartularia",
+        "h1": [
+          "Connexion au Cercle requise"
+        ],
+        "pathname": "/community",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/community",
+      "scene": "cercle-acces",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 28412
+    },
+    {
+      "bytes": 64166,
+      "file": "public/assets/public/captures/registre-demo.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 1957,
+        "title": "Registre · Cartularia",
+        "h1": [
+          "Les Cartulaires du Registre"
+        ],
+        "pathname": "/registry/reg_cartularia_demo/items",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/registry/reg_cartularia_demo/items",
+      "scene": "registre-demo",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      }
+    },
+    {
+      "bytes": 28932,
+      "file": "public/assets/public/captures/collection-demo.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 900,
+        "title": "Registre · Cartularia",
+        "h1": [
+          "Collections"
+        ],
+        "pathname": "/registry/reg_cartularia_demo/collections",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/registry/reg_cartularia_demo/collections",
+      "scene": "collection-demo",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      }
+    }
+  ],
+  "publicScenes": [
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/accueil-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 15607,
+        "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux",
+        "h1": [
+          "L'histoire de vos pièces de valeur mérite un dossier complet et ordonné"
+        ],
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/",
+      "scene": "accueil",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 434186
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/objets-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 4827,
+        "title": "Les objets documentés dans Cartularia · Cartularia",
+        "h1": [
+          "Les objets documentés dans Cartularia"
+        ],
+        "pathname": "/objets",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/objets",
+      "scene": "objets",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 109948
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/aide-documentaire-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 4657,
+        "title": "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ? · Cartularia",
+        "h1": [
+          "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ?"
+        ],
+        "pathname": "/aide-documentaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/aide-documentaire",
+      "scene": "aide-documentaire",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 125802
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/conseils-photo-video-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 3623,
+        "title": "Prendre vos photos et vidéos vous-même · Cartularia",
+        "h1": [
+          "Prendre vos photos et vidéos vous-même"
+        ],
+        "pathname": "/conseils-photo-video",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/conseils-photo-video",
+      "scene": "conseils-photo-video",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 116200
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/confidentialite-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 34471,
+        "title": "Politique de protection des données personnelles — Cartularia",
+        "h1": [
+          "Politique de protection des données personnelles"
+        ],
+        "pathname": "/confidentialite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/confidentialite",
+      "scene": "confidentialite",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 25234
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cartulaire-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2689,
+        "title": "Le Cartulaire · Cartularia",
+        "h1": [
+          "Le Cartulaire"
+        ],
+        "pathname": "/livrables/cartulaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cartulaire",
+      "scene": "livrable-cartulaire",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 56292
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-registre-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2649,
+        "title": "Le Registre · Cartularia",
+        "h1": [
+          "Le Registre"
+        ],
+        "pathname": "/livrables/registre",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/registre",
+      "scene": "livrable-registre",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 57718
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-collection-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2897,
+        "title": "La Collection · Cartularia",
+        "h1": [
+          "La Collection"
+        ],
+        "pathname": "/livrables/collection",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/collection",
+      "scene": "livrable-collection",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 60914
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-mini-site-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2933,
+        "title": "Le Mini Site (extrait de Cartulaire ou Collection) · Cartularia",
+        "h1": [
+          "Le Mini Site (extrait de Cartulaire ou Collection)"
+        ],
+        "pathname": "/livrables/mini-site",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/mini-site",
+      "scene": "livrable-mini-site",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 63778
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-rapport-pdf-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2793,
+        "title": "Le rapport PDF · Cartularia",
+        "h1": [
+          "Le rapport PDF"
+        ],
+        "pathname": "/livrables/rapport-pdf",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/rapport-pdf",
+      "scene": "livrable-rapport-pdf",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 60642
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-sceau-integrite-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2889,
+        "title": "Le Sceau d'intégrité · Cartularia",
+        "h1": [
+          "Le Sceau d'intégrité"
+        ],
+        "pathname": "/livrables/sceau-integrite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/sceau-integrite",
+      "scene": "livrable-sceau-integrite",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 62162
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cercle-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2802,
+        "title": "Le Cercle · Cartularia",
+        "h1": [
+          "Le Cercle"
+        ],
+        "pathname": "/livrables/cercle",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cercle",
+      "scene": "livrable-cercle",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 54362
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-todo-list-390.webp",
+      "metrics": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollHeight": 2778,
+        "title": "Une todo list pour gérer votre patrimoine · Cartularia",
+        "h1": [
+          "Une todo list pour gérer votre patrimoine"
+        ],
+        "pathname": "/livrables/todo-list",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/todo-list",
+      "scene": "livrable-todo-list",
+      "status": "captured",
+      "viewport": {
+        "name": "mobile-390",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      },
+      "bytes": 59200
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/accueil-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 11441,
+        "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux",
+        "h1": [
+          "L'histoire de vos pièces de valeur mérite un dossier complet et ordonné"
+        ],
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/",
+      "scene": "accueil",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 450696
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/objets-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 3138,
+        "title": "Les objets documentés dans Cartularia · Cartularia",
+        "h1": [
+          "Les objets documentés dans Cartularia"
+        ],
+        "pathname": "/objets",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/objets",
+      "scene": "objets",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 113192
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/aide-documentaire-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 3174,
+        "title": "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ? · Cartularia",
+        "h1": [
+          "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ?"
+        ],
+        "pathname": "/aide-documentaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/aide-documentaire",
+      "scene": "aide-documentaire",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 127322
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/conseils-photo-video-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2899,
+        "title": "Prendre vos photos et vidéos vous-même · Cartularia",
+        "h1": [
+          "Prendre vos photos et vidéos vous-même"
+        ],
+        "pathname": "/conseils-photo-video",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/conseils-photo-video",
+      "scene": "conseils-photo-video",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 121834
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/confidentialite-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 25567,
+        "title": "Politique de protection des données personnelles — Cartularia",
+        "h1": [
+          "Politique de protection des données personnelles"
+        ],
+        "pathname": "/confidentialite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/confidentialite",
+      "scene": "confidentialite",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 51046
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cartulaire-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2227,
+        "title": "Le Cartulaire · Cartularia",
+        "h1": [
+          "Le Cartulaire"
+        ],
+        "pathname": "/livrables/cartulaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cartulaire",
+      "scene": "livrable-cartulaire",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 65714
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-registre-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2193,
+        "title": "Le Registre · Cartularia",
+        "h1": [
+          "Le Registre"
+        ],
+        "pathname": "/livrables/registre",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/registre",
+      "scene": "livrable-registre",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 68854
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-collection-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2381,
+        "title": "La Collection · Cartularia",
+        "h1": [
+          "La Collection"
+        ],
+        "pathname": "/livrables/collection",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/collection",
+      "scene": "livrable-collection",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 68194
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-mini-site-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2396,
+        "title": "Le Mini Site (extrait de Cartulaire ou Collection) · Cartularia",
+        "h1": [
+          "Le Mini Site (extrait de Cartulaire ou Collection)"
+        ],
+        "pathname": "/livrables/mini-site",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/mini-site",
+      "scene": "livrable-mini-site",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 72800
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-rapport-pdf-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2354,
+        "title": "Le rapport PDF · Cartularia",
+        "h1": [
+          "Le rapport PDF"
+        ],
+        "pathname": "/livrables/rapport-pdf",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/rapport-pdf",
+      "scene": "livrable-rapport-pdf",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 70762
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-sceau-integrite-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2354,
+        "title": "Le Sceau d'intégrité · Cartularia",
+        "h1": [
+          "Le Sceau d'intégrité"
+        ],
+        "pathname": "/livrables/sceau-integrite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/sceau-integrite",
+      "scene": "livrable-sceau-integrite",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 72958
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cercle-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2381,
+        "title": "Le Cercle · Cartularia",
+        "h1": [
+          "Le Cercle"
+        ],
+        "pathname": "/livrables/cercle",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cercle",
+      "scene": "livrable-cercle",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 62660
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-todo-list-768.webp",
+      "metrics": {
+        "clientWidth": 768,
+        "scrollWidth": 768,
+        "scrollHeight": 2276,
+        "title": "Une todo list pour gérer votre patrimoine · Cartularia",
+        "h1": [
+          "Une todo list pour gérer votre patrimoine"
+        ],
+        "pathname": "/livrables/todo-list",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/todo-list",
+      "scene": "livrable-todo-list",
+      "status": "captured",
+      "viewport": {
+        "name": "tablet-768",
+        "width": 768,
+        "height": 1024,
+        "mobile": false
+      },
+      "bytes": 68094
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/accueil-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 9692,
+        "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux",
+        "h1": [
+          "L'histoire de vos pièces de valeur mérite un dossier complet et ordonné"
+        ],
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/",
+      "scene": "accueil",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 521022
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/objets-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2983,
+        "title": "Les objets documentés dans Cartularia · Cartularia",
+        "h1": [
+          "Les objets documentés dans Cartularia"
+        ],
+        "pathname": "/objets",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/objets",
+      "scene": "objets",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 135146
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/aide-documentaire-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 3440,
+        "title": "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ? · Cartularia",
+        "h1": [
+          "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ?"
+        ],
+        "pathname": "/aide-documentaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/aide-documentaire",
+      "scene": "aide-documentaire",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 161306
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/conseils-photo-video-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 3259,
+        "title": "Prendre vos photos et vidéos vous-même · Cartularia",
+        "h1": [
+          "Prendre vos photos et vidéos vous-même"
+        ],
+        "pathname": "/conseils-photo-video",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/conseils-photo-video",
+      "scene": "conseils-photo-video",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 151196
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/confidentialite-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 23640,
+        "title": "Politique de protection des données personnelles — Cartularia",
+        "h1": [
+          "Politique de protection des données personnelles"
+        ],
+        "pathname": "/confidentialite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/confidentialite",
+      "scene": "confidentialite",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 44666
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cartulaire-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2127,
+        "title": "Le Cartulaire · Cartularia",
+        "h1": [
+          "Le Cartulaire"
+        ],
+        "pathname": "/livrables/cartulaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cartulaire",
+      "scene": "livrable-cartulaire",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 81282
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-registre-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2046,
+        "title": "Le Registre · Cartularia",
+        "h1": [
+          "Le Registre"
+        ],
+        "pathname": "/livrables/registre",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/registre",
+      "scene": "livrable-registre",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 86024
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-collection-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2263,
+        "title": "La Collection · Cartularia",
+        "h1": [
+          "La Collection"
+        ],
+        "pathname": "/livrables/collection",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/collection",
+      "scene": "livrable-collection",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 84916
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-mini-site-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2239,
+        "title": "Le Mini Site (extrait de Cartulaire ou Collection) · Cartularia",
+        "h1": [
+          "Le Mini Site (extrait de Cartulaire ou Collection)"
+        ],
+        "pathname": "/livrables/mini-site",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/mini-site",
+      "scene": "livrable-mini-site",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 91992
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-rapport-pdf-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2172,
+        "title": "Le rapport PDF · Cartularia",
+        "h1": [
+          "Le rapport PDF"
+        ],
+        "pathname": "/livrables/rapport-pdf",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/rapport-pdf",
+      "scene": "livrable-rapport-pdf",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 86050
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-sceau-integrite-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2287,
+        "title": "Le Sceau d'intégrité · Cartularia",
+        "h1": [
+          "Le Sceau d'intégrité"
+        ],
+        "pathname": "/livrables/sceau-integrite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/sceau-integrite",
+      "scene": "livrable-sceau-integrite",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 90178
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cercle-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2206,
+        "title": "Le Cercle · Cartularia",
+        "h1": [
+          "Le Cercle"
+        ],
+        "pathname": "/livrables/cercle",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cercle",
+      "scene": "livrable-cercle",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 77852
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-todo-list-1440.webp",
+      "metrics": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollHeight": 2135,
+        "title": "Une todo list pour gérer votre patrimoine · Cartularia",
+        "h1": [
+          "Une todo list pour gérer votre patrimoine"
+        ],
+        "pathname": "/livrables/todo-list",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/todo-list",
+      "scene": "livrable-todo-list",
+      "status": "captured",
+      "viewport": {
+        "name": "desktop-1440",
+        "width": 1440,
+        "height": 900,
+        "mobile": false
+      },
+      "bytes": 88650
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/accueil-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 9612,
+        "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux",
+        "h1": [
+          "L'histoire de vos pièces de valeur mérite un dossier complet et ordonné"
+        ],
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/",
+      "scene": "accueil",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 532590
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/objets-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 2942,
+        "title": "Les objets documentés dans Cartularia · Cartularia",
+        "h1": [
+          "Les objets documentés dans Cartularia"
+        ],
+        "pathname": "/objets",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/objets",
+      "scene": "objets",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 133642
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/aide-documentaire-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 3341,
+        "title": "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ? · Cartularia",
+        "h1": [
+          "Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ?"
+        ],
+        "pathname": "/aide-documentaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/aide-documentaire",
+      "scene": "aide-documentaire",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 163728
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/conseils-photo-video-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 3261,
+        "title": "Prendre vos photos et vidéos vous-même · Cartularia",
+        "h1": [
+          "Prendre vos photos et vidéos vous-même"
+        ],
+        "pathname": "/conseils-photo-video",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/conseils-photo-video",
+      "scene": "conseils-photo-video",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 152694
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/confidentialite-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 23793,
+        "title": "Politique de protection des données personnelles — Cartularia",
+        "h1": [
+          "Politique de protection des données personnelles"
+        ],
+        "pathname": "/confidentialite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/confidentialite",
+      "scene": "confidentialite",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 55112
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cartulaire-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 1991,
+        "title": "Le Cartulaire · Cartularia",
+        "h1": [
+          "Le Cartulaire"
+        ],
+        "pathname": "/livrables/cartulaire",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cartulaire",
+      "scene": "livrable-cartulaire",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 86736
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-registre-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 1991,
+        "title": "Le Registre · Cartularia",
+        "h1": [
+          "Le Registre"
+        ],
+        "pathname": "/livrables/registre",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/registre",
+      "scene": "livrable-registre",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 93486
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-collection-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 2208,
+        "title": "La Collection · Cartularia",
+        "h1": [
+          "La Collection"
+        ],
+        "pathname": "/livrables/collection",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/collection",
+      "scene": "livrable-collection",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 90256
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-mini-site-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 2184,
+        "title": "Le Mini Site (extrait de Cartulaire ou Collection) · Cartularia",
+        "h1": [
+          "Le Mini Site (extrait de Cartulaire ou Collection)"
+        ],
+        "pathname": "/livrables/mini-site",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/mini-site",
+      "scene": "livrable-mini-site",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 97562
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-rapport-pdf-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 2118,
+        "title": "Le rapport PDF · Cartularia",
+        "h1": [
+          "Le rapport PDF"
+        ],
+        "pathname": "/livrables/rapport-pdf",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/rapport-pdf",
+      "scene": "livrable-rapport-pdf",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 93238
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-sceau-integrite-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 2175,
+        "title": "Le Sceau d'intégrité · Cartularia",
+        "h1": [
+          "Le Sceau d'intégrité"
+        ],
+        "pathname": "/livrables/sceau-integrite",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/sceau-integrite",
+      "scene": "livrable-sceau-integrite",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 98034
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-cercle-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 2151,
+        "title": "Le Cercle · Cartularia",
+        "h1": [
+          "Le Cercle"
+        ],
+        "pathname": "/livrables/cercle",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/cercle",
+      "scene": "livrable-cercle",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 81382
+    },
+    {
+      "file": "docs/audits/2026-09-17-corrections-accueil/screenshots/livrable-todo-list-1728.webp",
+      "metrics": {
+        "clientWidth": 1728,
+        "scrollWidth": 1728,
+        "scrollHeight": 2138,
+        "title": "Une todo list pour gérer votre patrimoine · Cartularia",
+        "h1": [
+          "Une todo list pour gérer votre patrimoine"
+        ],
+        "pathname": "/livrables/todo-list",
+        "search": "",
+        "hash": ""
+      },
+      "path": "/livrables/todo-list",
+      "scene": "livrable-todo-list",
+      "status": "captured",
+      "viewport": {
+        "name": "wide-1728",
+        "width": 1728,
+        "height": 1080,
+        "mobile": false
+      },
+      "bytes": 96078
+    }
+  ],
+  "screenshotsDirectory": "docs/audits/2026-09-17-corrections-accueil/screenshots",
+  "network": "bloqué hors 127.0.0.1",
+  "summary": {
+    "captured": 60,
+    "failed": 0,
+    "productAssets": 8,
+    "publicScenes": 52
+  }
+}

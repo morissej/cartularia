@@ -5,11 +5,34 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function accountIsActive(uid) {
+    // Server-only cutoff: refreshing an ID token keeps auth_time and cannot reopen a revoked session.
+    function accountSessionIsCurrent(uid) {
+      let accessPath = /databases/$(database)/documents/accountAccess/$(uid);
+      return !exists(accessPath)
+        || (get(accessPath).data.status == 'active'
+          && get(accessPath).data.validAfter is int
+          && get(accessPath).data.validAfter >= 0
+          && request.auth.token.auth_time is int
+          && request.auth.token.auth_time > get(accessPath).data.validAfter
+          && (request.auth.token.firebase.sign_in_provider != 'custom'
+            || (request.auth.token.cartulariaRecoveryIssuedAt is int
+              && request.auth.token.cartulariaRecoveryIssuedAt > get(accessPath).data.validAfter)));
+    }
+
+    match /accountAccess/{uid} {
+      allow read, write: if false;
+    }
+
+    function accountCanRead(uid) {
       return signedIn()
         && request.auth.uid == uid
+        && accountSessionIsCurrent(uid)
         && exists(/databases/$(database)/documents/users/$(uid))
-        && get(/databases/$(database)/documents/users/$(uid)).data.status == 'active'
+        && get(/databases/$(database)/documents/users/$(uid)).data.status == 'active';
+    }
+
+    function accountIsActive(uid) {
+      return accountCanRead(uid)
         && get(/databases/$(database)/documents/users/$(uid)).data.get('accountPurpose', '') != 'public_read_only_demo';
     }
 
@@ -18,7 +41,7 @@ service cloud.firestore {
     }
 
     function hasActiveMembership(organizationId) {
-      return signedIn()
+      return accountCanRead(request.auth.uid)
         && exists(membershipPath(organizationId))
         && get(membershipPath(organizationId)).data.status == 'active'
         && get(membershipPath(organizationId)).data.uid == request.auth.uid;
@@ -91,7 +114,8 @@ service cloud.firestore {
     }
 
     function canManageRegistry(organizationId, registryId) {
-      return hasPermission(organizationId, 'cartulary.edit')
+      return accountIsActive(request.auth.uid)
+        && hasPermission(organizationId, 'cartulary.edit')
         && registryIsInScope(organizationId, registryId);
     }
 
@@ -106,7 +130,7 @@ service cloud.firestore {
     }
 
     function hasCommunityPermission(permission) {
-      return signedIn()
+      return accountCanRead(request.auth.uid)
         && exists(communityMembershipPath())
         && get(communityMembershipPath()).data.uid == request.auth.uid
         && get(communityMembershipPath()).data.status == 'active'
@@ -120,8 +144,9 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
+      // Minimal own account status stays readable so a suspended session can close its UI.
       allow get: if signedIn() && request.auth.uid == uid;
-      allow update: if signedIn()
+      allow update: if accountIsActive(uid)
         && request.auth.uid == uid
         && resource.data.status == 'active'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActiveAt', 'updatedAt'])
@@ -130,7 +155,7 @@ service cloud.firestore {
       allow list, create, delete: if false;
 
       match /private/{privateDocument} {
-        allow get: if signedIn() && request.auth.uid == uid;
+        allow get: if accountCanRead(request.auth.uid) && request.auth.uid == uid;
         allow list, create, update, delete: if false;
       }
     }
@@ -140,7 +165,7 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
 
       match /memberships/{uid} {
-        allow get: if signedIn()
+        allow get: if accountCanRead(request.auth.uid)
           && (request.auth.uid == uid || hasPermission(organizationId, 'membership.read'));
         allow list: if hasPermission(organizationId, 'membership.read');
         allow create, update, delete: if false;
@@ -149,7 +174,7 @@ service cloud.firestore {
 
     // Autorise uniquement une requête collectionGroup explicitement bornée au uid courant.
     match /{membershipPath=**}/memberships/{membershipId} {
-      allow get, list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow get, list: if accountCanRead(request.auth.uid) && resource.data.uid == request.auth.uid;
       allow create, update, delete: if false;
     }
 
@@ -208,11 +233,11 @@ service cloud.firestore {
     }
 
     match /schemaCatalog/{assetType} {
-      allow get, list: if signedIn();
+      allow get, list: if accountCanRead(request.auth.uid);
       allow create, update, delete: if false;
 
       match /{schemaDocument=**} {
-        allow get, list: if signedIn();
+        allow get, list: if accountCanRead(request.auth.uid);
         allow create, update, delete: if false;
       }
     }
@@ -323,7 +348,7 @@ service cloud.firestore {
             (resource.data.status == 'active' && request.resource.data.status in ['active', 'deleted'])
             || (resource.data.status == 'deleted' && request.resource.data.status == 'deleted')
           );
-        allow delete: if signedIn() && request.auth.uid == uid && resource.data.ownerUid == uid;
+        allow delete: if accountIsActive(uid) && request.auth.uid == uid && resource.data.ownerUid == uid;
 
         match /state/{stateKey} {
           allow get, list: if accountIsActive(uid)
@@ -351,7 +376,7 @@ service cloud.firestore {
                 && request.resource.data.value.size() <= 900000
               )
             );
-          allow delete: if signedIn() && request.auth.uid == uid;
+          allow delete: if accountIsActive(uid) && request.auth.uid == uid;
         }
 
         match /binaries/{binaryId} {
@@ -370,8 +395,40 @@ service cloud.firestore {
               'detectedFormat', 'verifiedSize', 'imageWidth', 'imageHeight',
               'capturedAtExtracted', 'capturedAtSource', 'derivativeStatus',
               'presentationDerivative', 'metadataPolicy', 'malwareScanStatus',
-              'mediaDecodeStatus', 'publicationEligible', 'verifiedAt'
+              'mediaDecodeStatus', 'publicationEligible', 'verifiedAt', 'verificationIdentity',
+              'verificationAttemptId', 'verificationLeaseExpiresAt',
+              'verificationRetryAfter', 'verificationRetryCount'
             ];
+          }
+
+          function hasVerifiedBinaryIdentity() {
+            return ('verificationStatus' in resource.data && resource.data.verificationStatus == 'accepted')
+              || 'verificationIdentity' in resource.data;
+          }
+
+          function preservesVerifiedBinaryIdentity() {
+            return !hasVerifiedBinaryIdentity()
+              || (
+                // L'attestation serveur reste attachée au même original. Le client
+                // peut actualiser son suivi ou le supprimer, jamais le remplacer.
+                request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                  'deleted', 'revision', 'fileName', 'storagePath', 'clientUpdatedAt',
+                  'uploadStatus', 'updatedAt'
+                ])
+                && (
+                  (
+                    request.resource.data.deleted == true
+                    && request.resource.data.storagePath == null
+                    && request.resource.data.uploadStatus == 'deleted'
+                  )
+                  || (
+                    resource.data.deleted == false
+                    && request.resource.data.deleted == false
+                    && request.resource.data.storagePath == resource.data.storagePath
+                    && request.resource.data.uploadStatus == resource.data.uploadStatus
+                  )
+                )
+              );
           }
 
           function validClientBinary() {
@@ -394,6 +451,8 @@ service cloud.firestore {
                 || (
                   request.resource.data.deleted == false
                   && request.resource.data.storagePath is string
+                  && request.resource.data.storagePath == 'private-drafts/' + uid + '/' + cartularyId + '/' + binaryId
+                    + '/' + request.resource.data.sha256.replace('^sha256:', '') + '/original'
                   && request.resource.data.uploadStatus in ['pending_upload', 'ready']
                 )
               );
@@ -409,8 +468,12 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/privateDrafts/$(uid)/cartularies/$(cartularyId)).data.status == 'active'
             && request.resource.data.keys().hasOnly(clientBinaryKeys().concat(verifiedBinaryKeys()))
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(clientBinaryKeys())
+            && preservesVerifiedBinaryIdentity()
             && validClientBinary();
-          allow delete: if signedIn() && request.auth.uid == uid;
+          // Conserver l'identité, même supprimée logiquement, empêche delete puis
+          // create de réutiliser un identifiant déjà attesté avec d'autres octets.
+          allow delete: if accountIsActive(uid) && request.auth.uid == uid
+            && !hasVerifiedBinaryIdentity();
         }
       }
     }
@@ -445,7 +508,7 @@ service cloud.firestore {
           );
       }
 
-      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow get: if accountCanRead(request.auth.uid) && resource.data.ownerUid == request.auth.uid;
       allow create: if validPendingSyncRequest();
       allow update: if validPendingSyncRequest()
         && resource.data.status in ['processed', 'failed']
@@ -488,7 +551,7 @@ service cloud.firestore {
           && registryIsInScope(request.resource.data.organizationId, request.resource.data.registryId);
       }
 
-      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow get: if accountCanRead(request.auth.uid) && resource.data.ownerUid == request.auth.uid;
       allow create: if validPendingCreateRequest();
       allow update: if validPendingCreateRequest()
         && resource.data.status == 'failed'
@@ -505,7 +568,7 @@ service cloud.firestore {
     // File d'horodatage authentifiée. Le navigateur peut uniquement déposer
     // une empreinte et relire sa demande ; la Function seule crée le reçu.
     match /timestampRequests/{requestDocumentId} {
-      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow get: if accountCanRead(request.auth.uid) && resource.data.ownerUid == request.auth.uid;
       allow create: if accountIsActive(request.auth.uid)
         && request.resource.data.keys().hasOnly([
           'requestDocumentId', 'requestId', 'ownerUid', 'cartularyId',
@@ -549,12 +612,12 @@ service cloud.firestore {
     }
 
     match /cartularyTransfers/{transferId} {
-      allow get, list: if signedIn() && request.auth.uid in resource.data.participantUids;
+      allow get, list: if accountCanRead(request.auth.uid) && request.auth.uid in resource.data.participantUids;
       allow create, update, delete: if false;
     }
 
     match /cartularyTransferRequests/{requestDocumentId} {
-      allow get: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow get: if accountCanRead(request.auth.uid) && resource.data.ownerUid == request.auth.uid;
       allow create: if accountIsActive(request.auth.uid)
         && request.resource.data.keys().hasOnly([
           'requestDocumentId', 'requestId', 'transferId', 'cartularyId',
@@ -595,11 +658,11 @@ service cloud.firestore {
     }
 
     match /transferPrivateArchives/{transferId} {
-      allow get: if signedIn() && resource.data.sellerUid == request.auth.uid;
+      allow get: if accountCanRead(request.auth.uid) && resource.data.sellerUid == request.auth.uid;
       allow list, create, update, delete: if false;
 
       match /records/{recordId} {
-        allow get, list: if signedIn()
+        allow get, list: if accountCanRead(request.auth.uid)
           && get(/databases/$(database)/documents/transferPrivateArchives/$(transferId)).data.sellerUid == request.auth.uid;
         allow create, update, delete: if false;
       }
@@ -623,7 +686,7 @@ service cloud.firestore {
     }
 
     match /communityMemberships/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid;
+      allow get: if accountCanRead(request.auth.uid) && request.auth.uid == uid;
       allow list, create, update, delete: if false;
     }
 
@@ -688,7 +751,7 @@ service cloud.firestore {
     }
 
     match /cartularyExports/{exportId} {
-      allow get: if signedIn()
+      allow get: if accountCanRead(request.auth.uid)
         && resource.data.ownerUid == request.auth.uid
         && resource.data.status == 'ready'
         && hasPermission(resource.data.organizationId, 'cartulary.export')
@@ -696,7 +759,7 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
 
       match /records/{recordId} {
-        allow get, list: if signedIn()
+        allow get, list: if accountCanRead(request.auth.uid)
           && get(/databases/$(database)/documents/cartularyExports/$(exportId)).data.ownerUid == request.auth.uid
           && get(/databases/$(database)/documents/cartularyExports/$(exportId)).data.status == 'ready'
           && hasPermission(
@@ -716,11 +779,11 @@ service cloud.firestore {
     }
 
     match /integrityBatches/{batchId} {
-      allow get: if signedIn() && request.auth.uid in resource.data.readerUids;
+      allow get: if accountCanRead(request.auth.uid) && request.auth.uid in resource.data.readerUids;
       allow list, create, update, delete: if false;
 
       match /receipts/{receiptId} {
-        allow get, list: if signedIn()
+        allow get, list: if accountCanRead(request.auth.uid)
           && request.auth.uid in get(
             /databases/$(database)/documents/integrityBatches/$(batchId)
           ).data.readerUids;
@@ -728,7 +791,7 @@ service cloud.firestore {
       }
 
       match /timestampReceipts/{receiptId} {
-        allow get, list: if signedIn()
+        allow get, list: if accountCanRead(request.auth.uid)
           && request.auth.uid in get(
             /databases/$(database)/documents/integrityBatches/$(batchId)
           ).data.readerUids;
@@ -736,7 +799,7 @@ service cloud.firestore {
       }
 
       match /publicAnchors/{providerId} {
-        allow get, list: if signedIn()
+        allow get, list: if accountCanRead(request.auth.uid)
           && request.auth.uid in get(
             /databases/$(database)/documents/integrityBatches/$(batchId)
           ).data.readerUids;
@@ -758,7 +821,7 @@ service cloud.firestore {
     }
 
     function ownsVault(uid) {
-      return signedIn() && request.auth.uid == uid;
+      return accountCanRead(request.auth.uid) && request.auth.uid == uid;
     }
 
     function validEncryptedAccount(uid) {
@@ -787,8 +850,8 @@ service cloud.firestore {
       match /vault/{vaultId} {
         allow get: if vaultId == 'profile' && ownsVault(uid);
         allow list: if false;
-        allow create, update: if vaultId == 'profile' && ownsVault(uid) && validEncryptedAccount(uid);
-        allow delete: if vaultId == 'profile' && ownsVault(uid) && resource.data.ownerUid == uid;
+        allow create, update: if vaultId == 'profile' && accountIsActive(uid) && validEncryptedAccount(uid);
+        allow delete: if vaultId == 'profile' && accountIsActive(uid) && resource.data.ownerUid == uid;
       }
     }
 
@@ -818,23 +881,23 @@ service cloud.firestore {
       match /account/{documentId} {
         allow read: if documentId == 'profile' && ownsVault(uid);
         allow create, update: if documentId == 'profile'
-          && ownsVault(uid)
+          && accountIsActive(uid)
           && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'primaryClientNumber', 'updatedAt'])
           && request.resource.data.schemaVersion == 'code-account-link@1.0.0'
           && request.resource.data.ownerUid == uid
           && request.resource.data.primaryClientNumber.matches('^CLI-[A-F0-9]{8}$');
-        allow delete: if documentId == 'profile' && ownsVault(uid) && resource.data.ownerUid == uid;
+        allow delete: if documentId == 'profile' && accountIsActive(uid) && resource.data.ownerUid == uid;
       }
 
       match /clients/{clientNumber} {
         allow read: if ownsVault(uid);
-        allow create: if ownsVault(uid)
+        allow create: if accountIsActive(uid)
           && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'updatedAt'])
           && bridgeBaseIsValid(uid, clientNumber)
           && clientNumber.matches('^CLI-[A-F0-9]{8}$')
           && request.resource.data.objectCodes is list
           && request.resource.data.objectCodes.size() == 0;
-        allow update: if ownsVault(uid)
+        allow update: if accountIsActive(uid)
           && request.resource.data.keys().hasOnly(['schemaVersion', 'ownerUid', 'code', 'objectCodes', 'updatedAt'])
           && bridgeBaseIsValid(uid, clientNumber)
           && request.resource.data.objectCodes == resource.data.objectCodes;
@@ -843,26 +906,26 @@ service cloud.firestore {
 
       match /transmissions/{code} {
         allow read: if ownsVault(uid);
-        allow create, update: if ownsVault(uid) && bridgeSimpleCodeIsValid(uid, code) && code.matches('^TRN-[A-F0-9]{8}$');
-        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+        allow create, update: if accountIsActive(uid) && bridgeSimpleCodeIsValid(uid, code) && code.matches('^TRN-[A-F0-9]{8}$');
+        allow delete: if accountIsActive(uid) && resource.data.ownerUid == uid;
       }
 
       match /locations/{code} {
         allow read: if ownsVault(uid);
-        allow create, update: if ownsVault(uid) && bridgeLabeledCodeIsValid(uid, code, '^LIE-[A-F0-9]{8}$', '^Lieu [1-9][0-9]*$');
-        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+        allow create, update: if accountIsActive(uid) && bridgeLabeledCodeIsValid(uid, code, '^LIE-[A-F0-9]{8}$', '^Lieu [1-9][0-9]*$');
+        allow delete: if accountIsActive(uid) && resource.data.ownerUid == uid;
       }
 
       match /managers/{code} {
         allow read: if ownsVault(uid);
-        allow create, update: if ownsVault(uid) && bridgeSimpleCodeIsValid(uid, code) && code.matches('^GES-[A-F0-9]{8}$');
-        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+        allow create, update: if accountIsActive(uid) && bridgeSimpleCodeIsValid(uid, code) && code.matches('^GES-[A-F0-9]{8}$');
+        allow delete: if accountIsActive(uid) && resource.data.ownerUid == uid;
       }
 
       match /people/{code} {
         allow read: if ownsVault(uid);
-        allow create, update: if ownsVault(uid) && bridgeLabeledCodeIsValid(uid, code, '^(CLI|PER|GES)-[A-F0-9]{8}$', '^Personne [1-9][0-9]*$');
-        allow delete: if ownsVault(uid) && resource.data.ownerUid == uid;
+        allow create, update: if accountIsActive(uid) && bridgeLabeledCodeIsValid(uid, code, '^(CLI|PER|GES)-[A-F0-9]{8}$', '^Personne [1-9][0-9]*$');
+        allow delete: if accountIsActive(uid) && resource.data.ownerUid == uid;
       }
     }
 

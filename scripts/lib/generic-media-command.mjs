@@ -1,4 +1,4 @@
-import { privateBinaryIsVerified } from './private-upload-command.mjs';
+import { assertPrivateBinaryOriginal, privateBinaryIsVerified } from './private-upload-command.mjs';
 
 const tags = new Set(['main-photo', 'main-video', 'spin-3d', 'slideshow', 'accessories', 'documentation', 'other']);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{3,160}$/.test(value);
@@ -8,7 +8,7 @@ export class GenericMediaError extends Error {
 const fail = (message, code = 'invalid_generic_media') => { throw new GenericMediaError(code, message); };
 
 /** Explicit delta; omitted imported assets and private originals are never erased. */
-export function applyGenericMediaChanges({ draft, root, existingAssets, binaries }) {
+export async function applyGenericMediaChanges({ draft, root, existingAssets, binaries, storage }) {
   if (draft?.version !== 1 || draft.baseRevision !== root.revision) fail('Le Cartulaire a changé. Rechargez les médias avant de réessayer.', 'revision_conflict');
   if (Object.keys(draft).some((key) => !['version', 'baseRevision', 'changes', 'removeIds', 'confirmedRemoval', 'confirmedPublicIds'].includes(key)) || (draft.confirmedPublicIds !== undefined && (!Array.isArray(draft.confirmedPublicIds) || draft.confirmedPublicIds.length > 100 || draft.confirmedPublicIds.some((id) => !identifier(id))))) fail('Confirmation de diffusion invalide.');
   if (!Array.isArray(draft.changes) || !Array.isArray(draft.removeIds) || draft.changes.length + draft.removeIds.length < 1 || draft.changes.length + draft.removeIds.length > 100) fail('La liste des modifications média est invalide.');
@@ -42,6 +42,9 @@ export function applyGenericMediaChanges({ draft, root, existingAssets, binaries
     if ((next.tags.includes('main-photo') || next.tags.includes('spin-3d')) && type !== 'image') fail('Seule une image peut servir de couverture ou de vue 360°.');
     if (next.tags.includes('main-video') && type !== 'video') fail('Le rôle vidéo exige un fichier vidéo.');
     if (next.visibility === 'Tous' && existing?.visibility !== 'Tous' && (!draft.confirmedPublicIds?.includes(change.id) || !privateBinaryIsVerified(binary) || binary.verificationStatus !== 'accepted')) fail('Confirmez explicitement l’autorisation publique du média vérifié.');
+    if (!existing || (next.visibility === 'Tous' && existing.visibility !== 'Tous')) {
+      await assertPrivateBinaryOriginal({ storage, manifest: binary, uid: root.accountHolderId, cartularyId: root.id, binaryId });
+    }
     if (existing?.visibility === 'Tous' && next.visibility !== 'Tous' && root.publicationStatus === 'published') fail('Retirez d’abord le mini-site public avant de remettre ce média en privé.', 'publication_must_be_revoked');
     next.name = next.name.trim(); next.tags = [...new Set(next.tags)];
     if (next.tags.includes('main-photo')) for (const [id, other] of current) if (id !== next.id) current.set(id, { ...other, tags: other.tags.filter((tag) => tag !== 'main-photo') });

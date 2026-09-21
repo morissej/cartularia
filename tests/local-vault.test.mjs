@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CartulariaLocalVault,
+  LocalVaultAccessError,
   MemoryVaultBackend,
   ScopedStorage,
+  createVerifiedLocalVaultSession,
   migrateLocalVaultCartularyId,
 } from '../src/persistence/localVault.ts';
 
@@ -45,6 +47,169 @@ test('deux Cartulaires restent isolés dans le même localStorage', () => {
   iwc.removeItem('cartularia-owner-fields');
   assert.equal(iwc.getItem('cartularia-owner-fields'), null);
   assert.notEqual(rolex.getItem('cartularia-owner-fields'), null);
+});
+
+test('le cache privé sépare les comptes pour un même Cartulaire, puis les Cartulaires du même compte', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const open = (uid, cartularyId = 'cart-private') => createVerifiedLocalVaultSession({ uid, cartularyId, backend, storage });
+  const first = open('account-a');
+  await first.vault.writeJson('cartularia-owner-fields', { name: 'Privé A' });
+  await first.vault.putBinary({
+    binaryId: 'proof', kind: 'owner_document', fileName: 'a.pdf', mimeType: 'application/pdf',
+    sha256: 'a'.repeat(64), blob: new Blob(['pièce A']),
+  });
+  first.lock();
+
+  const second = open('account-b');
+  await second.vault.restoreLocalStorage();
+  assert.equal(second.storage.getItem('cartularia-owner-fields'), null);
+  assert.deepEqual(await second.vault.listStateRecords(), []);
+  assert.equal(await second.vault.getBinary('proof'), null);
+  await second.vault.writeJson('cartularia-owner-fields', { name: 'Privé B' });
+
+  const otherCartulary = open('account-a', 'cart-other');
+  assert.equal(otherCartulary.storage.getItem('cartularia-owner-fields'), null);
+  assert.deepEqual(await otherCartulary.vault.listStateRecords(), []);
+
+  const firstAgain = open('account-a');
+  await firstAgain.vault.restoreLocalStorage();
+  assert.deepEqual(JSON.parse(firstAgain.storage.getItem('cartularia-owner-fields')), { name: 'Privé A' });
+  const original = await firstAgain.vault.getBinary('proof');
+  assert.equal(await original.blob.text(), 'pièce A');
+  assert.equal(original.cartularyId, 'cart-private');
+  assert.equal(first.storage.getItem('cartularia-owner-fields'), null);
+  await assert.rejects(first.vault.getBinary('proof'), LocalVaultAccessError);
+  await assert.rejects(first.vault.writeJson('cartularia-owner-fields', { name: 'Ancien callback' }), LocalVaultAccessError);
+});
+
+test('un verrouillage ferme aussi les handles synchrones conservés par un ancien composant', async () => {
+  const session = createVerifiedLocalVaultSession({
+    uid: 'account-a', cartularyId: 'cart-private', backend: new MemoryVaultBackend(), storage: new MemoryStorage(),
+  });
+  await session.vault.writeJson('cartularia-owner-fields', { name: 'Privé' });
+  session.lock();
+  assert.equal(session.storage.length, 0);
+  assert.equal(session.storage.key(0), null);
+  assert.equal(session.storage.getItem('cartularia-owner-fields'), null);
+  assert.throws(() => session.storage.setItem('cartularia-owner-fields', 'callback'), LocalVaultAccessError);
+  assert.throws(() => session.storage.removeItem('cartularia-owner-fields'), LocalVaultAccessError);
+  await assert.rejects(session.vault.listStateRecords(), LocalVaultAccessError);
+  await assert.rejects(session.vault.listBinaryRecords(), LocalVaultAccessError);
+  await assert.rejects(session.vault.restoreLocalStorage(), LocalVaultAccessError);
+  await assert.rejects(session.vault.deleteAllLocalData(), LocalVaultAccessError);
+});
+
+test('un brouillon accepté juste avant le verrouillage est préservé dans son compte et reste dirty', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const open = (uid) => createVerifiedLocalVaultSession({ uid, cartularyId: 'cart-private', backend, storage });
+  const first = open('account-a');
+  const saving = first.vault.writeJson('cartularia-owner-fields', { name: 'Dernière saisie non synchronisée' });
+  // Le traitement IndexedDB n'a pas encore démarré dans la microtask.
+  first.lock();
+  const second = open('account-b');
+  await saving;
+  assert.deepEqual(await second.vault.listStateRecords(), []);
+  const reopened = open('account-a');
+  const [record] = await reopened.vault.listStateRecords();
+  assert.deepEqual(JSON.parse(record.value), { name: 'Dernière saisie non synchronisée' });
+  assert.equal(record.dirty, true);
+  assert.equal(record.cloudRevision, 0);
+});
+
+test('un binaire déjà accepté reste sauvegardé sans livrer son résultat au callback révoqué', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const input = { uid: 'account-a', cartularyId: 'cart-private', backend, storage };
+  const session = createVerifiedLocalVaultSession(input);
+  const saving = session.vault.putBinary({
+    binaryId: 'proof', kind: 'owner_document', fileName: 'proof.pdf', mimeType: 'application/pdf',
+    sha256: 'a'.repeat(64), blob: new Blob(['preuve encore locale']),
+  });
+  session.lock();
+  await assert.rejects(saving, LocalVaultAccessError);
+  const reopened = createVerifiedLocalVaultSession(input);
+  const record = await reopened.vault.getBinary('proof');
+  assert.equal(await record.blob.text(), 'preuve encore locale');
+  assert.equal(record.dirty, true);
+});
+
+test('un résultat de lecture retardé ne ressort pas après révocation du handle', async () => {
+  let finishRead;
+  let readStarted;
+  const started = new Promise((resolve) => { readStarted = resolve; });
+  class DelayedBackend extends MemoryVaultBackend {
+    async listState(cartularyId) {
+      const records = await super.listState(cartularyId);
+      readStarted();
+      await new Promise((resolve) => { finishRead = resolve; });
+      return records;
+    }
+  }
+  const backend = new DelayedBackend();
+  const session = createVerifiedLocalVaultSession({ uid: 'account-a', cartularyId: 'cart-private', backend, storage: new MemoryStorage() });
+  await session.vault.writeJson('cartularia-owner-fields', { name: 'Privé' });
+  const reading = session.vault.listStateRecords();
+  await started;
+  session.lock();
+  finishRead();
+  await assert.rejects(reading, LocalVaultAccessError);
+});
+
+test('un ancien résultat cloud ne peut réhydrater ni acquitter un brouillon après verrouillage', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const input = { uid: 'account-a', cartularyId: 'cart-private', backend, storage };
+  const session = createVerifiedLocalVaultSession(input);
+  await session.vault.writeRaw('cartularia-owner-fields', 'brouillon local');
+  const latePull = session.vault.applyCloudState({
+    id: '', cartularyId: 'cart-private', key: 'cartularia-owner-fields', value: 'ancien cloud',
+    updatedAt: 100, dirty: false, deleted: false, cloudRevision: 3,
+  });
+  session.lock();
+  await assert.rejects(latePull, LocalVaultAccessError);
+  await assert.rejects(session.vault.markStateCloudSynced('cartularia-owner-fields', 4), LocalVaultAccessError);
+  const [record] = await createVerifiedLocalVaultSession(input).vault.listStateRecords();
+  assert.equal(record.value, 'brouillon local');
+  assert.equal(record.dirty, true);
+});
+
+test('les anciens caches sans identité restent intacts sans être attribués au premier compte connecté', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const legacyStorage = new ScopedStorage(storage, 'cart-private');
+  const legacy = new CartulariaLocalVault('cart-private', backend, legacyStorage);
+  await legacy.writeRaw('cartularia-owner-fields', 'ancien brouillon sans auteur prouvé');
+  await legacy.putBinary({
+    binaryId: 'proof', kind: 'owner_document', fileName: 'proof.pdf', mimeType: 'application/pdf',
+    sha256: 'a'.repeat(64), blob: new Blob(['ancien original']),
+  });
+  for (const uid of ['account-a', 'account-b']) {
+    const session = createVerifiedLocalVaultSession({ uid, cartularyId: 'cart-private', backend, storage });
+    await session.vault.restoreLocalStorage();
+    assert.equal(session.storage.getItem('cartularia-owner-fields'), null);
+    assert.deepEqual(await session.vault.listStateRecords(), []);
+    assert.equal(await session.vault.getBinary('proof'), null);
+    session.lock();
+  }
+  assert.equal(legacyStorage.getItem('cartularia-owner-fields'), 'ancien brouillon sans auteur prouvé');
+  assert.equal((await legacy.listStateRecords())[0].dirty, true);
+  assert.equal(await (await legacy.getBinary('proof')).blob.text(), 'ancien original');
+});
+
+test('la suppression volontaire du cache d’un compte conserve les brouillons des autres comptes', async () => {
+  const backend = new MemoryVaultBackend();
+  const storage = new MemoryStorage();
+  const first = createVerifiedLocalVaultSession({ uid: 'account-a', cartularyId: 'cart-private', backend, storage });
+  const second = createVerifiedLocalVaultSession({ uid: 'account-b', cartularyId: 'cart-private', backend, storage });
+  await first.vault.writeRaw('cartularia-owner-fields', 'A');
+  await second.vault.writeRaw('cartularia-owner-fields', 'B');
+  await first.vault.deleteAllLocalData();
+  assert.equal(first.storage.getItem('cartularia-owner-fields'), null);
+  assert.deepEqual(await first.vault.listStateRecords(), []);
+  assert.equal(second.storage.getItem('cartularia-owner-fields'), 'B');
+  assert.equal((await second.vault.listStateRecords())[0].value, 'B');
 });
 
 test('les valeurs localStorage migrées survivent à une perte du cache synchrone', async () => {
@@ -182,8 +347,8 @@ test('un arbitrage explicite peut rebaser la version locale sur la révision clo
     binaryId: 'conflicted-file', kind: 'owner_document', fileName: 'preuve.pdf',
     mimeType: 'application/pdf', sha256: 'd'.repeat(64), blob: new Blob(['local']),
   });
-  await vault.prepareStateConflictResolution('cartularia-owner-fields', 7);
-  await vault.prepareBinaryConflictResolution('conflicted-file', 4);
+  await vault.prepareStateConflictResolution('cartularia-owner-fields', 7, (await vault.listStateRecords())[0]);
+  await vault.prepareBinaryConflictResolution('conflicted-file', 4, await vault.getBinary('conflicted-file'));
   const state = (await vault.listStateRecords())[0];
   const binary = await vault.getBinary('conflicted-file');
   assert.equal(state.dirty, true);

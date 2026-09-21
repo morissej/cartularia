@@ -33,6 +33,11 @@ test('la navigation précédente et suivante ne peut jamais produire undefined',
 
 test('les routes inconnues ne sont pas assimilées au Cartulaire privé', () => {
   assert.equal(applicationRouteFromPathname('/'), 'home');
+  assert.equal(applicationRouteFromPathname('/objets'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/aide-documentaire'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/conseils-photo-video'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/livrables/cartulaire'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/confidentialite'), 'privacy-policy');
   assert.equal(applicationRouteFromPathname('/account/create'), 'account-create');
   assert.equal(applicationRouteFromPathname('/account/sign-in'), 'account-sign-in');
   assert.equal(applicationRouteFromPathname('/administration'), 'administration');

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/persistence/localVault.ts', () => ({
   persistCartulariaJson: vi.fn().mockResolvedValue(undefined),
+  readCartulariaImportVersion: vi.fn().mockReturnValue(null),
 }));
 
 import { persistCartulariaJson } from '../../src/persistence/localVault.ts';
@@ -39,6 +40,7 @@ describe('hooks de domaine du Cartulaire', () => {
     await waitFor(() => expect(persistCartulariaJson).toHaveBeenLastCalledWith(
       'cartularia-media-assets-v3',
       [expect.objectContaining({ url: '', thumbnailUrl: undefined, posterUrl: undefined, tags: ['main-photo'] })],
+      { expectedImportVersion: null },
     ));
   });
 
@@ -57,6 +59,7 @@ describe('hooks de domaine du Cartulaire', () => {
     await waitFor(() => expect(persistCartulariaJson).toHaveBeenCalledWith(
       'cartularia-condition-entries',
       [expect.objectContaining({ attachments: [expect.objectContaining({ url: undefined })] })],
+      { expectedImportVersion: null },
     ));
   });
 

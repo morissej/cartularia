@@ -294,7 +294,7 @@ export const applyPresentationRegeneration = async ({ firestore, storage, bucket
   ]);
   const mirrors = [];
   for (const binaryId of [...mirrorBinaryIds].sort()) {
-    const mirror = await applyPresentationMirrors({ firestore, uid: plan.ownerUid, cartularyId: plan.cartularyId, binaryId });
+    const mirror = await applyPresentationMirrors({ firestore, storage, bucketName, uid: plan.ownerUid, cartularyId: plan.cartularyId, binaryId });
     mirrors.push({ binaryId, status: mirror.status, reason: mirror.reason ?? null, assets: mirror.assets, itemThumbnail: mirror.itemThumbnail, thumbnailStatus: mirror.thumbnailStatus ?? null, writes: mirror.writes ?? 0 });
     summary.firestoreWrites += mirror.writes ?? 0;
     if (mirror.status === 'mirrored') { summary.mirrored += 1; summary.assetsMirrored += mirror.assets.length; }

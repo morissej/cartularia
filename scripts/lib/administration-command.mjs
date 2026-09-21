@@ -1,8 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { assertActiveAccountSession } from './account-access-command.mjs';
 
-const ADMIN_ROLE = 'cartulariaAdmin';
 const MAX_PAGE_SIZE = 200;
-const RECENT_AUTH_SECONDS = 15 * 60;
 const MEMBERSHIP_STATUSES = ['invited', 'active', 'suspended', 'revoked'];
 
 export class AdministrationCommandError extends Error {
@@ -13,18 +12,12 @@ export class AdministrationCommandError extends Error {
   }
 }
 
-export const requireAdministrator = (requestAuth, nowSeconds = Math.floor(Date.now() / 1000)) => {
-  if (!requestAuth?.uid) {
-    throw new AdministrationCommandError('unauthenticated', 'Connexion administrateur requise.');
+export const requireAdministrator = async ({ auth, firestore, requestAuth, nowSeconds }) => {
+  try {
+    return (await assertActiveAccountSession({ auth, firestore, requestAuth, nowSeconds, requireAdmin: true })).uid;
+  } catch (error) {
+    throw new AdministrationCommandError(error?.code || 'internal', error?.message || 'La session administrateur ne peut pas être confirmée.');
   }
-  if (requestAuth.token?.[ADMIN_ROLE] !== true) {
-    throw new AdministrationCommandError('permission_denied', 'Ce compte ne possède pas le rôle administrateur.');
-  }
-  const authenticationTime = Number(requestAuth.token?.auth_time || 0);
-  if (!authenticationTime || nowSeconds - authenticationTime > RECENT_AUTH_SECONDS) {
-    throw new AdministrationCommandError('unauthenticated', 'Reconnectez-vous avec votre mot de passe administrateur.');
-  }
-  return requestAuth.uid;
 };
 
 const timestampIso = (value) => {
@@ -41,8 +34,13 @@ const sourceReference = (source, uid) => {
   return source.firestore.doc(`codeAccounts/${uid}/account/profile`);
 };
 
-const publicUser = (source, user, documentSnapshot) => {
+const publicUser = (source, user, documentSnapshot, accessSnapshot) => {
   const document = documentSnapshot?.exists ? documentSnapshot.data() : null;
+  const access = accessSnapshot?.exists ? accessSnapshot.data() : null;
+  const accessOperationStatus = ['pending', 'failed', 'completed'].includes(access?.operationStatus) ? access.operationStatus : null;
+  const accessClosed = accessSnapshot?.exists === true
+    && (access?.status !== 'active' || !Number.isInteger(access?.validAfter) || access.validAfter < 0);
+  const profileClosed = source.id === 'registry' && documentSnapshot?.exists === true && document?.status !== 'active';
   const fallbackLabel = source.id === 'registry' ? 'Compte Registre' : source.id === 'personal' ? 'Compte Coffre' : 'Compte de correspondance';
   return {
     uid: user.uid,
@@ -50,7 +48,9 @@ const publicUser = (source, user, documentSnapshot) => {
       ? document.displayName
       : user.displayName || fallbackLabel,
     email: source.id === 'registry' ? user.email || null : null,
-    disabled: user.disabled === true,
+    disabled: user.disabled === true || accessClosed || profileClosed || accessOperationStatus === 'pending',
+    authDisabled: user.disabled === true,
+    accessOperationStatus,
     emailVerified: user.emailVerified === true,
     createdAt: user.metadata?.creationTime || null,
     lastSignInAt: user.metadata?.lastSignInTime || null,
@@ -82,8 +82,11 @@ const getUserOrNull = async (source, email) => {
 
 const sourceAccount = async (source, user) => {
   if (!source || !user) return null;
-  const snapshot = await sourceReference(source, user.uid).get();
-  return publicUser(source, user, snapshot);
+  const [snapshot, accessSnapshot] = await Promise.all([
+    sourceReference(source, user.uid).get(),
+    source.firestore.doc(`accountAccess/${user.uid}`).get(),
+  ]);
+  return publicUser(source, user, snapshot, accessSnapshot);
 };
 
 const resolveRegistryIdentity = async ({ selectedSource, selectedUser, registrySource }) => {
@@ -284,13 +287,16 @@ const listSource = async (source, pageSize) => {
   }
   try {
     const result = await source.auth.listUsers(pageSize);
-    const references = result.users.map((user) => sourceReference(source, user.uid));
+    const references = [
+      ...result.users.map((user) => sourceReference(source, user.uid)),
+      ...result.users.map((user) => source.firestore.doc(`accountAccess/${user.uid}`)),
+    ];
     const snapshots = references.length > 0 ? await source.firestore.getAll(...references) : [];
     return {
       id: source.id,
       label: source.label,
       state: 'ready',
-      users: result.users.map((user, index) => publicUser(source, user, snapshots[index])),
+      users: result.users.map((user, index) => publicUser(source, user, snapshots[index], snapshots[index + result.users.length])),
       truncated: Boolean(result.pageToken),
       error: null,
     };
@@ -322,6 +328,12 @@ export const loadAdministrationOverview = async ({ sources, pageSize = 100 }) =>
 
 const validReason = (value) => String(value || '').trim().replace(/\s+/g, ' ').slice(0, 240);
 
+const authenticationCutoff = (user) => {
+  const value = user.tokensValidAfterTime ? Date.parse(user.tokensValidAfterTime) / 1000 : 0;
+  if (!Number.isFinite(value) || value < 0) throw new AdministrationCommandError('failed_precondition', 'La révocation de session ne peut pas être vérifiée.');
+  return Math.floor(value);
+};
+
 export const setAdministrationUserDisabled = async ({
   actorUid,
   source,
@@ -330,51 +342,116 @@ export const setAdministrationUserDisabled = async ({
   reason,
   auditFirestore,
   timestamp,
+  nowSeconds = Math.floor(Date.now() / 1000),
 }) => {
-  if (!source?.auth || !source?.firestore) {
+  if (!source?.auth || !source?.firestore?.runTransaction) {
     throw new AdministrationCommandError('failed_precondition', 'Cette base n’est pas configurée.');
   }
-  if (!targetUid || typeof targetUid !== 'string') {
-    throw new AdministrationCommandError('invalid_argument', 'Compte utilisateur invalide.');
+  if (!targetUid || typeof targetUid !== 'string' || targetUid.includes('/') || typeof disabled !== 'boolean') {
+    throw new AdministrationCommandError('invalid_argument', 'Compte utilisateur ou état invalide.');
   }
-  if (source.id === 'registry' && targetUid === actorUid && disabled === true) {
+  if (source.id === 'registry' && targetUid === actorUid && disabled) {
     throw new AdministrationCommandError('failed_precondition', 'Vous ne pouvez pas suspendre votre propre compte administrateur.');
   }
   const normalizedReason = validReason(reason);
   if (normalizedReason.length < 8) {
     throw new AdministrationCommandError('invalid_argument', 'Un motif d’au moins 8 caractères est requis.');
   }
+  if (!Number.isInteger(nowSeconds) || nowSeconds < 0) throw new AdministrationCommandError('invalid_argument', 'Horloge de suspension invalide.');
 
   const previousUser = await source.auth.getUser(targetUid);
+  const accessReference = source.firestore.doc(`accountAccess/${targetUid}`);
   const registryReference = source.id === 'registry' ? source.firestore.doc(`users/${targetUid}`) : null;
-  const registrySnapshot = registryReference ? await registryReference.get() : null;
-  const previousRegistryDocument = registrySnapshot?.exists ? registrySnapshot.data() : null;
-  await source.auth.updateUser(targetUid, { disabled: disabled === true });
-  try {
-    if (registryReference && registrySnapshot?.exists) {
-        await registryReference.update({
-          status: disabled ? 'suspended' : 'active',
-          inactiveAt: disabled ? timestamp : null,
-          updatedAt: timestamp,
-        });
+  const communityReference = source.id === 'registry' ? source.firestore.doc(`communityMemberships/${targetUid}`) : null;
+  const operationId = randomUUID();
+  const requestedAction = disabled ? 'user.suspend' : 'user.reactivate';
+  const readBarrier = async (transaction) => {
+    const [access, profile, membership] = await Promise.all([
+      transaction.get(accessReference),
+      registryReference ? transaction.get(registryReference) : null,
+      communityReference ? transaction.get(communityReference) : null,
+    ]);
+    return { access: access.exists ? access.data() : null, profile, membership };
+  };
+  const writeBarrier = (transaction, current, status, validAfter, operationStatus, details = {}) => {
+    const accountAccess = { status, validAfter };
+    transaction.set(accessReference, {
+      schemaVersion: 'account-access@1.0.0', ...accountAccess, operationId,
+      operationStatus, requestedDisabled: disabled, actorUid, reason: normalizedReason,
+      updatedAt: timestamp, ...details,
+    }, { merge: true });
+    if (current.profile?.exists) transaction.update(registryReference, {
+      status: status === 'active' ? 'active' : 'suspended',
+      inactiveAt: status === 'active' ? null : timestamp,
+      updatedAt: timestamp, accountAccess,
+    });
+    // Storage can read only two Firestore documents. These mirrors are server-owned and
+    // committed atomically with the central barrier, preserving membership roles/status.
+    if (current.membership?.exists) transaction.update(communityReference, { accountAccess });
+  };
+  const initialCutoff = await source.firestore.runTransaction(async (transaction) => {
+    const current = await readBarrier(transaction);
+    if (current.access?.operationStatus === 'pending') {
+      throw new AdministrationCommandError('failed_precondition', 'Une modification de ce compte est déjà en cours. Son état reste verrouillé jusqu’à confirmation.');
     }
-    await auditFirestore.collection('administrationAudit').add({
-      schemaVersion: 'administration-audit@1.0.0',
-      actorUid,
-      targetUid,
-      database: source.id,
-      action: disabled ? 'user.suspend' : 'user.reactivate',
-      reason: normalizedReason,
-      createdAt: timestamp,
+    if (current.access && (!Number.isInteger(current.access.validAfter) || current.access.validAfter < 0)) {
+      throw new AdministrationCommandError('failed_precondition', 'La barrière d’accès existante doit être vérifiée avant modification.');
+    }
+    const cutoff = Math.max(current.access?.validAfter ?? 0, authenticationCutoff(previousUser), nowSeconds);
+    // Both suspension and reactivation begin closed. No Auth/audit failure may reopen it.
+    writeBarrier(transaction, current, 'suspended', cutoff, 'pending');
+    return cutoff;
+  });
+
+  try {
+    // Attempt both independently: a disable failure must not prevent token revocation.
+    const authenticationResults = await Promise.allSettled([
+      source.auth.updateUser(targetUid, { disabled }),
+      source.auth.revokeRefreshTokens(targetUid),
+    ]);
+    const failedAuthentication = authenticationResults.find((result) => result.status === 'rejected');
+    if (failedAuthentication) throw failedAuthentication.reason;
+    const updatedUser = await source.auth.getUser(targetUid);
+    if (Boolean(updatedUser.disabled) !== disabled) throw new Error('Authentication state could not be confirmed.');
+    const finalCutoff = Math.max(initialCutoff, authenticationCutoff(updatedUser));
+    await auditFirestore.doc(`administrationAudit/${operationId}`).set({
+      schemaVersion: 'administration-audit@1.1.0', operationId,
+      actorUid, targetUid, database: source.id, action: requestedAction,
+      reason: normalizedReason, validAfter: finalCutoff,
+      outcome: 'authentication_applied', createdAt: timestamp,
+    });
+    await source.firestore.runTransaction(async (transaction) => {
+      const current = await readBarrier(transaction);
+      if (current.access?.operationId !== operationId || current.access.operationStatus !== 'pending') {
+        throw new AdministrationCommandError('failed_precondition', 'L’état du compte a changé pendant la modification.');
+      }
+      writeBarrier(transaction, current, disabled ? 'suspended' : 'active',
+        Math.max(finalCutoff, current.access.validAfter), 'completed');
     });
   } catch (error) {
-    await Promise.allSettled([
-      source.auth.updateUser(targetUid, { disabled: previousUser.disabled === true }),
-      ...(registryReference && previousRegistryDocument
-        ? [registryReference.set(previousRegistryDocument)]
-        : []),
+    // In particular, never compensate a failed suspension by enabling Authentication.
+    // Reactivation failures also return Authentication to disabled where possible.
+    if (!disabled) await Promise.allSettled([
+      source.auth.updateUser(targetUid, { disabled: true }),
+      source.auth.revokeRefreshTokens(targetUid),
     ]);
-    throw error;
+    await Promise.allSettled([
+      source.firestore.runTransaction(async (transaction) => {
+        const current = await readBarrier(transaction);
+        if (current.access?.operationId !== operationId) return;
+        writeBarrier(transaction, current, 'suspended', Math.max(initialCutoff, current.access.validAfter), 'failed', {
+          failureCode: typeof error?.code === 'string' ? error.code : 'unavailable',
+        });
+      }),
+      auditFirestore.doc(`administrationAudit/${operationId}`).set({
+        schemaVersion: 'administration-audit@1.1.0', operationId,
+        actorUid, targetUid, database: source.id, action: requestedAction,
+        reason: normalizedReason, outcome: 'failed_closed', createdAt: timestamp,
+      }, { merge: true }),
+    ]);
+    const failure = new AdministrationCommandError('failed_precondition', 'Modification incomplète : le compte reste verrouillé. Vérifiez son état avant de réessayer.');
+    failure.details = { database: source.id, uid: targetUid, operationId, accessStatus: 'suspended', causeCode: error?.code || 'unavailable' };
+    throw failure;
   }
-  return { database: source.id, uid: targetUid, disabled: disabled === true };
+  return { database: source.id, uid: targetUid, disabled };
 };
