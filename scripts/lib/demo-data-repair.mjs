@@ -30,7 +30,7 @@ const ACCESSES_PATH = `${REGISTRY_PATH}/accesses`;
 const ZERO_HASH = `sha256:${'0'.repeat(64)}`;
 // Borne de lecture de l'historique d'un Cartulaire démo : seed, v1, v2 et quelques cycles de publication.
 const MAX_AUDIT_EVENTS = 12;
-const READ_ONLY_PERMISSIONS = ['organization.read', 'membership.read', 'registry.read', 'access.read', 'cartulary.read', 'cartulary.export'];
+const READ_ONLY_PERMISSIONS = ['organization.read', 'membership.read', 'registry.read', 'valuation.read', 'access.read', 'cartulary.read', 'cartulary.export'];
 const COMPLETENESS_LEVELS = ['imported_unreviewed', 'complete'];
 const PUBLICATION_ACTIONS = { 'publication.published': 'published', 'publication.revoked': 'revoked' };
 const fail = (detail) => { throw new Error(`Réparation démo refusée : ${detail}`); };
@@ -186,7 +186,7 @@ export function assertDemoRepairScope(state, user, schema) {
   requireFields(membership, { uid, organizationId: DEMO_ACCOUNT.organizationId, roles: ['guest'], status: 'active', scopes: { registryIds: [DEMO_ACCOUNT.registryId] }, revokedAt: null, accountPurpose: DEMO_PURPOSE }, 'adhésion');
   requireValue(sameSet(membership.permissions, READ_ONLY_PERMISSIONS), 'les droits du compte ne sont pas exactement en lecture seule.');
   requireValue(sameSet(state.queries[`${ORG_PATH}/memberships`], [`${ORG_PATH}/memberships/${uid}`]), 'membre supplémentaire dans l’organisation démo.');
-  requireFields(docData(state, REGISTRY_PATH), { id: DEMO_ACCOUNT.registryId, organizationId: DEMO_ACCOUNT.organizationId, status: 'active', visibility: 'secret', itemCount: 5, accountPurpose: DEMO_PURPOSE }, REGISTRY_PATH);
+  requireFields(docData(state, REGISTRY_PATH), { id: DEMO_ACCOUNT.registryId, organizationId: DEMO_ACCOUNT.organizationId, status: 'active', visibility: 'secret', itemCount: 5, referenceCurrency: 'EUR', accountPurpose: DEMO_PURPOSE }, REGISTRY_PATH);
   requireValue(sameSet(state.queries.organizationRegistries, [REGISTRY_PATH]), 'registre supplémentaire dans l’organisation démo.');
   requireValue(sameSet(state.queries.organizationCartularies, DEMO_CARTULARIES.map(({ id }) => `cartularies/${id}`)), 'Cartulaires inattendus ou manquants dans l’organisation démo.');
   requireValue(sameSet(state.queries[`${REGISTRY_PATH}/items`], DEMO_CARTULARIES.map(({ id }) => `${REGISTRY_PATH}/items/${id}`)), 'projections inattendues ou manquantes dans le registre démo.');

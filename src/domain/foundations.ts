@@ -18,6 +18,7 @@ export type FoundationPermission =
   | 'organization.read'
   | 'membership.read'
   | 'registry.read'
+  | 'valuation.read'
   | 'access.read'
   | 'cartulary.read'
   | 'cartulary.edit'
@@ -82,6 +83,7 @@ export interface RegistryDocument {
   status: 'active' | 'archived';
   visibility: 'secret';
   itemCount: number;
+  referenceCurrency: 'EUR';
   modelVersion: typeof FOUNDATION_MODEL_VERSION;
   createdAt: FirestoreTimestampValue;
   updatedAt: FirestoreTimestampValue;

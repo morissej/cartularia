@@ -8,11 +8,14 @@ import {
   buildDemoCartularyEnvelope,
   buildDemoCartularySections,
   buildDemoRegistryItem,
+  buildDemoRegistryValuation,
   buildDemoAssetDocuments,
   buildDemoReminderDocuments,
 } from '../src/data/demoCartularyDocuments.ts';
 import { CANONICALIZATION_VERSION, sha256Digest } from './lib/canonical-json.mjs';
 import { buildDemoAccessProjections, demoRepairOptions, runDemoDataRepair } from './lib/demo-data-repair.mjs';
+import { buildRegistryValuationSnapshot } from './lib/registry-valuation-command.mjs';
+import { buildFictitiousDemoDocumentationAssessment } from './lib/demo-documentation.mjs';
 
 // Deux voies :
 //   --data-only : migration additive et rejouable (simulation par défaut), seule voie autorisée
@@ -113,6 +116,7 @@ batch.set(firestore.doc(`organizations/${DEMO_ACCOUNT.organizationId}/membership
     'organization.read',
     'membership.read',
     'registry.read',
+    'valuation.read',
     'access.read',
     'cartulary.read',
     'cartulary.export',
@@ -129,6 +133,7 @@ batch.set(firestore.doc(`registries/${DEMO_ACCOUNT.registryId}`), {
   status: 'active',
   visibility: 'secret',
   itemCount: DEMO_CARTULARIES.length,
+  referenceCurrency: 'EUR',
   modelVersion: '1.0.0',
   createdAt: now,
   updatedAt: now,
@@ -151,7 +156,9 @@ batch.set(firestore.doc(`registries/${DEMO_ACCOUNT.registryId}/collections/${DEM
   updatedAt: now,
 });
 
-for (const cartulary of DEMO_CARTULARIES) {
+const demoValuationProjections = [];
+const demoDocumentationTiers = ['P0', 'P1', 'P2', 'P3', 'P4'];
+for (const [cartularyIndex, cartulary] of DEMO_CARTULARIES.entries()) {
   const demoContent = demoCartularyContentById(cartulary.id);
   if (!demoContent) throw new Error(`Historique de démonstration absent pour ${cartulary.id}.`);
   const sections = buildDemoCartularySections(cartulary);
@@ -250,11 +257,49 @@ for (const cartulary of DEMO_CARTULARIES) {
     generatedAt: now,
     updatedAt: now,
   });
+  const valuationProjectionBase = buildDemoRegistryValuation(cartulary, 'sha256:pending');
+  const { contentHash: _pendingHash, ...valuationHashInput } = valuationProjectionBase;
+  const valuationProjection = { ...valuationProjectionBase, contentHash: sha256Digest(valuationHashInput) };
+  demoValuationProjections.push(valuationProjection);
+  batch.set(firestore.doc(`registries/${DEMO_ACCOUNT.registryId}/valuationItems/${cartulary.id}`), {
+    ...valuationProjection,
+    generatedAt: now,
+    updatedAt: now,
+  });
+  const documentationAssessment = buildFictitiousDemoDocumentationAssessment({
+    cartulary: envelope,
+    tier: demoDocumentationTiers[cartularyIndex],
+    evaluatedAt: DEMO_ASSERTED_AT,
+    dataRevision: envelope.revision,
+  });
+  batch.set(firestore.doc(`cartularies/${cartulary.id}/documentationAssessments/current`), {
+    ...documentationAssessment,
+    generatedAt: now,
+    updatedAt: now,
+  });
+  batch.set(firestore.doc(`registries/${DEMO_ACCOUNT.registryId}/documentationItems/${cartulary.id}`), {
+    ...documentationAssessment,
+    generatedAt: now,
+    updatedAt: now,
+  });
   // Rappels de Suivi fictifs (contrat de firestore.rules : createdBy = compte démo, dates serveur).
   for (const reminder of buildDemoReminderDocuments(cartulary, demoUser.uid)) {
     batch.set(firestore.doc(`cartularies/${cartulary.id}/reminders/${reminder.id}`), { ...reminder, createdAt: now, updatedAt: now });
   }
 }
+
+const demoSnapshot = buildRegistryValuationSnapshot({
+  projections: demoValuationProjections,
+  registry: { id: DEMO_ACCOUNT.registryId, organizationId: DEMO_ACCOUNT.organizationId, referenceCurrency: 'EUR' },
+  snapshotId: 'statement_demo_2026_08_01',
+  asOfDate: '2026-08-01',
+  actorUid: demoUser.uid,
+  occurredAt: DEMO_ASSERTED_AT,
+});
+batch.set(firestore.doc(`registries/${DEMO_ACCOUNT.registryId}/valuationSnapshots/${demoSnapshot.snapshotId}`), {
+  ...demoSnapshot,
+  createdAt: now,
+});
 
 // Projections d'Accès fictives : aucune registryInvitation, aucun document mail, aucun envoi.
 for (const access of buildDemoAccessProjections()) {

@@ -2,6 +2,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { CANONICALIZATION_VERSION, canonicalize, sha256Digest } from './canonical-json.mjs';
 import { findPrivatePublicKeyToken, findPrivatePublicTextToken } from './public-text-policy.mjs';
 import { registryItemPresentationFields } from './registry-thumbnail.mjs';
+import { buildRegistryValuationProjection } from './registry-valuation-command.mjs';
+import { buildDocumentationAssessment, deriveWatchDocumentationFacts } from './documentation-tier-command.mjs';
 
 const ZERO_HASH = `sha256:${'0'.repeat(64)}`;
 
@@ -271,11 +273,16 @@ export const projectRegistryItem = async ({
     );
     const itemRef = registryRef.collection('items').doc(cartularyId);
     const primaryAssetId = typeof rootData.primaryAssetId === 'string' && rootData.primaryAssetId ? rootData.primaryAssetId : null;
-    const [registry, membership, item, primaryAsset] = await Promise.all([
+    const [registry, membership, item, primaryAsset, sections, assets, seal] = await Promise.all([
       transaction.get(registryRef),
       transaction.get(membershipRef),
       transaction.get(itemRef),
       primaryAssetId ? transaction.get(rootRef.collection('assets').doc(primaryAssetId)) : null,
+      transaction.get(rootRef.collection('sections')),
+      transaction.get(rootRef.collection('assets')),
+      typeof rootData.publicCode === 'string' && rootData.publicCode
+        ? transaction.get(firestore.doc(`seals/${rootData.publicCode}`))
+        : null,
     ]);
     // Manifeste du binaire primaire (lecture avant toute écriture de la transaction) : thumbnailStatus 'failed' quand
     // la copie de présentation ne sera pas produite (K3 étendu) ; absent ou illisible → jamais un échec.
@@ -307,12 +314,6 @@ export const projectRegistryItem = async ({
       userAlias: rootData.userAlias || null,
       objectCode: rootData.objectCode || rootData.publicCode || null,
       possessionStatus: rootData.possessionStatus,
-      purchasePrice: rootData.purchasePrice ?? null,
-      costBasis: rootData.costBasis ?? null,
-      grossValuation: rootData.grossValuation ?? null,
-      netValuation: rootData.netValuation ?? null,
-      netAfterTaxValuation: rootData.netAfterTaxValuation ?? null,
-      valuationCurrency: rootData.valuationCurrency || rootData.currency || null,
       completenessLevel: rootData.completenessLevel,
       primaryAssetId: rootData.primaryAssetId,
       sourceRevision: rootData.revision,
@@ -330,6 +331,27 @@ export const projectRegistryItem = async ({
       resource: { type: 'registryItem', id: cartularyId },
       afterDigest,
     });
+    const valuationProjection = buildRegistryValuationProjection({
+      root: rootData,
+      retainedValue: {},
+      insuranceCoverages: [],
+      sourceRevision: nextRevision,
+    });
+    const documentationAssessment = {
+      ...buildDocumentationAssessment({
+        cartulary: { ...rootData, id: cartularyId },
+        facts: rootData.assetType === 'watch' ? deriveWatchDocumentationFacts({
+          cartularyId,
+          sections: sections.docs.map((document) => ({ id: document.id, ...document.data() })),
+          assets: assets.docs.map((document) => ({ id: document.id, ...document.data() })),
+          retainedValue: null,
+          seal: seal?.exists ? { id: seal.id, ...seal.data() } : null,
+        }) : {},
+        evaluatedAt: occurredAt,
+        dataRevision: nextRevision,
+      }),
+      projectionStatus: 'active',
+    };
     // Vignette, nature et état de la couverture (contrat K3 étendu) : depuis l'asset primaire, sinon conservées ; hors afterDigest.
     const presentationFields = registryItemPresentationFields({
       primaryAssetId,
@@ -342,6 +364,22 @@ export const projectRegistryItem = async ({
       ...presentationFields,
       sourceRevision: nextRevision,
       contentHash: afterDigest,
+      generatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(registryRef.collection('valuationItems').doc(cartularyId), {
+      ...valuationProjection,
+      sourceRevision: nextRevision,
+      generatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(rootRef.collection('documentationAssessments').doc('current'), {
+      ...documentationAssessment,
+      generatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(registryRef.collection('documentationItems').doc(cartularyId), {
+      ...documentationAssessment,
       generatedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

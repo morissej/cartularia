@@ -64,7 +64,7 @@ test('la matrice signale les différences sans modifier les projections sources'
   const rows = buildRegistryComparisonRows(source);
   assert.equal(rows.find(({ id }) => id === 'assetType').allEqual, false);
   assert.equal(rows.find(({ id }) => id === 'completenessLevel').allEqual, true);
-  assert.equal(rows.find(({ id }) => id === 'purchasePrice').values[0], 'Non renseignée');
+  assert.equal(rows.some(({ id }) => id === 'purchasePrice'), false);
   assert.deepEqual(source, before);
 });
 
@@ -82,11 +82,6 @@ test('la liste blanche exclut identifiants internes, médias, empreintes et donn
     'possessionStatus',
     'patrimonialStatus',
     'lifecycleStatus',
-    'purchasePrice',
-    'costBasis',
-    'grossValuation',
-    'netValuation',
-    'netAfterTaxValuation',
     'completenessLevel',
     'sourceRevision',
     'updatedAt',

@@ -241,7 +241,7 @@ export const acceptRegistryInvitation = async ({ firestore, actorUid, actorEmail
         roles: ['guest'],
         status: 'active',
         scopes: { registryIds: [...new Set([...(currentMembership?.scopes?.registryIds || []), data.registryId])] },
-        permissions: ['organization.read', 'registry.read', 'cartulary.read'],
+        permissions: ['organization.read', 'registry.read', 'valuation.read', 'cartulary.read'],
         invitationManaged: true,
         invitationSources: mergedGrant.invitationSources,
         invitationGrants: mergedGrant.invitationGrants,

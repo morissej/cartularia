@@ -36,6 +36,8 @@ import {
 import { activateRegistryAccount as activateRegistryAccountCommand } from './lib/account-command.mjs';
 import { deleteEmptyRegistryCollection, saveRegistryCollectionCommand } from './lib/collection-command.mjs';
 import { createPersonalRecoveryCommands } from './lib/personal-recovery-command.mjs';
+import { createRegistryValuationSnapshot } from './lib/registry-valuation-command.mjs';
+import { getRegistryDocumentationSummary as getRegistryDocumentationSummaryCommand } from './lib/documentation-tier-command.mjs';
 import { createRegistryRecoveryCommands } from './lib/registry-recovery-command.mjs';
 import { getWebsitePublicationState, publishWebsite, revokeWebsite } from './lib/website-publication-command.mjs';
 import { assertActiveAccountSession } from './lib/account-access-command.mjs';
@@ -113,6 +115,39 @@ export const saveRegistryCollection = onCall(invitationCallableOptions, async (r
       confirmedPublication: request.data?.confirmedPublication,
     });
   } catch (error) { throw callableError(error); }
+});
+
+export const createRegistryValuationStatement = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth });
+    return await createRegistryValuationSnapshot({
+      firestore,
+      actorUid: request.auth.uid,
+      registryId: request.data?.registryId,
+      snapshotId: request.data?.snapshotId,
+      asOfDate: request.data?.asOfDate,
+    });
+  } catch (error) {
+    logger.warn("Échec de création d’un arrêté de valeur.", { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
+});
+
+export const getRegistryDocumentationSummary = onCall(invitationCallableOptions, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
+  try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth });
+    return await getRegistryDocumentationSummaryCommand({
+      firestore,
+      actorUid: request.auth.uid,
+      registryId: request.data?.registryId,
+      asOfDate: request.data?.asOfDate,
+    });
+  } catch (error) {
+    logger.warn("Échec de calcul de la synthèse documentaire.", { code: error?.code || 'internal' });
+    throw callableError(error);
+  }
 });
 
 const configuredProjectServices = (name, projectId, registryProjectId) => {

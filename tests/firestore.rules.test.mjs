@@ -91,7 +91,7 @@ beforeEach(async () => {
           ownerUid,
           ownerOrganizationId,
           ownerRegistryId,
-          ['organization.read', 'membership.read', 'registry.read', 'access.read', 'cartulary.read', 'cartulary.edit'],
+          ['organization.read', 'membership.read', 'registry.read', 'valuation.read', 'access.read', 'cartulary.read', 'cartulary.edit'],
           ['account_holder', 'legal_owner'],
         ),
       ),
@@ -114,7 +114,7 @@ beforeEach(async () => {
         membership(registryReaderUid, ownerOrganizationId, ownerRegistryId, ['organization.read', 'registry.read'], ['manager']),
       ),
       setDoc(doc(firestore, 'organizations', ownerOrganizationId, 'memberships', invitedUid), {
-        ...membership(invitedUid, ownerOrganizationId, ownerRegistryId, ['organization.read', 'registry.read', 'cartulary.read'], ['guest']),
+        ...membership(invitedUid, ownerOrganizationId, ownerRegistryId, ['organization.read', 'registry.read', 'valuation.read', 'cartulary.read'], ['guest']),
         invitationManaged: true,
         invitationGrants: {
           [ownerRegistryId]: { registry: false, collectionIds: [], cartularyIds: ['cart-a'] },
@@ -126,6 +126,7 @@ beforeEach(async () => {
         name: 'Registre A',
         status: 'active',
         visibility: 'secret',
+        referenceCurrency: 'EUR',
       }),
       setDoc(doc(firestore, 'registries', outsiderRegistryId), {
         id: outsiderRegistryId,
@@ -133,6 +134,7 @@ beforeEach(async () => {
         name: 'Registre B',
         status: 'active',
         visibility: 'secret',
+        referenceCurrency: 'EUR',
       }),
       setDoc(doc(firestore, 'schemaCatalog', 'watch'), {
         assetType: 'watch',
@@ -165,6 +167,35 @@ beforeEach(async () => {
       }),
       setDoc(doc(firestore, 'registries', ownerRegistryId, 'items', 'cart-b'), {
         cartularyId: 'cart-b', registryId: ownerRegistryId, organizationId: ownerOrganizationId, collectionId: 'col-b',
+      }),
+      setDoc(doc(firestore, 'registries', ownerRegistryId, 'valuationItems', 'cart-a'), {
+        schemaVersion: 'registry-valuation@1.0.0', cartularyId: 'cart-a', registryId: ownerRegistryId,
+        organizationId: ownerOrganizationId, collectionId: 'col-a', collectionIds: ['col-a'],
+        projectionStatus: 'active', visibility: 'secret', marketValue: { amount: 1000, currency: 'EUR' },
+      }),
+      setDoc(doc(firestore, 'registries', ownerRegistryId, 'valuationItems', 'cart-b'), {
+        schemaVersion: 'registry-valuation@1.0.0', cartularyId: 'cart-b', registryId: ownerRegistryId,
+        organizationId: ownerOrganizationId, collectionId: 'col-b', collectionIds: ['col-b'],
+        projectionStatus: 'active', visibility: 'secret', marketValue: { amount: 2000, currency: 'EUR' },
+      }),
+      setDoc(doc(firestore, 'registries', ownerRegistryId, 'documentationItems', 'cart-a'), {
+        schemaVersion: 'documentation-assessment@1.0.0', cartularyId: 'cart-a', registryId: ownerRegistryId,
+        organizationId: ownerOrganizationId, collectionId: 'col-a', collectionIds: ['col-a'],
+        assessmentStatus: 'evaluated', documentationTier: 'P2', projectionStatus: 'active', visibility: 'secret',
+      }),
+      setDoc(doc(firestore, 'registries', ownerRegistryId, 'documentationItems', 'cart-b'), {
+        schemaVersion: 'documentation-assessment@1.0.0', cartularyId: 'cart-b', registryId: ownerRegistryId,
+        organizationId: ownerOrganizationId, collectionId: 'col-b', collectionIds: ['col-b'],
+        assessmentStatus: 'evaluated', documentationTier: 'P1', projectionStatus: 'active', visibility: 'secret',
+      }),
+      setDoc(doc(firestore, 'cartularies', 'cart-a', 'documentationAssessments', 'current'), {
+        schemaVersion: 'documentation-assessment@1.0.0', cartularyId: 'cart-a', assessmentStatus: 'evaluated',
+        documentationTier: 'P2', visibility: 'secret',
+      }),
+      setDoc(doc(firestore, 'registries', ownerRegistryId, 'valuationSnapshots', 'statement-a'), {
+        schemaVersion: 'registry-valuation-snapshot@1.0.0', snapshotId: 'statement-a', registryId: ownerRegistryId,
+        organizationId: ownerOrganizationId, scopeType: 'registry', scopeId: ownerRegistryId,
+        visibility: 'secret', immutable: true, totalMarketValue: 3000,
       }),
       setDoc(doc(firestore, 'registries', ownerRegistryId, 'accesses', 'access-a'), {
         id: 'access-a',
@@ -202,6 +233,47 @@ test('un second compte ne peut ni lire ni découvrir les ressources du premier t
   await assertFails(getDoc(doc(firestore, 'organizations', ownerOrganizationId)));
   await assertFails(getDoc(doc(firestore, 'registries', ownerRegistryId)));
   await assertFails(getDoc(doc(firestore, 'cartularies', 'cart-a')));
+});
+
+test('les valeurs exigent valuation.read et restent bornées au mandat', async () => {
+  const owner = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const reader = testEnvironment.authenticatedContext(registryReaderUid).firestore();
+  const invited = testEnvironment.authenticatedContext(invitedUid).firestore();
+  const itemA = ['registries', ownerRegistryId, 'valuationItems', 'cart-a'];
+  const itemB = ['registries', ownerRegistryId, 'valuationItems', 'cart-b'];
+  const statement = ['registries', ownerRegistryId, 'valuationSnapshots', 'statement-a'];
+  await assertSucceeds(getDoc(doc(owner, ...itemA)));
+  await assertSucceeds(getDocs(collection(owner, 'registries', ownerRegistryId, 'valuationItems')));
+  await assertSucceeds(getDoc(doc(owner, ...statement)));
+  await assertSucceeds(getDocs(collection(owner, 'registries', ownerRegistryId, 'valuationSnapshots')));
+  await assertFails(getDoc(doc(reader, ...itemA)));
+  await assertFails(getDoc(doc(reader, ...statement)));
+  await assertSucceeds(getDoc(doc(invited, ...itemA)));
+  await assertFails(getDoc(doc(invited, ...itemB)));
+  await assertFails(getDoc(doc(invited, ...statement)));
+  await assertFails(getDocs(collection(invited, 'registries', ownerRegistryId, 'valuationSnapshots')));
+  await assertFails(updateDoc(doc(owner, ...itemA), { 'marketValue.amount': 9999 }));
+  await assertFails(deleteDoc(doc(owner, ...statement)));
+});
+
+test('les paliers documentaires Secrets exigent les droits de valeur, respectent le mandat et restent non modifiables', async () => {
+  const owner = testEnvironment.authenticatedContext(ownerUid).firestore();
+  const reader = testEnvironment.authenticatedContext(registryReaderUid).firestore();
+  const invited = testEnvironment.authenticatedContext(invitedUid).firestore();
+  const anonymous = testEnvironment.unauthenticatedContext().firestore();
+  const itemA = ['registries', ownerRegistryId, 'documentationItems', 'cart-a'];
+  const itemB = ['registries', ownerRegistryId, 'documentationItems', 'cart-b'];
+  const assessmentA = ['cartularies', 'cart-a', 'documentationAssessments', 'current'];
+  await assertSucceeds(getDoc(doc(owner, ...itemA)));
+  await assertSucceeds(getDocs(collection(owner, 'registries', ownerRegistryId, 'documentationItems')));
+  await assertFails(getDoc(doc(reader, ...itemA)));
+  await assertSucceeds(getDoc(doc(invited, ...itemA)));
+  await assertFails(getDoc(doc(invited, ...itemB)));
+  await assertSucceeds(getDoc(doc(invited, ...assessmentA)));
+  await assertFails(getDoc(doc(anonymous, ...itemA)));
+  await assertFails(getDoc(doc(anonymous, ...assessmentA)));
+  await assertFails(updateDoc(doc(owner, ...itemA), { documentationTier: 'P4' }));
+  await assertFails(setDoc(doc(owner, ...assessmentA), { documentationTier: 'P4' }, { merge: true }));
 });
 
 test('un payeur sans permission patrimoniale ne lit ni Registre ni Cartulaire', async () => {

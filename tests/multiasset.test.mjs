@@ -35,6 +35,8 @@ let testEnvironment;
 const seedFoundations = async () => {
   const now = new Date('2026-08-14T13:00:00.000Z');
   await Promise.all([
+    adminFirestore.doc('users/wave1-owner').set({ uid: 'wave1-owner', status: 'active' }),
+    adminFirestore.doc('users/wave1-outsider').set({ uid: 'wave1-outsider', status: 'active' }),
     adminFirestore.doc('organizations/org_demo').set({ id: 'org_demo', status: 'active', createdAt: now }),
     adminFirestore.doc('registries/reg_collection_privee').set({
       id: 'reg_collection_privee',

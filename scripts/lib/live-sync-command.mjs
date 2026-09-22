@@ -8,6 +8,8 @@ import { assertNewCollectionAssignments } from './collection-command.mjs';
 import { applyGenericMediaChanges } from './generic-media-command.mjs';
 import { assetPrivatePresentationFor, registryItemPresentationFields } from './registry-thumbnail.mjs';
 import { cartularyReviewRootPatch, parseCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY } from './cartulary-review-policy.mjs';
+import { buildRegistryValuationProjection } from './registry-valuation-command.mjs';
+import { buildDocumentationAssessment, deriveWatchDocumentationFacts } from './documentation-tier-command.mjs';
 
 const SYNC_RATE_LIMIT_PER_HOUR = 120;
 const ONE_HOUR_MS = 60 * 60 * 1_000;
@@ -232,16 +234,20 @@ export const processCartularySyncRequest = async ({
   if (!claim.claimed) return { requestDocumentId, status: 'ignored', reason: claim.reason };
 
   const rootRef = firestore.doc(`cartularies/${cartularyId}`);
-  const [root, auditSnapshot, draft, existingAssetsSnapshot, existingRemindersSnapshot] = await Promise.all([
+  const [root, auditSnapshot, draft, existingAssetsSnapshot, existingRemindersSnapshot, existingSectionsSnapshot] = await Promise.all([
     rootRef.get(),
     rootRef.collection('auditEvents').orderBy('sequence').get(),
     loadDraft(firestore, ownerUid, cartularyId),
     rootRef.collection('assets').get(),
     rootRef.collection('reminders').get(),
+    rootRef.collection('sections').get(),
   ]);
   if (!root.exists) throw new LiveSyncCommandError('cartulary_not_found', `Cartulaire ${cartularyId} introuvable.`);
   const rootData = root.data();
-  const previousProjection = await firestore.doc(`registries/${rootData.registryId}/items/${cartularyId}`).get();
+  const [previousProjection, sealSnapshot] = await Promise.all([
+    firestore.doc(`registries/${rootData.registryId}/items/${cartularyId}`).get(),
+    typeof rootData.publicCode === 'string' && rootData.publicCode ? firestore.doc(`seals/${rootData.publicCode}`).get() : Promise.resolve(null),
+  ]);
   const moneyBaseline = { ...previousProjection.data(), ...rootData };
   const chain = verifyAuditChain({
     events: auditSnapshot.docs.map((document) => document.data()),
@@ -297,6 +303,7 @@ export const processCartularySyncRequest = async ({
   const purchaseExpenses = stateValue(draft.states, 'cartularia-purchase-expenses');
   const retainedValuationState = stateValue(draft.states, 'cartularia-retained-valuation');
   const retainedValuation = retainedValuationState || {};
+  const insuranceCoverages = stateValue(draft.states, 'cartularia-insurance-coverages');
   const creationProfile = stateValue(draft.states, 'cartularia-creation-profile') || {};
   const purchasePrice = asNonNegativeNumber(purchase.purchasePrice, moneyBaseline.purchasePrice ?? creationProfile.purchasePrice ?? null);
   const costBasis = !purchaseState && !Array.isArray(purchaseExpenses) ? (moneyBaseline.costBasis ?? purchasePrice) : purchasePrice === null ? null : purchasePrice + (Array.isArray(purchaseExpenses)
@@ -353,7 +360,27 @@ export const processCartularySyncRequest = async ({
 
   const registryRef = firestore.doc(`registries/${rootData.registryId}`);
   const registryItemRef = registryRef.collection('items').doc(cartularyId);
+  const registryValuationRef = registryRef.collection('valuationItems').doc(cartularyId);
+  const registryDocumentationRef = registryRef.collection('documentationItems').doc(cartularyId);
+  const cartularyDocumentationRef = rootRef.collection('documentationAssessments').doc('current');
   const membershipRef = firestore.doc(`organizations/${rootData.organizationId}/memberships/${ownerUid}`);
+
+  const effectiveSections = new Map(existingSectionsSnapshot.docs.map((document) => [document.id, { id: document.id, ...document.data() }]));
+  for (const patch of sectionPatches) effectiveSections.set(patch.id, patch);
+  const effectiveAssets = Array.isArray(media)
+    ? assetPatches
+    : existingAssetsSnapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+  const documentationFacts = rootData.assetType === 'watch' ? deriveWatchDocumentationFacts({
+    cartularyId,
+    sections: [...effectiveSections.values()],
+    assets: effectiveAssets,
+    retainedValue: retainedValuationState || editedValue ? {
+      ...retainedValuation,
+      amount: grossValuation,
+      currency: retainedValuation.currency || editedValue?.currency || null,
+    } : null,
+    seal: sealSnapshot?.exists ? { id: sealSnapshot.id, ...sealSnapshot.data() } : null,
+  }) : {};
 
   return firestore.runTransaction(async (transaction) => {
     const [currentRequest, currentRoot, registry, membership, registryItem] = await Promise.all([
@@ -413,18 +440,43 @@ export const processCartularySyncRequest = async ({
       patrimonialStatus,
       userAlias,
       objectCode,
-      purchasePrice,
-      costBasis,
-      grossValuation,
-      netValuation,
-      netAfterTaxValuation,
-      valuationCurrency,
       completenessLevel: reviewPatch?.completenessLevel ?? currentRootData.completenessLevel,
       primaryAssetId,
       sourceRevision: nextRevision,
       projectionStatus: 'active',
     };
     const contentHash = sha256Digest(projection);
+    const valuationProjection = buildRegistryValuationProjection({
+      root: {
+        ...currentRootData,
+        id: cartularyId,
+        collectionId,
+        collectionIds,
+        displayTitle: projection.displayTitle,
+      },
+      retainedValue: retainedValuationState || editedValue ? {
+        ...retainedValuation,
+        amount: grossValuation,
+        currency: retainedValuation.currency || editedValue?.currency || null,
+      } : {},
+      insuranceCoverages,
+      sourceRevision: nextRevision,
+    });
+    const documentationAssessment = {
+      ...buildDocumentationAssessment({
+        cartulary: {
+          ...currentRootData,
+          id: cartularyId,
+          collectionId,
+          collectionIds,
+          displayTitle: projection.displayTitle,
+        },
+        facts: documentationFacts,
+        evaluatedAt: occurredAt,
+        dataRevision: nextRevision,
+      }),
+      projectionStatus: 'active',
+    };
     const auditEvent = createAuditEvent({
       rootData: currentRootData, requestId, actorId: ownerUid, occurredAt, afterDigest: draft.digest,
       ...(reviewPatch ? { action: REVIEW_CONFIRMED_ACTION, resource: { type: 'cartulary', id: cartularyId } } : {}),
@@ -506,6 +558,21 @@ export const processCartularySyncRequest = async ({
       ...projection,
       ...presentationFields,
       contentHash,
+      generatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(registryValuationRef, {
+      ...valuationProjection,
+      generatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(cartularyDocumentationRef, {
+      ...documentationAssessment,
+      generatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(registryDocumentationRef, {
+      ...documentationAssessment,
       generatedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

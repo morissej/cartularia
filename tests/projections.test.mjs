@@ -39,6 +39,8 @@ let testEnvironment;
 const seedFoundations = async () => {
   const now = new Date('2026-08-14T08:00:00.000Z');
   await Promise.all([
+    adminFirestore.doc('users/wave1-owner').set({ uid: 'wave1-owner', status: 'active' }),
+    adminFirestore.doc('users/wave1-outsider').set({ uid: 'wave1-outsider', status: 'active' }),
     adminFirestore.doc('organizations/org_demo').set({ id: 'org_demo', status: 'active', createdAt: now }),
     adminFirestore.doc('registries/reg_collection_privee').set({
       id: 'reg_collection_privee',
@@ -187,6 +189,8 @@ test('le Registre reçoit une projection privée minimale et isolée', async () 
     occurredAt: '2026-08-14T10:00:00.000Z',
   });
   const item = await adminFirestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`).get();
+  const cartularyDocumentation = await adminFirestore.doc(`cartularies/${IWC_CARTULARY_ID}/documentationAssessments/current`).get();
+  const registryDocumentation = await adminFirestore.doc(`registries/reg_collection_privee/documentationItems/${IWC_CARTULARY_ID}`).get();
   // G7 : la base64 de la vignette inline est exclue du contrôle de sous-chaînes (elle peut contenir « owner » par hasard).
   const itemText = registryItemAuditText(item.data()).toLowerCase();
   const ownerFirestore = testEnvironment.authenticatedContext('wave1-owner').firestore();
@@ -204,6 +208,12 @@ test('le Registre reçoit une projection privée minimale et isolée', async () 
   assert.equal(item.data().thumbnail, null);
   assert.equal(item.data().primaryMediaKind, 'image');
   assert.equal(item.data().thumbnailStatus, 'pending', 'K3 étendu : image sans miroir ni échec consigné');
+  assert.equal(cartularyDocumentation.data().assessmentStatus, 'evaluated');
+  assert.equal(cartularyDocumentation.data().visibility, 'secret');
+  assert.equal(cartularyDocumentation.data().dataRevision, 2);
+  const { generatedAt: _cartularyGeneratedAt, updatedAt: _cartularyUpdatedAt, ...cartularyDocumentationPayload } = cartularyDocumentation.data();
+  const { generatedAt: _registryGeneratedAt, updatedAt: _registryUpdatedAt, ...registryDocumentationPayload } = registryDocumentation.data();
+  assert.deepEqual(registryDocumentationPayload, cartularyDocumentationPayload);
 });
 
 test('la projection recopie la vignette de l’asset primaire et conserve une vignette posée par ailleurs', async () => {

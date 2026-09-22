@@ -36,6 +36,8 @@ let testEnvironment;
 
 const seedFoundations = async () => {
   await Promise.all([
+    adminFirestore.doc(`users/${ownerUid}`).set({ uid: ownerUid, status: 'active' }),
+    adminFirestore.doc(`users/${outsiderUid}`).set({ uid: outsiderUid, status: 'active' }),
     adminFirestore.doc('organizations/org_demo').set({ id: 'org_demo', status: 'active' }),
     adminFirestore.doc('registries/reg_collection_privee').set({
       id: 'reg_collection_privee', organizationId: 'org_demo', status: 'active', visibility: 'secret',

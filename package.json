@@ -46,6 +46,8 @@
     "test:seed": "FIREBASE_CLI_DISABLE_UPDATE_CHECK=true firebase emulators:exec --project cartularia-wave1-local --only auth,firestore \"npm run schema:check && npm run seed:foundations && npm run seed:foundations\"",
     "test:registry-wave2": "node --test tests/registry-catalog.test.mjs",
     "test:registry-wave3": "node --test tests/registry-aggregates.test.mjs",
+    "test:registry-valuation": "node --test tests/registry-valuation.test.mjs",
+    "test:documentation-tier": "node --test tests/documentation-tier.test.mjs",
     "test:registry-wave4": "node --test tests/registry-follow-up.test.mjs",
     "test:registry-wave5": "node --test tests/registry-administration.test.mjs",
     "test:registry-wave6": "node --test tests/registry-access.test.mjs",

@@ -6,7 +6,7 @@ import { validRegistryThumbnail } from '../scripts/lib/presentation-variants.mjs
 import { normalizeRegistryThumbnail } from '../src/domain/registryThumbnail.ts';
 import sharp from 'sharp';
 import {
-  DEMO_REVIEWED_AT, buildDemoAccessDocuments, buildDemoAssetDocuments, buildDemoCartularyEnvelope, buildDemoCartularySections, buildDemoRegistryItem, buildDemoRegistryThumbnail, buildDemoReminderDocuments, demoValuationAmounts,
+  DEMO_REVIEWED_AT, buildDemoAccessDocuments, buildDemoAssetDocuments, buildDemoCartularyEnvelope, buildDemoCartularySections, buildDemoRegistryItem, buildDemoRegistryThumbnail, buildDemoRegistryValuation, buildDemoReminderDocuments, demoValuationAmounts,
 } from '../src/data/demoCartularyDocuments.ts';
 import { presentationImageSetFor } from '../src/media/presentationDerivatives.ts';
 import { buildDemoAccessProjections } from '../scripts/lib/demo-data-repair.mjs';
@@ -20,20 +20,26 @@ const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'ut
 const hostingConfig = JSON.parse(readFileSync(new URL('../firebase.json', import.meta.url), 'utf8'));
 const seedScript = readFileSync(new URL('../scripts/seed-demo-account.mjs', import.meta.url), 'utf8');
 
-test('la Galerie et le Registre démo utilisent les médias et montants du Cartulaire', () => {
+test('la Galerie et le Registre démo séparent médias de catalogue et projection financière Secret', () => {
   for (const cartulary of DEMO_CARTULARIES) {
     const assets = buildDemoAssetDocuments(cartulary);
     const item = buildDemoRegistryItem(cartulary, 'sha256:test');
     assert.ok(assets.some((asset) => asset.id === item.primaryAssetId && asset.tags.includes('main-photo') && asset.presentationDerivative.url.startsWith('/assets/')));
     assert.equal(buildDemoCartularyEnvelope(cartulary).primaryAssetId, item.primaryAssetId);
-    assert.equal(buildDemoCartularyEnvelope(cartulary).costBasis, item.costBasis);
-    assert.equal(buildDemoCartularyEnvelope(cartulary).netValuation, item.netValuation);
-    assert.equal(item.costBasis, cartulary.purchasePrice + demoCartularyContentById(cartulary.id).expenses.reduce((sum, entry) => sum + entry.amount, 0));
-    assert.equal(item.netValuation, item.grossValuation - demoValuationAmounts(cartulary).saleCostAmount);
-    assert.equal(item.netAfterTaxValuation, item.netValuation);
+    const valuation = buildDemoRegistryValuation(cartulary, 'sha256:test');
+    assert.equal('grossValuation' in item, false);
+    assert.equal('purchasePrice' in item, false);
+    assert.equal(valuation.marketValue.amount, cartulary.valuationMid);
+    assert.equal(valuation.marketValue.level, 'owner_declared');
+    assert.equal(valuation.insuranceContracts[0].insuredAmount, demoCartularyContentById(cartulary.id).insurance.insuredValue);
+    assert.equal(buildDemoCartularyEnvelope(cartulary).netValuation, cartulary.valuationMid - demoValuationAmounts(cartulary).saleCostAmount);
     assert.ok(assets.every((asset) => asset.visibility === 'secret'));
   }
   assert.match(seedScript, /buildDemoAssetDocuments\(cartulary\)/);
+  assert.match(seedScript, /valuationItems/);
+  assert.match(seedScript, /documentationAssessments\/current/);
+  assert.match(seedScript, /documentationItems/);
+  assert.match(seedScript, /valuationSnapshots/);
   assert.equal(DEMO_ACCOUNT.collectionName, 'Les cinq icônes');
   assert.match(seedScript, /name: DEMO_ACCOUNT\.collectionName/);
   assert.match(seedScript, /description: DEMO_ACCOUNT\.collectionDescription/);

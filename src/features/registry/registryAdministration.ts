@@ -35,6 +35,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'organization.read': 'Voir l’organisation',
   'membership.read': 'Voir les membres',
   'registry.read': 'Ouvrir le Registre',
+  'valuation.read': 'Lire les valeurs et arrêtés autorisés',
   'access.read': 'Voir les accès partagés',
   'cartulary.read': 'Lire les Cartulaires autorisés',
   'cartulary.edit': 'Créer et modifier les Cartulaires autorisés',
@@ -66,6 +67,7 @@ export interface RegistryAdministrationSummary {
 
 const PATRIMONIAL_PERMISSIONS = new Set<FoundationPermission>([
   'registry.read',
+  'valuation.read',
   'access.read',
   'cartulary.read',
   'cartulary.edit',

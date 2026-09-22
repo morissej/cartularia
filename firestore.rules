@@ -94,6 +94,20 @@ service cloud.firestore {
         );
     }
 
+    function canReadRegistryValuationItem(organizationId, registryId, cartularyId, collectionId, collectionIds) {
+      return hasPermission(organizationId, 'valuation.read')
+        && canReadRegistryItem(organizationId, registryId, cartularyId, collectionId, collectionIds);
+    }
+
+    function canReadRegistryValuationSnapshot(organizationId, registryId) {
+      return hasPermission(organizationId, 'valuation.read')
+        && canReadRegistry(organizationId, registryId)
+        && (
+          !membershipIsInvitationManaged(organizationId)
+          || invitationGrant(organizationId, registryId).registry == true
+        );
+    }
+
     function cartularyMatchesInvitedCollection(organizationId, registryId, cartularyId) {
       let root = get(/databases/$(database)/documents/cartularies/$(cartularyId)).data;
       let grant = invitationGrant(organizationId, registryId);
@@ -200,6 +214,36 @@ service cloud.firestore {
           collectionId
         );
         // Version checks, publication and deletion are authoritative transactions.
+        allow create, update, delete: if false;
+      }
+
+      match /valuationItems/{cartularyId} {
+        allow get, list: if canReadRegistryValuationItem(
+          get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+          registryId,
+          cartularyId,
+          resource.data.collectionId,
+          resource.data.get('collectionIds', [])
+        );
+        allow create, update, delete: if false;
+      }
+
+      match /valuationSnapshots/{snapshotId} {
+        allow get, list: if canReadRegistryValuationSnapshot(
+            get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+            registryId
+          );
+        allow create, update, delete: if false;
+      }
+
+      match /documentationItems/{cartularyId} {
+        allow get, list: if canReadRegistryValuationItem(
+          get(/databases/$(database)/documents/registries/$(registryId)).data.organizationId,
+          registryId,
+          cartularyId,
+          resource.data.collectionId,
+          resource.data.get('collectionIds', [])
+        );
         allow create, update, delete: if false;
       }
 

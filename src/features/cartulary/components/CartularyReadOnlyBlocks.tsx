@@ -162,6 +162,13 @@ export function ValuationLevelsReadOnly({ retained, currentValue, net, netAfterT
         <span className="eyebrow">{tx('Explication de la valeur retenue', 'Retained value explanation')}</span>
         <p {...aiFieldProps('value.retained.explanation')}>{retained.explanation || tx('Aucune explication renseignée.', 'No explanation provided.')}</p>
       </div>
+      <dl className="retained-value-card__metadata retained-value-card__metadata--readonly">
+        <div><dt>{tx('Niveau de valeur', 'Value level')}</dt><dd>{({ owner_declared: tx('Déclarée par le propriétaire', 'Declared by owner'), ai_proposed: tx('Proposée par IA', 'AI proposed'), professional: tx('Professionnel mandaté', 'Mandated professional'), transaction: tx('Transaction observée', 'Observed transaction') } as Record<string, string>)[retained.level || ''] || tx('Non renseigné', 'Not provided')}</dd></div>
+        <div><dt>{tx('Date', 'Date')}</dt><dd>{retained.observedAt || tx('Non renseignée', 'Not provided')}</dd></div>
+        <div><dt>{tx('Source', 'Source')}</dt><dd>{retained.sourceLabel || tx('Non renseignée', 'Not provided')}</dd></div>
+        <div><dt>{tx('Confiance', 'Confidence')}</dt><dd>{({ low: tx('Faible', 'Low'), medium: tx('Moyenne', 'Medium'), high: tx('Élevée', 'High') } as Record<string, string>)[retained.confidence || ''] || tx('Non renseignée', 'Not provided')}</dd></div>
+        <div><dt>{tx('Devise', 'Currency')}</dt><dd>{retained.currency || tx('Non renseignée', 'Not provided')}</dd></div>
+      </dl>
     </>
   );
 }

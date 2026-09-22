@@ -85,6 +85,23 @@ export interface RetainedValuationState {
   saleCostAmount: number;
   taxAmount: number;
   explanation: string;
+  level?: '' | 'owner_declared' | 'ai_proposed' | 'professional' | 'transaction';
+  observedAt?: string;
+  sourceLabel?: string;
+  confidence?: '' | 'low' | 'medium' | 'high';
+  currency?: string;
+}
+
+export interface InsuranceContractState {
+  contractId: string;
+  carrierLabel: string;
+  contractReference: string;
+  insuredAmount: number;
+  currency: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  basisLabel: string;
+  status: 'active' | 'expired' | 'pending';
 }
 
 export interface StorageLocation {

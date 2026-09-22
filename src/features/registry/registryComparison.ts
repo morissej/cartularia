@@ -20,11 +20,6 @@ export type RegistryComparisonFieldId =
   | 'possessionStatus'
   | 'patrimonialStatus'
   | 'lifecycleStatus'
-  | 'purchasePrice'
-  | 'costBasis'
-  | 'grossValuation'
-  | 'netValuation'
-  | 'netAfterTaxValuation'
   | 'completenessLevel'
   | 'sourceRevision'
   | 'updatedAt';
@@ -46,11 +41,6 @@ export const REGISTRY_COMPARISON_FIELD_IDS: readonly RegistryComparisonFieldId[]
   'possessionStatus',
   'patrimonialStatus',
   'lifecycleStatus',
-  'purchasePrice',
-  'costBasis',
-  'grossValuation',
-  'netValuation',
-  'netAfterTaxValuation',
   'completenessLevel',
   'sourceRevision',
   'updatedAt',
@@ -98,15 +88,6 @@ const formattedTimestamp = (item: RegistryItemProjection) => {
   }).format(date);
 };
 
-const formattedMoney = (item: RegistryItemProjection, value: number | null | undefined) => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Non renseignée';
-  try {
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: item.valuationCurrency || 'EUR', maximumFractionDigits: 0 }).format(value);
-  } catch {
-    return `${Math.round(value).toLocaleString('fr-FR')} ${item.valuationCurrency || 'EUR'}`;
-  }
-};
-
 const FIELD_DEFINITIONS: Array<{
   id: RegistryComparisonFieldId;
   label: string;
@@ -121,11 +102,6 @@ const FIELD_DEFINITIONS: Array<{
   { id: 'possessionStatus', label: 'Situation', value: (item) => POSSESSION_LABELS[item.possessionStatus] || labelFromIdentifier(item.possessionStatus) },
   { id: 'patrimonialStatus', label: 'Statut patrimonial', value: (item) => item.patrimonialStatus || 'Non renseigné' },
   { id: 'lifecycleStatus', label: 'État du dossier', value: (item) => LIFECYCLE_LABELS[item.lifecycleStatus] || labelFromIdentifier(item.lifecycleStatus) },
-  { id: 'purchasePrice', label: "Prix d’achat", value: (item) => formattedMoney(item, item.purchasePrice) },
-  { id: 'costBasis', label: 'Prix de revient', value: (item) => formattedMoney(item, item.costBasis) },
-  { id: 'grossValuation', label: 'Valorisation brute', value: (item) => formattedMoney(item, item.grossValuation) },
-  { id: 'netValuation', label: 'Valorisation nette après frais de vente', value: (item) => formattedMoney(item, item.netValuation) },
-  { id: 'netAfterTaxValuation', label: 'Valorisation nette après impôts', value: (item) => formattedMoney(item, item.netAfterTaxValuation) },
   { id: 'completenessLevel', label: 'Palier de complétude', value: (item) => COMPLETENESS_LABELS[item.completenessLevel] || labelFromIdentifier(item.completenessLevel) },
   { id: 'sourceRevision', label: 'Révision projetée', value: (item) => String(item.sourceRevision) },
   { id: 'updatedAt', label: 'Projection actualisée', value: formattedTimestamp },

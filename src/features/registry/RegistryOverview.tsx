@@ -28,6 +28,8 @@ import { buildRegistryAggregates } from './registryAggregates.ts';
 import { ROLE_LABELS } from './registryAdministration.ts';
 import { buildRegistryFollowUpSummary } from './registryFollowUp.ts';
 import { useRegistryCollections } from './useRegistryCollections.ts';
+import { RegistryValuationSummary } from './RegistryValuationSummary.tsx';
+import { RegistryDocumentationSummary } from './RegistryDocumentationSummary.tsx';
 import {
   assetTypeLabel,
   completenessLabel,
@@ -168,6 +170,9 @@ export function RegistryOverview({ registry, organization, membership }: {
           </small>
         </article>
       </section>
+
+      <RegistryValuationSummary registry={registry} membership={membership} />
+      <RegistryDocumentationSummary registry={registry} membership={membership} />
 
       {loadState === 'loading' && (
         <section className="registry-dashboard-loading" role="status">

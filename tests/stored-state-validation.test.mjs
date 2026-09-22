@@ -131,6 +131,11 @@ test('une ancienne valorisation reçoit les nouveaux niveaux nets sans perdre so
     saleCostAmount: 2_000,
     taxAmount: 500,
     explanation: 'Historique',
+    level: '',
+    observedAt: '',
+    sourceLabel: '',
+    confidence: '',
+    currency: '',
   });
 });
 

@@ -27,7 +27,7 @@ const seedFoundations = async () => {
   await Promise.all([
     firestore.doc('organizations/org_demo').set({ id: 'org_demo', status: 'active', createdAt: now }),
     firestore.doc('registries/reg_collection_privee').set({
-      id: 'reg_collection_privee', organizationId: 'org_demo', status: 'active', itemCount: 0,
+      id: 'reg_collection_privee', organizationId: 'org_demo', status: 'active', itemCount: 0, referenceCurrency: 'EUR',
     }),
     firestore.doc('registries/reg_collection_privee/collections/col_archive').set({
       id: 'col_archive', registryId: 'reg_collection_privee', organizationId: 'org_demo', status: 'draft',
@@ -35,7 +35,7 @@ const seedFoundations = async () => {
     firestore.doc('organizations/org_demo/memberships/wave1-owner').set({
       uid: 'wave1-owner', organizationId: 'org_demo', roles: ['account_holder', 'legal_owner'], status: 'active',
       scopes: { registryIds: ['reg_collection_privee'] },
-      permissions: ['registry.read', 'cartulary.read', 'cartulary.edit', 'publication.manage'],
+      permissions: ['registry.read', 'cartulary.read', 'cartulary.edit', 'publication.manage', 'valuation.read'],
     }),
     firestore.doc('schemaCatalog/watch/versions/1.3.0').set({
       schemaId: 'watch', assetType: 'watch', version: '1.3.0', status: 'baseline',
@@ -92,7 +92,14 @@ const writeDraftAndRequest = async (requestId) => {
     firestore.doc(`${draftPath}/state/cartularia-watch-status`).set({ key: 'cartularia-watch-status', value: JSON.stringify('À vendre'), deleted: false, revision: 1, clientUpdatedAt: 13 }),
     firestore.doc(`${draftPath}/state/cartularia-purchase`).set({ key: 'cartularia-purchase', value: JSON.stringify({ date: '2020-01-01', purchasePrice: 10_000 }), deleted: false, revision: 1, clientUpdatedAt: 14 }),
     firestore.doc(`${draftPath}/state/cartularia-purchase-expenses`).set({ key: 'cartularia-purchase-expenses', value: JSON.stringify([{ id: 'expense-1', amount: 1_500 }]), deleted: false, revision: 1, clientUpdatedAt: 15 }),
-    firestore.doc(`${draftPath}/state/cartularia-retained-valuation`).set({ key: 'cartularia-retained-valuation', value: JSON.stringify({ amount: 20_000, saleCostAmount: 2_000, taxAmount: 500 }), deleted: false, revision: 1, clientUpdatedAt: 16 }),
+    firestore.doc(`${draftPath}/state/cartularia-retained-valuation`).set({ key: 'cartularia-retained-valuation', value: JSON.stringify({
+      amount: 20_000, saleCostAmount: 2_000, taxAmount: 500, level: 'owner_declared', observedAt: '2026-08-15',
+      sourceLabel: 'Déclaration propriétaire test', confidence: 'medium', currency: 'EUR',
+    }), deleted: false, revision: 1, clientUpdatedAt: 16 }),
+    firestore.doc(`${draftPath}/state/cartularia-insurance-coverages`).set({ key: 'cartularia-insurance-coverages', value: JSON.stringify([{
+      contractId: 'insurance-live-1', carrierLabel: 'Assureur test', contractReference: 'POLICE-001', insuredAmount: 18_000,
+      currency: 'EUR', effectiveFrom: '2026-01-01', effectiveTo: null, basisLabel: 'Capital contractuel', status: 'active',
+    }]), deleted: false, revision: 1, clientUpdatedAt: 16 }),
     firestore.doc(`${draftPath}/state/cartularia-creation-profile`).set({ key: 'cartularia-creation-profile', value: JSON.stringify({ currency: 'EUR' }), deleted: false, revision: 1, clientUpdatedAt: 17 }),
     firestore.doc(`${draftPath}/state/cartularia-todos`).set({ key: 'cartularia-todos', value: JSON.stringify([{ id: 'follow-up-1', text: 'Renouveler assurance', dueAt: '2026-09-01', category: 'insurance', status: 'planned' }]), deleted: false, revision: 1, clientUpdatedAt: 18 }),
     firestore.doc(`${draftPath}/state/cartularia-owner-fields`).set({ key: 'cartularia-owner-fields', value: JSON.stringify([{ id: 'owner-name', value: 'Nom historique à filtrer' }]), deleted: false, revision: 1, clientUpdatedAt: 19 }),
@@ -160,9 +167,12 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
   assert.equal(result.outcome, 'updated');
   assert.equal(result.revision, 2);
 
-  const [root, item, asset, personalState, ownerDocument, liveState, reminder, request, audits] = await Promise.all([
+  const [root, item, valuation, cartularyDocumentation, registryDocumentation, asset, personalState, ownerDocument, liveState, reminder, request, audits] = await Promise.all([
     firestore.doc(`cartularies/${IWC_CARTULARY_ID}`).get(),
     firestore.doc(`registries/reg_collection_privee/items/${IWC_CARTULARY_ID}`).get(),
+    firestore.doc(`registries/reg_collection_privee/valuationItems/${IWC_CARTULARY_ID}`).get(),
+    firestore.doc(`cartularies/${IWC_CARTULARY_ID}/documentationAssessments/current`).get(),
+    firestore.doc(`registries/reg_collection_privee/documentationItems/${IWC_CARTULARY_ID}`).get(),
     firestore.doc(`cartularies/${IWC_CARTULARY_ID}/assets/asset-live-photo`).get(),
     firestore.doc(`cartularies/${IWC_CARTULARY_ID}/liveState/cartularia-owner-fields`).get(),
     firestore.doc(`cartularies/${IWC_CARTULARY_ID}/assets/owner-document-live-0001`).get(),
@@ -177,11 +187,31 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
   assert.equal(item.data().primaryAssetId, 'asset-live-photo');
   assert.equal(item.data().collectionId, 'col_archive');
   assert.equal(item.data().patrimonialStatus, 'À vendre');
-  assert.equal(item.data().purchasePrice, 10_000);
-  assert.equal(item.data().costBasis, 11_500);
-  assert.equal(item.data().grossValuation, 20_000);
-  assert.equal(item.data().netValuation, 18_000);
-  assert.equal(item.data().netAfterTaxValuation, 17_500);
+  assert.equal(root.data().purchasePrice, 10_000);
+  assert.equal(root.data().costBasis, 11_500);
+  assert.equal(root.data().grossValuation, 20_000);
+  assert.equal(root.data().netValuation, 18_000);
+  assert.equal(root.data().netAfterTaxValuation, 17_500);
+  for (const financialField of ['purchasePrice', 'costBasis', 'grossValuation', 'netValuation', 'netAfterTaxValuation', 'valuationCurrency']) {
+    assert.equal(item.data()[financialField], undefined, `${financialField} absent de la projection catalogue`);
+  }
+  assert.equal(valuation.data().eligibility, 'eligible');
+  assert.deepEqual(valuation.data().marketValue, {
+    amount: 20_000,
+    confidence: 'medium',
+    currency: 'EUR',
+    level: 'owner_declared',
+    observedAt: '2026-08-15',
+    sourceLabel: 'Déclaration propriétaire test',
+  });
+  assert.equal(valuation.data().insuranceContracts[0].insuredAmount, 18_000);
+  assert.equal(cartularyDocumentation.data().assessmentStatus, 'evaluated');
+  assert.equal(cartularyDocumentation.data().visibility, 'secret');
+  assert.equal(cartularyDocumentation.data().dataRevision, 2);
+  assert.equal('completenessLevel' in cartularyDocumentation.data(), false, 'le palier documentaire reste distinct de la revue propriétaire');
+  const { generatedAt: _cartularyGeneratedAt, updatedAt: _cartularyUpdatedAt, ...cartularyDocumentationPayload } = cartularyDocumentation.data();
+  const { generatedAt: _registryGeneratedAt, updatedAt: _registryUpdatedAt, ...registryDocumentationPayload } = registryDocumentation.data();
+  assert.deepEqual(registryDocumentationPayload, cartularyDocumentationPayload, 'le miroir Registre reprend uniquement le calcul serveur');
   assert.equal(reminder.data().title, 'Renouveler assurance');
   assert.equal(asset.data().processingState, 'ready');
   assert.match(asset.data().storagePath, /^private-drafts\/wave1-owner\//);

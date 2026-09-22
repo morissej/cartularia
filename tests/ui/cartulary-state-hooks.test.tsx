@@ -90,6 +90,7 @@ describe('hooks de domaine du Cartulaire', () => {
       loadSensitivityPrices: () => [1, 2, 3],
       loadSensitivityCosts: () => [5, 10],
       loadRetainedValuation: () => ({ amount: 2, saleCostAmount: 0, taxAmount: 0, explanation: '' }),
+      loadInsuranceCoverages: () => [{ contractId: 'contract-1', carrierLabel: 'Assureur', contractReference: 'A-1', insuredAmount: 3, currency: 'EUR', effectiveFrom: '2026-01-01', effectiveTo: null, basisLabel: 'Capital déclaré', status: 'active' }],
       loadPurchase: () => ({ date: '2020-01-01', purchasePrice: 1 }),
       loadPurchaseExpenses: () => [{ id: 'expense-1', kind: 'Autre', date: '', label: '', amount: 0 }],
       loadExitAssumptions: () => ({ saleDate: '2026-08-17', salePrice: 3, disposalCostPct: 10 }),
@@ -97,8 +98,10 @@ describe('hooks de domaine du Cartulaire', () => {
 
     act(() => result.current.commands.updateComparableAnalysis('analysis-1', { finding: 'Stable' }));
     act(() => result.current.commands.updateExpense('expense-1', 'amount', 250));
+    act(() => result.current.commands.replaceInsuranceCoverages((current) => current.map((contract) => ({ ...contract, insuredAmount: 4 }))));
     expect(result.current.comparableAnalysis[0].finding).toBe('Stable');
     expect(result.current.purchaseExpenses[0].amount).toBe(250);
+    expect(result.current.insuranceCoverages[0].insuredAmount).toBe(4);
   });
 
   it('ne persiste la liaison de publication qu’après calcul de son empreinte', async () => {

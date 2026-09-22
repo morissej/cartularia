@@ -165,6 +165,7 @@ import { DEMO_ACCOUNT, DEMO_WEBSITE_BLOCK_IDS } from './data/demoCartularies';
 import { loadPublicPublicationSummaries } from './services/projections';
 import { PublicationReadOnlySummary } from './features/cartulary/components/PublicationReadOnlySummary';
 import { PublicationSelectionTable } from './features/cartulary/components/PublicationSelectionTable';
+import { DocumentationTierPanel } from './features/cartulary/components/DocumentationTierPanel';
 import { communityPublicationNote } from './features/cartulary/components/publicationSummaryModel';
 import { clearWebsiteRequestSession } from './services/websiteRequestSession';
 import {
@@ -776,12 +777,33 @@ function App() {
       saleCostAmount: Math.round(mockCartulary.marketSnapshot.midValue * 0.1),
       taxAmount: 0,
       explanation: DEFAULT_RETAINED_VALUE_EXPLANATION,
+      level: 'owner_declared',
+      observedAt: mockCartulary.watchInstance.valuations.at(-1)?.date || '',
+      sourceLabel: 'Décision fictive du propriétaire de démonstration',
+      confidence: 'low',
+      currency: mockCartulary.watchInstance.currency || 'EUR',
     } : readStored('cartularia-retained-valuation', {
       amount: mockCartulary.marketSnapshot.midValue,
       saleCostAmount: Math.round(mockCartulary.marketSnapshot.midValue * 0.1),
       taxAmount: 0,
       explanation: DEFAULT_RETAINED_VALUE_EXPLANATION,
+      level: '',
+      observedAt: '',
+      sourceLabel: '',
+      confidence: '',
+      currency: '',
     })),
+    loadInsuranceCoverages: () => (isDemoCartulary ? [{
+      contractId: `contract_${mockCartulary.id}`,
+      carrierLabel: mockCartulary.insurance.insurer,
+      contractReference: `DEMO-${mockCartulary.publicCode}`,
+      insuredAmount: mockCartulary.insurance.insuredValue,
+      currency: mockCartulary.insurance.currency,
+      effectiveFrom: mockCartulary.watchInstance.valuations.at(-1)?.date || '',
+      effectiveTo: mockCartulary.insurance.renewalDate || null,
+      basisLabel: 'Capital assuré fictif déclaré',
+      status: 'active',
+    }] : readStored('cartularia-insurance-coverages', [])),
     loadPurchase: () => (isDemoCartulary ? {
       date: mockCartulary.watchInstance.acquisitionDate,
       purchasePrice: mockCartulary.watchInstance.acquisitionPrice ?? 0,
@@ -802,7 +824,7 @@ function App() {
   });
   const {
     marketHistory, marketDepth, comparables, comparableAnalysis, sensitivityPrices,
-    sensitivityCosts, retainedValuation, purchase, purchaseExpenses, exitAssumptions,
+    sensitivityCosts, retainedValuation, insuranceCoverages, purchase, purchaseExpenses, exitAssumptions,
     reloadValuationState, commands: valuationCommands,
   } = valuationState;
   const setMarketHistory = valuationCommands.replaceMarketHistory;
@@ -812,6 +834,7 @@ function App() {
   const setSensitivityPrices = valuationCommands.setSensitivityPrices;
   const setSensitivityCosts = valuationCommands.setSensitivityCosts;
   const setRetainedValuation = valuationCommands.setRetainedValuation;
+  const setInsuranceCoverages = valuationCommands.replaceInsuranceCoverages;
   const setPurchase = valuationCommands.setPurchase;
   const setPurchaseExpenses = valuationCommands.replacePurchaseExpenses;
   const setExitAssumptions = valuationCommands.setExitAssumptions;
@@ -933,6 +956,7 @@ function App() {
       sensitivityPrices,
       sensitivityCosts,
       retainedValuation,
+      insuranceCoverages,
       purchase,
       purchaseExpenses,
       exitAssumptions,
@@ -958,6 +982,7 @@ function App() {
     sensitivityPrices,
     sensitivityCosts,
     retainedValuation,
+    insuranceCoverages,
     purchase,
     purchaseExpenses,
     exitAssumptions,
@@ -2611,6 +2636,8 @@ function App() {
         <ConditionPage active={activePage === 'condition'}>
             <PageIntroduction number="03" title={tx("L’objet", 'The object')} />
 
+            <DocumentationTierPanel cartularyId={ACTIVE_CARTULARY_ID} />
+
                 <section>
                   <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history', true)} />
                   <article className="ownership-history-card">
@@ -2927,6 +2954,34 @@ function App() {
                     <label className="retained-value-card__explanation">{tx('Explication de la valeur retenue', 'Retained value explanation')}
                       <AutoResizeTextarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder={tx('Expliquez le montant retenu, les ajustements et les réserves éventuelles.', 'Explain the retained amount, adjustments and any reservations.')} />
                     </label>
+                    <div className="retained-value-card__metadata" aria-label={tx("Métadonnées de l’arrêté", 'Statement metadata')}>
+                      <label>{tx('Niveau de valeur', 'Value level')}
+                        <select value={retainedValuation.level || ''} onChange={(event) => setRetainedValuation((current) => ({ ...current, level: event.target.value as NonNullable<typeof current.level> }))}>
+                          <option value="">{tx('Choisir explicitement', 'Choose explicitly')}</option>
+                          <option value="owner_declared">{tx('Déclarée par le propriétaire', 'Declared by owner')}</option>
+                          <option value="ai_proposed">{tx('Proposée par IA', 'AI proposed')}</option>
+                          <option value="professional">{tx('Professionnel mandaté', 'Mandated professional')}</option>
+                          <option value="transaction">{tx('Transaction observée', 'Observed transaction')}</option>
+                        </select>
+                      </label>
+                      <label>{tx("Date de la valeur", 'Value date')}<input type="date" value={retainedValuation.observedAt || ''} onChange={(event) => setRetainedValuation((current) => ({ ...current, observedAt: event.target.value }))} /></label>
+                      <label>{tx('Confiance', 'Confidence')}
+                        <select value={retainedValuation.confidence || ''} onChange={(event) => setRetainedValuation((current) => ({ ...current, confidence: event.target.value as NonNullable<typeof current.confidence> }))}>
+                          <option value="">{tx('Choisir explicitement', 'Choose explicitly')}</option>
+                          <option value="low">{tx('Faible', 'Low')}</option>
+                          <option value="medium">{tx('Moyenne', 'Medium')}</option>
+                          <option value="high">{tx('Élevée', 'High')}</option>
+                        </select>
+                      </label>
+                      <label>{tx('Devise', 'Currency')}
+                        <select value={retainedValuation.currency || ''} onChange={(event) => setRetainedValuation((current) => ({ ...current, currency: event.target.value }))}>
+                          <option value="">{tx('Choisir explicitement', 'Choose explicitly')}</option>
+                          <option value="EUR">EUR</option><option value="CHF">CHF</option><option value="USD">USD</option><option value="GBP">GBP</option>
+                        </select>
+                      </label>
+                      <label className="retained-value-card__source">{tx('Source de la valeur retenue', 'Retained value source')}<input type="text" value={retainedValuation.sourceLabel || ''} onChange={(event) => setRetainedValuation((current) => ({ ...current, sourceLabel: event.target.value }))} placeholder={tx('Décision, document ou observation datée', 'Dated decision, document or observation')} /></label>
+                      <p>{tx("Ces champs sont obligatoires pour inclure cette valeur dans un arrêté du Registre. Ils ne sont jamais déduits automatiquement.", 'These fields are required to include this value in a Registry statement. They are never inferred automatically.')}</p>
+                    </div>
                     </>) : <ValuationLevelsReadOnly retained={retainedValuation} currentValue={marketDepth.midValue} net={retainedNetValuation} netAfterTax={retainedNetAfterTaxValuation} currency={watch.currency} language={language} />}
                     <aside className="ownership-valuation-note" {...aiFieldProps('value.provenance.ownershipAssessment')}>
                       <strong>{tx('Critère de provenance', 'Provenance criterion')}</strong>
@@ -2934,6 +2989,23 @@ function App() {
                     </aside>
                   </article>
                 </div>
+                <article className="insurance-contracts">
+                  <header><div><span className="eyebrow">{tx('Assurance', 'Insurance')}</span><h3>{tx("Contrats et capitaux assurés", 'Policies and insured capital')}</h3></div>{editingBlock === 'value-market' && <button type="button" className="button button--quiet no-print" onClick={() => setInsuranceCoverages((current) => [...current, { contractId: newId('contract'), carrierLabel: '', contractReference: '', insuredAmount: 0, currency: 'EUR', effectiveFrom: '', effectiveTo: null, basisLabel: '', status: 'pending' }])}><Plus size={14} />{tx('Ajouter un contrat', 'Add policy')}</button>}</header>
+                  {insuranceCoverages.length === 0 ? <p className="storage-empty">{tx("Aucun contrat applicable : la ligne sera signalée comme non assurée dans l’arrêté.", 'No applicable policy: the line will be marked uninsured in the statement.')}</p> : <div className="insurance-contracts__list">{insuranceCoverages.map((contract) => editingBlock === 'value-market' ? (
+                    <div className="insurance-contracts__editor" key={contract.contractId}>
+                      <label>{tx('Assureur', 'Carrier')}<input type="text" value={contract.carrierLabel} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, carrierLabel: event.target.value } : entry))} /></label>
+                      <label>{tx('Référence du contrat', 'Policy reference')}<input type="text" value={contract.contractReference} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, contractReference: event.target.value } : entry))} /></label>
+                      <label>{tx('Capital assuré', 'Insured capital')}<input type="number" min="0" step="100" value={contract.insuredAmount} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, insuredAmount: Math.max(0, Number(event.target.value)) } : entry))} /></label>
+                      <label>{tx('Devise', 'Currency')}<select value={contract.currency} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, currency: event.target.value } : entry))}><option value="EUR">EUR</option><option value="CHF">CHF</option><option value="USD">USD</option><option value="GBP">GBP</option></select></label>
+                      <label>{tx("Début d’effet", 'Effective from')}<input type="date" value={contract.effectiveFrom} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, effectiveFrom: event.target.value } : entry))} /></label>
+                      <label>{tx("Fin d’effet", 'Effective to')}<input type="date" value={contract.effectiveTo || ''} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, effectiveTo: event.target.value || null } : entry))} /></label>
+                      <label>{tx('Base de couverture', 'Coverage basis')}<input type="text" value={contract.basisLabel} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, basisLabel: event.target.value } : entry))} /></label>
+                      <label>{tx('Statut', 'Status')}<select value={contract.status} onChange={(event) => setInsuranceCoverages((current) => current.map((entry) => entry.contractId === contract.contractId ? { ...entry, status: event.target.value as typeof contract.status } : entry))}><option value="active">{tx('Actif', 'Active')}</option><option value="pending">{tx('En attente', 'Pending')}</option><option value="expired">{tx('Expiré', 'Expired')}</option></select></label>
+                      <button type="button" className="icon-button no-print" onClick={() => setInsuranceCoverages((current) => current.filter((entry) => entry.contractId !== contract.contractId))} aria-label={tx(`Supprimer le contrat ${contract.contractReference || contract.contractId}`, `Delete policy ${contract.contractReference || contract.contractId}`)}><Trash2 size={15} /></button>
+                    </div>
+                  ) : <div className="insurance-contracts__row" key={contract.contractId}><div><strong>{contract.carrierLabel || tx('Assureur non renseigné', 'Carrier not provided')}</strong><span>{contract.contractReference || contract.contractId} · {contract.basisLabel || tx('Base non renseignée', 'Basis not provided')}</span></div><strong>{formatMoney(contract.insuredAmount, contract.currency)}</strong><span>{contract.effectiveFrom || '—'} → {contract.effectiveTo || '—'} · {contract.status}</span></div>)}</div>}
+                  <p>{tx("Seuls les contrats actifs, applicables à la date de l’arrêté et libellés dans la devise de référence sont additionnés.", 'Only active policies applicable on the statement date and denominated in the reference currency are included.')}</p>
+                </article>
               </section>
             )}
 

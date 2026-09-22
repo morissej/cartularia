@@ -34,11 +34,33 @@ test('le compte Firebase démo lit cinq Cartulaires « Complet », leurs rappels
       new Set(items.docs.map((entry) => entry.data().makerName)),
       new Set(DEMO_CARTULARIES.map(({ brand }) => brand)),
     );
+    assert.ok(items.docs.every((entry) => !('grossValuation' in entry.data()) && !('valuationCurrency' in entry.data())), 'la projection catalogue ne porte aucune donnée financière');
+
+    const valuationItems = await getDocs(collection(firestore, 'registries', DEMO_ACCOUNT.registryId, 'valuationItems'));
+    assert.equal(valuationItems.size, DEMO_CARTULARIES.length);
+    assert.ok(valuationItems.docs.every((entry) => entry.data().eligibility === 'eligible' && entry.data().marketValue.currency === 'EUR'));
+    const documentationItems = await getDocs(collection(firestore, 'registries', DEMO_ACCOUNT.registryId, 'documentationItems'));
+    assert.equal(documentationItems.size, DEMO_CARTULARIES.length);
+    assert.deepEqual(new Set(documentationItems.docs.map((entry) => entry.data().documentationTier)), new Set(['P0', 'P1', 'P2', 'P3', 'P4']));
+    assert.ok(documentationItems.docs.every((entry) => entry.data().visibility === 'secret' && entry.data().demo === true));
+    const valuationSnapshot = await getDoc(doc(firestore, 'registries', DEMO_ACCOUNT.registryId, 'valuationSnapshots', 'statement_demo_2026_08_01'));
+    assert.equal(valuationSnapshot.data()?.immutable, true);
+    assert.equal(valuationSnapshot.data()?.lines.length, DEMO_CARTULARIES.length);
+    assert.equal(valuationSnapshot.data()?.referenceCurrency, 'EUR');
+    await assert.rejects(
+      setDoc(doc(firestore, 'registries', DEMO_ACCOUNT.registryId, 'valuationSnapshots', 'statement_demo_forbidden'), {
+        snapshotId: 'statement_demo_forbidden', immutable: true,
+      }),
+      /permission-denied|Missing or insufficient permissions/,
+    );
 
     const submariner = await getDoc(doc(firestore, 'cartularies', DEMO_SUBMARINER_CARTULARY_ID));
     assert.equal(submariner.data()?.referenceCode, '124060');
     const sections = await getDocs(collection(firestore, 'cartularies', DEMO_SUBMARINER_CARTULARY_ID, 'sections'));
     assert.ok(sections.size >= 9);
+    const documentationAssessment = await getDoc(doc(firestore, 'cartularies', DEMO_SUBMARINER_CARTULARY_ID, 'documentationAssessments', 'current'));
+    assert.equal(documentationAssessment.data()?.assessmentStatus, 'evaluated');
+    assert.match(documentationAssessment.data()?.demoDisclaimer || '', /fictif/i);
 
     await assert.rejects(
       setDoc(doc(firestore, 'cartularies', DEMO_SUBMARINER_CARTULARY_ID, 'reminders', 'demo_write_forbidden'), {

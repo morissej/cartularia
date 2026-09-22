@@ -9,7 +9,7 @@ import { normalizeRegistryThumbnail } from '../src/domain/registryThumbnail.ts';
 import { Timestamp } from 'firebase-admin/firestore';
 import { DEMO_ACCOUNT, DEMO_CARTULARIES } from '../src/data/demoCartularies.ts';
 import {
-  DEMO_REVIEWED_AT, buildDemoCartularyEnvelope, buildDemoRegistryItem, buildDemoAssetDocuments, buildDemoReminderDocuments, demoValuationAmounts,
+  DEMO_REVIEWED_AT, buildDemoCartularyEnvelope, buildDemoRegistryItem, buildDemoAssetDocuments, buildDemoReminderDocuments,
 } from '../src/data/demoCartularyDocuments.ts';
 import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { CANONICALIZATION_VERSION, sha256Digest } from '../scripts/lib/canonical-json.mjs';
@@ -49,9 +49,9 @@ function fixture() {
   }
   put(`users/${user.uid}`, { ...user, status: 'active', accountPurpose: 'public_read_only_demo' });
   put(orgPath, { id: DEMO_ACCOUNT.organizationId, name: 'Collection de démonstration Cartularia', status: 'active' });
-  put(`${orgPath}/memberships/${user.uid}`, { uid: user.uid, organizationId: DEMO_ACCOUNT.organizationId, roles: ['guest'], status: 'active', scopes: { registryIds: [DEMO_ACCOUNT.registryId] }, permissions: ['organization.read', 'membership.read', 'registry.read', 'access.read', 'cartulary.read', 'cartulary.export'], revokedAt: null, accountPurpose: 'public_read_only_demo' });
+  put(`${orgPath}/memberships/${user.uid}`, { uid: user.uid, organizationId: DEMO_ACCOUNT.organizationId, roles: ['guest'], status: 'active', scopes: { registryIds: [DEMO_ACCOUNT.registryId] }, permissions: ['organization.read', 'membership.read', 'registry.read', 'valuation.read', 'access.read', 'cartulary.read', 'cartulary.export'], revokedAt: null, accountPurpose: 'public_read_only_demo' });
   state.queries[`${orgPath}/memberships`] = [`${orgPath}/memberships/${user.uid}`];
-  put(registryPath, { id: DEMO_ACCOUNT.registryId, organizationId: DEMO_ACCOUNT.organizationId, status: 'active', visibility: 'secret', itemCount: 5, accountPurpose: 'public_read_only_demo' });
+  put(registryPath, { id: DEMO_ACCOUNT.registryId, organizationId: DEMO_ACCOUNT.organizationId, status: 'active', visibility: 'secret', itemCount: 5, referenceCurrency: 'EUR', accountPurpose: 'public_read_only_demo' });
   put(collectionPath, { id: DEMO_ACCOUNT.collectionId, registryId: DEMO_ACCOUNT.registryId, organizationId: DEMO_ACCOUNT.organizationId, name: 'Demo Montres', websiteTitle: 'Demo Montres', description: DEMO_ACCOUNT.collectionDescription, status: 'draft', visibility: 'secret', publicationConsent: false, publishedCartularyIds: [], publishedAt: null });
   state.queries.organizationRegistries = [registryPath];
   state.queries.organizationCartularies = DEMO_CARTULARIES.map(({ id }) => `cartularies/${id}`).sort();
@@ -195,7 +195,7 @@ test('Auth est exclusivement lu ; compte manquant/désactivé/non vérifié ou p
   await assert.rejects(resolveExistingDemoUser({ getUserByEmail: async () => { throw { code: 'auth/user-not-found' }; } }, user.email), /aucune création/);
 });
 
-test('le plan répare Galerie/codes/coût de revient/net sans remplacer Auth, droits, sections ou audit initial', () => {
+test('le plan historique répare Galerie et codes sans réintroduire de nouveaux montants dans les items', () => {
   const state = fixture();
   for (const { id } of DEMO_CARTULARIES) {
     assert.equal(Object.hasOwn(state.documents[`cartularies/${id}`].data, 'objectCode'), false);
@@ -213,8 +213,8 @@ test('le plan répare Galerie/codes/coût de revient/net sans remplacer Auth, dr
   for (const cartulary of DEMO_CARTULARIES) {
     const item = state.documents[`${registryPath}/items/${cartulary.id}`].data;
     assert.equal(item.objectCode, cartulary.publicCode);
-    assert.equal(item.costBasis, demoValuationAmounts(cartulary).costBasis);
-    assert.equal(item.netValuation, demoValuationAmounts(cartulary).netValuation);
+    assert.equal(item.costBasis, cartulary.purchasePrice, 'le plan historique ne crée plus de montant financier dans une projection de catalogue');
+    assert.equal(item.netValuation, null);
     assert.ok(state.documents[`cartularies/${cartulary.id}/assets/${item.primaryAssetId}`].data.presentationDerivative.url.startsWith('/assets/demo-watches/'));
     assert.deepEqual(item.thumbnail, buildDemoRegistryItem(cartulary, item.contentHash).thumbnail, 'v3 posée dans la même mise à jour d’item');
   }

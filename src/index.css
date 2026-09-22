@@ -2256,8 +2256,10 @@ textarea {
 .retained-value-card__intro p { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .retained-value-card label { display: grid; gap: var(--s1); color: var(--muted); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
 .retained-value-card input,
-.retained-value-card textarea { width: 100%; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); font-family: var(--font-sans); font-size: 14px; text-transform: none; }
+.retained-value-card textarea,
+.retained-value-card select { width: 100%; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); font-family: var(--font-sans); font-size: 14px; text-transform: none; }
 .retained-value-card input { min-height: 54px; padding: 0 var(--s3); font-family: var(--font-mono); font-size: 24px; font-weight: 700; }
+.retained-value-card select { min-height: 44px; padding: 0 var(--s2); }
 .retained-value-card textarea { min-height: 112px; padding: var(--s3); line-height: 1.6; }
 .retained-value-card__amount > span { display: grid; grid-template-columns: minmax(0, 1fr) 56px; }
 .retained-value-card__amount > span > strong { display: grid; place-items: center; border: 1px solid var(--rule); border-left: 0; background: var(--ink); color: var(--sheet); font-family: var(--font-mono); font-size: 10px; }
@@ -2274,11 +2276,30 @@ textarea {
 .retained-value-card__levels > div { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3); border: 1px solid var(--rule); background: var(--fill); }
 .retained-value-card__levels > div span { color: #5F5B53; font-size: 10px; } /* V6 (D17 (a)) : 4,24:1 → 5,3:1 sur --fill à 10 px, voir .publication-summary__group th */
 .retained-value-card__levels > div strong { font-family: var(--font-mono); font-size: 14px; }
+.retained-value-card__metadata { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); padding-top: var(--s4); border-top: 1px solid var(--rule); }
+.retained-value-card__metadata .retained-value-card__source { grid-column: span 2; }
+.retained-value-card__metadata > p { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.retained-value-card__metadata--readonly > div { display: grid; gap: var(--s1); }
+.retained-value-card__metadata--readonly dd { color: var(--ink); font-size: 13px; }
 .ownership-valuation-note { grid-column: 1 / -1; margin-top: 0; }
 .retained-value-card--published { grid-template-columns: minmax(220px, 3fr) minmax(180px, 2fr) minmax(320px, 5fr); }
 .retained-value-card--published > div { display: grid; gap: var(--s2); }
 .retained-value-card--published > strong { font-family: var(--font-mono); font-size: 28px; }
 .retained-value-card--published > p { white-space: pre-wrap; color: var(--muted); line-height: 1.7; }
+
+.insurance-contracts { display: grid; gap: var(--s3); margin-top: var(--s4); padding: var(--s4); border: 1px solid var(--rule); background: var(--sheet); }
+.insurance-contracts > header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
+.insurance-contracts > header > div { display: grid; gap: var(--s1); }
+.insurance-contracts > p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.insurance-contracts__list { display: grid; gap: var(--s2); }
+.insurance-contracts__row { display: grid; grid-template-columns: minmax(220px, 1fr) auto minmax(180px, auto); align-items: center; gap: var(--s3); padding: var(--s3); background: var(--fill); }
+.insurance-contracts__row > div { display: grid; gap: var(--s1); }
+.insurance-contracts__row span { color: var(--muted); font-size: 11px; }
+.insurance-contracts__row > strong { font-family: var(--font-mono); }
+.insurance-contracts__editor { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; gap: var(--s2); padding: var(--s3); border: 1px solid var(--rule); background: var(--fill); }
+.insurance-contracts__editor label { display: grid; gap: var(--s1); color: var(--muted); font-family: var(--font-mono); font-size: 8px; text-transform: uppercase; }
+.insurance-contracts__editor input, .insurance-contracts__editor select { min-height: 42px; width: 100%; padding: 0 var(--s2); border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); }
+.insurance-contracts__editor .icon-button { margin-bottom: 1px; }
 
 .comparable-groups { display: grid; gap: var(--s5); }
 
@@ -2937,6 +2958,10 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .market-depth-card { grid-column: span 4; }
   .retained-value-card,
   .retained-value-card--published { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .retained-value-card__metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .insurance-contracts__editor { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
+  .insurance-contracts__row { grid-template-columns: minmax(220px, 1fr) auto; }
+  .insurance-contracts__row > span { grid-column: 1 / -1; }
   .retained-value-card__explanation,
   .retained-value-card--published > p { grid-column: 1 / -1; }
   .condition-layout { grid-template-columns: 1fr; }
@@ -3107,6 +3132,12 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .retained-value-card--published { grid-template-columns: 1fr; padding: var(--s4); }
   .retained-value-card__explanation,
   .retained-value-card--published > p { grid-column: auto; }
+  .retained-value-card__metadata { grid-template-columns: 1fr; }
+  .retained-value-card__metadata .retained-value-card__source { grid-column: auto; }
+  .insurance-contracts > header { align-items: stretch; flex-direction: column; }
+  .insurance-contracts__editor { grid-template-columns: 1fr; }
+  .insurance-contracts__row { grid-template-columns: 1fr; }
+  .insurance-contracts__row > span { grid-column: auto; }
   .purchase-fields { grid-template-columns: 1fr; gap: var(--s3); }
   .cost-basis-card { padding: var(--s4); }
   .cost-basis-total { grid-template-columns: 32px 1fr; }
@@ -3868,3 +3899,51 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
 .media-modal__original { align-self: start; }
 .spin-sequence { width: 100%; }
 .spin-sequence > .media-empty { min-height: 260px; display: grid; place-items: center; }
+
+/* DEV-10 — évaluation Secret, distincte du niveau de revue éditorial du Cartulaire. */
+.documentation-tier { display: grid; gap: var(--s4); padding: var(--s5); border: 1px solid var(--ink); background: var(--sheet); }
+.documentation-tier__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s4); }
+.documentation-tier__header > div { display: grid; gap: var(--s1); }
+.documentation-tier__header h2 { font-size: clamp(24px, 3vw, 34px); }
+.documentation-tier__header p, .documentation-tier__note { color: var(--muted); }
+.documentation-tier__header > svg { width: 28px; height: 28px; color: var(--mark); stroke-width: 1.5; }
+.documentation-tier__method { padding: var(--s2) var(--s3); border-left: 3px solid var(--mark); background: var(--fill); color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+.documentation-tier__state { display: flex; align-items: center; gap: var(--s2); padding: var(--s3); border: 1px dashed var(--rule); }
+.documentation-tier__state svg { width: 17px; }
+.documentation-tier__spinner { animation: documentation-tier-spin .9s linear infinite; }
+@keyframes documentation-tier-spin { to { transform: rotate(360deg); } }
+.documentation-tier__state--alert { border-style: solid; border-color: var(--mark); }
+.documentation-tier__facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule); }
+.documentation-tier__facts article { display: grid; gap: var(--s1); min-height: 112px; align-content: center; padding: var(--s3); border-right: 1px solid var(--rule); }
+.documentation-tier__facts article:last-child { border-right: 0; }
+.documentation-tier__facts span, .documentation-tier__facts small { color: var(--muted); font-size: 10px; }
+.documentation-tier__facts strong { font-family: var(--font-display); font-size: clamp(24px, 3vw, 34px); font-weight: 500; }
+.documentation-tier__columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+.documentation-tier__columns > div { padding: var(--s3); background: var(--fill); }
+.documentation-tier__columns h3 { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); font-size: 17px; }
+.documentation-tier__columns h3 svg { width: 17px; color: var(--mark); }
+.documentation-tier__columns ul { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.documentation-tier__columns li { display: flex; justify-content: space-between; gap: var(--s3); padding-top: var(--s2); border-top: 1px solid var(--rule); font-size: 12px; }
+.documentation-tier__columns small { color: var(--muted); text-align: right; }
+.documentation-tier__columns details { max-width: 62%; color: var(--muted); font-size: 10px; text-align: right; }
+.documentation-tier__columns summary { cursor: pointer; }
+.documentation-tier__evidence { margin-top: var(--s2) !important; text-align: left; }
+.documentation-tier__evidence li { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.documentation-tier__evidence code { color: var(--muted); font-family: var(--font-mono); font-size: 9px; white-space: normal; }
+.documentation-tier__actions { display: grid; gap: var(--s3); }
+.documentation-tier__actions h3 { font-size: 18px; }
+.documentation-tier__actions ol { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.documentation-tier__actions li { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: var(--s3); padding: var(--s3); border: 1px solid var(--rule); }
+.documentation-tier__actions li div { display: grid; gap: var(--s1); }
+.documentation-tier__actions p, .documentation-tier__actions small { color: var(--muted); font-size: 11px; }
+.documentation-tier__cost { align-self: start; padding: 5px 7px; border: 1px solid currentColor; color: var(--ink); font-family: var(--font-mono); font-size: 9px; text-align: center; text-transform: uppercase; }
+.documentation-tier__cost--free { color: #35663a; }
+.documentation-tier__cost--service { color: var(--mark); }
+.documentation-tier__note { font-size: 11px; line-height: 1.6; }
+@media (max-width: 720px) {
+  .documentation-tier { padding: var(--s3); }
+  .documentation-tier__facts, .documentation-tier__columns { grid-template-columns: 1fr; }
+  .documentation-tier__facts article { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .documentation-tier__facts article:last-child { border-bottom: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .documentation-tier__spinner { animation: none; } }

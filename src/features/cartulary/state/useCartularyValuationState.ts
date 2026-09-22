@@ -3,6 +3,7 @@ import type { ComparableTransaction, Valuation } from '../../../types';
 import type {
   ComparableAnalysisEntry,
   ExitAssumptions,
+  InsuranceContractState,
   MarketDepthState,
   PurchaseExpense,
   PurchaseState,
@@ -18,6 +19,7 @@ interface ValuationStateOptions {
   loadSensitivityPrices: () => number[];
   loadSensitivityCosts: () => number[];
   loadRetainedValuation: () => RetainedValuationState;
+  loadInsuranceCoverages: () => InsuranceContractState[];
   loadPurchase: () => PurchaseState;
   loadPurchaseExpenses: () => PurchaseExpense[];
   loadExitAssumptions: () => ExitAssumptions;
@@ -31,6 +33,7 @@ export const useCartularyValuationState = (options: ValuationStateOptions) => {
   const sensitivityPrices = usePersistentCartularyState({ key: 'cartularia-sensitivity-prices', load: options.loadSensitivityPrices });
   const sensitivityCosts = usePersistentCartularyState({ key: 'cartularia-sensitivity-costs', load: options.loadSensitivityCosts });
   const retainedValuation = usePersistentCartularyState({ key: 'cartularia-retained-valuation', load: options.loadRetainedValuation });
+  const insuranceCoverages = usePersistentCartularyState({ key: 'cartularia-insurance-coverages', load: options.loadInsuranceCoverages });
   const purchase = usePersistentCartularyState({ key: 'cartularia-purchase', load: options.loadPurchase });
   const purchaseExpenses = usePersistentCartularyState({ key: 'cartularia-purchase-expenses', load: options.loadPurchaseExpenses });
   const exitAssumptions = usePersistentCartularyState({ key: 'cartularia-exit-assumptions', load: options.loadExitAssumptions });
@@ -41,6 +44,7 @@ export const useCartularyValuationState = (options: ValuationStateOptions) => {
   const reloadSensitivityPrices = sensitivityPrices.reloadIfPresent;
   const reloadSensitivityCosts = sensitivityCosts.reloadIfPresent;
   const reloadRetainedValuation = retainedValuation.reloadIfPresent;
+  const reloadInsuranceCoverages = insuranceCoverages.reloadIfPresent;
   const reloadPurchase = purchase.reloadIfPresent;
   const reloadPurchaseExpenses = purchaseExpenses.reloadIfPresent;
   const reloadExitAssumptions = exitAssumptions.reloadIfPresent;
@@ -52,6 +56,7 @@ export const useCartularyValuationState = (options: ValuationStateOptions) => {
     reloadSensitivityPrices(keys),
     reloadSensitivityCosts(keys),
     reloadRetainedValuation(keys),
+    reloadInsuranceCoverages(keys),
     reloadPurchase(keys),
     reloadPurchaseExpenses(keys),
     reloadExitAssumptions(keys),
@@ -63,6 +68,7 @@ export const useCartularyValuationState = (options: ValuationStateOptions) => {
     reloadSensitivityPrices,
     reloadSensitivityCosts,
     reloadRetainedValuation,
+    reloadInsuranceCoverages,
     reloadPurchase,
     reloadPurchaseExpenses,
     reloadExitAssumptions,
@@ -76,6 +82,7 @@ export const useCartularyValuationState = (options: ValuationStateOptions) => {
     sensitivityPrices: sensitivityPrices.value,
     sensitivityCosts: sensitivityCosts.value,
     retainedValuation: retainedValuation.value,
+    insuranceCoverages: insuranceCoverages.value,
     purchase: purchase.value,
     purchaseExpenses: purchaseExpenses.value,
     exitAssumptions: exitAssumptions.value,
@@ -88,6 +95,7 @@ export const useCartularyValuationState = (options: ValuationStateOptions) => {
       setSensitivityPrices: sensitivityPrices.replace,
       setSensitivityCosts: sensitivityCosts.replace,
       setRetainedValuation: retainedValuation.replace,
+      replaceInsuranceCoverages: insuranceCoverages.replace,
       setPurchase: purchase.replace,
       replacePurchaseExpenses: purchaseExpenses.replace,
       setExitAssumptions: exitAssumptions.replace,

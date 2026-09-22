@@ -1,7 +1,7 @@
 import type { RegistryAccessProjection } from '../domain/access.ts';
 import { CARTULARY_MODEL_VERSION, type CartularyEnvelope, type CartularySectionDocument, type ProvenancedValue } from '../domain/cartulary.ts';
 import type { CartularyReminderDocument, FollowUpCategory, FollowUpSourceStatus } from '../domain/followUp.ts';
-import type { RegistryItemProjection } from '../domain/projections.ts';
+import type { RegistryItemProjection, RegistryValuationItemProjection } from '../domain/projections.ts';
 import { presentationBundleThumbnailFor } from '../media/presentationDerivatives.ts';
 import { DEMO_ACCOUNT, buildDemoCartularyAssets, demoCartularyContentById, type DemoCartularyDefinition } from './demoCartularies.ts';
 
@@ -297,12 +297,6 @@ export const buildDemoRegistryItem = (
   userAlias: 'Collection Démo',
   objectCode: cartulary.publicCode,
   possessionStatus: 'in_possession',
-  purchasePrice: cartulary.purchasePrice,
-  costBasis: demoValuationAmounts(cartulary).costBasis,
-  grossValuation: demoValuationAmounts(cartulary).grossValuation,
-  netValuation: demoValuationAmounts(cartulary).netValuation,
-  netAfterTaxValuation: demoValuationAmounts(cartulary).netAfterTaxValuation,
-  valuationCurrency: cartulary.currency,
   completenessLevel: 'complete',
   primaryAssetId: buildDemoCartularyAssets(cartulary).find((asset) => asset.tags?.includes('main-photo'))?.id || null,
   sourceRevision: 1,
@@ -310,6 +304,50 @@ export const buildDemoRegistryItem = (
   contentHash,
   thumbnail: buildDemoRegistryThumbnail(cartulary),
 });
+
+export const buildDemoRegistryValuation = (
+  cartulary: DemoCartularyDefinition,
+  contentHash: string,
+): RegistryValuationItemProjection => {
+  const content = demoCartularyContentById(cartulary.id);
+  if (!content) throw new Error(`Contenu de démonstration absent pour ${cartulary.id}.`);
+  return {
+    schemaVersion: 'registry-valuation@1.0.0',
+    cartularyId: cartulary.id,
+    organizationId: DEMO_ACCOUNT.organizationId,
+    registryId: DEMO_ACCOUNT.registryId,
+    collectionId: DEMO_ACCOUNT.collectionId,
+    collectionIds: [DEMO_ACCOUNT.collectionId],
+    assetType: 'watch',
+    displayTitle: `${cartulary.brand} ${cartulary.model}`,
+    marketValue: {
+      amount: cartulary.valuationMid,
+      currency: cartulary.currency,
+      level: 'owner_declared',
+      observedAt: cartulary.valuationDate,
+      sourceLabel: 'Décision fictive du propriétaire de démonstration',
+      confidence: 'low',
+    },
+    insuranceContracts: [{
+      contractId: `contract_${cartulary.id}`,
+      carrierLabel: content.insurance.insurer,
+      contractReference: `DEMO-${cartulary.publicCode}`,
+      insuredAmount: content.insurance.insuredValue,
+      currency: content.insurance.currency,
+      effectiveFrom: cartulary.valuationDate,
+      effectiveTo: content.insurance.renewalDate,
+      basisLabel: 'Capital assuré fictif déclaré',
+      status: 'active',
+    }],
+    insuranceWarnings: [],
+    eligibility: 'eligible',
+    exclusionReasons: [],
+    visibility: 'secret',
+    sourceRevision: 1,
+    projectionStatus: 'active',
+    contentHash,
+  };
+};
 
 /**
  * Rappel de démonstration conforme au contrat de firestore.rules (`cartularies/{id}/reminders`) :

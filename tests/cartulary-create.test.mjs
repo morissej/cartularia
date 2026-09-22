@@ -161,9 +161,10 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
   assert.equal(created.status, 'processed');
   assert.equal(created.revision, 2);
 
-  const [rootAfterCreate, projectionAfterCreate, assetAfterCreate, requestAfterCreate, syncRequest] = await Promise.all([
+  const [rootAfterCreate, projectionAfterCreate, valuationAfterCreate, assetAfterCreate, requestAfterCreate, syncRequest] = await Promise.all([
     firestore.doc(`cartularies/${cartularyId}`).get(),
     firestore.doc(`registries/reg_collection_privee/items/${cartularyId}`).get(),
+    firestore.doc(`registries/reg_collection_privee/valuationItems/${cartularyId}`).get(),
     firestore.doc(`cartularies/${cartularyId}/assets/asset_rolex_cover`).get(),
     firestore.doc(`cartularyCreateRequests/${cartularyId}`).get(),
     firestore.doc(`cartularySyncRequests/${cartularyId}`).get(),
@@ -178,7 +179,12 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
   assert.equal(assetAfterCreate.data().binaryId, 'bin_rolex_cover_0000000001');
   assert.match(assetAfterCreate.data().storagePath, /^private-drafts\/wave1-owner\//);
   assert.equal('serialNumber' in projectionAfterCreate.data(), false);
-  assert.equal(projectionAfterCreate.data().purchasePrice, 21_900);
+  assert.equal(rootAfterCreate.data().purchasePrice, 21_900);
+  assert.equal(projectionAfterCreate.data().purchasePrice, undefined);
+  assert.equal(valuationAfterCreate.data().eligibility, 'excluded');
+  assert.deepEqual(valuationAfterCreate.data().exclusionReasons, [
+    'missing_amount', 'missing_currency', 'missing_level', 'missing_date', 'missing_source', 'missing_confidence',
+  ]);
   assert.equal(projectionAfterCreate.data().userAlias, null);
   assert.equal(projectionAfterCreate.data().objectCode, 'ROL-TEST01');
   assert.equal('storageCodeNames' in projectionAfterCreate.data(), false);
@@ -262,10 +268,17 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
   await processCartularySyncRequest({ storage, firestore, requestDocumentId: cartularyId });
   const afterEdit = (await rootRef.get()).data();
   const itemAfterEdit = (await firestore.doc(`registries/reg_collection_privee/items/${cartularyId}`).get()).data();
+  const valuationAfterEdit = (await firestore.doc(`registries/reg_collection_privee/valuationItems/${cartularyId}`).get()).data();
   assert.equal(afterEdit.modelName, 'Voiture corrigée'); assert.equal(itemAfterEdit.modelName, 'Voiture corrigée');
   assert.equal(afterEdit.schemaVersion, '1.2.0'); assert.equal(afterEdit.objectCode, 'ROL-TEST01');
-  assert.equal(itemAfterEdit.grossValuation, 30000); assert.equal(itemAfterEdit.netValuation, null);
-  assert.equal(itemAfterEdit.purchasePrice, 21900); assert.equal(itemAfterEdit.costBasis, 21900);
+  assert.equal(afterEdit.grossValuation, 30000); assert.equal(afterEdit.netValuation, null);
+  for (const financialField of ['purchasePrice', 'costBasis', 'grossValuation', 'netValuation', 'netAfterTaxValuation', 'valuationCurrency']) {
+    assert.equal(itemAfterEdit[financialField], undefined, `${financialField} absent de la projection catalogue`);
+  }
+  assert.equal(valuationAfterEdit.marketValue.amount, 30000);
+  assert.equal(valuationAfterEdit.marketValue.currency, 'EUR');
+  assert.equal(valuationAfterEdit.eligibility, 'excluded');
+  assert.deepEqual(valuationAfterEdit.exclusionReasons, ['missing_level', 'missing_date', 'missing_source', 'missing_confidence']);
   assert.equal(JSON.stringify(itemAfterEdit).includes('VIN-CORRIGE'), false);
   const identity = (await rootRef.collection('sections').doc('identity.private').get()).data();
   assert.equal(identity.fields['identity.car.vin'].value, 'VIN-CORRIGE'); assert.equal(identity.fields['identity.car.vin'].visibility, 'secret');
