@@ -1,4 +1,4 @@
-name: Schema integrity
+name: Cartularia CI
 
 on:
   pull_request:
@@ -6,22 +6,120 @@ on:
     branches:
       - main
       - 'agent/**'
+      - 'feat/**'
 
 permissions:
   contents: read
 
+env:
+  CI: true
+  FIREBASE_CLI_DISABLE_UPDATE_CHECK: true
+
 jobs:
-  schema-integrity:
+  static-integrity:
+    name: Static, schema and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:ci:static
+
+  ui-tests:
+    name: UI tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:ci:ui
+
+  business-tests:
+    name: Business and security tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:ci:business
+
+  firestore-rules:
+    name: Firestore rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:ci:rules:firestore
+      - run: npm run test:ci:rules-regression
+
+  storage-rules:
+    name: Storage rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:ci:rules:storage
+
+  personal-vault-rules:
+    name: Personal Vault rules
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22.18.0
           cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - run: npm ci --ignore-scripts
-      - run: npm run validate:ai
-      - run: npm run test:schema
-      - run: npm run lint
-      - run: npm run build
+      - run: npm run test:ci:rules:personal
+
+  bridge-rules:
+    name: Correspondence bridge rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci --ignore-scripts
+      - run: npm run test:ci:rules:bridge

@@ -409,7 +409,9 @@ test('un rejet de sécurité déterministe ne reçoit aucun bail/retry et n’es
   const before = env.firestore.dump();
   assert.equal((await processPrivateDraftUpload({ firestore: env.firestore, storage: env.storage, object: env.object })).reason, 'already_rejected');
   assert.equal((await processPrivateDraftUploadBacklog({ firestore: env.firestore, storage: env.storage })).inspected, 0);
-  assert.deepEqual(env.firestore.dump(), before);
+  const after = env.firestore.dump();
+  delete after['systemJobs/privateUploadBacklog'];
+  assert.deepEqual(after, before, 'le rejet reste inchangé ; seul le curseur opérationnel du backlog progresse');
 });
 
 test('le backlog garde les erreurs transitoires récupérables et ne compte pas de faux succès', async () => {

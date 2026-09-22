@@ -10,7 +10,7 @@ vi.mock('../../src/persistence/localVault.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/persistence/localVault.ts')>();
   return { ...actual, readCartulariaStorage: mocks.read, persistCartulariaJson: mocks.persist };
 });
-vi.mock('../../src/services/followUp.ts', () => ({ observeCartularyFollowUpTodos: mocks.observe, createCartularyFollowUpTodo: vi.fn(), updateCartularyFollowUpTodo: vi.fn(), deleteCartularyFollowUpTodo: vi.fn() }));
+vi.mock('../../src/services/followUp.ts', () => ({ observeCartularyFollowUpTodos: mocks.observe, syncCartularyFollowUpTodo: vi.fn(), deleteCartularyFollowUpTodo: vi.fn() }));
 
 describe('Mini-site public /watch-website (D5)', () => {
   it('rend App sur /watch-website?publicCode=… sans ouvrir l’écoute des rappels ni lire les suivis locaux', async () => {

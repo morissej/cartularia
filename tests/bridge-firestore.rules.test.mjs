@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { deleteDoc, doc, getDoc, getDocFromServer, setDoc, updateDoc, Timestamp, writeBatch } from 'firebase/firestore';
+import { requireEmulatorEndpoint } from './helpers/require-emulator.mjs';
 
 let environment;
 const projectId = process.env.CODE_BRIDGE_PROJECT_ID || 'cartularia-code-bridge-test';
@@ -30,10 +31,10 @@ const base = (ownerUid, code) => ({
 });
 
 before(async () => {
-  const [host = '127.0.0.1', portValue = '8380'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
+  const { host, port } = requireEmulatorEndpoint('FIRESTORE_EMULATOR_HOST');
   environment = await initializeTestEnvironment({
     projectId,
-    firestore: { host, port: Number(portValue), rules: readFileSync(new URL('../bridge-firestore.rules', import.meta.url), 'utf8') },
+    firestore: { host, port, rules: readFileSync(new URL('../bridge-firestore.rules', import.meta.url), 'utf8') },
   });
 });
 

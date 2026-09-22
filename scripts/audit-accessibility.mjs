@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve } from 'node:path';
+import { blockingIncompleteRules } from './lib/accessibility-audit-policy.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
@@ -57,7 +58,6 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'best-practice'];
 const BLOCKING = new Set(['serious', 'critical']);
 // Règles dont un nœud « à vérifier » vaut échec : elles signalent ici un contrat ARIA objectivement invalide,
 // même lorsqu'axe classe le résultat dans son canal manuel `incomplete`.
-const NEVER_INCOMPLETE = new Set(['aria-prohibited-attr', 'aria-valid-attr-value']);
 // Motif construit par concaténation : la garde du contrat parcourt scripts/ et ne doit pas se lire elle-même (C4).
 const FAULTY_TITLE = 'mini' + ' -site';
 
@@ -172,7 +172,7 @@ try {
         entry.allowed += allowed; entry.blocking += nodes.length - allowed;
       }
       entry.checks = evaluateChecks(scene, viewport, await evaluate(CHECKS), ready);
-      const neverIncomplete = results.incomplete.filter((rule) => NEVER_INCOMPLETE.has(rule.id));
+      const neverIncomplete = blockingIncompleteRules(results.incomplete);
       entry.checks.push({ name: 'aucun contrat ARIA invalide dans les nœuds à vérifier', ok: neverIncomplete.length === 0, detail: neverIncomplete.map((rule) => `${rule.id} × ${rule.nodes} (${rule.target})`).join(' ; ') || 'aucun' });
       report.scenes.push(entry);
       await browser.send('Target.closeTarget', { targetId });

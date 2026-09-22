@@ -12,6 +12,7 @@ import {
 } from '../src/features/cartulary/presentation/cartularyPresentationContract.ts';
 import { filterPublicationBlockIds, getPublicationPolicy, PUBLISHED_BLOCK_IDS } from '../src/domain/publication.ts';
 import { cartularyIdFromLocation, IWC_CARTULARY_ID } from '../src/domain/cartularyIds.ts';
+import { BLOCKING_INCOMPLETE_RULE_IDS, blockingIncompleteRules } from '../scripts/lib/accessibility-audit-policy.mjs';
 
 test('tous les Cartulaires partagent les six pages et les structures communes', () => {
   assert.equal(CARTULARY_PRESENTATION_CONTRACT_VERSION, 'cartulary-presentation@1.4.0');
@@ -1050,8 +1051,17 @@ test('V6 relecture : audit axe mesuré contre clientWidth, nœuds à vérifier c
   assert.match(audit, /const toReviewTotal = report\.scenes\.reduce\(\(sum, scene\) => sum \+ scene\.toReview, 0\);/);
   assert.match(audit, /\| À vérifier \(incomplete\) \| Assertions en échec \|/);
   assert.match(audit, /'## Nœuds à vérifier', '', \.\.\.\(toReview\.length \? toReview : \['Aucun\.'\]\)/);
-  assert.match(audit, /const NEVER_INCOMPLETE = new Set\(\['aria-prohibited-attr'\]\);/);
-  assert.match(audit, /name: 'aucun nœud à vérifier sur aria-prohibited-attr', ok: neverIncomplete\.length === 0,/);
+  assert.deepEqual(BLOCKING_INCOMPLETE_RULE_IDS, ['aria-prohibited-attr', 'aria-valid-attr-value']);
+  assert.deepEqual(
+    blockingIncompleteRules([
+      { id: 'color-contrast' },
+      { id: 'aria-valid-attr-value' },
+      { id: 'aria-prohibited-attr' },
+    ]).map(({ id }) => id),
+    ['aria-valid-attr-value', 'aria-prohibited-attr'],
+  );
+  assert.match(audit, /const neverIncomplete = blockingIncompleteRules\(results\.incomplete\);/);
+  assert.match(audit, /name: 'aucun contrat ARIA invalide dans les nœuds à vérifier', ok: neverIncomplete\.length === 0,/);
   assert.match(audit, /blockingTotal === 0 && failedChecks\.length === 0 \? 0 : 1/, 'D15 (a) : le canal incomplete ne change pas le code de sortie');
   // F2 outillage : chaque scène porte son titre attendu, la page doit être rendue, un déclencheur absent n'est toléré que sur la fenêtre prévue.
   assert.match(audit, /name: 'titre attendu', ok: values\.title === scene\.title, detail: values\.title/);
@@ -1059,7 +1069,7 @@ test('V6 relecture : audit axe mesuré contre clientWidth, nœuds à vérifier c
   assert.match(audit, /const DEMO_TITLE = 'Cartulaire Rolex Submariner · Cartularia';/);
   assert.match(audit, /title: 'Page introuvable · Cartularia'/);
   assert.match(audit, /title: 'Connexion · Cartularia'/);
-  for (const title of ['Accessibilité', 'Conditions d’utilisation du pilote', 'Confidentialité et données', 'Disponibilité et limites']) assert.ok(audit.includes(`'${title}'`), title);
+  for (const title of ['Accessibilité', 'Conditions d’utilisation du pilote', 'Politique de protection des données personnelles — Cartularia', 'Disponibilité et limites']) assert.ok(audit.includes(`'${title}'`), title);
   assert.equal((audit.match(/openAbsentOn: 'desktop-1440'/g) ?? []).length, 1, 'un seul saut prévu : le menu mobile de l’accueil à 1 440');
   assert.match(audit, /if \(scene\.openAbsentOn === viewport\.name\) entry\.skipped = /);
   assert.match(audit, /else entry\.checks\.push\(\{ name: `déclencheur \$\{scene\.open\} présent`, ok: false,/);

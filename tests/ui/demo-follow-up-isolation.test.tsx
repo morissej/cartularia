@@ -6,7 +6,7 @@ import { CartularyTodoBoard } from '../../src/components/CartularyTodoBoard';
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), persist: vi.fn(), observe: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() }));
 vi.mock('../../src/persistence/localVault.ts', () => ({ readCartulariaStorage: mocks.read, persistCartulariaJson: mocks.persist }));
-vi.mock('../../src/services/followUp.ts', () => ({ observeCartularyFollowUpTodos: mocks.observe, createCartularyFollowUpTodo: mocks.create, updateCartularyFollowUpTodo: mocks.update, deleteCartularyFollowUpTodo: mocks.remove }));
+vi.mock('../../src/services/followUp.ts', () => ({ observeCartularyFollowUpTodos: mocks.observe, syncCartularyFollowUpTodo: mocks.create, deleteCartularyFollowUpTodo: mocks.remove }));
 
 describe('Suivi de la démonstration anonyme', () => {
   it('ne lit aucun suivi privé, ne synchronise rien et ne montre pas une fausse panne', () => {

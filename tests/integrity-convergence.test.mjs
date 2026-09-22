@@ -132,5 +132,6 @@ test('le vocabulaire réserve le Sceau à la projection publique et nomme claire
   assert.match(app, /Le Sceau public identifie une publication émise par le serveur/);
   assert.match(app, /Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert/);
   assert.match(registry, /Chaîne serveur & preuves/);
+  assert.match(registry, /Vérification complète/);
   assert.doesNotMatch(registry, /Confiance blockchain-ready/);
 });

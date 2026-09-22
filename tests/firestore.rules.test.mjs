@@ -22,10 +22,10 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
+import { requireEmulatorEndpoint } from './helpers/require-emulator.mjs';
 
 const projectId = 'cartularia-wave1-test';
-const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
-const port = Number(portValue);
+const { host, port } = requireEmulatorEndpoint('FIRESTORE_EMULATOR_HOST');
 
 const ownerUid = 'owner-a';
 const outsiderUid = 'owner-b';

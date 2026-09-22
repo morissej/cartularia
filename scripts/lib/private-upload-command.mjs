@@ -28,6 +28,9 @@ export { PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS, privateBinaryIsVerified };
 export { PRIVATE_BINARY_IDENTITY_VERSION };
 /** Limite nocturne : au plus 10 manifestes par passe (première passe = vérification, seconde = variantes manquantes). */
 export const PRIVATE_UPLOAD_BACKLOG_LIMIT = 10;
+/** Inventaire borné : chaque passe examine au plus 50 chemins Storage avant de céder la place au passage suivant. */
+export const PRIVATE_UPLOAD_BACKLOG_READ_BUDGET = 50;
+export const PRIVATE_UPLOAD_BACKLOG_CURSOR_PATH = 'systemJobs/privateUploadBacklog';
 // Longer than the deployed 540-second worker timeout. No heartbeat is needed for a bounded invocation.
 export const PRIVATE_UPLOAD_LEASE_MS = 10 * 60 * 1000;
 export const PRIVATE_UPLOAD_RETRY_MIN_MS = 30 * 1000;
@@ -768,38 +771,89 @@ export const applyPresentationMirrors = async ({ firestore, storage, bucket, buc
     return { ...identity, status, assets: mirror ? assetIds : [], itemThumbnail, itemThumbnailAssetId, thumbnailStatus, registryId: root.registryId ?? null, writes };
   });
 };
+
+const boundedPositiveInteger = (value, fallback) => Number.isSafeInteger(value) && value > 0 ? value : fallback;
+const boundedNonNegativeInteger = (value, fallback) => Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+
+/**
+ * Parcourt une page lexicographique d'originaux et mémorise le dernier chemin
+ * effectivement examiné. Deux curseurs indépendants empêchent la passe de
+ * vérification et celle des variantes de se faire mutuellement progresser.
+ */
+const scanPrivateOriginalPage = async ({ firestore, storage, cursorField, readBudget, visit }) => {
+  const budget = boundedPositiveInteger(readBudget, PRIVATE_UPLOAD_BACKLOG_READ_BUDGET);
+  const cursorRef = firestore.doc(PRIVATE_UPLOAD_BACKLOG_CURSOR_PATH);
+  const cursorSnapshot = await cursorRef.get();
+  const storedCursor = cursorSnapshot.exists && typeof cursorSnapshot.data()?.[cursorField] === 'string'
+    ? cursorSnapshot.data()[cursorField]
+    : null;
+  const options = {
+    prefix: 'private-drafts/',
+    autoPaginate: false,
+    maxResults: budget,
+    ...(storedCursor ? { startOffset: `${storedCursor}\u0000` } : {}),
+  };
+  const [listedFiles, nextQuery] = await storage.bucket().getFiles(options);
+  // Les doubles de test historiques ignoraient maxResults : la tranche garde
+  // la borne vraie même avec un fournisseur qui ne l'applique pas.
+  const files = listedFiles.slice(0, budget);
+  let lastInspected = storedCursor;
+  let stoppedEarly = false;
+  for (const file of files) {
+    lastInspected = file.name;
+    if (await visit(file) === false) {
+      stoppedEarly = true;
+      break;
+    }
+  }
+  const providerHasMore = Boolean(nextQuery?.pageToken) || listedFiles.length > budget;
+  const nextCursor = lastInspected && (stoppedEarly || providerHasMore) ? lastInspected : null;
+  await cursorRef.set({
+    [cursorField]: nextCursor,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+};
 /**
  * Seconde passe du backlog (K7/G5/G6) : variantes manquantes sur binaire image vérifié, sans re-vérification ni dégradation,
  * puis miroirs de l'objet (ou thumbnailStatus 'failed' sur l'item quand sharp refuse l'original). `limit` borne le nombre
  * de régénérations par passage (10 par nuit, PRIVATE_UPLOAD_BACKLOG_LIMIT).
  */
-export const regenerateMissingPresentationVariants = async ({ firestore, storage, limit = PRIVATE_UPLOAD_BACKLOG_LIMIT }) => {
-  const [files] = await storage.bucket().getFiles({ prefix: 'private-drafts/' });
+export const regenerateMissingPresentationVariants = async ({
+  firestore,
+  storage,
+  limit = PRIVATE_UPLOAD_BACKLOG_LIMIT,
+  readBudget = PRIVATE_UPLOAD_BACKLOG_READ_BUDGET,
+}) => {
+  const processingLimit = boundedNonNegativeInteger(limit, PRIVATE_UPLOAD_BACKLOG_LIMIT);
   let regenerated = 0;
   let failed = 0;
   let mirrored = 0;
-  const seen = new Set();
-  for (const file of files) {
-    if (regenerated + failed >= limit) break;
-    const identity = parsePrivateOriginalPath(file.name);
-    if (!identity) continue;
-    const key = manifestPath(identity);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const manifest = (await firestore.doc(key).get()).data() ?? null;
-    if (!manifest || manifest.deleted === true || !privateBinaryIsVerified(manifest) || !manifestDescribesImage(manifest)) continue;
-    if (manifestHasCurrentPresentationVariants(manifest) || manifest.presentationDerivative?.variantsFailure) continue;
-    const result = await regeneratePresentationDerivatives({ firestore, storage, ...identity });
-    if (result.status === 'generated') {
-      regenerated += 1;
-      const mirror = await applyPresentationMirrors({ firestore, storage, ...identity });
-      if (mirror.status === 'mirrored') mirrored += 1;
-    } else if (result.status === 'failed' || result.status === 'digest_mismatch') {
-      failed += 1;
-      // Échec définitif consigné : l'item de l'objet passe à thumbnailStatus 'failed' (jamais « en préparation » perpétuel).
-      if (result.status === 'failed') await applyPresentationMirrors({ firestore, storage, ...identity });
-    }
-  }
+  if (processingLimit === 0) return { variantsRegenerated: 0, variantsFailed: 0, mirrored: 0 };
+  await scanPrivateOriginalPage({
+    firestore,
+    storage,
+    cursorField: 'variantCursor',
+    readBudget,
+    visit: async (file) => {
+      const identity = parsePrivateOriginalPath(file.name);
+      if (!identity) return true;
+      const key = manifestPath(identity);
+      const manifest = (await firestore.doc(key).get()).data() ?? null;
+      if (!manifest || manifest.deleted === true || !privateBinaryIsVerified(manifest) || !manifestDescribesImage(manifest)) return true;
+      if (manifestHasCurrentPresentationVariants(manifest) || manifest.presentationDerivative?.variantsFailure) return true;
+      const result = await regeneratePresentationDerivatives({ firestore, storage, ...identity });
+      if (result.status === 'generated') {
+        regenerated += 1;
+        const mirror = await applyPresentationMirrors({ firestore, storage, ...identity });
+        if (mirror.status === 'mirrored') mirrored += 1;
+      } else if (result.status === 'failed' || result.status === 'digest_mismatch') {
+        failed += 1;
+        // Échec définitif consigné : l'item de l'objet passe à thumbnailStatus 'failed' (jamais « en préparation » perpétuel).
+        if (result.status === 'failed') await applyPresentationMirrors({ firestore, storage, ...identity });
+      }
+      return regenerated + failed < processingLimit;
+    },
+  });
   return { variantsRegenerated: regenerated, variantsFailed: failed, mirrored };
 };
 
@@ -818,33 +872,52 @@ const backlogNeedsVerification = (manifest, nowMs) => (
   && !deferredUntil(manifest, nowMs)
 );
 
-export const processPrivateDraftUploadBacklog = async ({ firestore, storage, limit = PRIVATE_UPLOAD_BACKLOG_LIMIT, variantLimit = limit, now = Date.now }) => {
-  const [files] = await storage.bucket().getFiles({ prefix: 'private-drafts/' });
+export const processPrivateDraftUploadBacklog = async ({
+  firestore,
+  storage,
+  limit = PRIVATE_UPLOAD_BACKLOG_LIMIT,
+  variantLimit = limit,
+  readBudget = PRIVATE_UPLOAD_BACKLOG_READ_BUDGET,
+  variantReadBudget = readBudget,
+  now = Date.now,
+}) => {
+  const inspectionLimit = boundedNonNegativeInteger(limit, PRIVATE_UPLOAD_BACKLOG_LIMIT);
   let inspected = 0;
   let accepted = 0;
   let rejected = 0;
   let retryableFailures = 0;
-  for (const file of files) {
-    if (inspected >= limit) break;
-    const identity = parsePrivateOriginalPath(file.name);
-    if (!identity) continue;
-    const manifest = await firestore.doc(
-      `privateDrafts/${identity.uid}/cartularies/${identity.cartularyId}/binaries/${identity.binaryId}`,
-    ).get();
-    if (!manifest.exists || !backlogNeedsVerification(manifest.data(), now())) continue;
-    inspected += 1;
-    try {
-      const [metadata] = await file.getMetadata();
-      const result = await processPrivateDraftUpload({ firestore, storage, object: metadata, now });
-      if (result.status === 'accepted') accepted += 1;
-      if (result.status === 'rejected') rejected += 1;
-    } catch (error) {
-      // A failed object must not starve the rest of the bounded recovery pass.
-      if (error instanceof PrivateUploadVerificationError) throw error;
-      retryableFailures += 1;
-    }
+  if (inspectionLimit > 0) {
+    await scanPrivateOriginalPage({
+      firestore,
+      storage,
+      cursorField: 'verificationCursor',
+      readBudget,
+      visit: async (file) => {
+        const identity = parsePrivateOriginalPath(file.name);
+        if (!identity) return true;
+        const manifest = await firestore.doc(manifestPath(identity)).get();
+        if (!manifest.exists || !backlogNeedsVerification(manifest.data(), now())) return true;
+        inspected += 1;
+        try {
+          const [metadata] = await file.getMetadata();
+          const result = await processPrivateDraftUpload({ firestore, storage, object: metadata, now });
+          if (result.status === 'accepted') accepted += 1;
+          if (result.status === 'rejected') rejected += 1;
+        } catch (error) {
+          // A failed object must not starve the rest of the bounded recovery pass.
+          if (error instanceof PrivateUploadVerificationError) throw error;
+          retryableFailures += 1;
+        }
+        return inspected < inspectionLimit;
+      },
+    });
   }
   // Seconde passe : variantes manquantes sur binaires vérifiés (jamais de re-vérification, jamais de dégradation).
-  const second = await regenerateMissingPresentationVariants({ firestore, storage, limit: variantLimit });
+  const second = await regenerateMissingPresentationVariants({
+    firestore,
+    storage,
+    limit: variantLimit,
+    readBudget: variantReadBudget,
+  });
   return { inspected, accepted, rejected, ...second, ...(retryableFailures ? { retryableFailures } : {}) };
 };

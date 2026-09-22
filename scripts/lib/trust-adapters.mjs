@@ -37,6 +37,46 @@ export const toPublicAnchorPayload = (batch) => ({
 
 export const publicAnchorPayloadDigest = (payload) => sha256Digest(payload);
 
+export const OPENTIMESTAMPS_CALENDARS = Object.freeze([
+  'https://a.pool.opentimestamps.org',
+  'https://b.pool.opentimestamps.org',
+  'https://a.pool.eternitywall.com',
+  'https://ots.btc.catallaxy.com',
+]);
+export const OPENTIMESTAMPS_ESPLORA_URL = 'https://blockstream.info/api';
+export const OPENTIMESTAMPS_MAXIMUM_PROOF_BYTES = 64 * 1024;
+const allowedOpenTimestampsCalendars = new Set(OPENTIMESTAMPS_CALENDARS);
+
+const failOpenTimestamps = (code, message) => {
+  const error = new TypeError(message);
+  error.code = code;
+  throw error;
+};
+
+const normalizeOpenTimestampsCalendars = (calendars) => {
+  const selected = calendars ?? OPENTIMESTAMPS_CALENDARS;
+  if (!Array.isArray(selected) || selected.length === 0) {
+    return failOpenTimestamps('invalid_opentimestamps_calendars', 'Au moins un calendrier OpenTimestamps approuvé est requis.');
+  }
+  const normalized = [...new Set(selected)];
+  if (normalized.some((calendar) => !allowedOpenTimestampsCalendars.has(calendar))) {
+    return failOpenTimestamps('invalid_opentimestamps_calendars', 'Le calendrier OpenTimestamps demandé n’est pas approuvé.');
+  }
+  return Object.freeze(normalized);
+};
+
+const decodeOpenTimestampsProof = (proofBase64) => {
+  if (typeof proofBase64 !== 'string' || proofBase64.length === 0 || proofBase64.length % 4 !== 0
+    || !/^[A-Za-z0-9+/]+={0,2}$/.test(proofBase64)) {
+    return failOpenTimestamps('invalid_public_anchor_proof', 'Preuve OpenTimestamps illisible.');
+  }
+  const proof = Buffer.from(proofBase64, 'base64');
+  if (proof.length === 0 || proof.length > OPENTIMESTAMPS_MAXIMUM_PROOF_BYTES) {
+    return failOpenTimestamps('invalid_public_anchor_proof', 'Preuve OpenTimestamps absente ou trop volumineuse.');
+  }
+  return proof;
+};
+
 const loadOpenTimestamps = () => {
   const require = createRequire(import.meta.url);
   return require('opentimestamps');
@@ -54,7 +94,10 @@ const normalizeBitcoinVerification = (verification) => {
 export class OpenTimestampsPublicAnchorAdapter {
   constructor({ client, calendars, minimumCalendarResponses = 2, timeout = 10_000 } = {}) {
     this.client = client;
-    this.calendars = calendars;
+    this.calendars = normalizeOpenTimestampsCalendars(calendars);
+    if (!Number.isInteger(minimumCalendarResponses) || minimumCalendarResponses < 1 || minimumCalendarResponses > this.calendars.length) {
+      failOpenTimestamps('invalid_opentimestamps_quorum', 'Le quorum OpenTimestamps doit tenir dans la liste des calendriers approuvés.');
+    }
     this.minimumCalendarResponses = minimumCalendarResponses;
     this.timeout = timeout;
   }
@@ -75,7 +118,7 @@ export class OpenTimestampsPublicAnchorAdapter {
     );
     let stamped;
     if (proofBase64) {
-      stamped = OpenTimestamps.DetachedTimestampFile.deserialize(Buffer.from(proofBase64, 'base64'));
+      stamped = OpenTimestamps.DetachedTimestampFile.deserialize(decodeOpenTimestampsProof(proofBase64));
       await OpenTimestamps.upgrade(stamped, {
         calendars: this.calendars,
         timeout: this.timeout,
@@ -96,6 +139,7 @@ export class OpenTimestampsPublicAnchorAdapter {
     try {
       confirmation = normalizeBitcoinVerification(await OpenTimestamps.verify(stamped, original, {
         calendars: this.calendars,
+        esplora: { url: OPENTIMESTAMPS_ESPLORA_URL, timeout: this.timeout },
         ignoreBitcoinNode: true,
         timeout: this.timeout,
       }));

@@ -83,6 +83,8 @@ describe('Accueil public Cartularia', () => {
     fireEvent.click(trigger);
     expect(screen.getByRole('link', { name: 'Objets' }).getAttribute('href')).toBe('/objets');
     expect(screen.getByRole('link', { name: 'Aide photo et vidéo' }).getAttribute('href')).toBe('/aide-documentaire');
+    expect(screen.getByRole('link', { name: 'Démo Submariner' }).getAttribute('href')).toBe('/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover');
+    expect(screen.getByRole('link', { name: 'Registre démo · 5 montres' }).getAttribute('href')).toBe('/account/sign-in?demo=1');
     expect(screen.queryByRole('navigation', { name: /Navigation de pied de page/i })).toBeNull();
     expect(screen.getByText('Le dossier vivant de vos objets patrimoniaux.')).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /Confidentialité/i }).some((link) => link.getAttribute('href') === '/confidentialite')).toBe(true);

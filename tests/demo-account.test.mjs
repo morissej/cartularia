@@ -12,9 +12,9 @@ import { presentationImageSetFor } from '../src/media/presentationDerivatives.ts
 import { buildDemoAccessProjections } from '../scripts/lib/demo-data-repair.mjs';
 import { buildDemoCartularyAssets, DEMO_ACCOUNT, DEMO_CARTULARIES, DEMO_SUBMARINER_CARTULARY_ID, DEMO_SUBMARINER_PUBLIC_CODE, demoCartularyContentById } from '../src/data/demoCartularies.ts';
 import { buildCartularyHref } from '../src/features/registry/registryCatalog.ts';
+import { DEMO_REGISTRY_ENTRY_HREF, DEMO_REGISTRY_RETURN_HREF, resolveRegistryReturn, signedOutRegistryLinks } from '../src/features/registry/registryReturn.ts';
+import { DEMO_SUBMARINER_HREF } from '../src/features/public/publicContent.ts';
 
-const homePage = readFileSync(new URL('../src/features/public/HomePage.tsx', import.meta.url), 'utf8');
-const accountPage = readFileSync(new URL('../src/features/public/AccountAccessPage.tsx', import.meta.url), 'utf8');
 const rootPage = readFileSync(new URL('../src/RootPage.tsx', import.meta.url), 'utf8');
 const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
 const hostingConfig = JSON.parse(readFileSync(new URL('../firebase.json', import.meta.url), 'utf8'));
@@ -148,12 +148,17 @@ test('chaque Cartulaire démo est réaliste, complet et explicitement fictif', (
   }
 });
 
-test('l’accueil ouvre la Submariner et rend le Registre démo visible', () => {
-  assert.match(homePage, /DEMO_SUBMARINER_CARTULARY_ID/);
-  assert.match(homePage, /\/cartulary-demo\?cartularyId=/);
-  assert.match(homePage, /Registre démo/);
-  assert.match(accountPage, /Ouvrir le Registre démo/);
-  assert.match(accountPage, /signInToCartularia\(DEMO_ACCOUNT\.userName, DEMO_ACCOUNT\.password\)/);
+test('les entrées de démonstration pointent vers la Submariner et la connexion du Registre démo', () => {
+  const cartularyEntry = new URL(DEMO_SUBMARINER_HREF, 'https://cartularia.test');
+  assert.equal(cartularyEntry.pathname, '/cartulary-demo');
+  assert.equal(cartularyEntry.searchParams.get('cartularyId'), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyEntry.hash, '#cover');
+  assert.equal(DEMO_REGISTRY_ENTRY_HREF, '/account/sign-in?demo=1');
+  assert.deepEqual(signedOutRegistryLinks(null)[0], {
+    href: DEMO_REGISTRY_ENTRY_HREF,
+    label: 'Ouvrir le Registre démo',
+    kind: 'demo',
+  });
 });
 
 test('le seed limite le compte partagé à la lecture', () => {
@@ -281,7 +286,6 @@ test('le seed complet écrit rappels et accès fictifs sans registryInvitations,
 // ---------------------------------------------------------------------------------------------
 // V2 — blocs livrés par publication-demo et retours-demo, appliqués par l'intégrateur App.tsx.
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-const registryApp = readFileSync(new URL('../src/features/registry/RegistryApp.tsx', import.meta.url), 'utf8');
 const publicationCommand = readFileSync(new URL('../scripts/lib/demo-publication-command.mjs', import.meta.url), 'utf8');
 const publicationWrapper = readFileSync(new URL('../scripts/publish-demo-website.mjs', import.meta.url), 'utf8');
 
@@ -309,12 +313,15 @@ test('un seul objet démo est publié en V2 : la Submariner, code DEMO-ROL-12406
   assert.doesNotMatch(app, /DEMO_SUBMARINER_PUBLIC_CODE/);
 });
 
-test('le retour d’un Cartulaire démo et l’écran de connexion du Registre proposent le Registre démo (V-A4, V-A5)', () => {
-  assert.match(app, /resolveRegistryReturn\(routeParameters\.get\('returnTo'\), \{ demo: isDemoCartulary \}\)/);
-  assert.match(app, /returnHref=\{registryReturnHref\}/);
-  assert.match(app, /registryReturn\.label\[language\]/);
-  assert.doesNotMatch(app, /isRegistryReturnPath/);
-  assert.match(registryApp, /demoRequested=\{shouldOfferDemoRegistryEntry\(route\.registryId\)\}/);
-  assert.match(registryApp, /Ouvrir le Registre démo/);
-  assert.match(homePage, /DEMO_REGISTRY_HREF = DEMO_REGISTRY_ENTRY_HREF/);
+test('le retour d’un Cartulaire démo et les issues sans session utilisent le contrat de routage commun (V-A4, V-A5)', () => {
+  const registryReturn = resolveRegistryReturn(null, { demo: true });
+  assert.equal(registryReturn.href, DEMO_REGISTRY_RETURN_HREF);
+  assert.equal(registryReturn.label.FR, 'Retour au Registre démo');
+  assert.deepEqual(
+    signedOutRegistryLinks(DEMO_ACCOUNT.registryId).map(({ href, label }) => ({ href, label })),
+    [
+      { href: DEMO_REGISTRY_ENTRY_HREF, label: 'Ouvrir le Registre démo' },
+      { href: '/', label: 'Retour à l’accueil' },
+    ],
+  );
 });

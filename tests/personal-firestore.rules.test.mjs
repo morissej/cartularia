@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { deleteDoc, doc, getDoc, getDocFromServer, setDoc, updateDoc } from 'firebase/firestore';
+import { requireEmulatorEndpoint } from './helpers/require-emulator.mjs';
 
 const projectId = 'cartularia-personal-vault-test';
 const accountId = 'a'.repeat(64);
@@ -22,10 +23,10 @@ const validDocument = (uid = 'vault-owner') => ({
 });
 
 before(async () => {
-  const [host = '127.0.0.1', portValue = '8280'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
+  const { host, port } = requireEmulatorEndpoint('FIRESTORE_EMULATOR_HOST');
   environment = await initializeTestEnvironment({
     projectId,
-    firestore: { host, port: Number(portValue), rules: readFileSync(new URL('../personal-firestore.rules', import.meta.url), 'utf8') },
+    firestore: { host, port, rules: readFileSync(new URL('../personal-firestore.rules', import.meta.url), 'utf8') },
   });
 });
 

@@ -641,7 +641,9 @@ test('tour 5 MK7d : la seconde passe ne reprend jamais un binaire portant varian
   const journalBefore = journal.length;
   const result = await regenerateMissingPresentationVariants({ firestore, storage, limit: 10 });
   assert.deepEqual(result, { variantsRegenerated: 0, variantsFailed: 0, mirrored: 0 });
-  assert.deepEqual(firestore.dump(), before, 'aucune écriture Firestore (pas de retentative nocturne, § 2.6)');
+  const after = firestore.dump();
+  delete after['systemJobs/privateUploadBacklog'];
+  assert.deepEqual(after, before, 'aucune écriture métier Firestore (seul le curseur opérationnel progresse, pas de retentative nocturne, § 2.6)');
   assert.equal(journal.length, journalBefore);
 });
 

@@ -6,15 +6,13 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { deleteDoc, doc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { requireEmulatorEndpoint } from './helpers/require-emulator.mjs';
 
 // Cross-service Storage rules resolve Firestore in the emulator's startup project.
 const projectId = process.env.CARTULARIA_STORAGE_TEST_PROJECT_ID || 'cartularia-wave1-storage-test';
 const bucketUrl = `gs://${projectId}.appspot.com`;
-const [host = '127.0.0.1', portValue = '9199'] = (process.env.FIREBASE_STORAGE_EMULATOR_HOST || '').split(':');
-const port = Number(portValue);
-const [firestoreHost = '127.0.0.1', firestorePortValue = '8080'] =
-  (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
-const firestorePort = Number(firestorePortValue);
+const { host, port } = requireEmulatorEndpoint('FIREBASE_STORAGE_EMULATOR_HOST');
+const { host: firestoreHost, port: firestorePort } = requireEmulatorEndpoint('FIRESTORE_EMULATOR_HOST');
 const privatePath = 'private/org-a/cart-a/originals/asset-a/version-a';
 const publicCode = 'PUBLIC-A1';
 const publicPath = `public/${publicCode}/asset-a/web-v1`;

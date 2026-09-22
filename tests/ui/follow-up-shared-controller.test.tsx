@@ -10,8 +10,7 @@ vi.mock('../../src/persistence/localVault.ts', () => ({
 }));
 
 vi.mock('../../src/services/followUp.ts', () => ({
-  createCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
-  updateCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
+  syncCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
   deleteCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
   observeCartularyFollowUpTodos: vi.fn((_cartularyId: string, onData: (todos: unknown[]) => void) => {
     onData([]);
