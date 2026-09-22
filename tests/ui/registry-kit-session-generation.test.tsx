@@ -29,13 +29,13 @@ describe('AC03 : une génération tardive ne peut pas remplacer le kit d’un au
     const snapshot = (path: string) => ({ exists: records.has(path), data: () => records.get(path) });
     const db = { doc: (path: string) => ({ path, get: async () => snapshot(path), set: async (value: any) => records.set(path, value) }), runTransaction: async (task: any) => task({ get: async ({ path }: any) => snapshot(path), set: ({ path }: any, value: any) => records.set(path, value), update: ({ path }: any, value: any) => records.set(path, { ...records.get(path), ...value }) }) };
     state.commands = createRegistryRecoveryCommands({ db, projectId: 'registry-test', auth: { getUser: async (uid: string) => ({ uid, disabled: false }), createCustomToken: vi.fn() } });
-    state.context = { uid: 'user-a', token: { auth_time: Date.now() / 1000 } };
+    state.context = { uid: 'user-a', token: { auth_time: Math.floor(Date.now() / 1000) } };
     const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
     const kitA = { format: 'cartularia-registry-recovery@1.0.0', projectId: 'registry-test', ownerUid: 'user-a', credentialId: crypto.randomUUID(), createdAt: new Date().toISOString(), signingPrivateKeyJwk: await crypto.subtle.exportKey('jwk', keys.privateKey), signingPublicKeyJwk: await crypto.subtle.exportKey('jwk', keys.publicKey) };
     render(<RegistryRecoveryPage />);
     await waitFor(() => expect((screen.getByRole('button', { name: 'Préparer le kit' }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Préparer le kit' }));
-    await act(async () => { state.auth.currentUser = { uid: 'user-b' }; state.context = { uid: 'user-b', token: { auth_time: Date.now() / 1000 } }; state.observer(state.auth.currentUser); });
+    await act(async () => { state.auth.currentUser = { uid: 'user-b' }; state.context = { uid: 'user-b', token: { auth_time: Math.floor(Date.now() / 1000) } }; state.observer(state.auth.currentUser); });
     await act(async () => state.finishGeneration(kitA));
     expect(screen.queryByRole('button', { name: 'Télécharger le kit secret' })).toBeNull();
     expect(records.has('registryRecovery/user-b')).toBe(false);

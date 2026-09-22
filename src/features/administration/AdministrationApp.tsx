@@ -127,7 +127,7 @@ function UserStateDialog({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (reason.trim().length < 8) return;
+    if (reason.trim().length < 8 || user.accessOperationStatus === 'pending') return;
     setSubmitting(true);
     setError(null);
     try {
@@ -157,7 +157,7 @@ function UserStateDialog({
           {error && <p className="administration-error" role="alert"><AlertTriangle aria-hidden="true" />{error}</p>}
           <div className="administration-dialog__actions">
             <button type="button" className="is-secondary" onClick={closeDialog} disabled={submitting}>Annuler</button>
-            <button type="submit" className={nextDisabled ? 'is-danger' : 'is-success'} disabled={submitting || reason.trim().length < 8}>
+            <button type="submit" className={nextDisabled ? 'is-danger' : 'is-success'} disabled={submitting || reason.trim().length < 8 || user.accessOperationStatus === 'pending'}>
               {submitting && <LoaderCircle className="administration-spinner" aria-hidden="true" />}
               {submitting ? 'Application…' : nextDisabled ? 'Confirmer la suspension' : 'Confirmer la réactivation'}
             </button>
@@ -237,8 +237,8 @@ function AdministrationConsole({ overview, onReload }: { overview: Administratio
         {refreshError && <p className="administration-error" role="alert">{refreshError} <a href="/account/sign-in?returnTo=%2Fadministration">Renouveler la connexion</a></p>}
         <section className="administration-metrics" aria-label="Synthèse des comptes">
           <article><UserRoundCog aria-hidden="true" /><span>Comptes visibles</span><strong>{overview.totals.users}</strong><small>dans les bases configurées</small></article>
-          <article><CheckCircle2 aria-hidden="true" /><span>Comptes actifs</span><strong>{overview.totals.users - overview.totals.disabled}</strong><small>connexion autorisée</small></article>
-          <article className={overview.totals.disabled ? 'is-attention' : undefined}><UserX aria-hidden="true" /><span>Comptes suspendus</span><strong>{overview.totals.disabled}</strong><small>connexion bloquée</small></article>
+          <article><CheckCircle2 aria-hidden="true" /><span>Comptes actifs</span><strong>{overview.totals.users - overview.totals.disabled}</strong><small>accès privé autorisé</small></article>
+          <article className={overview.totals.disabled ? 'is-attention' : undefined}><UserX aria-hidden="true" /><span>Comptes suspendus</span><strong>{overview.totals.disabled}</strong><small>accès privé bloqué</small></article>
           <article><Database aria-hidden="true" /><span>Bases raccordées</span><strong>{overview.totals.configured}/3</strong><small>accès serveur uniquement</small></article>
         </section>
         <nav className="administration-databases" aria-label="Bases de données">
@@ -256,6 +256,7 @@ function AdministrationConsole({ overview, onReload }: { overview: Administratio
             <div className="administration-empty"><LockKeyhole aria-hidden="true" /><h3>{database.state === 'unconfigured' ? 'Raccordement à terminer' : 'Base indisponible'}</h3><p>{database.error || 'Le projet Firebase distinct doit être configuré côté serveur et autoriser le compte de service de la console.'}</p></div>
           ) : (
             <>
+              {database.users.some((user) => user.accessOperationStatus === 'pending') && <p className="administration-warning">Une opération reste en attente. Une réconciliation administrative est requise avant de pouvoir réactiver le compte.</p>}
               <div className="administration-tools">
                 <label><Search aria-hidden="true" /><span className="sr-only">Rechercher un compte</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nom, identifiant ou référence…" /></label>
                 <select aria-label="Filtrer par état" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="all">Tous les états</option><option value="active">Actifs</option><option value="suspended">Suspendus</option></select>
@@ -264,10 +265,10 @@ function AdministrationConsole({ overview, onReload }: { overview: Administratio
                 <div className="administration-user-list__head"><span>Utilisateur</span><span>État</span><span>Dernière connexion</span><span>Dossier</span><span>Action</span></div>
                 {users.map((user) => <article key={user.uid}>
                   <button type="button" className="administration-user-identity" onClick={() => setDashboardTarget({ database: database.id, user })} aria-label={`Ouvrir le dashboard de ${user.label}`}><span className="administration-user-avatar">{user.label.slice(0, 2).toLocaleUpperCase('fr')}</span><span><strong>{user.label}</strong><small>{user.email || user.codedReference || user.uid}</small></span></button>
-                  <span className={`administration-user-status ${user.disabled ? 'is-suspended' : 'is-active'}`}>{user.disabled ? 'Suspendu' : 'Actif'}</span>
+                  <span className={`administration-user-status ${user.disabled ? 'is-suspended' : 'is-active'}`}>{user.accessOperationStatus === 'pending' ? 'Vérification en cours' : user.disabled ? 'Suspendu' : 'Actif'}</span>
                   <span className="administration-user-date">{formatDate(user.lastSignInAt)}</span>
                   <span className={`administration-record-state ${user.recordPresent ? 'is-present' : ''}`}>{user.recordPresent ? <><CheckCircle2 aria-hidden="true" /> Présent</> : 'Absent'}</span>
-                  <button type="button" disabled={reloading || !!refreshError} className={user.disabled ? 'is-reactivate' : 'is-suspend'} onClick={() => setSelectedUser(user)}>{user.disabled ? <UserCheck aria-hidden="true" /> : <UserX aria-hidden="true" />}{user.disabled ? 'Réactiver' : 'Suspendre'}</button>
+                  <button type="button" disabled={reloading || !!refreshError || user.accessOperationStatus === 'pending'} className={user.disabled ? 'is-reactivate' : 'is-suspend'} onClick={() => setSelectedUser(user)}>{user.disabled ? <UserCheck aria-hidden="true" /> : <UserX aria-hidden="true" />}{user.disabled ? 'Réactiver' : 'Suspendre'}</button>
                 </article>)}
                 {users.length === 0 && <div className="administration-empty administration-empty--compact"><UserRoundCog aria-hidden="true" /><h3>Aucun compte trouvé</h3><p>Modifiez les filtres ou actualisez la base.</p></div>}
               </div>

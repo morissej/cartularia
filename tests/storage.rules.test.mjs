@@ -5,15 +5,14 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { requireEmulatorEndpoint } from './helpers/require-emulator.mjs';
 
-const projectId = 'cartularia-wave1-storage-test';
+// Cross-service Storage rules resolve Firestore in the emulator's startup project.
+const projectId = process.env.CARTULARIA_STORAGE_TEST_PROJECT_ID || 'cartularia-wave1-storage-test';
 const bucketUrl = `gs://${projectId}.appspot.com`;
-const [host = '127.0.0.1', portValue = '9199'] = (process.env.FIREBASE_STORAGE_EMULATOR_HOST || '').split(':');
-const port = Number(portValue);
-const [firestoreHost = '127.0.0.1', firestorePortValue = '8080'] =
-  (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
-const firestorePort = Number(firestorePortValue);
+const { host, port } = requireEmulatorEndpoint('FIREBASE_STORAGE_EMULATOR_HOST');
+const { host: firestoreHost, port: firestorePort } = requireEmulatorEndpoint('FIRESTORE_EMULATOR_HOST');
 const privatePath = 'private/org-a/cart-a/originals/asset-a/version-a';
 const publicCode = 'PUBLIC-A1';
 const publicPath = `public/${publicCode}/asset-a/web-v1`;
@@ -222,6 +221,43 @@ test('un dérivé nettoyé est lisible par son seul propriétaire et jamais insc
   await assertFails(ownerStorage.ref(derivativePath).putString('faux dérivé'));
 });
 
+test('une variante v3 avec extension est lisible par son propriétaire seulement si derivativeId == nom de fichier complet (C1/G7)', async () => {
+  // Contrat V3 : private-derivatives/{uid}/{cartularyId}/{binaryId}/presentation-v3-480.webp, métadonnée derivativeId = 'presentation-v3-480.webp'.
+  const variantPath = 'private-derivatives/owner-a/cart-a/draft-binary-a1/presentation-v3-480.webp';
+  const mismatchedPath = 'private-derivatives/owner-a/cart-a/draft-binary-a1/presentation-v2.webp';
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await context.storage(bucketUrl).ref(variantPath).putString('variante v3', 'raw', {
+      contentType: 'image/webp',
+      customMetadata: {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        binaryId: 'draft-binary-a1',
+        derivativeId: 'presentation-v3-480.webp',
+        metadataStripped: 'true',
+        firebaseStorageDownloadTokens: '',
+      },
+    });
+    // Défaut historique : presentation-v2.webp écrit avec derivativeId 'presentation-v2' (sans extension) → illisible sous ces règles.
+    await context.storage(bucketUrl).ref(mismatchedPath).putString('copie v2', 'raw', {
+      contentType: 'image/webp',
+      customMetadata: {
+        ownerUid: 'owner-a',
+        cartularyId: 'cart-a',
+        binaryId: 'draft-binary-a1',
+        derivativeId: 'presentation-v2',
+        metadataStripped: 'true',
+      },
+    });
+  });
+  const ownerStorage = testEnvironment.authenticatedContext('owner-a').storage(bucketUrl);
+  const outsiderStorage = testEnvironment.authenticatedContext('owner-b').storage(bucketUrl);
+  await assertSucceeds(ownerStorage.ref(variantPath).getMetadata());
+  await assertFails(outsiderStorage.ref(variantPath).getMetadata());
+  await assertFails(testEnvironment.unauthenticatedContext().storage(bucketUrl).ref(variantPath).getMetadata());
+  await assertFails(ownerStorage.ref(mismatchedPath).getMetadata());
+  await assertFails(ownerStorage.ref(variantPath).putString('faux dérivé'));
+});
+
 test('un autre compte et un visiteur ne peuvent ni lire ni écrire le brouillon privé', async () => {
   const outsiderStorage = testEnvironment.authenticatedContext('owner-b').storage(bucketUrl);
   const anonymousStorage = testEnvironment.unauthenticatedContext().storage(bucketUrl);
@@ -329,4 +365,83 @@ test('la modération suspend immédiatement le dérivé communautaire', async ()
   });
   const storage = testEnvironment.authenticatedContext('member-a').storage(bucketUrl);
   await assertFails(storage.ref(communityPath).getDownloadURL());
+});
+
+const mirrorAccountAccess = (uid, access) => testEnvironment.withSecurityRulesDisabled(async (context) => {
+  const firestore = context.firestore();
+  const batch = writeBatch(firestore);
+  batch.set(doc(firestore, 'accountAccess', uid), access);
+  batch.set(doc(firestore, 'users', uid), { uid, status: 'active', accountAccess: access }, { merge: true });
+  if (uid === 'member-a') batch.update(doc(firestore, 'communityMemberships', uid), { accountAccess: access });
+  await batch.commit();
+});
+const putPrivateOriginal = (storage, binaryId) => storage.ref(`private-drafts/owner-a/cart-a/${binaryId}/${draftDigest}/original`).putString('original', 'raw', {
+  contentType: 'image/jpeg',
+  customMetadata: { ownerUid: 'owner-a', cartularyId: 'cart-a', binaryId, sha256: `sha256:${draftDigest}`, kind: 'media' },
+});
+
+test('F02 : une suspension ferme originaux, variantes et suppression pour la session Storage déjà ouverte', async () => {
+  const derivativePath = `private-derivatives/owner-a/cart-a/${draftBinaryId}/presentation-v3-480.webp`;
+  await testEnvironment.withSecurityRulesDisabled((context) => context.storage(bucketUrl).ref(derivativePath).putString('variante', 'raw', {
+    contentType: 'image/webp',
+    customMetadata: { ownerUid: 'owner-a', cartularyId: 'cart-a', binaryId: draftBinaryId, derivativeId: 'presentation-v3-480.webp', metadataStripped: 'true' },
+  }));
+  const storage = testEnvironment.authenticatedContext('owner-a', { firebase: { sign_in_provider: 'password' }, auth_time: 1_000 }).storage(bucketUrl);
+  await assertSucceeds(storage.ref(draftPath).getMetadata());
+  await assertSucceeds(storage.ref(derivativePath).getMetadata());
+  await mirrorAccountAccess('owner-a', { status: 'suspended', validAfter: 1_000 });
+  await assertFails(storage.ref(draftPath).getMetadata());
+  await assertFails(storage.ref(derivativePath).getMetadata());
+  await assertFails(putPrivateOriginal(storage, 'suspended-upload'));
+  await assertFails(storage.ref(draftPath).delete());
+});
+
+test('F02 : la réactivation Storage exige une authentification ultérieure et garde la démo sans droit d’écriture', async () => {
+  await mirrorAccountAccess('owner-a', { status: 'active', validAfter: 1_000 });
+  const old = testEnvironment.authenticatedContext('owner-a', { firebase: { sign_in_provider: 'password' }, auth_time: 1_000, iat: 2_000 }).storage(bucketUrl);
+  const fresh = testEnvironment.authenticatedContext('owner-a', { firebase: { sign_in_provider: 'password' }, auth_time: 1_001 }).storage(bucketUrl);
+  await assertFails(old.ref(draftPath).getMetadata());
+  await assertFails(putPrivateOriginal(old, 'old-upload'));
+  await assertSucceeds(fresh.ref(draftPath).getMetadata());
+  await assertSucceeds(putPrivateOriginal(fresh, 'fresh-upload'));
+  await testEnvironment.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), 'users/owner-a'), { accountPurpose: 'public_read_only_demo' }));
+  await assertSucceeds(fresh.ref(draftPath).getMetadata());
+  await assertFails(putPrivateOriginal(fresh, 'demo-upload'));
+  await assertFails(fresh.ref(draftPath).delete());
+});
+
+test('F02 : la suspension communautaire coupe la session existante sans couper les médias réellement publics', async () => {
+  const old = testEnvironment.authenticatedContext('member-a', { firebase: { sign_in_provider: 'password' }, auth_time: 1_000 }).storage(bucketUrl);
+  await assertSucceeds(old.ref(communityPath).getMetadata());
+  await mirrorAccountAccess('member-a', { status: 'suspended', validAfter: 1_000 });
+  await assertFails(old.ref(communityPath).getMetadata());
+  await assertSucceeds(old.ref(publicPath).getMetadata());
+  await assertSucceeds(testEnvironment.unauthenticatedContext().storage(bucketUrl).ref(publicPath).getMetadata());
+  await mirrorAccountAccess('member-a', { status: 'active', validAfter: 1_000 });
+  await assertFails(old.ref(communityPath).getMetadata());
+  await assertSucceeds(testEnvironment.authenticatedContext('member-a', { firebase: { sign_in_provider: 'password' }, auth_time: 1_001 }).storage(bucketUrl).ref(communityPath).getMetadata());
+});
+
+test('F02 : un miroir Storage malformé ferme l’accès et le client ne peut pas le réécrire', async () => {
+  const context = testEnvironment.authenticatedContext('owner-a', { firebase: { sign_in_provider: 'password' }, auth_time: 1_001 });
+  for (const access of [null, { status: 'active' }, { status: 'active', validAfter: '1000' }, { status: 'active', validAfter: -1 }]) {
+    await testEnvironment.withSecurityRulesDisabled((admin) => updateDoc(doc(admin.firestore(), 'users/owner-a'), { accountAccess: access }));
+    await assertFails(context.storage(bucketUrl).ref(draftPath).getMetadata());
+  }
+  await assertFails(updateDoc(doc(context.firestore(), 'users/owner-a'), { accountAccess: { status: 'active', validAfter: 0 } }));
+});
+
+test('F02 : le miroir Storage refuse un custom token ancien malgré son auth_time récent', async () => {
+  await mirrorAccountAccess('owner-a', { status: 'active', validAfter: 1_000 });
+  for (const issuedAt of [undefined, 1_000, '1001']) {
+    const storage = testEnvironment.authenticatedContext('owner-a', {
+      firebase: { sign_in_provider: 'custom' }, auth_time: 1_005,
+      ...(issuedAt === undefined ? {} : { cartulariaRecoveryIssuedAt: issuedAt }),
+    }).storage(bucketUrl);
+    await assertFails(storage.ref(draftPath).getMetadata());
+  }
+  const fresh = testEnvironment.authenticatedContext('owner-a', {
+    firebase: { sign_in_provider: 'custom' }, auth_time: 1_005, cartulariaRecoveryIssuedAt: 1_001,
+  }).storage(bucketUrl);
+  await assertSucceeds(fresh.ref(draftPath).getMetadata());
 });

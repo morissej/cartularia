@@ -22,6 +22,8 @@ vi.mock('../../src/components/MediaDownloadLink', () => ({ MediaDownloadLink: ()
 const registry = { id: 'reg_audit', organizationId: 'org_audit', name: 'Registre audit' } as any;
 const col = { id: 'col_audit', registryId: registry.id, organizationId: registry.organizationId, versionToken: 'version_initiale', name: 'Collection initiale', description: 'Description initiale', websiteTitle: 'Titre initial', websiteSlug: 'initial', status: 'draft', visibility: 'secret', publicationConsent: false, publishedCartularyIds: [] } as any;
 beforeEach(() => {
+  // V4 lot B : le panneau de publication lit sessionStorage au chargement ; aucune demande résiduelle entre tests.
+  sessionStorage.clear();
   fixture.collections = [{ ...col }]; fixture.items = [];
   fixture.publication = { cartularyId: 'cart_audit', publicCode: 'OBJ-AUDIT', revision: 1, status: 'draft', blockIds: [], selectedAssetIds: [] };
   fixture.publish.mockReset();

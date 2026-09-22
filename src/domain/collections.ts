@@ -65,13 +65,27 @@ export interface CollectionWebsiteItemProjection {
   publicCode: string | null;
 }
 
-const collectionSlug = (value: string) => value
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, '-')
-  .replace(/^-+|-+$/g, '')
-  .slice(0, 64);
+export const COLLECTION_SLUG_MAX_LENGTH = 64;
+
+/**
+ * Slug d'une Collection (adresse du mini-site, identifiant). Au-delà de la limite, troncature sur
+ * une frontière de mot pour ne jamais finir par `-` (même règle que le slug des Cartulaires,
+ * défaut D5 de l'audit du 2026-09-08). Doit rester identique à `normalizeCollectionWebsiteSlug`
+ * dans `scripts/lib/collection-policy.mjs`, que le serveur applique à la même saisie.
+ */
+const collectionSlug = (value: string) => {
+  const normalized = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (normalized.length <= COLLECTION_SLUG_MAX_LENGTH) return normalized;
+  const cut = normalized.slice(0, COLLECTION_SLUG_MAX_LENGTH);
+  if (normalized[COLLECTION_SLUG_MAX_LENGTH] === '-') return cut;
+  const boundary = cut.lastIndexOf('-');
+  return (boundary > 0 ? cut.slice(0, boundary) : cut).replace(/-+$/g, '');
+};
 
 export const normalizeCollectionSlug = (value: string) => collectionSlug(value) || 'collection';
 

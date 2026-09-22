@@ -10,7 +10,6 @@ import {
   Globe2,
   Lock,
   Paperclip,
-  Pencil,
   Play,
   Plus,
   RotateCw,
@@ -25,10 +24,13 @@ import {
   activeCreationProfile,
   activeDemoContent,
   isDemoCartulary,
-  isIwcCartulary,
-  isRolexCartulary,
 } from './data/activeCartulary';
 import { ACTIVE_CARTULARY_ID } from './domain/cartularyIds';
+import { useAuthoritativeCartulary } from './features/cartulary/state/useAuthoritativeCartulary';
+import { useGenericSectionEdits } from './features/cartulary/state/useGenericSectionEdits';
+import { useCartularyReview } from './features/cartulary/state/useCartularyReview'; import { CartularyReviewStatus } from './features/cartulary/components/CartularyReviewStatus';
+import { GenericSchemaPageSections } from './components/GenericSchemaPageSections';
+import type { VerticalSchema } from './schema/schemaTypes';
 import type { Asset, ComparableTransaction, MediaTag, Valuation } from './types';
 import { BarreDossier } from './components/BarreDossier';
 import { CartularyTodoBoard } from './components/CartularyTodoBoard';
@@ -39,9 +41,11 @@ import { MediaVideo } from './components/MediaVideo';
 import { PublicWebsitePublicationPanel } from './components/PublicWebsitePublicationPanel';
 import { buildWebsiteDraft, websiteDraftPreview, websiteDraftRequest } from './domain/websiteDraft';
 import { WebsiteDraftWarnings } from './components/WebsiteDraftWarnings';
-import { ReportMediaItem } from './components/ReportMediaItem';
+import { ReportMediaItem, ReportPrintImage } from './components/ReportMediaItem';
+import { SpinSequence } from './components/SpinSequence.tsx';
 import { AutoResizeTextarea } from './components/AutoResizeTextarea';
-import { computeHash, IntegrityJournal, isRfc3161Receipt } from './utils/integrityJournal';
+import { computeHash, isRfc3161Receipt } from './utils/integrityJournal';
+import { createCartularyJournal } from './persistence/cartularyJournal';
 import { downloadTextPdf } from './utils/pdfExport';
 import { AI_SCHEMA_VERSION, aiFieldProps } from './ai/fieldCatalog';
 import { ProjectedPublicBlock } from './components/ProjectedPublicBlock';
@@ -50,11 +54,9 @@ import type { LoadedPublicProjection } from './domain/projections';
 import {
   cartulariaLocalVault,
   cartulariaStorage,
-  mirrorCartulariaLocalStorage,
   persistCartulariaJson,
 } from './persistence/localVault';
 import { readValidatedStoredJson } from './persistence/storedStateValidation';
-import { validateFileForUpload } from './security/fileValidation';
 import {
   CLOUD_PULL_APPLIED_EVENT,
   useHybridPersistence,
@@ -63,51 +65,58 @@ import {
 import {
   PUBLISHED_BLOCK_IDS,
   PUBLICATION_BLOCK_CATALOG,
-  applyPublicationDecision,
-  destinationLabel,
-  destinationMarker,
-  evaluatePublicationEligibility,
   filterPublicationBlockIds,
-  publicationBlockIdsFor,
+  filterRequestedWebsiteBlocks,
   getPublicationPolicy,
-  isSelectionValidated,
-  publicationActionFor,
-  type PublicationAction,
   type PublicationDecision,
   type PublicationDestination,
-  type PublicationEligibility,
-  type PublicationPolicyResult,
   type PublishedBlockId,
 } from './domain/publication';
 import {
+  DEFAULT_INTERFACE_LANGUAGE,
   INTERFACE_LANGUAGE_STORAGE_KEY,
   adjacentCartularyPage,
   cartularyPageFromHash,
-  normalizeInterfaceLanguage,
+  pageScrollBehavior,
   type CartularyPage,
-  type InterfaceLanguage,
 } from './utils/interfaceState';
 import { useDialogFocus } from './hooks/useDialogFocus';
+import { useRevealActiveTab } from './hooks/useRevealActiveTab';
 import { removeItemById, restoreItemAtIndex } from './utils/undoableDeletion';
 import { horizontalNavigationDirection, targetConsumesHorizontalNavigation } from './utils/horizontalNavigation';
 import { mediaDownloadFileName } from './utils/mediaDownload';
 import {
   formatDate,
   formatDateTime,
-  formatFileSize,
   formatMoney,
   formatPercent,
 } from './utils/formatting';
+import { newId } from './utils/identifiers';
+import { prepareImportedAssets, prepareConditionAttachments } from './features/cartulary/media/importMediaFiles';
+import { useAtomicFileImport } from './features/cartulary/media/useAtomicFileImport';
+import { useLocalMediaHydration } from './features/cartulary/media/useLocalMediaHydration';
+import { EmptyMediaSlot } from './features/cartulary/components/EmptyMediaSlot';
+import { CartularyAccessNotice } from './features/cartulary/components/CartularyAccessNotice';
 import {
-  AccessRestricted,
   BlockMarkers,
   ComparableTable,
+  EditableFact,
   EditableParagraphs,
   PageIntroduction,
   SectionTitle,
+  SpecificationAddForm,
   VideoPoster,
   type BlockMarkerState,
 } from './features/cartulary/components/CartularyPresentation';
+import { AnalysisRowsReadOnly, CostBasisReadOnly, CoverFactsReadOnly, DocumentationRegisterReadOnly, ExitAssumptionsReadOnly, MarketDepthReadOnly, OwnershipHistoryReadOnly, ValuationLevelsReadOnly, VaultCodeListReadOnly } from './features/cartulary/components/CartularyReadOnlyBlocks';
+import {
+  PROTECTED_SPECIFICATION_IDS,
+  appendSpecification,
+  mergeStoredSpecificationGroups,
+  specificationGroupsFromLegacyWatchData,
+  type SpecificationGroup,
+  type SpecificationItem,
+} from './domain/specificationGroups';
 import {
   DeletionDialog,
   MarketHistoryDialog,
@@ -138,7 +147,6 @@ import {
 import type {
   AssetKind,
   ComparableAnalysisEntry,
-  ConditionAttachment,
   ConditionEntry,
   DocumentationCategory,
   DocumentationItem,
@@ -149,11 +157,16 @@ import type {
   PurchaseExpense,
   WatchPatrimonialStatus,
 } from './features/cartulary/state/cartularyStateTypes';
-import { isRegistryReturnPath } from './features/registry/registryCatalog';
-import { parseRegistryRoute } from './features/registry/registryRouting';
+import { resolveRegistryReturn } from './features/registry/registryReturn.ts';
+import { parseRegistryRoute, registryHref } from './features/registry/registryRouting';
 import type { RegistryCollectionDocument } from './domain/collections';
 import { loadCartularyCollectionContext, saveRegistryCollection } from './services/collections';
-import { DEMO_ACCOUNT } from './data/demoCartularies';
+import { DEMO_ACCOUNT, DEMO_WEBSITE_BLOCK_IDS } from './data/demoCartularies';
+import { loadPublicPublicationSummaries } from './services/projections';
+import { PublicationReadOnlySummary } from './features/cartulary/components/PublicationReadOnlySummary';
+import { PublicationSelectionTable } from './features/cartulary/components/PublicationSelectionTable';
+import { communityPublicationNote } from './features/cartulary/components/publicationSummaryModel';
+import { clearWebsiteRequestSession } from './services/websiteRequestSession';
 import {
   normalizeStorageCodeReferences,
   normalizeTransmissionCodeReferences,
@@ -176,18 +189,7 @@ import {
   type DatedCashFlow,
 } from './domain/valuationPerformance';
 
-const Spin360 = lazy(() => import('./components/Spin360.tsx').then((module) => ({ default: module.Spin360 })));
 const AuditPanel = lazy(() => import('./components/AuditPanel.tsx').then((module) => ({ default: module.AuditPanel })));
-
-interface PublicationIntent {
-  requestId: string;
-  destination: PublicationDestination;
-  blockId: PublishedBlockId;
-  blockLabel: string;
-  action: PublicationAction;
-  eligibility: PublicationEligibility;
-  policy: PublicationPolicyResult;
-}
 
 type PopularityResourceType = 'Forum officiel' | 'Discussion dédiée' | 'Communauté' | 'Base de données' | 'Revue';
 
@@ -198,19 +200,11 @@ interface PopularityResource {
   url: string;
 }
 
-interface SpecificationDatum {
-  id: string;
-  label: string;
-  value: string;
-}
-
-interface SpecificationGroupData {
-  id: string;
-  title: string;
-  items: SpecificationDatum[];
-}
+type SpecificationDatum = SpecificationItem;
+type SpecificationGroupData = SpecificationGroup;
 
 interface EditableCopyData {
+  originTitle?: string;
   heroSummary: string;
   originParagraphs: string[];
   originKnowledge: string;
@@ -223,12 +217,9 @@ interface EditableCopyData {
   };
 }
 
-const journal = new IntegrityJournal({
+const journal = createCartularyJournal({
   cartularyId: mockCartulary.id,
-  storage: cartulariaStorage ?? undefined,
-  onUpdate: () => {
-    void mirrorCartulariaLocalStorage().catch((error: unknown) => console.error('Miroir local du journal impossible', error));
-  },
+  demonstration: isDemoCartulary,
 });
 const LOCAL_ACCESS_REQUEST_ID = `access-${globalThis.crypto.randomUUID()}`;
 
@@ -260,83 +251,9 @@ const creationModel = activeCreationProfile?.model || mockCartulary.watchInstanc
 const creationReference = activeCreationProfile?.reference || mockCartulary.watchInstance.reference.reference || 'Référence à documenter';
 const creationYear = activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : 'À documenter';
 const creationCaliber = activeCreationProfile?.caliber || 'Calibre à documenter';
-const hasDocumentedReferenceProfile = isIwcCartulary || isRolexCartulary || isDemoCartulary;
+const hasDocumentedReferenceProfile = isDemoCartulary;
 
-const DEFAULT_CHECKS: IdentificationCheck[] = isDemoCartulary && activeDemoContent ? activeDemoContent.checks : isIwcCartulary ? [
-  {
-    id: 'dial-tzc',
-    title: 'Cadran noir IW3251-001',
-    note: 'Mention « TZC » au-dessus de 6 h, chiffres arabes peints et typographie cohérente avec le millésime 2002.',
-    checked: true,
-  },
-  {
-    id: 'utc-date',
-    title: 'Disque UTC et date',
-    note: 'Disque 24 heures visible dans le secteur à 12 h, guichet de date à 3 h et alignement fonctionnel des deux indications.',
-    checked: true,
-  },
-  {
-    id: 'case-geometry',
-    title: 'Boîtier acier de 39 mm',
-    note: 'Diamètre 39 mm et épaisseur de référence 13,5 mm. Les vues documentent les finitions ; l’absence de sur-polissage reste à confirmer.',
-    checked: false,
-  },
-  {
-    id: 'fish-crown',
-    title: 'Couronne « poisson »',
-    note: 'Gravure poisson attendue sur un exemplaire de 2002 selon le rapport interne, mais non lisible sur les vues versées.',
-    checked: false,
-  },
-  {
-    id: 'caliber-tzc',
-    title: 'Calibre IWC 37526 et module TZC',
-    note: 'Mouvement automatique IWC photographié ouvert, rotor signé et mention 21 rubis visibles. Fonctionnement du correcteur à tester.',
-    checked: true,
-  },
-  {
-    id: 'serial-paperwork',
-    title: 'Série et facture du 08.03.2002',
-    note: 'Numéro 2715537 porté par la facture et lisible sur les vues extérieure et intérieure du fond. Carte de garantie distincte non retrouvée.',
-    checked: true,
-  },
-] : isRolexCartulary ? [
-  {
-    id: 'dial-long-e',
-    title: 'Cadran mat Mark I « Long E »',
-    note: 'Typographie du E de ROLEX, couronne fine et marquage SWISS – T < 25 à contrôler sur les vues macro.',
-    checked: false,
-  },
-  {
-    id: 'serial-period',
-    title: 'Série et millésime 1969',
-    note: `Numéro ${mockCartulary.watchInstance.serialNumber || 'à documenter'} à rapprocher de la période de production de la référence 1675.`,
-    checked: false,
-  },
-  {
-    id: 'case-geometry',
-    title: 'Boîtier et protège-couronne',
-    note: 'Géométrie du boîtier, épaisseur des cornes, arêtes et éventuelles reprises de polissage à examiner.',
-    checked: false,
-  },
-  {
-    id: 'fuchsia-insert',
-    title: 'Insert Pepsi fuchsia',
-    note: 'Insert déclaré d’époque ; teinte, typographie, usure et cohérence avec le millésime doivent être revues.',
-    checked: false,
-  },
-  {
-    id: 'caliber-1575',
-    title: 'Calibre Rolex 1575',
-    note: 'Mouvement, pont marqué 1570 le cas échéant, numéro et fonctionnement GMT à confirmer montre ouverte.',
-    checked: false,
-  },
-  {
-    id: 'bracelet-jubilee',
-    title: 'Bracelet Jubilee',
-    note: 'Références de bracelet et d’end-links, date de fermoir, allongement et cohérence avec la montre à documenter.',
-    checked: false,
-  },
-] : [
+const DEFAULT_CHECKS: IdentificationCheck[] = isDemoCartulary && activeDemoContent ? activeDemoContent.checks : [
   {
     id: 'identity-reference',
     title: 'Marque, modèle et référence',
@@ -375,29 +292,15 @@ const DEFAULT_CHECKS: IdentificationCheck[] = isDemoCartulary && activeDemoConte
   },
 ];
 
-const DEFAULT_CONDITION_ENTRIES: ConditionEntry[] = mockCartulary.conditionReports.map((report, index) => ({
+const DEFAULT_CONDITION_ENTRIES: ConditionEntry[] = mockCartulary.conditionReports.map((report) => ({
   id: report.id,
   date: report.date,
   title: report.title,
   note: report.summary,
-  attachments: isIwcCartulary && index === 0
-    ? [{ name: 'Rapport_etat_2026-08-08.pdf' }, { name: 'Fiche_controle_fonctionnel.pdf' }]
-    : isIwcCartulary
-      ? [{ name: 'Revue_visuelle_2024-02-15.pdf' }]
-      : [],
+  attachments: [],
 }));
 
-const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isDemoCartulary && activeDemoContent ? activeDemoContent.documentation : isIwcCartulary ? [
-  { id: 'doc-invoice', category: 'Facture', description: 'Facture originale nominative du 08.03.2002, boutique Aldebert à Paris.', state: 'Présent' },
-  { id: 'doc-warranty', category: 'Garantie', description: 'Aucune carte de garantie distincte dans les fichiers versés ; à rechercher physiquement.', state: 'À vérifier' },
-  { id: 'doc-box', category: 'Boîte', description: 'Boîte et coussin IWC photographiés le 28.08.2026 ; revêtement extérieur fortement dégradé.', state: 'Présent' },
-  { id: 'doc-manual', category: 'Manuel', description: 'Livret utilisateur et documentation de la fonction UTC.', state: 'À vérifier' },
-] : isRolexCartulary ? [
-  { id: 'doc-purchase', category: 'Facture', description: `Acquisition du ${activeCreationProfile?.purchaseDate || '23.07.2026'} auprès de ${activeCreationProfile?.seller || 'L’Atelier du Temps'}. Pièce à identifier dans les documents importés.`, state: 'À vérifier' },
-  { id: 'doc-seller', category: 'Garantie', description: 'Garantie vendeur de cinq ans déclarée dans le dossier. Étendue et conditions à confirmer.', state: 'À vérifier' },
-  { id: 'doc-box', category: 'Boîte', description: 'Boîte et accessoires non confirmés à ce stade.', state: 'À vérifier' },
-  { id: 'doc-expertise', category: 'Certificat', description: 'Notes d’expertise et sources de marché importées ; revue humaine requise avant validation.', state: 'À vérifier' },
-] : [
+const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isDemoCartulary && activeDemoContent ? activeDemoContent.documentation : [
   {
     id: 'doc-purchase',
     category: 'Facture',
@@ -413,43 +316,26 @@ const DEFAULT_DOCUMENTATION_ITEMS: DocumentationItem[] = isDemoCartulary && acti
 
 const DEFAULT_RETAINED_VALUE_EXPLANATION = 'Valeur retenue à partir de la valeur actuelle du marché, sous réserve de l’état de l’objet, de la complétude de son dossier et du canal de cession.';
 
-const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isDemoCartulary && activeDemoContent ? activeDemoContent.popularityResources : isIwcCartulary ? [
-  { id: 'pop-iwc-forum', name: 'IWC Collectors Forum', type: 'Forum officiel', url: 'https://forum.iwc.com/' },
-  { id: 'pop-iwc-3251-thread', name: 'IWC Die Fliegeruhr UTC Ref. 3251', type: 'Discussion dédiée', url: 'https://forum.iwc.com/t/iwc-die-fliegeruhr-utc-ref3251/30513/' },
-  { id: 'pop-watchbase', name: 'WatchBase · IW3251-01', type: 'Base de données', url: 'https://watchbase.com/iwc/pilot/iw3251-01' },
-  { id: 'pop-reddit', name: 'r/IWCschaffhausen', type: 'Communauté', url: 'https://www.reddit.com/r/IWCschaffhausen/' },
-  { id: 'pop-timezone', name: 'TimeZone · IWC 3251 Review', type: 'Revue', url: 'https://forums.timezone.com/index.php?goto=594&rid=0&t=tree' },
-] : [];
+const DEFAULT_POPULARITY_RESOURCES: PopularityResource[] = isDemoCartulary && activeDemoContent ? activeDemoContent.popularityResources : [];
 
 const DEFAULT_EXPENSES: PurchaseExpense[] = isDemoCartulary && activeDemoContent ? activeDemoContent.expenses : [];
 
-const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isDemoCartulary && activeDemoContent ? activeDemoContent.comparableAnalysis : isIwcCartulary ? [
-  { id: 'analysis-listings', angle: 'Prix affichés', finding: '4 150 €', reading: 'Deux annonces observées ; ce niveau reste un prix demandé et non un prix encaissé.' },
-  { id: 'analysis-transactions', angle: 'Prix réalisés', finding: '3 450 €', reading: 'Une transaction observée ; ce point dispose d’une valeur probante supérieure mais l’échantillon reste limité.' },
-  { id: 'analysis-gap', angle: 'Écart annonce / transaction', finding: '20,3 %', reading: 'L’écart mesure la prime d’affichage observée. Il doit couvrir la négociation, le délai et les frais de cession.' },
-  { id: 'analysis-price-channel', angle: 'Canal de prix', finding: 'Annonce spécialisée', reading: 'Canal à privilégier pour défendre le prix d’un exemplaire complet, avec un délai de commercialisation plus long.' },
-  { id: 'analysis-liquidity-channel', angle: 'Canal de liquidité', finding: 'Enchère', reading: 'Exécution plus rapide et prix public, mais résultat plus volatil et frais généralement plus élevés.' },
-] : isRolexCartulary ? [
-  { id: 'analysis-listings', angle: 'Prix affichés', finding: '16 958 € à 21 774 €', reading: 'Trois annonces 1969 relevées dans le dossier. Ce sont des prix demandés, non des transactions réalisées.' },
-  { id: 'analysis-pivot', angle: 'Niveau de travail', finding: '21 000 € à 25 000 €', reading: 'Fourchette de travail pour l’exemplaire déclaré, à revalider après contrôle du cadran, de l’insert, du boîtier et du bracelet.' },
-  { id: 'analysis-liquidity', angle: 'Liquidité', finding: 'Marché international', reading: 'La profondeur observée facilite la comparaison, mais la dispersion des configurations vintage impose une sélection stricte.' },
-  { id: 'analysis-premium', angle: 'Facteurs de prime', finding: 'Long E · fuchsia · patine', reading: 'Ces caractéristiques ne justifient une prime qu’après confirmation de leur authenticité et de leur cohérence.' },
-] : [];
+const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isDemoCartulary && activeDemoContent ? activeDemoContent.comparableAnalysis : [];
 
 const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   {
     id: 'basic', title: 'Données de base', items: [
       ['ad-code', 'Code annonce', `Non applicable · dossier ${mockCartulary.publicCode}`],
       ['brand', 'Marque', mockCartulary.watchInstance.reference.brand],
-      ['collection', 'Collection', isRolexCartulary ? 'GMT-Master' : isIwcCartulary ? 'Pilot’s Watches' : 'Collection à documenter'],
+      ['collection', 'Collection', 'Collection à documenter'],
       ['model', 'Modèle', mockCartulary.watchInstance.reference.model],
       ['reference', 'Numéro de référence', mockCartulary.watchInstance.reference.reference],
       ['movement', 'Mouvement', hasDocumentedReferenceProfile ? 'Remontage automatique' : 'Type de mouvement à documenter'],
       ['case', 'Boîtier', mockCartulary.watchInstance.reference.material],
-      ['bracelet', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
-      ['year', 'Année de fabrication', activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : isIwcCartulary ? '2002' : 'À documenter'],
+      ['bracelet', 'Matière du bracelet', 'À documenter'],
+      ['year', 'Année de fabrication', activeCreationProfile?.manufactureYear ? String(activeCreationProfile.manufactureYear) : 'À documenter'],
       ['condition', 'État', 'Voir 03 · L’objet'],
-      ['delivered', 'Contenu livré', isRolexCartulary ? 'Montre et bracelet Jubilee · accessoires à documenter' : isIwcCartulary ? 'Montre, boîte, écrin et facture · garantie et manuel à vérifier' : 'Montre et accessoires à inventorier'],
+      ['delivered', 'Contenu livré', 'Montre et accessoires à inventorier'],
       ['gender', 'Sexe', 'Montre homme / Unisexe'],
       ['location', 'Emplacement', 'Accès restreint'],
       ['price', 'Prix', 'Voir 04 · Valorisation'],
@@ -460,9 +346,9 @@ const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
     id: 'caliber', title: 'Calibre', items: [
       ['cal-movement', 'Mouvement', hasDocumentedReferenceProfile ? 'Remontage automatique' : 'À documenter'],
       ['caliber', 'Calibre', mockCartulary.watchInstance.reference.caliber],
-      ['base-caliber', 'Calibre de base', isRolexCartulary ? 'Rolex 1570 · pont pouvant être marqué 1570' : isIwcCartulary ? 'ETA 2893-2 selon les sources les mieux recoupées · divergence interne avec ETA 2892-A2' : 'À documenter'],
+      ['base-caliber', 'Calibre de base', 'À documenter'],
       ['power-reserve', 'Réserve de marche', mockCartulary.watchInstance.reference.powerReserve],
-      ['jewels', 'Nombre de pierres', isRolexCartulary ? '26' : isIwcCartulary ? '21 · visible sur le rotor' : 'À documenter'],
+      ['jewels', 'Nombre de pierres', 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
@@ -471,31 +357,31 @@ const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
       ['diameter', 'Diamètre', hasDocumentedReferenceProfile ? `${mockCartulary.watchInstance.reference.diameter.toFixed(1)} mm` : 'À documenter'],
       ['height', 'Hauteur', hasDocumentedReferenceProfile ? `${mockCartulary.watchInstance.reference.thickness.toFixed(1)} mm` : 'À documenter'],
       ['water', 'Étanche', hasDocumentedReferenceProfile ? mockCartulary.watchInstance.reference.waterResistance : 'À documenter'],
-      ['bezel', 'Matériau de la lunette', isRolexCartulary ? 'Insert aluminium Pepsi fuchsia déclaré' : isIwcCartulary ? 'Acier' : 'À documenter'],
-      ['crystal', 'Verre', isRolexCartulary ? 'Plexiglas' : isIwcCartulary ? 'Saphir' : 'À documenter'],
+      ['bezel', 'Matériau de la lunette', 'À documenter'],
+      ['crystal', 'Verre', 'À documenter'],
       ['dial', 'Cadran', hasDocumentedReferenceProfile ? 'Voir la fiche de référence' : 'Couleur et finition à documenter'],
-      ['numerals', 'Chiffres du cadran', isRolexCartulary ? 'Index appliqués au tritium' : isIwcCartulary ? 'Arabes' : 'À documenter'],
+      ['numerals', 'Chiffres du cadran', 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'bracelet', title: 'Bracelet', items: [
-      ['strap-material', 'Matière du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Cuir' : 'À documenter'],
-      ['strap-color', 'Couleur du bracelet', isRolexCartulary ? 'Acier' : isIwcCartulary ? 'Marron foncé patiné' : 'À documenter'],
-      ['clasp', 'Boucle', isRolexCartulary ? 'Boucle déployante Rolex · référence à documenter' : isIwcCartulary ? 'Ardillon IWC' : 'À documenter'],
+      ['strap-material', 'Matière du bracelet', 'À documenter'],
+      ['strap-color', 'Couleur du bracelet', 'À documenter'],
+      ['clasp', 'Boucle', 'À documenter'],
       ['clasp-material', 'Matière de la boucle', 'Acier'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'functions', title: 'Fonctions', items: [
-      ['date', 'Date', isRolexCartulary ? 'Guichet à 3 heures · réglage non rapide' : isIwcCartulary ? 'Guichet à 3 heures' : 'À documenter'],
-      ['gmt', 'GMT', isRolexCartulary ? 'Aiguille GMT 24 heures' : isIwcCartulary ? 'Disque UTC 24 heures' : 'À documenter'],
-      ['timezone', 'Second fuseau horaire', isRolexCartulary ? 'Lunette bidirectionnelle 24 heures' : isIwcCartulary ? 'Réglage par module TZC' : 'À documenter'],
+      ['date', 'Date', 'À documenter'],
+      ['gmt', 'GMT', 'À documenter'],
+      ['timezone', 'Second fuseau horaire', 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
   {
     id: 'other', title: 'Autres', items: [
       ['seconds', 'Seconde', hasDocumentedReferenceProfile ? 'Selon la configuration de référence' : 'À documenter'],
-      ['crown', 'Couronne', isRolexCartulary ? 'Couronne Rolex déclarée d’origine' : isIwcCartulary ? 'Gravure à confirmer · couronne poisson attendue mais non établie' : 'À documenter'],
+      ['crown', 'Couronne', 'À documenter'],
       ['caseback', 'Fond', hasDocumentedReferenceProfile ? 'Selon la configuration de référence' : 'À documenter'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
@@ -511,49 +397,7 @@ const DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = BASE_DEFAULT_SPEC
   })),
 }));
 
-const DEFAULT_EDITABLE_COPY: EditableCopyData = isDemoCartulary && activeDemoContent ? activeDemoContent.editableCopy : isIwcCartulary ? {
-  heroSummary: 'Flieger UTC en acier de 39 mm, acquise neuve en 2002. Le dossier réunit la facture d’origine, la boîte IWC, des vues de 2022 et 2026, le mouvement ouvert et une vidéo.',
-  originParagraphs: [
-    'La Flieger UTC associe la lisibilité des montres d’aviateur IWC à un disque 24 heures qui conserve l’heure du domicile pendant les déplacements. La génération IW3251 a été introduite en 1998 et sa production s’est poursuivie jusqu’en 2005 environ.',
-    'La famille comprend plusieurs variantes documentées : les références 3251-001 et 3251-002 à cadran noir, les versions Spitfire 3251-005 et 3251-007, la rare 3251-009 en platine et la 3251-010 à cadran clair. Le présent exemplaire correspond à la 3251-001, livrée sur cuir et identifiable par la mention « TZC » au-dessus de 6 heures.',
-    'IWC n’a pas publié le nombre total de montres produites pour cette génération. L’estimation du volume reste donc à documenter et doit être considérée comme non vérifiée tant qu’une archive de manufacture ou une source de référence n’est pas disponible.',
-  ],
-  originKnowledge: 'Sur un exemplaire de 2002, la couronne « poisson » est cohérente avec la période. Une couronne « Probus Scafusia » indique généralement un remplacement en service.',
-  watchDescription: [
-    'Cette IWC Flieger UTC IW3251-001 est une montre d’aviateur automatique en acier de 39 mm, produite en 2002. Son cadran noir à chiffres arabes associe un guichet de date à 3 heures à un disque UTC 24 heures disposé à 12 heures.',
-    'L’exemplaire est présenté sur bracelet cuir marron fortement patiné. Le cadran TZC, le disque UTC, le fond numéroté et le mouvement IWC 21 rubis sont documentés ; la gravure de couronne reste à confirmer.',
-  ],
-  conditionSummary: [
-    'L’exemplaire est cohérent avec une IWC Flieger UTC IW3251-001 de 2002. Les vues documentent le cadran, les affichages, le boîtier, le fond numéroté et le mouvement, avec des marques d’usage et un bracelet très patiné.',
-    'La boîte est présente mais son revêtement extérieur est fortement dégradé. Le fonctionnement du module UTC, la marche, l’étanchéité, la gravure de couronne, le lume et le niveau de polissage restent à contrôler.',
-  ],
-  conditionFacts: {
-    lastCondition: '08/08/2026',
-    conclusion: 'Configuration cohérente · contrôles fonctionnels à compléter',
-    openPoint: 'TZC, marche, étanchéité, couronne, lume et service',
-  },
-} : isRolexCartulary ? {
-  heroSummary: activeCreationProfile?.description || 'GMT-Master 1675 de 1969, cadran mat Mark I « Long E », insert Pepsi fuchsia et bracelet Jubilee.',
-  originParagraphs: [
-    'La GMT-Master référence 1675 appartient à la génération vintage produite par Rolex de la fin des années 1950 au début des années 1980. Son aiguille 24 heures et sa lunette graduée permettent la lecture d’un second fuseau horaire.',
-    'Le présent dossier décrit un exemplaire de 1969 avec cadran mat Mark I dit « Long E ». Cette qualification repose sur la typographie du mot ROLEX et doit être confirmée sur les vues macro versées au Cartulaire.',
-    'L’insert Pepsi à décoloration fuchsia, le tritium à patine coquille d’œuf et le bracelet Jubilee sont déclarés dans les pièces sources. Leur période, leur authenticité et leur association à l’exemplaire restent soumises à revue.',
-  ],
-  originKnowledge: 'Sur une 1675 vintage, la valeur dépend fortement du cadran, de l’insert, de la géométrie du boîtier, du mouvement et de la cohérence du bracelet. Toute conclusion doit être rattachée à une preuve datée.',
-  watchDescription: [
-    activeCreationProfile?.description || 'Rolex GMT-Master réf. 1675 de 1969 en acier, cadran mat Mark I « Long E », aiguille GMT et insert Pepsi fuchsia déclaré.',
-    'L’exemplaire porte le numéro de série 1 982 530 et est présenté sur bracelet Jubilee déclaré d’origine. Le calibre indiqué au dossier est le Rolex 1575.',
-  ],
-  conditionSummary: [
-    activeCreationProfile?.conditionSummary || 'L’état a été déclaré lors de la création du Cartulaire et n’a pas encore été confirmé par une revue indépendante.',
-    'Points ouverts : authenticité et période du cadran et de l’insert, niveau de polissage du boîtier, références du bracelet, inspection du mouvement et contrôle d’étanchéité.',
-  ],
-  conditionFacts: {
-    lastCondition: 'À revoir',
-    conclusion: 'État déclaré · non validé',
-    openPoint: 'Authenticité et configuration',
-  },
-} : {
+const DEFAULT_EDITABLE_COPY: EditableCopyData = isDemoCartulary && activeDemoContent ? activeDemoContent.editableCopy : {
   heroSummary: activeCreationProfile?.description
     || `${creationBrand} ${creationModel}, référence ${creationReference}. Dossier créé depuis le Registre et à compléter sur pièces.`,
   originParagraphs: [
@@ -577,15 +421,11 @@ const DEFAULT_EDITABLE_COPY: EditableCopyData = isDemoCartulary && activeDemoCon
   },
 };
 
-const DEFAULT_SENSITIVITY_PRICES = isIwcCartulary
-  ? [3200, 3600, 4000, 4400, 4800]
-  : [
-      mockCartulary.marketSnapshot.lowValue,
-      Math.round((mockCartulary.marketSnapshot.lowValue + mockCartulary.marketSnapshot.midValue) / 2),
-      mockCartulary.marketSnapshot.midValue,
-      Math.round((mockCartulary.marketSnapshot.midValue + mockCartulary.marketSnapshot.highValue) / 2),
-      mockCartulary.marketSnapshot.highValue,
-    ];
+/** Grille de sensibilité par défaut : dérivée de la profondeur de marché enregistrée, sans valeur codée par marque. */
+const defaultSensitivityPrices = () => {
+  const { lowValue, midValue, highValue } = loadMarketDepth();
+  return [lowValue, Math.round((lowValue + midValue) / 2), midValue, Math.round((midValue + highValue) / 2), highValue];
+};
 const DEFAULT_SENSITIVITY_COSTS = [0, 5, 10, 15, 20];
 
 const pageFromHash = (): CartularyPage => {
@@ -637,7 +477,8 @@ const loadConditionEntries = (): ConditionEntry[] => (isDemoCartulary ? DEFAULT_
 }));
 
 const loadPublishedBlocks = (): PublishedBlockId[] => {
-  if (isDemoCartulary) return [...PUBLISHED_BLOCK_IDS];
+  // V4 D3 : la sélection démo du mini-site vaut les 8 blocs réellement publiés (même sélection de blocs que le mini-site démo ; le contenu des blocs peut différer : bibliothèque à 18 médias ici contre 3 images publiées, six groupes de spécifications contre un).
+  if (isDemoCartulary) return [...DEMO_WEBSITE_BLOCK_IDS];
   const stored = readStored<string[]>(
     'cartularia-published-blocks',
     ['media-hero', 'media-slideshow', 'reference-history', 'reference-specs'],
@@ -702,35 +543,14 @@ const loadPublicationSourceBinding = (): PublicationSourceBinding => {
   };
 };
 
+// V5 point 3 (P-C4) : l'état enregistré fait foi (lignes ajoutées, libellés, suppressions durables) ;
+// le catalogue ne sert qu'à compléter la forme de création, les libellés d'identité et les valeurs de repli.
 const loadSpecificationGroups = (): SpecificationGroupData[] => {
   if (isDemoCartulary) return DEFAULT_SPECIFICATION_GROUPS;
   const stored = readStored<SpecificationGroupData[] | null>('cartularia-specification-groups', null);
-  if (stored?.length) {
-    if (!isIwcCartulary) {
-      const storedValues = new Map(stored.flatMap((group) => group.items || []).map((item) => [item.id, item.value]));
-      return DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.map((item) => ({ ...item, value: storedValues.get(item.id) || item.value })),
-      }));
-    }
-    return stored.map((group) => ({
-      ...group,
-      items: group.items.map((item) => ({ ...item, value: item.value === 'Voir 04 · Valeur' ? 'Voir 04 · Valorisation' : item.value })),
-    }));
-  }
+  if (stored?.length) return mergeStoredSpecificationGroups(stored, DEFAULT_SPECIFICATION_GROUPS);
   const legacy = readStored<Record<string, string> | null>('cartularia-basic-watch-data', null);
-  if (!legacy) return DEFAULT_SPECIFICATION_GROUPS;
-  const legacyMap: Record<string, string> = {
-    'ad-code': legacy.adCode, brand: legacy.brand, collection: legacy.collection, model: legacy.model,
-    reference: legacy.reference, movement: legacy.movement, case: legacy.caseMaterial,
-    bracelet: legacy.braceletMaterial, year: legacy.productionYear, condition: legacy.condition,
-    delivered: legacy.deliveredContent, gender: legacy.gender, location: legacy.location,
-    price: legacy.price, availability: legacy.availability,
-  };
-  return DEFAULT_SPECIFICATION_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.map((item) => ({ ...item, value: legacyMap[item.id] ?? item.value })),
-  }));
+  return legacy ? specificationGroupsFromLegacyWatchData(legacy, DEFAULT_SPECIFICATION_GROUPS) : DEFAULT_SPECIFICATION_GROUPS;
 };
 
 const loadEditableCopy = (): EditableCopyData => {
@@ -800,41 +620,56 @@ const loadMediaAssets = (): Asset[] => {
   });
 };
 
-const digestFile = async (file: File) => {
-  const digest = await window.crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
-};
-
 const persistJson = (key: string, value: unknown) => {
   void persistCartulariaJson(key, value).catch((error: unknown) => console.error(`Persistance impossible pour ${key}`, error));
 };
 
-const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+/** Schéma vide tant que l'enveloppe autoritaire n'est pas chargée : aucun rendu générique, aucun masquage. */
+const EMPTY_SCHEMA: VerticalSchema = { schemaId: '', assetType: '', version: '', status: 'baseline', defaultVisibility: 'secret', fieldCount: 0, sections: [], fields: [] };
+
 function App() {
   const isWatchWebsite = window.location.pathname.replace(/\/$/, '') === '/watch-website';
   const routeParameters = new URLSearchParams(window.location.search);
-  const requestedRegistryReturn = routeParameters.get('returnTo');
-  const registryReturnHref = isRegistryReturnPath(requestedRegistryReturn) ? requestedRegistryReturn : '/registry';
+  const openDemoProofs = isDemoCartulary && routeParameters.get('view') === 'proofs';
+  const registryReturn = resolveRegistryReturn(routeParameters.get('returnTo'), { demo: isDemoCartulary });
+  const registryReturnHref = registryReturn.href;
+  // En démo sans returnTo, requestedRegistryId vaut le Registre démo : le contexte de Collection n'est
+  // pas chargé en démo (effet gardé plus bas) et la page Publication passe en rendu lecture.
   const requestedRegistryId = parseRegistryRoute(registryReturnHref).registryId;
   const requestedPublicCode = publicCodeFromUrl();
   const localPublicationPreviewAllowed = isWatchWebsite
     && routeParameters.get('preview') === 'local';
   const invalidPublicCode = isWatchWebsite && !requestedPublicCode;
+  // Lecteur unique : l'enveloppe, les sections et le schéma autoritaires pilotent l'identité et les
+  // sections génériques de tout objet ; le brouillon privé reste la source des blocs spécialisés.
+  const authoritative = useAuthoritativeCartulary(ACTIVE_CARTULARY_ID, { enabled: !isDemoCartulary && !isWatchWebsite });
+  const envelope = authoritative.snapshot?.envelope ?? null;
+  const cartularyPublicCode = envelope?.publicCode || mockCartulary.publicCode;
+  const schema = authoritative.schema;
+  const schemaHas = (sectionId: string) => !schema || schema.sections.includes(sectionId);
+  const sectionEdits = useGenericSectionEdits({ schema: schema ?? EMPTY_SCHEMA, onSave: authoritative.saveFields, canManage: authoritative.canManage });
+  const review = useCartularyReview({ envelope, canManage: authoritative.canManage, confirm: authoritative.confirmReview });
+  const genericPageProps = { sections: authoritative.snapshot?.sections, schema, edits: sectionEdits, canManage: authoritative.canManage, review: review.state };
+  const watch = useMemo(() => envelope
+    ? { ...mockCartulary.watchInstance, reference: { ...mockCartulary.watchInstance.reference, brand: envelope.makerName || mockCartulary.watchInstance.reference.brand, model: envelope.modelName || mockCartulary.watchInstance.reference.model, reference: envelope.referenceCode || mockCartulary.watchInstance.reference.reference } }
+    : mockCartulary.watchInstance, [envelope]);
   useEffect(() => {
     if (!isWatchWebsite) {
-      const reference = mockCartulary.watchInstance.reference;
-      document.title = `Cartulaire ${reference.brand} ${reference.model} · Cartularia`;
+      document.title = `Cartulaire ${watch.reference.brand} ${watch.reference.model} · Cartularia`;
     }
-  }, [isWatchWebsite]);
-  const [language, setLanguage] = useState<InterfaceLanguage>(() => normalizeInterfaceLanguage(
-    readStored<unknown>(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR'),
-  ));
-  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary });
-  const canEdit = !isDemoCartulary;
-  const showCompleteContent = canEdit || isDemoCartulary;
+  }, [isWatchWebsite, watch]);
+  // V6 (V-D9) : bascule FR/EN masquée tant que la traduction est partielle ; la préférence stockée n'est plus relue.
+  const language = DEFAULT_INTERFACE_LANGUAGE;
+  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary || isWatchWebsite });
+  // V5 point 1 (V-D1, P-D6) : une seule source de vérité pour l'édition des pages 00-04, la même que la page Publication (V2 (b), D5 (a)) :
+  // faux en démonstration (hook désactivé), hors session, pendant la résolution des droits et pour tout lecteur sans « cartulary.edit ».
+  const canEdit = authoritative.canManage;
+  // Décision V2 (b) : la page Publication n'est éditable que si le serveur reconnaît le droit de gérer l'objet ;
+  // tout autre lecteur (démonstration comprise, hook autoritaire désactivé) reçoit le rendu lecture des quatre structures.
+  const canManagePublication = authoritative.canManage;
   const [activePage, setActivePage] = useState<CartularyPage>(pageFromHash);
   const [eventTrigger, setEventTrigger] = useState(0);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(openDemoProofs);
   const [isSpinOpen, setIsSpinOpen] = useState(false);
   const [isMarketHistoryEditorOpen, setIsMarketHistoryEditorOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -844,11 +679,15 @@ function App() {
   const [fileImportError, setFileImportError] = useState<string | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
   const [editingBlock, setEditingBlock] = useState<PublishedBlockId | null>(null);
+  const [pendingSpecificationGroupId, setPendingSpecificationGroupId] = useState<string | null>(null);
   const mediaState = useCartularyMediaState({ loadAssets: loadMediaAssets });
   const { mediaAssets, reloadMediaState, commands: mediaCommands } = mediaState;
   const setMediaAssets = mediaCommands.replaceAssets;
   const [mediaUploadTags, setMediaUploadTags] = useState<MediaTag[]>([]);
-  const [isEditingChecks, setIsEditingChecks] = useState(false);
+  const fileImport = useAtomicFileImport({ vault: cartulariaLocalVault, enabled: canEdit, onError: setFileImportError });
+  const mediaImportBusy = fileImport.busy;
+  // Perte du droit de gérer pendant une édition (déconnexion) : le bloc revient au texte, sans champ orphelin.
+  useEffect(() => { if (!canEdit) { setEditingBlock(null); setPendingSpecificationGroupId(null); } }, [canEdit]);
   const conditionState = useCartularyConditionState({
     loadChecks: () => isDemoCartulary ? DEFAULT_CHECKS : readStored('cartularia-identification-checks', DEFAULT_CHECKS),
     loadEntries: loadConditionEntries,
@@ -864,7 +703,7 @@ function App() {
     loadWatchStatus: () => readStored<WatchPatrimonialStatus>('cartularia-watch-status', 'Patrimonial'),
     loadCollectionId: () => isDemoCartulary ? DEMO_ACCOUNT.collectionId : readStored<string>('cartularia-collection-id', activeCreationProfile?.collectionId || 'col_pilots'),
     loadUserAlias: () => isDemoCartulary ? 'COLLECTIONNEUR-DEMO' : readStored<string>('cartularia-user-alias', ''),
-    loadObjectCode: () => readStored<string>('cartularia-object-code', mockCartulary.publicCode),
+    loadObjectCode: () => readStored<string>('cartularia-object-code', cartularyPublicCode),
     loadStorageCodes: () => normalizeStorageCodeReferences(isDemoCartulary ? activeDemoContent?.storageCodes ?? [] : readStored<unknown>('cartularia-storage-code-names', [])),
     loadTransmissionCodes: () => normalizeTransmissionCodeReferences(isDemoCartulary ? activeDemoContent?.transmissionCodes ?? [] : readStored<unknown>('cartularia-transmission-code-references', [])),
   });
@@ -892,6 +731,12 @@ function App() {
   const [publicationUrlCopied, setPublicationUrlCopied] = useState(false);
   const [collectionUrlCopied, setCollectionUrlCopied] = useState(false);
   const [communityUrlCopied, setCommunityUrlCopied] = useState(false);
+  // Décision V2 (d) : le mini-site n'est annoncé (lien, code public, QR) que si publications/{code} est
+  // réellement publié à l'exécution ; jamais de faux « publié », jamais de message technique.
+  const [websitePublished, setWebsitePublished] = useState(false);
+  // Blocs réellement en ligne (publications/{code}.blockIds), lus avec le statut ; null tant que rien n'est constaté.
+  const [publishedWebsiteBlockIds, setPublishedWebsiteBlockIds] = useState<string[] | null>(null);
+  const [websitePublicationCheck, setWebsitePublicationCheck] = useState(0); // V4 point 2 : relecture du constat publications/{code} après Publier / Retirer / Reprendre
   useEffect(() => {
     if (isDemoCartulary || isWatchWebsite) return;
     let active = true;
@@ -924,7 +769,7 @@ function App() {
     loadMarketDepth,
     loadComparables: () => isDemoCartulary ? mockCartulary.comparables : readStored('cartularia-comparables', mockCartulary.comparables),
     loadComparableAnalysis: () => isDemoCartulary ? DEFAULT_COMPARABLE_ANALYSIS : readStored('cartularia-comparable-analysis', DEFAULT_COMPARABLE_ANALYSIS),
-    loadSensitivityPrices: () => isDemoCartulary ? DEFAULT_SENSITIVITY_PRICES : readStored('cartularia-sensitivity-prices', DEFAULT_SENSITIVITY_PRICES),
+    loadSensitivityPrices: () => isDemoCartulary ? defaultSensitivityPrices() : readStored('cartularia-sensitivity-prices', defaultSensitivityPrices()),
     loadSensitivityCosts: () => isDemoCartulary ? DEFAULT_SENSITIVITY_COSTS : readStored('cartularia-sensitivity-costs', DEFAULT_SENSITIVITY_COSTS),
     loadRetainedValuation: () => (isDemoCartulary ? {
       amount: mockCartulary.marketSnapshot.midValue,
@@ -998,16 +843,7 @@ function App() {
   const setExternalPublicationEnabled = publicationCommands.setExternalEnabled;
   const setCollectionPublicationEnabled = publicationCommands.setCollectionEnabled;
   const setCommunityPublicationEnabled = publicationCommands.setCommunityEnabled;
-  const setPublicationDecisions = publicationCommands.replaceDecisions;
   const setPublicationSourceBinding = publicationCommands.setSourceBinding;
-  const [publicationIntent, setPublicationIntent] = useState<PublicationIntent | null>(null);
-  const [publicationAcknowledged, setPublicationAcknowledged] = useState(false);
-  const [publicationError, setPublicationError] = useState<string | null>(null);
-  const [isPublicationSubmitting, setIsPublicationSubmitting] = useState(false);
-  const [publicationSourceDigest, setPublicationSourceDigest] = useState('');
-  const publicationSourceSnapshotRef = useRef<Record<string, unknown> | null>(null);
-  const publicationSubmissionRef = useRef(false);
-  const publicationDialogOpenedAtRef = useRef(0);
   const [specificationGroups, setSpecificationGroups] = useState<SpecificationGroupData[]>(loadSpecificationGroups);
   const [editableCopy, setEditableCopy] = useState<EditableCopyData>(loadEditableCopy);
   const [cloudRefreshVersion, setCloudRefreshVersion] = useState(0);
@@ -1015,22 +851,18 @@ function App() {
   const [publicProjectionLoading, setPublicProjectionLoading] = useState(Boolean(
     isWatchWebsite && requestedPublicCode && !localPublicationPreviewAllowed,
   ));
+  useRevealActiveTab(isWatchWebsite && publicProjectionLoading ? null : activePage); // V6 relecture (REG-1) : rejoue quand la porte du mini-site se lève, la piste n'existant qu'après
   const [publicProjectionError, setPublicProjectionError] = useState<string | null>(null);
+  // Vrai quand la publication est absente ou révoquée : état définitif, sans bouton « Réessayer ».
+  const [publicProjectionAbsent, setPublicProjectionAbsent] = useState(false);
   const persistence = useHybridPersistence(mockCartulary.id, !isDemoCartulary && !isWatchWebsite);
   const drawerRef = useRef<HTMLElement>(null);
-  const publicationDialogRef = useRef<HTMLDivElement>(null);
   const deletionDialogRef = useRef<HTMLDivElement>(null);
   const marketHistoryDialogRef = useRef<HTMLDivElement>(null);
   const spinDialogRef = useRef<HTMLDivElement>(null);
   const mediaDialogRef = useRef<HTMLDivElement>(null);
 
   useDialogFocus(isDrawerOpen, drawerRef, () => setIsDrawerOpen(false));
-  useDialogFocus(Boolean(publicationIntent), publicationDialogRef, () => {
-    if (isPublicationSubmitting) return;
-    setPublicationIntent(null);
-    setPublicationAcknowledged(false);
-    setPublicationError(null);
-  });
   useDialogFocus(Boolean(pendingDeletion), deletionDialogRef, () => {
     if (!isDeletingItem) setPendingDeletion(null);
   });
@@ -1043,7 +875,6 @@ function App() {
       const detail = (event as CustomEvent<CloudPullAppliedDetail>).detail;
       if (!detail || detail.cartularyId !== mockCartulary.id) return;
       const keys = new Set(detail.stateKeys);
-      if (keys.has(INTERFACE_LANGUAGE_STORAGE_KEY)) setLanguage(normalizeInterfaceLanguage(readStored(INTERFACE_LANGUAGE_STORAGE_KEY, 'FR')));
       reloadMediaState(keys);
       reloadConditionState(keys);
       reloadOwnerState(keys);
@@ -1131,11 +962,6 @@ function App() {
     purchaseExpenses,
     exitAssumptions,
   ]);
-  const effectivePublicationSourceDigest = publicationSourceSnapshotRef.current === publicationSourceSnapshot
-    && publicationSourceBinding.digest === publicationSourceDigest
-    ? publicationSourceDigest
-    : '';
-  const effectivePublicationSourceRevision = effectivePublicationSourceDigest ? publicationSourceBinding.revision : 0;
   const integritySnapshot = useMemo<Record<string, unknown>>(() => ({
     ...publicationSourceSnapshot,
     publication: {
@@ -1151,16 +977,13 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    setPublicationSourceDigest('');
     void computeHash(publicationSourceSnapshot).then((digest) => {
       if (!active) return;
-      publicationSourceSnapshotRef.current = publicationSourceSnapshot;
       setPublicationSourceBinding((current) => current.digest === digest ? current : {
         revision: current.revision + 1,
         digest,
         updatedAt: new Date().toISOString(),
       });
-      setPublicationSourceDigest(digest);
     }).catch((error: unknown) => console.error('Empreinte de publication impossible', error));
     return () => {
       active = false;
@@ -1195,6 +1018,7 @@ function App() {
     let active = true;
     setPublicProjectionLoading(true);
     setPublicProjectionError(null);
+    setPublicProjectionAbsent(false);
     import('./services/projections.ts')
       .then(({ loadPublicProjection }) => loadPublicProjection(requestedPublicCode))
       .then((projection) => {
@@ -1202,11 +1026,13 @@ function App() {
         setPublicProjection(projection);
         if (!projection && !localPublicationPreviewAllowed) {
           setPublicProjectionError('Publication absente ou révoquée.');
+          setPublicProjectionAbsent(true);
         }
       })
       .catch(() => {
         if (!active) return;
         setPublicProjection(null);
+        setPublicProjectionAbsent(false);
         if (!localPublicationPreviewAllowed) {
           setPublicProjectionError('Publication indisponible.');
         }
@@ -1226,6 +1052,7 @@ function App() {
   }, [publicProjection]);
 
   useEffect(() => {
+    if (isDemoCartulary) return; // décision V2 (c) : aucune trace locale de la consultation démo
     journal
       .logEvent(
         'ACCESS_CARTULARY',
@@ -1251,53 +1078,11 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [undoNotice]);
 
-  useEffect(() => {
-    if (!cartulariaLocalVault) return;
-    const vault = cartulariaLocalVault;
-    let active = true;
-    const createdUrls = new Set<string>();
-    const hydrateBinary = async (binaryId?: string) => {
-      if (!binaryId) return undefined;
-      const record = await vault.getBinary(binaryId);
-      if (!record?.blob || record.deleted) return undefined;
-      const url = URL.createObjectURL(record.blob);
-      if (!active) {
-        URL.revokeObjectURL(url);
-        return undefined;
-      }
-      createdUrls.add(url);
-      return { record, url };
-    };
-
-    void Promise.all(mediaAssets.map(async (asset) => {
-      if (!asset.binaryId || (asset.url && asset.url !== LOCAL_MEDIA_PLACEHOLDER)) return asset;
-      const hydrated = await hydrateBinary(asset.binaryId);
-      return {
-        ...asset,
-        url: hydrated?.url ?? '',
-        hash: asset.hash || hydrated?.record.sha256 || '',
-        mimeType: asset.mimeType || hydrated?.record.mimeType,
-        fileSize: asset.fileSize || (hydrated ? formatFileSize(hydrated.record.size) : undefined),
-        localAvailability: hydrated ? 'available' as const : 'missing' as const,
-      };
-    })).then((hydrated) => active && setMediaAssets(hydrated));
-
-    void Promise.all(conditionEntries.map(async (entry) => ({
-      ...entry,
-      attachments: await Promise.all(entry.attachments.map(async (attachment) => (
-        !attachment.binaryId || attachment.url
-          ? attachment
-          : { ...attachment, url: (await hydrateBinary(attachment.binaryId))?.url }
-      ))),
-    }))).then((hydrated) => active && setConditionEntries(hydrated));
-
-    return () => {
-      active = false;
-      createdUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-    // A remote pull increments cloudRefreshVersion so only media object URLs are rehydrated.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudRefreshVersion]);
+  useLocalMediaHydration({
+    vault: cartulariaLocalVault, mediaAssets, conditionEntries, setMediaAssets, setConditionEntries,
+    refreshVersion: cloudRefreshVersion, placeholderUrl: LOCAL_MEDIA_PLACEHOLDER,
+    preserveUnreferenced: Boolean(undoNotice),
+  });
 
   useEffect(() => {
     setSelectedAsset((current) => current ? mediaAssets.find((asset) => asset.id === current.id) ?? null : null);
@@ -1319,6 +1104,7 @@ function App() {
   }, [editableCopy]);
 
   useEffect(() => {
+    if (isDemoCartulary) return undefined; // rien n'est enregistré dans le navigateur du visiteur
     const timeout = window.setTimeout(() => {
       void journal.reconcileSnapshot(integritySnapshot).then((event) => {
         if (event) setEventTrigger((previous) => previous + 1);
@@ -1327,7 +1113,6 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [integritySnapshot]);
 
-  const watch = mockCartulary.watchInstance;
   const visibleAssets = mediaAssets;
   const localWebsiteAssets = mediaAssets.filter((asset) => asset.visibility === 'Tous');
   const renderedAssets = isWatchWebsite && !requestedPublicCode ? localWebsiteAssets : visibleAssets;
@@ -1360,35 +1145,17 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moveSelectedAsset, renderedAssets.length, selectedAsset]);
-  const publicationMainPhoto = mediaAssets.find((asset) => asset.tags.includes('main-photo'));
   const referenceConditionReport = conditionEntries.find((entry) => entry.id === 'report-2026-08-08') ?? conditionEntries[0];
   const priorConditionReviews = conditionEntries.filter((entry) => entry.id !== referenceConditionReport?.id);
   const rawSpecificationValue = (label: string) =>
     specificationGroups.flatMap((group) => group.items).find((item) => item.label === label)?.value ?? '';
   const specificationValue = (label: string, fallback: string) =>
     rawSpecificationValue(label) || fallback;
-  const publicationEligibilityFor = (destination: PublicationDestination) => evaluatePublicationEligibility({
-    brand: rawSpecificationValue('Marque'),
-    model: rawSpecificationValue('Modèle'),
-    mainPhoto: publicationMainPhoto,
-    destination,
-  });
-  const selectedBlocksFor = (destination: PublicationDestination) => (
-    destination === 'website' ? publishedBlocks
-      : destination === 'collection' ? collectionBlocks
-        : destination === 'report' ? reportBlocks : communityBlocks
-  );
-  const selectionIsValidated = (destination: PublicationDestination, blockId: PublishedBlockId) => isSelectionValidated({
-    selected: selectedBlocksFor(destination).includes(blockId),
-    destination,
-    blockId,
-    decisions: publicationDecisions,
-    sourceDigest: effectivePublicationSourceDigest,
-    sourceRevision: effectivePublicationSourceRevision,
-  });
   const approvedWebsiteBlocks = filterPublicationBlockIds('website', publishedBlocks);
   const approvedReportBlocks = filterPublicationBlockIds('report', reportBlocks);
-  const requestedPublishedBlocks = publishedBlocksFromUrl();
+  // V4 décision 2 : un paramètre blocks= de l'aperçu local ne dépasse jamais la sélection locale (aperçu ⊆ sélection).
+  const requestedUrlBlocks = publishedBlocksFromUrl();
+  const requestedPublishedBlocks = requestedUrlBlocks && filterRequestedWebsiteBlocks(requestedUrlBlocks, approvedWebsiteBlocks);
   const firestorePublishedBlocks = publicProjection?.blocks
     .map((block) => block.blockId)
     .filter((blockId): blockId is PublishedBlockId => PUBLISHED_BLOCK_IDS.includes(blockId as PublishedBlockId)) ?? [];
@@ -1407,9 +1174,23 @@ function App() {
   };
   const websiteDraft = buildWebsiteDraft(websiteContent, approvedWebsiteBlocks);
   const localPreviewBlocks = websiteDraftPreview(buildWebsiteDraft(websiteContent, watchWebsiteBlocks));
-  const publicShareUrl = `${window.location.origin}/watch-website?publicCode=${encodeURIComponent(mockCartulary.publicCode)}`;
+  const publicShareUrl = `${window.location.origin}/watch-website?publicCode=${encodeURIComponent(cartularyPublicCode)}`;
+  useEffect(() => {
+    if (isWatchWebsite || !cartularyPublicCode) return undefined;
+    let active = true;
+    loadPublicPublicationSummaries([cartularyPublicCode])
+      .then((summaries) => {
+        if (!active) return;
+        const summary = summaries[cartularyPublicCode];
+        setWebsitePublished(summary?.published === true);
+        setPublishedWebsiteBlockIds(summary?.published === true ? summary.blockIds : null);
+      })
+      .catch(() => { if (active) { setWebsitePublished(false); setPublishedWebsiteBlockIds(null); } });
+    return () => { active = false; };
+  }, [cartularyPublicCode, isWatchWebsite, websitePublicationCheck]);
+  const publishedWebsiteUrl = websitePublished ? publicShareUrl : null;
   const localPublicationPreviewParameters = new URLSearchParams({
-    publicCode: mockCartulary.publicCode,
+    publicCode: cartularyPublicCode,
     preview: 'local',
     cartularyId: mockCartulary.id,
     blocks: approvedWebsiteBlocks.join(','),
@@ -1439,142 +1220,15 @@ function App() {
   const reportTimestampReceipt = [...journal.getReceipts()].reverse().find(isRfc3161Receipt);
   const reportTimestampCoversContent = reportTimestampReceipt?.anchoredContentDigest === reportProofState.contentDigest;
 
-  const closePublicationDialog = () => {
-    setPublicationIntent(null);
-    setPublicationAcknowledged(false);
-    setPublicationError(null);
-  };
-
-  const requestPublicationChange = (
-    destination: PublicationDestination,
-    blockId: PublishedBlockId,
-    blockLabel: string,
-  ) => {
-    if (!canEdit) return;
-    publicationDialogOpenedAtRef.current = performance.now();
-    const selected = selectedBlocksFor(destination).includes(blockId);
-    const validated = selectionIsValidated(destination, blockId);
-    setPublicationIntent({
-      requestId: `publication-${globalThis.crypto.randomUUID()}`,
-      destination,
-      blockId,
-      blockLabel,
-      action: publicationActionFor({ selected, validated }),
-      eligibility: publicationEligibilityFor(destination),
-      policy: getPublicationPolicy(destination, blockId),
-    });
-    setPublicationAcknowledged(false);
-    setPublicationError(null);
-  };
-
-  const confirmPublicationIntent = async (overrideAction?: PublicationAction) => {
-    if (!publicationIntent || publicationSubmissionRef.current) return;
-    const action = overrideAction ?? publicationIntent.action;
-    const removalOfLegacySelection = publicationIntent.action === 'validate' && action === 'revoke';
-    if (!publicationAcknowledged && !removalOfLegacySelection) return;
-    publicationSubmissionRef.current = true;
-    setIsPublicationSubmitting(true);
-    setPublicationError(null);
-    try {
-      const [currentDigest, currentEligibility] = await Promise.all([
-        computeHash(publicationSourceSnapshot),
-        Promise.resolve(publicationEligibilityFor(publicationIntent.destination)),
-      ]);
-      const currentPolicy = getPublicationPolicy(publicationIntent.destination, publicationIntent.blockId);
-      if (action !== 'revoke' && (
-        !currentEligibility.isEligible
-        || !currentPolicy.allowed
-        || currentDigest !== effectivePublicationSourceDigest
-        || effectivePublicationSourceRevision === 0
-      )) {
-        setPublicationIntent((current) => current ? {
-          ...current,
-          eligibility: currentEligibility,
-          policy: currentPolicy,
-        } : current);
-        setPublicationAcknowledged(false);
-        setPublicationError(tx(
-          'Le dossier, sa révision ou la politique a changé. Les contrôles ont été recalculés ; corrigez les points bloquants puis relancez la décision.',
-          'The record, its revision or the policy changed. Checks were recalculated; resolve the blocking items and start the decision again.',
-        ));
-        return;
-      }
-
-      const reconciliation = await journal.reconcileSnapshot(integritySnapshot);
-      if (reconciliation) setEventTrigger((previous) => previous + 1);
-      const decision: PublicationDecision = {
-        requestId: publicationIntent.requestId,
-        destination: publicationIntent.destination,
-        blockId: publicationIntent.blockId,
-        blockLabel: publicationIntent.blockLabel,
-        action,
-        status: 'confirmed',
-        decisionSource: 'human_confirmed',
-        decidedAt: new Date().toISOString(),
-        sourceRevision: effectivePublicationSourceRevision,
-        sourceDigest: currentDigest,
-        policyVersion: 'publication-policy-v2',
-        prerequisites: currentEligibility.prerequisites,
-      };
-      const marker = destinationMarker(decision.destination);
-      await journal.logEvent(
-        action === 'revoke' ? 'PUBLICATION_SELECTION_REVOKED' : 'PUBLICATION_SELECTION_CONFIRMED',
-        'Propriétaire',
-        `${marker} · ${decision.blockId} · ${action} · prérequis ${currentEligibility.prerequisites.filter((item) => item.satisfied).length}/3 · source ${currentDigest.slice(0, 23)}`,
-        {
-          requestId: decision.requestId,
-          resource: { type: 'publication_selection', id: `${decision.destination}:${decision.blockId}` },
-        },
-      );
-
-      setPublicationDecisions((current) => current.some((item) => item.requestId === decision.requestId)
-        ? current
-        : [...current, decision]);
-      if (decision.destination === 'website') {
-        setPublishedBlocks((current) => applyPublicationDecision(current, decision));
-      } else if (decision.destination === 'collection') {
-        setCollectionBlocks((current) => applyPublicationDecision(current, decision));
-      } else if (decision.destination === 'report') {
-        setReportBlocks((current) => applyPublicationDecision(current, decision));
-      } else {
-        setCommunityBlocks((current) => applyPublicationDecision(current, decision));
-      }
-      setEventTrigger((previous) => previous + 1);
-      closePublicationDialog();
-    } catch (error) {
-      setPublicationError(error instanceof Error ? error.message : tx('La décision n’a pas pu être enregistrée.', 'The decision could not be saved.'));
-    } finally {
-      publicationSubmissionRef.current = false;
-      setIsPublicationSubmitting(false);
-    }
-  };
-
+  // V4 D5 : la sélection par destination se fait dans la table de la page Publication ; le bloc ne porte plus que son crayon d'édition.
   const publishProps = (blockId: PublishedBlockId, editable = false): BlockMarkerState => ({
     blockId,
     language,
-    website: {
-      active: publishedBlocks.includes(blockId),
-      pendingValidation: publishedBlocks.includes(blockId) && !selectionIsValidated('website', blockId),
-      onToggle: (label) => requestPublicationChange('website', blockId, label),
-      disabled: !canEdit,
-    },
-    report: {
-      active: reportBlocks.includes(blockId),
-      pendingValidation: reportBlocks.includes(blockId) && !selectionIsValidated('report', blockId),
-      onToggle: (label) => requestPublicationChange('report', blockId, label),
-      disabled: !canEdit,
-    },
-    community: {
-      active: communityBlocks.includes(blockId),
-      pendingValidation: communityBlocks.includes(blockId) && !selectionIsValidated('community', blockId),
-      onToggle: (label) => requestPublicationChange('community', blockId, label),
-      disabled: !canEdit,
-    },
-    ...(editable ? {
+    ...(editable && canEdit ? {
       edit: {
         active: editingBlock === blockId,
-        onToggle: () => setEditingBlock((current) => current === blockId ? null : blockId),
-        disabled: !canEdit,
+        // Un bloc à la fois ; le formulaire d'ajout de spécification ne survit pas à la sortie de son bloc.
+        onToggle: () => { setPendingSpecificationGroupId(null); setEditingBlock((current) => current === blockId ? null : blockId); },
       },
     } : {}),
   });
@@ -1680,56 +1334,9 @@ function App() {
       ? current.filter((id) => id !== blockId)
       : [...current, blockId]);
   };
-  const renderPublicationBlockSelector = (
-    destination: PublicationDestination,
-    selected: readonly PublishedBlockId[],
-  ) => {
-    const allowedSelection = filterPublicationBlockIds(destination, selected);
-    const count = allowedSelection.length;
-    return (
-    <div className="publication-block-selector">
-      <div className="publication-block-selector__toolbar">
-        <span>{tx(`${count} contenu${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''}`, `${count} selected item${count === 1 ? '' : 's'}`)}</span>
-        <button
-          type="button"
-          className="button button--quiet"
-          onClick={() => replacePublicationBlocks(destination, () => count === publicationBlockIdsFor(destination).length ? [] : publicationBlockIdsFor(destination))}
-          disabled={!canEdit}
-        >{count === publicationBlockIdsFor(destination).length ? tx('Tout décocher', 'Clear all') : tx('Tout sélectionner parmi les contenus autorisés', 'Select all allowed content')}</button>
-      </div>
-      {(['00', '01', '02', '03', '04'] as const).map((pageNumber) => {
-        const definitions = PUBLICATION_BLOCK_CATALOG.filter((definition) => definition.pageNumber === pageNumber && getPublicationPolicy(destination, definition.id).allowed);
-        if (!definitions.length) return null;
-        return (
-          <details key={pageNumber} open={pageNumber === '00'}>
-            <summary><span>{pageNumber}</span><strong>{definitions[0]?.pageLabel}</strong><small>{definitions.filter((definition) => selected.includes(definition.id)).length}/{definitions.length}</small></summary>
-            <div>
-              {definitions.map((definition) => {
-                const isSelected = selected.includes(definition.id);
-                const aiBinding = destination === 'website'
-                  ? aiFieldProps('publishing.blocks.website', definition.id)
-                  : destination === 'report' ? aiFieldProps('publishing.blocks.report', definition.id) : {};
-                return (
-                  <label key={definition.id} className={isSelected ? 'is-selected' : undefined}>
-                    <input
-                      {...aiBinding}
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => togglePublicationBlock(destination, definition.id)}
-                      disabled={!canEdit}
-                    />
-                    <span>{definition.title}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </details>
-        );
-      })}
-    </div>
-  );
-  };
   const ownershipSummary = ownershipHistorySummary(ownershipHistory, language);
+  // Libellé de repli de la Collection (sélecteur d'édition et lecture) : indisponible, non renseignée ou en cours de chargement.
+  const collectionFallbackLabel = publicationCollectionError ? tx('Collection indisponible', 'Collection unavailable') : collectionContext ? tx('Collection non renseignée', 'Collection not specified') : tx('Chargement de la Collection…', 'Loading Collection…');
   const ownershipAssessment = ownershipValuationAssessment(ownershipHistory, language);
   const interfaceLocale = language === 'FR' ? 'fr-FR' : 'en-GB';
   const mediaTagLabel = (tag: { id: MediaTag; label: string }) => language === 'FR' ? tag.label : ({
@@ -1843,13 +1450,11 @@ function App() {
     .filter((page) => page.blockIds.length > 0), [orderedReportBlocks, pages, publicationPageNumberByBlock]);
 
   const navigateTo = (page: CartularyPage) => {
-    if (activePage === page) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
+    if (activePage === page) { window.scrollTo({ top: 0, behavior: pageScrollBehavior() }); return; }
+    sectionEdits.reset(); sectionEdits.clearMessages();
     setActivePage(page);
     window.location.hash = page;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: pageScrollBehavior() }); // V6 relecture (F7) : immédiat sous prefers-reduced-motion
   };
 
   const reportPreparation = useReportPreparation(JSON.stringify([orderedReportBlocks, reportProofState.contentDigest]));
@@ -1880,8 +1485,8 @@ function App() {
         return definition ? `${definition.pageNumber} · ${definition.pageLabel} — ${definition.title}` : blockId;
       });
       const date = new Date().toISOString().slice(0, 10);
-      const exportMode = downloadTextPdf(`cartularia-${mockCartulary.publicCode}-${date}.pdf`, [
-        `RAPPORT CARTULARIA · ${mockCartulary.publicCode}`,
+      const exportMode = downloadTextPdf(`cartularia-${cartularyPublicCode}-${date}.pdf`, [
+        `RAPPORT CARTULARIA · ${cartularyPublicCode}`,
         `${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`,
         `${tx('Référence', 'Reference')} · ${specificationValue('Numéro de référence', watch.reference.reference)}`,
         `${tx('Date du rapport', 'Report date')} · ${date}`,
@@ -1903,6 +1508,7 @@ function App() {
       return;
     }
 
+    if (isDemoCartulary) return; // démonstration : aucune journalisation locale
     const scope = `rapport personnalisé · ${orderedReportBlocks.length} blocs`;
     void journal
       .logEvent('EXPORT_PDF', 'Propriétaire', `Ouverture de la boîte d’impression : ${scope}`)
@@ -1911,12 +1517,10 @@ function App() {
   };
 
   const handleDeleteAllData = async () => {
-    await journal.logEvent(
-      'PRIVATE_DATA_DELETION_REQUESTED',
-      'Propriétaire',
-      'Suppression explicite du coffre local et de la copie privée cloud du prototype.',
-    );
+    if (isDemoCartulary) return; // défense en profondeur : le bouton n'est plus rendu en lecture seule
+    await journal.logEvent('PRIVATE_DATA_DELETION_REQUESTED', 'Propriétaire', 'Suppression explicite du coffre local et de la copie privée cloud du prototype.');
     await persistence.deleteAllData();
+    clearWebsiteRequestSession(mockCartulary.id); // la demande de mini-site conservée dans l'onglet (lot B) suit le coffre : rien ne survit à la suppression
     window.location.replace('/?data-deleted=1');
   };
 
@@ -1971,7 +1575,7 @@ function App() {
 
   const addCheck = () => {
     conditionCommands.addCheck({ id: newId('check'), title: 'Nouveau point de contrôle', note: '', checked: false });
-    setIsEditingChecks(true);
+    setEditingBlock('reference-checks');
   };
 
   const addConditionEntry = async (event: FormEvent<HTMLFormElement>) => {
@@ -1982,93 +1586,34 @@ function App() {
     const title = String(formData.get('title') || '').trim();
     const note = String(formData.get('note') || '').trim();
     const files = formData.getAll('documents').filter(
-      (value): value is File => value instanceof File && value.size > 0,
+      (value): value is File => value instanceof File && Boolean(value.name),
     );
     if (!note && files.length === 0) return;
-    setFileImportError(null);
-    let attachments: ConditionAttachment[];
-    try {
-      attachments = await Promise.all(files.map(async (file): Promise<ConditionAttachment> => {
-      const binaryId = newId('condition-binary');
-      const sha256 = await digestFile(file);
-      await cartulariaLocalVault?.putValidatedBinary({
-        binaryId,
-        kind: 'condition_attachment',
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sha256,
-        blob: file,
-      });
-        return { id: newId('attachment'), name: file.name, size: file.size, type: file.type, binaryId, sha256, url: URL.createObjectURL(file) };
-      }));
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
-      return;
-    }
-    const entry: ConditionEntry = {
-      id: newId('condition'),
-      date,
-      title: title || 'Note d’état',
-      note,
-      attachments,
-    };
-    conditionCommands.addEntry(entry);
-    form.reset();
+    const imported = await fileImport.run(
+      () => prepareConditionAttachments({ files }),
+      (vault, prepared) => conditionCommands.importEntry(vault, prepared, {
+        id: newId('condition'), date, title: title || 'Note d’état', note, attachments: prepared.items,
+      }),
+    );
+    if (imported) form.reset();
+  };
+
+  /** Same atomic import for the library, media slots and reference reports. */
+  const importMediaFiles = (files: File[], tags: MediaTag[], referenceReport = false) => {
+    if (files.length === 0) return Promise.resolve(false);
+    return fileImport.run(
+      () => prepareImportedAssets({ files, tags, referenceReport }),
+      (vault, prepared) => mediaCommands.importAssets(vault, prepared),
+    );
   };
 
   const addMediaAssets = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const files = new FormData(form).getAll('media-files').filter(
-      (value): value is File => value instanceof File && value.size > 0,
+      (value): value is File => value instanceof File && Boolean(value.name),
     );
-    if (files.length === 0) return;
-
-    setFileImportError(null);
-    let importedAssets: Asset[];
-    try {
-      importedAssets = await Promise.all(files.map(async (file) => {
-        const hash = await digestFile(file);
-        const binaryId = newId('media-binary');
-        const storedBinary = await cartulariaLocalVault?.putValidatedBinary({
-          binaryId,
-          kind: 'media',
-          fileName: file.name,
-          mimeType: file.type,
-          sha256: hash,
-          blob: file,
-        });
-        const canonicalMimeType = storedBinary?.mimeType || file.type;
-        const type: Asset['type'] = canonicalMimeType.startsWith('image/')
-          ? 'image'
-          : canonicalMimeType.startsWith('video/') ? 'video' : 'document';
-        return {
-          id: newId('asset'),
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          originalFileName: file.name,
-          url: URL.createObjectURL(file),
-          type,
-          ratio: type === 'video' ? '16:9' : '4:5',
-          hash,
-          status: 'Archived',
-          visibility: 'Secret',
-          tags: mediaUploadTags,
-          capturedAt: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
-          metadataTimestamp: new Date(file.lastModified || Date.now()).toISOString(),
-          timestampSource: 'file.lastModified',
-          fileSize: formatFileSize(file.size),
-          mimeType: canonicalMimeType,
-          binaryId,
-          localAvailability: 'available',
-          derivativeStatus: type === 'video' ? 'pending' : 'not-required',
-        };
-      }));
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Fichier refusé.', 'File rejected.'));
-      return;
-    }
-
-    mediaCommands.appendAssets(importedAssets);
+    if (!(await importMediaFiles(files, mediaUploadTags))) return;
     form.reset();
     setMediaUploadTags([]);
   };
@@ -2077,56 +1622,9 @@ function App() {
     event.preventDefault();
     const form = event.currentTarget;
     const files = new FormData(form).getAll('reference-report-files').filter(
-      (value): value is File => value instanceof File && value.size > 0,
+      (value): value is File => value instanceof File && Boolean(value.name),
     );
-    if (files.length === 0) return;
-    setFileImportError(null);
-    try {
-      const reports = await Promise.all(files.map(async (file): Promise<Asset> => {
-        const inspection = await validateFileForUpload({
-          blob: file,
-          fileName: file.name,
-          declaredMimeType: file.type,
-          expectedKind: 'document',
-        });
-        const hash = await digestFile(file);
-        const binaryId = newId('reference-report-binary');
-        await cartulariaLocalVault?.putValidatedBinary({
-          binaryId,
-          kind: 'media',
-          fileName: file.name,
-          mimeType: inspection.canonicalMimeType,
-          sha256: hash,
-          blob: file,
-        });
-        return {
-          id: newId('reference-report'),
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          originalFileName: file.name,
-          url: URL.createObjectURL(file),
-          type: 'document',
-          ratio: '4:5',
-          hash,
-          status: 'Archived',
-          visibility: 'Secret',
-          tags: ['documentation'],
-          category: 'documentation',
-          capturedAt: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
-          metadataTimestamp: new Date(file.lastModified || Date.now()).toISOString(),
-          timestampSource: 'file.lastModified',
-          fileSize: formatFileSize(file.size),
-          mimeType: inspection.canonicalMimeType,
-          binaryId,
-          localAvailability: 'available',
-          derivativeStatus: 'not-required',
-          sourceSection: 'reference-report',
-        };
-      }));
-      mediaCommands.appendAssets(reports);
-      form.reset();
-    } catch (caught) {
-      setFileImportError(caught instanceof Error ? caught.message : tx('Rapport refusé.', 'Report rejected.'));
-    }
+    if (await importMediaFiles(files, ['documentation'], true)) form.reset();
   };
 
   const updateDocumentationItem = <K extends keyof DocumentationItem>(
@@ -2274,6 +1772,7 @@ function App() {
   };
 
   const deleteSpecification = (groupId: string, itemId: string) => {
+    if (PROTECTED_SPECIFICATION_IDS.has(itemId)) return;
     const group = specificationGroups.find((candidate) => candidate.id === groupId);
     const removed = group ? removeItemById(group.items, itemId) : null;
     if (!group || !removed) return;
@@ -2299,10 +1798,8 @@ function App() {
     });
   };
 
-  const addSpecification = (groupId: string) => {
-    setSpecificationGroups((current) => current.map((group) => group.id === groupId
-      ? { ...group, items: [...group.items, { id: newId('spec'), label: 'Nouvelle donnée', value: '' }] }
-      : group));
+  const addSpecification = (groupId: string, label: string, value: string) => {
+    setSpecificationGroups((current) => appendSpecification(current, groupId, { id: newId('spec'), label, value }) ?? current);
   };
 
   const renderWatchWebsiteBlock = (blockId: PublishedBlockId, forPrint = false) => {
@@ -2317,10 +1814,10 @@ function App() {
         return (
           <section className="cover-sheet cover-sheet--published">
             <div className="cover-sheet__identity">
-              <span className="eyebrow">Cartulaire · {mockCartulary.publicCode}</span>
+              <span className="eyebrow">Cartulaire · {cartularyPublicCode}</span>
               <div className="cover-sheet__published-title">
                 <p>{specificationValue('Marque', watch.reference.brand)}</p>
-                <h1>{specificationValue('Modèle', watch.reference.model)}</h1>
+                <h2>{specificationValue('Modèle', watch.reference.model)}</h2>
               </div>
               <div className="cover-sheet__identity-meta">
                 <span className="asset-kind-badge">{assetKindLabel(assetKind)}</span>
@@ -2330,38 +1827,11 @@ function App() {
             </div>
             <div className="cover-sheet__photo">
               {mainPhoto
-                ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager />
+                ? forPrint
+                  ? <ReportPrintImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" language={language} />
+                  : <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager role="stage" />
                 : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
             </div>
-          </section>
-        );
-      case 'cover-owner':
-        return (
-          <section>
-            <SectionTitle eyebrow={tx('Propriétaire', 'Owner')} title={tx('Propriétaire actuel', 'Current owner')} />
-            <article className="owner-card owner-card--published">
-              <p><strong>{tx('Pseudonyme / Code', 'Alias / Code')} :</strong> {userAlias || tx('Non renseigné', 'Not provided')}</p>
-              <p><strong>{tx('Statut de détention', 'Holding status')} :</strong> {watchStatusLabel(watchStatus)}</p>
-            </article>
-          </section>
-        );
-      case 'cover-transmission':
-        return (
-          <section>
-            <SectionTitle eyebrow={tx('Transmission', 'Transmission')} title={tx('Règles et contacts de transmission', 'Transmission rules & contacts')} />
-            <article className="transmission-card transmission-card--published">
-              {transmissionCodes.length > 0 ? (
-                <div className="storage-published-grid">
-                  {transmissionCodes.map((person, index) => (
-                    <article key={person.id}>
-                      <span className="eyebrow">{tx('Contact', 'Contact')} {String(index + 1).padStart(2, '0')}</span>
-                      <h3>{person.codeName || person.correspondenceCode || tx('Contact confidentiel', 'Confidential contact')}</h3>
-                      {person.note && <p>{person.note}</p>}
-                    </article>
-                  ))}
-                </div>
-              ) : <p className="storage-empty">{tx('Aucun contact de transmission renseigné.', 'No transmission contact entered.')}</p>}
-            </article>
           </section>
         );
       case 'cover-ownership-history':
@@ -2383,32 +1853,21 @@ function App() {
             </article>
           </section>
         );
-      case 'cover-storage':
-        return (
-          <section>
-            <SectionTitle eyebrow={tx('Conservation', 'Safekeeping')} title={tx('Stockage', 'Storage')} />
-            <article className="storage-card storage-card--published">
-              {storageCodes.length > 0 ? (
-                <div className="storage-published-grid">
-                  {storageCodes.map((location, index) => <article key={location.id}><span className="eyebrow">{tx('Code', 'Code')} {String(index + 1).padStart(2, '0')}</span><h3>{location.codeName}</h3></article>)}
-                </div>
-              ) : <p className="storage-empty">{tx('Aucun nom de code de stockage renseigné.', 'No storage code name entered.')}</p>}
-            </article>
-          </section>
-        );
       case 'media-hero':
         return (
           <section className="watch-website__hero">
-            {mainPhoto && <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" eager />}
+            {mainPhoto && (forPrint
+              ? <ReportPrintImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" language={language} />
+              : <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 50vw" eager role="stage" />)}
             <div>
               <span className="eyebrow">{watch.reference.reference}</span>
-              <h2>{watch.reference.brand}<br />{watch.reference.model}</h2>
+              <h2>{watch.reference.brand}{' '}{watch.reference.model}</h2>
               <p>{editableCopy.heroSummary}</p>
               <dl className="hero-facts">
                 <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
                 <div><dt>{tx('Dernier contrôle', 'Last inspection')}</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
                 <div><dt>{tx('Référence', 'Reference')}</dt><dd>{watch.reference.reference}</dd></div>
-                <div><dt>{tx('Dossier', 'Record')}</dt><dd>{mockCartulary.publicCode}</dd></div>
+                <div><dt>{tx('Dossier', 'Record')}</dt><dd>{cartularyPublicCode}</dd></div>
               </dl>
               {mainPhoto && <MediaDownloadLink media={mainPhoto} language={language} />}
             </div>
@@ -2430,8 +1889,8 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Séquence 3D', '3D sequence')} title={tx('Revue à 360°', '360° review')} />
-            {forPrint ? <div className="report-slideshow-gallery__grid">{spinAssets.map((asset) => <figure key={asset.id}><PrivateMediaImage asset={asset} alt={asset.name} eager /><figcaption>{asset.name}</figcaption></figure>)}{spinAssets.length === 0 && <p>{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}</div> : spinAssets.length > 0
-              ? <><Suspense fallback={<div className="media-empty" role="status">{tx('Chargement de la séquence 360°…', 'Loading 360° sequence…')}</div>}><Spin360 images={spinAssets} posterImageUrl={spinAssets[0].url} language={language} /></Suspense><details className="spin-downloads no-print"><summary>{tx(`Télécharger les vues (${spinAssets.length})`, `Download views (${spinAssets.length})`)}</summary><div>{spinAssets.map((asset, index) => <div key={asset.id}>{tx(`Vue ${index + 1}`, `View ${index + 1}`)} · <MediaDownloadLink media={asset} language={language} compact showName className="spin-downloads__link" /></div>)}</div></details></>
+            {forPrint ? <div className="report-slideshow-gallery__grid">{spinAssets.map((asset) => <figure key={asset.id}><ReportPrintImage asset={asset} alt={asset.name} language={language} /><figcaption>{asset.name}</figcaption></figure>)}{spinAssets.length === 0 && <p>{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}</div> : spinAssets.length > 0
+              ? <><SpinSequence images={spinAssets} language={language} /><details className="spin-downloads no-print"><summary>{tx(`Télécharger les vues (${spinAssets.length})`, `Download views (${spinAssets.length})`)}</summary><div>{spinAssets.map((asset, index) => <div key={asset.id}>{tx(`Vue ${index + 1}`, `View ${index + 1}`)} · <MediaDownloadLink media={asset} language={language} compact showName className="spin-downloads__link" /></div>)}</div></details></>
               : <p className="watch-website__empty">{tx('Séquence non disponible.', 'Sequence unavailable.')}</p>}
           </section>
         );
@@ -2439,11 +1898,13 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Présentation', 'Presentation')} title={tx('Diaporama', 'Slideshow')} />
-            <div className="report-slideshow-gallery">
-              <div className="report-slideshow-gallery__grid">
-                {presentationAssets.map((asset) => <ReportMediaItem key={asset.id} asset={asset} language={language} />)}
+            {forPrint && (
+              <div className="report-slideshow-gallery">
+                <div className="report-slideshow-gallery__grid">
+                  {presentationAssets.map((asset) => <ReportMediaItem key={asset.id} asset={asset} language={language} />)}
+                </div>
               </div>
-            </div>
+            )}
             {!forPrint && <div className="media-carousel-wrapper">
               <MediaCarousel assets={presentationAssets} language={language} onOpen={(asset) => window.open(asset.url, '_blank', 'noopener,noreferrer')} />
             </div>}
@@ -2461,7 +1922,9 @@ function App() {
                       ? <FileText size={28} />
                       : asset.type === 'video'
                         ? <><Video size={28} /><small>VIDEO</small></>
-                        : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" eager={forPrint} />}
+                        : forPrint
+                          ? <ReportPrintImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" language={language} />
+                          : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" role="thumbnail" />}
                   </span>
                   <strong>{asset.name}</strong>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
@@ -2487,9 +1950,9 @@ function App() {
             <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} />
             <div className="specification-groups">
               {specificationGroups.map((group) => (
-                <section className="specification-group" key={group.title}>
+                <section className="specification-group" key={group.id}>
                   <h3>{group.title}</h3>
-                  <dl>{group.items.map((item) => <div key={item.id}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
+                  <dl>{group.items.filter((item) => item.value.trim()).map((item) => <div key={item.id}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
                 </section>
               ))}
             </div>
@@ -2548,7 +2011,9 @@ function App() {
                     ? <FileText size={28} />
                     : asset.type === 'video'
                       ? <Video size={28} />
-                      : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" eager={forPrint} />}</span>
+                      : forPrint
+                        ? <ReportPrintImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" language={language} />
+                        : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" role="thumbnail" />}</span>
                   <strong>{asset.name}</strong><small>{asset.tags.includes('documentation') ? 'Documentation' : tx('Accessoires', 'Accessories')}</small>
                   <time dateTime={asset.metadataTimestamp}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : tx('Horodatage indisponible', 'Timestamp unavailable')}</time>
                   <span className="documentation-media__download no-print"><Download size={13} aria-hidden="true" />{tx('Télécharger', 'Download')}</span>
@@ -2580,7 +2045,7 @@ function App() {
           <section>
             <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} />
             <div className="market-grid">
-              <article className="market-chart-card"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><div className="market-bars">{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>{isDemoCartulary ? tx('Source : historique fictif de démonstration · aucune transaction réelle', 'Source: fictional demonstration history · no real transaction') : tx('Source : évaluations datées du dossier', 'Source: dated valuations from the record')}</small></article>
+              <article className="market-chart-card"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><div className="market-bars" role="group" tabIndex={0} aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>{isDemoCartulary ? tx('Source : historique fictif de démonstration · aucune transaction réelle', 'Source: fictional demonstration history · no real transaction') : tx('Source : évaluations datées du dossier', 'Source: dated valuations from the record')}</small></article>
               <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">{tx('Profondeur de marché', 'Market depth')}</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? tx(`Analyse du ${formatDate(marketDepth.analysisDate)}`, `Analysis dated ${formatDate(marketDepth.analysisDate)}`) : tx('Date non renseignée', 'Date not provided')}</time></div><div className="metric-grid"><div><strong>{marketDepth.activeListings}</strong><span>{tx('Annonces actives', 'Active listings')}</span></div><div><strong>{marketDepth.transactions12m}</strong><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div><div><strong>{marketDepth.medianDaysOnMarket} {tx('j', 'd')}</strong><span>{tx('Délai médian estimé', 'Estimated median time')}</span></div></div><div className="valuation-range"><span>{tx('Fourchette actuelle', 'Current range')}</span><strong>{formatMoney(marketDepth.lowValue)} — {formatMoney(marketDepth.highValue)}</strong><small>{tx('VALEUR MÉDIANE', 'MEDIAN VALUE')} {formatMoney(marketDepth.midValue)}</small></div></article>
               <article className="retained-value-card retained-value-card--published">
                 <div><span className="eyebrow">{tx('Décision du propriétaire', 'Owner decision')}</span><h3>{tx('Valeur retenue', 'Retained value')}</h3></div>
@@ -2629,7 +2094,7 @@ function App() {
         return (
           <section>
             <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} />
-            <div className="sensitivity-stack"><div><h3>{tx('Plus-value ou moins-value nette', 'Net capital gain or loss')}</h3><div className="sensitivity-table"><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>; })}</div>)}</div></div><div><h3>{tx('TRI annualisé', 'Annualized IRR')}</h3><div className="sensitivity-table sensitivity-table--irr"><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>; })}</div>)}</div></div></div>
+            <div className="sensitivity-stack"><div><h3>{tx('Plus-value ou moins-value nette', 'Net capital gain or loss')}</h3><div className="sensitivity-table" role="group" tabIndex={0} aria-label={tx('Sensibilité de la plus-value ou moins-value', 'Capital gain or loss sensitivity')}><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.gainLoss >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatMoney(scenario.gainLoss, watch.currency)}</strong></span>; })}</div>)}</div></div><div><h3>{tx('TRI annualisé', 'Annualized IRR')}</h3><div className="sensitivity-table sensitivity-table--irr" role="group" tabIndex={0} aria-label={tx('Sensibilité du TRI annualisé', 'Annualized IRR sensitivity')}><div className="sensitivity-table__head"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>{sensitivityCosts.map((costPct, costIndex) => <div key={`${costPct}-${costIndex}`}><strong>{costPct} %</strong>{sensitivityPrices.map((price, priceIndex) => { const scenario = scenarioPerformance(price, costPct); return <span key={`${price}-${priceIndex}`} className={scenario.irr !== null && scenario.irr >= 0 ? 'is-positive' : 'is-negative'}><strong>{formatPercent(scenario.irr)}</strong></span>; })}</div>)}</div></div></div>
           </section>
         );
       default:
@@ -2648,7 +2113,8 @@ function App() {
             {publicProjectionLoading ? <RotateCw className="is-spinning" size={26} /> : <Lock size={26} />}
             <h1>{publicProjectionLoading ? tx('Chargement de la publication', 'Loading publication') : tx('Publication indisponible', 'Publication unavailable')}</h1>
             <p>{publicProjectionLoading ? tx('Lecture des contenus publiés…', 'Loading published content…') : publicProjectionError}</p>
-            {!publicProjectionLoading && <button type="button" className="button button--quiet" onClick={() => window.location.reload()}>{tx('Réessayer', 'Retry')}</button>}
+            {!publicProjectionLoading && !publicProjectionAbsent && <button type="button" className="button button--quiet" onClick={() => window.location.reload()}>{tx('Réessayer', 'Retry')}</button>}
+            {!publicProjectionLoading && publicProjectionAbsent && <a className="button button--quiet" href="/">{tx('Retour à l’accueil', 'Back to home')}</a>}
           </div>
         </main>
       </div>
@@ -2695,7 +2161,7 @@ function App() {
     const nextWebsitePage = activeWebsitePageIndex >= 0
       ? publishedWebsitePages[activeWebsitePageIndex + 1] ?? null
       : null;
-    const websiteCode = publicProjection?.publication.publicCode ?? mockCartulary.publicCode;
+    const websiteCode = publicProjection?.publication.publicCode ?? cartularyPublicCode;
     const websiteBrand = publicProjection?.publication.makerName ?? watch.reference.brand;
     const websiteModel = publicProjection?.publication.modelName ?? watch.reference.model;
     return (
@@ -2718,8 +2184,7 @@ function App() {
                   onClick={() => navigateTo(page.id)}
                   aria-current={activeWebsitePage?.id === page.id ? 'page' : undefined}
                 >
-                  <span>{page.number}</span>
-                  {page.label}
+                  <span>{page.number}</span>{'\u00a0'}{page.label}
                 </button>
               ))}
             </div>
@@ -2748,26 +2213,22 @@ function App() {
     <div className="app-shell" data-ai-schema-version={AI_SCHEMA_VERSION} data-cartulary-presentation-version={CARTULARY_PRESENTATION_CONTRACT_VERSION}>
       <a className="skip-link" href="#cartulary-content">{language === 'FR' ? 'Aller au contenu' : 'Skip to content'}</a>
       <BarreDossier
-        publicCode={mockCartulary.publicCode}
+        publicCode={cartularyPublicCode}
         brand={watch.reference.brand}
         model={watch.reference.model}
         language={language}
-        setLanguage={setLanguage}
         followUp={followUp}
-        readOnly={isDemoCartulary}
+        readOnly={!canEdit}
+        demonstration={isDemoCartulary}
+        returnHref={registryReturnHref}
       />
 
-      {isDemoCartulary && (
-        <aside className="cartulary-demo-notice no-print" role="note">
-          <ShieldCheck size={16} aria-hidden="true" />
-          <strong>Démonstration en lecture seule</strong>
-          <span>Gabarit Cartulaire standard · données, documents, valeurs et médias fictifs.</span>
-        </aside>
-      )}
+      {/* V5 point 1 (2/2) : bandeau d'accès — démonstration, propriétaire hors session, chargement impossible ; rien pendant la résolution des droits. */}
+      <CartularyAccessNotice demonstration={isDemoCartulary} status={authoritative.status} language={language} />
 
       <a className="cartulary-registry-return no-print" href={registryReturnHref}>
         <ArrowLeft size={14} aria-hidden="true" />
-        {language === 'FR' ? 'Retour au Registre' : 'Back to Registry'}
+        {registryReturn.label[language]}
       </a>
 
       <nav className="page-tabs no-print" aria-label={language === 'FR' ? 'Pages du Cartulaire' : 'Cartulary pages'}>
@@ -2780,8 +2241,7 @@ function App() {
               onClick={() => navigateTo(page.id)}
               aria-current={activePage === page.id ? 'page' : undefined}
             >
-              <span>{page.number}</span>
-              {page.label}
+              <span>{page.number}</span>{'\u00a0'}{page.label}
             </button>
           ))}
           <button type="button" className="page-tabs__audit" onClick={() => setIsDrawerOpen(true)}>
@@ -2796,37 +2256,40 @@ function App() {
             <section className="cover-sheet publishable-block">
               <BlockMarkers selection={publishProps('cover-watch', true)} label={tx("Accueil de l’objet", 'Object cover')} />
               <div className="cover-sheet__identity">
-                <span className="eyebrow">Cartulaire · {mockCartulary.publicCode}</span>
+                <span className="eyebrow">Cartulaire · {cartularyPublicCode}</span>
                 {editingBlock === 'cover-watch' ? (
                   <><h1 className="sr-only">{specificationValue('Marque', watch.reference.brand)} {specificationValue('Modèle', watch.reference.model)}</h1><div className="cover-sheet__identity-editor">
                     <label>{tx('Marque', 'Brand')}<input {...aiFieldProps('cover.watch.brand')} type="text" value={specificationValue('Marque', watch.reference.brand)} onChange={(event) => updateSpecificationValue('Marque', event.target.value)} /></label>
                     <label>{tx("Nom de l’objet", 'Object name')}<input {...aiFieldProps('cover.watch.model')} type="text" value={specificationValue('Modèle', watch.reference.model)} onChange={(event) => updateSpecificationValue('Modèle', event.target.value)} /></label>
                   </div></>
                 ) : (
-                  <h1 className="cover-sheet__editable-heading"><button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => canEdit && setEditingBlock('cover-watch')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>
-                      <span>{specificationValue('Marque', watch.reference.brand)}</span>
-                      <strong>{specificationValue('Modèle', watch.reference.model)}</strong>
-                    </button></h1>
+                  <h1 className="cover-sheet__editable-heading">{canEdit
+                    ? <button type="button" className="cover-sheet__editable-title editable-click-target" onClick={() => setEditingBlock('cover-watch')} title={tx('Cliquer pour modifier', 'Click to edit')}><span>{specificationValue('Marque', watch.reference.brand)}</span>{' '}<strong>{specificationValue('Modèle', watch.reference.model)}</strong></button>
+                    : <span className="cover-sheet__editable-title"><span>{specificationValue('Marque', watch.reference.brand)}</span>{' '}<strong>{specificationValue('Modèle', watch.reference.model)}</strong></span>}</h1>
                 )}
                 <div className="cover-sheet__identity-meta">
-                  <label className="asset-kind-control">{tx('Type de bien', 'Asset type')}
-                    <select {...aiFieldProps('cover.asset.type')} value={assetKind} onChange={(event) => setAssetKind(event.target.value as AssetKind)} disabled={!canEdit}>
-                      {ASSET_KINDS.map((kind) => <option key={kind} value={kind}>{assetKindLabel(kind)}</option>)}
-                    </select>
-                  </label>
-                  <label className="watch-status-control">{tx('Statut', 'Status')}
-                    <select {...aiFieldProps('cover.watch.status')} value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchPatrimonialStatus)} disabled={!canEdit}>
-                      <option value="Patrimonial">{tx('Patrimonial', 'Collection asset')}</option>
-                      <option value="À vendre">{tx('À vendre', 'For sale')}</option>
-                      <option value="Ouvert à proposition">{tx('Ouvert à proposition', 'Open to offers')}</option>
-                    </select>
-                  </label>
-                  <label className="asset-kind-control">{tx('Collection', 'Collection')}
-                    <select value={collectionId} onChange={(event) => setCollectionId(event.target.value)} disabled={!canEdit}>
-                      {!availableCollections.some((entry) => entry.id === collectionId) && <option value={collectionId}>{publicationCollectionError ? tx('Collection indisponible', 'Collection unavailable') : collectionContext ? tx('Collection non renseignée', 'Collection not specified') : tx('Chargement de la Collection…', 'Loading Collection…')}</option>}
-                      {availableCollections.map((collection) => <option value={collection.id} key={collection.id}>{collection.name}</option>)}
-                    </select>
-                  </label>
+                  {editingBlock === 'cover-watch' ? (
+                    <>
+                      <label className="asset-kind-control">{tx('Type de bien', 'Asset type')}
+                        <select {...aiFieldProps('cover.asset.type')} value={assetKind} onChange={(event) => setAssetKind(event.target.value as AssetKind)}>
+                          {ASSET_KINDS.map((kind) => <option key={kind} value={kind}>{assetKindLabel(kind)}</option>)}
+                        </select>
+                      </label>
+                      <label className="watch-status-control">{tx('Statut', 'Status')}
+                        <select {...aiFieldProps('cover.watch.status')} value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchPatrimonialStatus)}>
+                          <option value="Patrimonial">{tx('Patrimonial', 'Collection asset')}</option>
+                          <option value="À vendre">{tx('À vendre', 'For sale')}</option>
+                          <option value="Ouvert à proposition">{tx('Ouvert à proposition', 'Open to offers')}</option>
+                        </select>
+                      </label>
+                      <label className="asset-kind-control">{tx('Collection', 'Collection')}
+                        <select value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+                          {!availableCollections.some((entry) => entry.id === collectionId) && <option value={collectionId}>{collectionFallbackLabel}</option>}
+                          {availableCollections.map((collection) => <option value={collection.id} key={collection.id}>{collection.name}</option>)}
+                        </select>
+                      </label>
+                    </>
+                  ) : <CoverFactsReadOnly assetKindLabel={assetKindLabel(assetKind)} statusLabel={watchStatusLabel(watchStatus)} collectionName={availableCollections.find((entry) => entry.id === collectionId)?.name ?? collectionFallbackLabel} language={language} />}
                   <small {...aiFieldProps('cover.watch.reference')}>{specificationValue('Numéro de référence', watch.reference.reference)}</small>
                 </div>
               </div>
@@ -2837,19 +2300,22 @@ function App() {
                 aria-label={tx('Agrandir la photo principale', 'Enlarge main photo')}
               >
                 {mainPhoto
-                  ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager />
+                  ? <PrivateMediaImage asset={mainPhoto} alt={`${specificationValue('Marque', watch.reference.brand)} ${specificationValue('Modèle', watch.reference.model)}`} sizes="(max-width: 720px) 100vw, 55vw" eager fetchPriority="high" role="stage" />
                   : <span className="empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>}
               </button>
             </section>
 
-            <CartularyTodoBoard followUp={followUp} language={language} readOnly={isDemoCartulary} />
+            <CartularyReviewStatus state={review.state} language={language} canManage={authoritative.canManage} busy={review.busy} notice={review.notice} error={review.error} onConfirm={review.confirm} onClearMessages={review.clearMessages} />
+            <CartularyTodoBoard followUp={followUp} language={language} readOnly={!canEdit} demonstration={isDemoCartulary} />
 
             <span hidden {...aiFieldProps('cover.privacy.userAlias')}>{userAlias}</span>
             <span hidden {...aiFieldProps('cover.privacy.objectCode')}>{objectCode}</span>
 
+            <GenericSchemaPageSections page="cover" {...genericPageProps} />
         </CoverPage>
 
         <MediaPage active={activePage === 'media'}>
+            {schemaHas('media.hero') && (
             <section className="watch-hero publishable-block">
               <BlockMarkers selection={publishProps('media-hero', true)} label={tx('Présentation principale', 'Main presentation')} />
               <button
@@ -2860,7 +2326,7 @@ function App() {
               >
                 {mainPhoto ? (
                   <span className="watch-hero__image-visual">
-                    <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 38vw" eager />
+                    <PrivateMediaImage asset={mainPhoto} alt={`${watch.reference.brand} ${watch.reference.model}`} sizes="(max-width: 720px) 100vw, 38vw" eager fetchPriority="high" role="stage" />
                   </span>
                 ) : (
                   <span className="watch-hero__image-visual empty-media">{tx('PHOTO PRINCIPALE NON AFFECTÉE', 'NO MAIN PHOTO ASSIGNED')}</span>
@@ -2874,36 +2340,33 @@ function App() {
                 <h1>{watch.reference.model}</h1>
                 {editingBlock === 'media-hero' ? (
                   <AutoResizeTextarea {...aiFieldProps('media.hero.summary')} className="editable-copy-single" value={editableCopy.heroSummary} rows={5} onChange={(event) => setEditableCopy((current) => ({ ...current, heroSummary: event.target.value }))} aria-label={tx('Modifier la présentation principale', 'Edit main presentation')} />
-                ) : <p {...aiFieldProps('media.hero.summary')} className="watch-hero__summary editable-click-target" onClick={() => canEdit && setEditingBlock('media-hero')} tabIndex={canEdit ? 0 : undefined} onKeyDown={(event) => { if (event.key === 'Enter' && canEdit) setEditingBlock('media-hero'); }} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
+                ) : <p {...aiFieldProps('media.hero.summary')} className={canEdit ? 'watch-hero__summary editable-click-target' : 'watch-hero__summary'} onClick={canEdit ? () => setEditingBlock('media-hero') : undefined} tabIndex={canEdit ? 0 : undefined} onKeyDown={canEdit ? (event) => { if (event.key === 'Enter') setEditingBlock('media-hero'); } : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.heroSummary}</p>}
                 {canEdit && <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance propriétaire', 'Ownership provenance')}</strong><p>{ownershipSummary}</p></aside>}
                 <dl className="hero-facts">
                   <div><dt>{tx('Statut', 'Status')}</dt><dd>{watchStatusLabel(watchStatus)}</dd></div>
                   <div><dt>{tx('Dernier contrôle', 'Last inspection')}</dt><dd>{formatDate(watch.lastVerificationDate)}</dd></div>
-                  <div><dt>{tx('Valeur retenue', 'Retained value')}</dt><dd>{canEdit ? formatMoney(retainedValuation.amount, watch.currency) : tx('ACCÈS RESTREINT', 'RESTRICTED ACCESS')}</dd></div>
-                  <div><dt>{tx('Dossier', 'Record')}</dt><dd>{mockCartulary.publicCode}</dd></div>
+                  <div><dt>{tx('Valeur retenue', 'Retained value')}</dt><dd>{formatMoney(retainedValuation.amount, watch.currency)}</dd></div>
+                  <div><dt>{tx('Dossier', 'Record')}</dt><dd>{cartularyPublicCode}</dd></div>
                 </dl>
               </div>
             </section>
+            )}
 
             <section className="media-wide-section">
               <SectionTitle eyebrow={tx('02 · Vidéo principale', '02 · Main video')} title={tx("L’objet en mouvement", 'The object in motion')} publish={publishProps('media-motion')} />
-              {mainVideo ? (
-                <VideoPoster asset={mainVideo} onOpen={setSelectedAsset} />
-              ) : (
-                <AccessRestricted title={tx('Vidéo principale non disponible', 'Main video unavailable')} language={language} />
-              )}
+              {mainVideo ? <VideoPoster asset={mainVideo} onOpen={setSelectedAsset} /> : <EmptyMediaSlot slot="main-video" language={language} canEdit={canEdit} busy={mediaImportBusy} onAddFiles={(files) => void importMediaFiles(files, ['main-video'])} />}
             </section>
 
             <section className="media-wide-section">
               <SectionTitle eyebrow={tx('03 · Séquence 3D', '03 · 3D sequence')} title={tx('Revue à 360°', '360° review')} publish={publishProps('media-spin')} />
               {spinAssets.length > 0 ? (
                 <button type="button" className="spin-callout" onClick={() => setIsSpinOpen(true)}>
-                  <PrivateMediaImage asset={spinAssets[0]} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} sizes="(max-width: 720px) 100vw, 1200px" />
+                  <PrivateMediaImage asset={spinAssets[0]} alt={tx('Aperçu de la séquence 360°', '360° sequence preview')} sizes="(max-width: 720px) 100vw, 1200px" role="stage" />
                   <span className="spin-callout__icon"><RotateCw size={23} /></span>
                   <span><strong>{spinAssets.length} {tx('vues ordonnées', 'ordered views')}</strong></span>
                 </button>
               ) : (
-                <AccessRestricted title={tx('Séquence 3D non affectée', 'No 3D sequence assigned')} language={language} />
+                <EmptyMediaSlot slot="spin-3d" language={language} canEdit={canEdit} busy={mediaImportBusy} onAddFiles={(files) => void importMediaFiles(files, ['spin-3d'])} />
               )}
             </section>
 
@@ -2925,7 +2388,7 @@ function App() {
                           ) : asset.type === 'video' ? (
                             <><Video size={28} /><small>VIDEO</small></>
                           ) : (
-                            <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" />
+                            <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 33vw" role="thumbnail" />
                           )}
                         </span>
                         <strong {...aiFieldProps('media.assets[].name', asset.id)}>{asset.name}</strong>
@@ -2966,86 +2429,88 @@ function App() {
                         ))}
                       </div>
                     </fieldset>
-                    <button type="submit" className="button button--primary">{tx('Ajouter à la bibliothèque', 'Add to library')}</button>
+                    <button type="submit" className="button button--primary" disabled={mediaImportBusy}>{tx('Ajouter à la bibliothèque', 'Add to library')}</button>
                   </form>
                 </div>
               </section>
             )}
+            <GenericSchemaPageSections page="media" {...genericPageProps} />
         </MediaPage>
 
         <ReferencePage active={activePage === 'reference'}>
             <PageIntroduction number="02" title={tx('Caractéristiques générales', 'General characteristics')} />
 
+            {schemaHas('reference.origins') && (
             <section>
               <SectionTitle eyebrow={tx('La référence', 'The reference')} title={tx('Origines', 'Origins')} publish={publishProps('reference-history', true)} />
               <div className="reference-story-grid">
                 <article className="editorial-card editorial-card--large">
                 <span className="eyebrow">{tx('Historique du modèle', 'Model history')}</span>
-                <h2>{isRolexCartulary
-                  ? 'La référence qui a défini la GMT vintage'
-                  : isIwcCartulary
-                    ? 'Une montre de pilote pensée pour voyager'
-                    : `Histoire de la référence ${creationReference}`}</h2>
-                <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={() => canEdit && setEditingBlock('reference-history')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
+                <h2>{editableCopy.originTitle || `Histoire de la référence ${watch.reference.reference}`}</h2>
+                <EditableParagraphs aiField="reference.origins.history[]" values={editableCopy.originParagraphs} editing={editingBlock === 'reference-history'} onActivate={canEdit ? () => setEditingBlock('reference-history') : undefined} onChange={(index, value) => setEditableCopy((current) => ({ ...current, originParagraphs: current.originParagraphs.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} className="history-text" language={language} />
                 </article>
                 <aside className="quote-card">
                 <span className="eyebrow">{tx('À savoir', 'Good to know')}</span>
-                {editingBlock === 'reference-history' ? <AutoResizeTextarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className="editable-click-target" onClick={() => canEdit && setEditingBlock('reference-history')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
+                {editingBlock === 'reference-history' ? <AutoResizeTextarea {...aiFieldProps('reference.origins.knowledge')} value={editableCopy.originKnowledge} rows={7} onChange={(event) => setEditableCopy((current) => ({ ...current, originKnowledge: event.target.value }))} aria-label={tx('Modifier À savoir', 'Edit Good to know')} /> : <p {...aiFieldProps('reference.origins.knowledge')} className={canEdit ? 'editable-click-target' : undefined} onClick={canEdit ? () => setEditingBlock('reference-history') : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{editableCopy.originKnowledge}</p>}
                 </aside>
               </div>
             </section>
+            )}
 
+            {schemaHas('reference.specifications') && (
             <section>
-              <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} publish={publishProps('reference-specs')} />
+              <SectionTitle eyebrow={tx('Fiche d’identité', 'Identity sheet')} title={tx('Spécifications de la référence', 'Reference specifications')} publish={publishProps('reference-specs', true)} />
               <div className="specification-groups">
                 {specificationGroups.map((group) => (
-                  <section className="specification-group" key={group.title}>
+                  <section className="specification-group" key={group.id}>
                     <h3>{group.title}</h3>
                     <dl>
                       {group.items.map((item) => (
                         <div className="specification-row" key={item.id} data-ai-scope="reference.specifications[]" data-ai-instance={item.id}>
-                          {canEdit ? (
+                          {editingBlock === 'reference-specs' ? (
                             <>
-                              <dt><input {...aiFieldProps('reference.specifications[].label', item.id)} type="text" value={item.label} onChange={(event) => updateSpecification(group.id, item.id, { label: event.target.value })} aria-label={tx(`Modifier le nom de ${item.label}`, `Edit the name of ${item.label}`)} /></dt>
+                              {PROTECTED_SPECIFICATION_IDS.has(item.id)
+                                ? <dt {...aiFieldProps('reference.specifications[].label', item.id)}>{item.label}</dt>
+                                : <dt><input {...aiFieldProps('reference.specifications[].label', item.id)} type="text" value={item.label} onChange={(event) => updateSpecification(group.id, item.id, { label: event.target.value })} aria-label={tx(`Modifier le nom de ${item.label}`, `Edit the name of ${item.label}`)} /></dt>}
                               <dd><input {...aiFieldProps('reference.specifications[].value', item.id)} type="text" value={item.value} onChange={(event) => updateSpecification(group.id, item.id, { value: event.target.value })} aria-label={tx(`Modifier ${item.label}`, `Edit ${item.label}`)} /></dd>
-                              <button type="button" className="icon-button no-print" onClick={() => deleteSpecification(group.id, item.id)} aria-label={tx(`Supprimer ${item.label}`, `Delete ${item.label}`)}><Trash2 size={15} /></button>
+                              <button type="button" className="icon-button specification-remove no-print" onClick={() => deleteSpecification(group.id, item.id)} disabled={PROTECTED_SPECIFICATION_IDS.has(item.id)} aria-label={tx(`Retirer ${item.label}`, `Remove ${item.label}`)} title={PROTECTED_SPECIFICATION_IDS.has(item.id) ? tx('Ligne d’identité posée à la création : non retirable', 'Identity line set at creation: cannot be removed') : tx('Retirer cette donnée', 'Remove this field')}><Trash2 size={15} aria-hidden="true" /><span>{tx('Retirer', 'Remove')}</span></button>
                             </>
-                          ) : <><dt>{item.label}</dt><dd>{item.value}</dd></>}
+                          ) : <><dt {...aiFieldProps('reference.specifications[].label', item.id)}>{item.label}</dt><dd {...aiFieldProps('reference.specifications[].value', item.id)}>{item.value}</dd></>}
                         </div>
                       ))}
                     </dl>
-                    {canEdit && <button type="button" className="specification-add button button--quiet no-print" onClick={() => addSpecification(group.id)}><Plus size={14} /> {tx('Ajouter une donnée', 'Add data')}</button>}
+                    {editingBlock === 'reference-specs' && (pendingSpecificationGroupId === group.id
+                      ? <SpecificationAddForm language={language} groupTitle={group.title} existingLabels={group.items.map((item) => item.label)} onAdd={(label, value) => addSpecification(group.id, label, value)} onClose={() => setPendingSpecificationGroupId(null)} />
+                      : <button type="button" className="specification-add button button--quiet no-print" onClick={() => setPendingSpecificationGroupId(group.id)}><Plus size={14} /> {tx('Ajouter une donnée', 'Add data')}</button>)}
                   </section>
                 ))}
               </div>
             </section>
+            )}
 
+            {schemaHas('reference.checks') && (
             <section>
               <div className="section-heading-row">
                 <SectionTitle eyebrow={tx('Identification', 'Identification')} title={tx('Points à contrôler', 'Inspection points')} />
                 <div className="section-heading-actions">
-                  <BlockMarkers selection={publishProps('reference-checks')} label={tx('Points à contrôler', 'Inspection points')} />
-                  {canEdit && (
-                    <button type="button" className={`content-marker content-marker--edit no-print ${isEditingChecks ? 'is-active' : ''}`} onClick={() => setIsEditingChecks((value) => !value)} aria-pressed={isEditingChecks} aria-label={isEditingChecks ? tx('Terminer la modification de la liste', 'Finish editing the list') : tx('Modifier la liste', 'Edit the list')} title={tx('Modifier la liste', 'Edit the list')}><Pencil size={15} /></button>
-                  )}
+                  <BlockMarkers selection={publishProps('reference-checks', true)} label={tx('Points à contrôler', 'Inspection points')} />
                 </div>
               </div>
               <div className="identification-list">
                 {identificationChecks.map((item, index) => (
                   <article key={item.id} className={item.checked ? 'is-checked' : ''} data-ai-scope="reference.checks[]" data-ai-instance={item.id}>
                     <span>{String(index + 1).padStart(2, '0')}</span>
-                    <label className="control-check">
-                      <input
-                        {...aiFieldProps('reference.checks[].checked', item.id)}
-                        type="checkbox"
-                        checked={item.checked}
-                        disabled={!canEdit}
-                        onChange={(event) => updateCheck(item.id, { checked: event.target.checked })}
-                      />
-                      <span aria-hidden="true">✓</span>
-                    </label>
+                    {canEdit ? (
+                      <label className="control-check">
+                        <input {...aiFieldProps('reference.checks[].checked', item.id)} type="checkbox" checked={item.checked} onChange={(event) => updateCheck(item.id, { checked: event.target.checked })} />
+                        <span aria-hidden="true">✓</span>
+                      </label>
+                    ) : (
+                      // Lecture : la case reste un geste rapide du propriétaire ; pour tout autre lecteur, texte pur (état lu par le lecteur d'écran).
+                      <span className="control-check control-check--static" {...aiFieldProps('reference.checks[].checked', item.id)}><span aria-hidden="true" className={item.checked ? 'is-checked' : undefined}>✓</span><span className="sr-only">{item.checked ? tx('Contrôlé', 'Checked') : tx('À contrôler', 'To check')}</span></span>
+                    )}
                     <div>
-                      {isEditingChecks ? (
+                      {editingBlock === 'reference-checks' ? (
                         <>
                           <input {...aiFieldProps('reference.checks[].title', item.id)} value={item.title} onChange={(event) => updateCheck(item.id, { title: event.target.value })} aria-label={tx('Point de contrôle', 'Inspection point')} />
                           <AutoResizeTextarea {...aiFieldProps('reference.checks[].note', item.id)} value={item.note} onChange={(event) => updateCheck(item.id, { note: event.target.value })} aria-label={tx('Détail du contrôle', 'Inspection details')} rows={2} />
@@ -3054,7 +2519,7 @@ function App() {
                         <><h3>{item.title}</h3><p>{item.note}</p></>
                       )}
                     </div>
-                    {isEditingChecks && (
+                    {editingBlock === 'reference-checks' && (
                       <button
                         type="button"
                         className="icon-button no-print"
@@ -3065,26 +2530,28 @@ function App() {
                   </article>
                 ))}
               </div>
-              {canEdit && (
+              {editingBlock === 'reference-checks' && (
                 <button type="button" className="button button--quiet no-print" onClick={addCheck}><Plus size={14} /> {tx('Ajouter un point', 'Add point')}</button>
               )}
               <p className="method-note">{tx('Le Sceau public identifie une publication émise par le serveur. La chaîne serveur se vérifie dans « Preuves ». Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert.', 'The public Seal identifies a server-issued publication. The server chain is checked under “Proofs”. Neither indicator replaces a physical examination or an expert opinion.')}</p>
             </section>
+            )}
 
+            {schemaHas('reference.popularity') && (
             <section>
-              <SectionTitle eyebrow={tx('Communauté et ressources', 'Community and resources')} title={tx('Popularité du modèle', 'Model popularity')} publish={publishProps('reference-popularity')} />
+              <SectionTitle eyebrow={tx('Communauté et ressources', 'Community and resources')} title={tx('Popularité du modèle', 'Model popularity')} publish={publishProps('reference-popularity', true)} />
               <div className="popularity-resources">
                 <div className="popularity-resources__head"><span>{tx('Site ou forum', 'Website or forum')}</span><span>Type</span><span>URL</span><span /></div>
                 {popularityResources.map((resource) => {
                   const hasValidUrl = /^https?:\/\//i.test(resource.url);
                   return (
                     <div key={resource.id} data-ai-scope="reference.popularity[]" data-ai-instance={resource.id}>
-                      {canEdit ? (
+                      {editingBlock === 'reference-popularity' ? (
                         <input {...aiFieldProps('reference.popularity[].name', resource.id)} type="text" value={resource.name} onChange={(event) => updatePopularityResource(resource.id, 'name', event.target.value)} aria-label={tx('Nom du site ou forum', 'Website or forum name')} />
                       ) : (
                         <strong>{resource.name}</strong>
                       )}
-                      {canEdit ? (
+                      {editingBlock === 'reference-popularity' ? (
                         <select {...aiFieldProps('reference.popularity[].type', resource.id)} value={resource.type} onChange={(event) => updatePopularityResource(resource.id, 'type', event.target.value as PopularityResourceType)} aria-label={`Type ${resource.name}`}>
                           {(['Forum officiel', 'Discussion dédiée', 'Communauté', 'Base de données', 'Revue'] as PopularityResourceType[]).map((type) => <option key={type} value={type}>{popularityTypeLabel(type)}</option>)}
                         </select>
@@ -3092,22 +2559,23 @@ function App() {
                         <span>{popularityTypeLabel(resource.type)}</span>
                       )}
                       <div className="popularity-url-cell">
-                        {canEdit ? (
+                        {editingBlock === 'reference-popularity' ? (
                           <input {...aiFieldProps('reference.popularity[].url', resource.id)} type="url" value={resource.url} onChange={(event) => updatePopularityResource(resource.id, 'url', event.target.value)} aria-label={`URL ${resource.name}`} placeholder="https://" />
                         ) : (
                           <span>{resource.url}</span>
                         )}
                         {hasValidUrl && <a href={resource.url} target="_blank" rel="noreferrer" aria-label={tx(`Ouvrir ${resource.name}`, `Open ${resource.name}`)}><ExternalLink size={15} /></a>}
                       </div>
-                      {canEdit && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: popularityResources, setItems: setPopularityResources, id: resource.id, targetLabel: resource.name })} aria-label={tx(`Supprimer ${resource.name}`, `Delete ${resource.name}`)}><Trash2 size={15} /></button>}
+                      {editingBlock === 'reference-popularity' && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: popularityResources, setItems: setPopularityResources, id: resource.id, targetLabel: resource.name })} aria-label={tx(`Supprimer ${resource.name}`, `Delete ${resource.name}`)}><Trash2 size={15} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {canEdit && (
+              {editingBlock === 'reference-popularity' && (
                 <button type="button" className="button button--quiet no-print" onClick={() => setPopularityResources((current) => [...current, { id: newId('popularity'), name: '', type: 'Communauté', url: '' }])}><Plus size={14} /> {tx('Ajouter un site ou forum', 'Add a website or forum')}</button>
               )}
             </section>
+            )}
 
             <section>
               <SectionTitle eyebrow={tx('Documentation externe', 'External documentation')} title={tx('Rapports sur la référence', 'Reference reports')} />
@@ -3119,7 +2587,7 @@ function App() {
                       <span>{tx('Charger des rapports', 'Upload reports')}</span>
                       <input type="file" name="reference-report-files" accept=".pdf,.doc,.docx,.odt,.rtf,.md,.markdown,.txt,.xls,.xlsx,.csv,.ppt,.pptx" multiple />
                     </label>
-                    <button type="submit" className="button button--primary">{tx('Ajouter les fichiers', 'Add files')}</button>
+                    <button type="submit" className="button button--primary" disabled={mediaImportBusy}>{tx('Ajouter les fichiers', 'Add files')}</button>
                   </form>
                 )}
                 {referenceReportAssets.length > 0 ? (
@@ -3137,16 +2605,14 @@ function App() {
                 ) : <p className="storage-empty">{tx('Aucun rapport chargé.', 'No report uploaded.')}</p>}
               </article>
             </section>
+            <GenericSchemaPageSections page="reference" {...genericPageProps} />
         </ReferencePage>
 
         <ConditionPage active={activePage === 'condition'}>
             <PageIntroduction number="03" title={tx("L’objet", 'The object')} />
-            <fieldset className="cartulary-readonly-scope" disabled={!canEdit}>
 
-            {showCompleteContent && (
-              <>
                 <section>
-                  <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history')} />
+                  <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history', true)} />
                   <article className="ownership-history-card">
                     <header className="ownership-history-card__heading">
                       <div>
@@ -3155,6 +2621,7 @@ function App() {
                       </div>
                       <span>{ownershipHistory.length} {language === 'FR' ? `période${ownershipHistory.length > 1 ? 's' : ''}` : `period${ownershipHistory.length === 1 ? '' : 's'}`}</span>
                     </header>
+                    {editingBlock === 'cover-ownership-history' ? (<>
                     {ownershipHistory.length > 0 ? (
                       <div className="ownership-history-list">
                         {ownershipHistory.map((entry, index) => {
@@ -3179,24 +2646,25 @@ function App() {
                       </div>
                     ) : <p className="ownership-history-empty">{tx("Aucun propriétaire précédent renseigné.", 'No previous owner entered.')}</p>}
                     <button type="button" className="button button--quiet no-print" onClick={addOwnershipHistory}><Plus size={14} /> {tx('Ajouter une période', 'Add period')}</button>
+                    </>) : <OwnershipHistoryReadOnly entries={ownershipHistory} language={language} />}
                     <div className="ownership-history-summary" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Synthèse de provenance', 'Provenance summary')}</strong><p>{ownershipSummary}</p></div>
                   </article>
                 </section>
 
                 <section>
-                  <SectionTitle eyebrow={tx('Conservation pseudonymisée', 'Pseudonymous safekeeping')} title={tx('Stockage', 'Storage')} publish={publishProps('cover-storage')} />
+                  <SectionTitle eyebrow={tx('Conservation pseudonymisée', 'Pseudonymous safekeeping')} title={tx('Stockage', 'Storage')} publish={publishProps('cover-storage', true)} />
                   <article className="storage-card storage-code-card">
-                    <VaultCodeHandoffControl handoff={vaultCodeHandoff} disabled={isDemoCartulary} />
+                    {editingBlock === 'cover-storage' && <VaultCodeHandoffControl handoff={vaultCodeHandoff} />}
                     <header className="storage-card__heading">
                       <div><span className="eyebrow">{tx('Lieux du Coffre personnel', 'Personal Vault locations')}</span></div>
                       <span>{storageCodes.length} {language === 'FR' ? `lieu${storageCodes.length > 1 ? 'x' : ''}` : `location${storageCodes.length === 1 ? '' : 's'}`}</span>
                     </header>
-                    {storageCodes.length > 0 ? <div className="storage-code-list">{storageCodes.map((storageCode, index) => (
+                    {editingBlock !== 'cover-storage' ? <VaultCodeListReadOnly items={storageCodes} emptyLabel={tx('Aucun lieu sélectionné.', 'No location selected.')} language={language} aiField="condition.storage.codeNames[]" /> : storageCodes.length > 0 ? <div className="storage-code-list">{storageCodes.map((storageCode, index) => (
                       <div key={storageCode.id}>
                         <span>{String(index + 1).padStart(2, '0')}</span>
                         <select
                           {...aiFieldProps('condition.storage.codeNames[]', storageCode.id)}
-                          value={isDemoCartulary && storageCode.codeName ? `demo:${storageCode.id}` : storageCode.correspondenceCode || (storageCode.codeName ? `legacy:${storageCode.id}` : '')}
+                          value={storageCode.correspondenceCode || (storageCode.codeName ? `legacy:${storageCode.id}` : '')}
                           onChange={(event) => {
                             const option = storageLocationOptions.find((entry) => entry.code === event.target.value);
                             ownerCommands.updateStorageCode(storageCode.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
@@ -3204,7 +2672,6 @@ function App() {
                           aria-label={tx(`Lieu de stockage ${index + 1}`, `Storage location ${index + 1}`)}
                         >
                           <option value="">{tx('Choisir un lieu', 'Select a location')}</option>
-                          {isDemoCartulary && storageCode.codeName && <option value={`demo:${storageCode.id}`}>{storageCode.codeName}</option>}
                           {!storageCode.correspondenceCode && storageCode.codeName && <option value={`legacy:${storageCode.id}`}>{storageCode.codeName}</option>}
                           {storageCode.correspondenceCode && !storageLocationOptions.some((option) => option.code === storageCode.correspondenceCode) && <option value={storageCode.correspondenceCode}>{storageCode.codeName || storageCode.correspondenceCode} · {tx('référence conservée, codes à actualiser', 'saved reference, refresh codes')}</option>}
                           {storageLocationOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel} · {option.code}</option>)}
@@ -3213,54 +2680,55 @@ function App() {
                         <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: storageCodes, setItems: setStorageCodes, id: storageCode.id, targetLabel: storageCode.codeName || tx(`le lieu ${index + 1}`, `location ${index + 1}`) })} aria-label={tx('Supprimer ce lieu', 'Delete this location')}><Trash2 size={15} /></button>
                       </div>
                     ))}</div> : <p className="storage-empty">{tx('Aucun lieu sélectionné.', 'No location selected.')}</p>}
-                    <button type="button" className="button button--quiet no-print" onClick={addStorageCode}><Plus size={14} /> {tx('Ajouter un lieu', 'Add a location')}</button>
+                    {editingBlock === 'cover-storage' && <button type="button" className="button button--quiet no-print" onClick={addStorageCode}><Plus size={14} /> {tx('Ajouter un lieu', 'Add a location')}</button>}
                   </article>
                 </section>
-              </>
-            )}
 
-            {showCompleteContent ? (
-              <>
+                {schemaHas('condition.description') && (
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx("Description de l’objet", 'Object description')} publish={publishProps('condition-description', true)} />
                   <article className="watch-description-card">
-                    <EditableParagraphs aiField="condition.description.paragraphs[]" values={editableCopy.watchDescription} editing={editingBlock === 'condition-description'} onActivate={() => canEdit && setEditingBlock('condition-description')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, watchDescription: current.watchDescription.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
+                    <EditableParagraphs aiField="condition.description.paragraphs[]" values={editableCopy.watchDescription} editing={editingBlock === 'condition-description'} onActivate={canEdit ? () => setEditingBlock('condition-description') : undefined} onChange={(index, value) => setEditableCopy((current) => ({ ...current, watchDescription: current.watchDescription.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
                     <aside className="ownership-context-note" {...aiFieldProps('cover.ownershipHistory.summary')}><strong>{tx('Provenance prise en compte', 'Provenance considered')}</strong><p>{ownershipSummary}</p></aside>
                   </article>
                 </section>
+                )}
 
+                {schemaHas('condition.summary') && (
                 <section>
                   <SectionTitle eyebrow={tx('Synthèse', 'Summary')} title={tx('État actuel', 'Current condition')} publish={publishProps('condition-summary', true)} />
                   <article className="current-condition-summary">
-                    <EditableParagraphs aiField="condition.summary.paragraphs[]" values={editableCopy.conditionSummary} editing={editingBlock === 'condition-summary'} onActivate={() => canEdit && setEditingBlock('condition-summary')} onChange={(index, value) => setEditableCopy((current) => ({ ...current, conditionSummary: current.conditionSummary.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
+                    <EditableParagraphs aiField="condition.summary.paragraphs[]" values={editableCopy.conditionSummary} editing={editingBlock === 'condition-summary'} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} onChange={(index, value) => setEditableCopy((current) => ({ ...current, conditionSummary: current.conditionSummary.map((paragraph, paragraphIndex) => paragraphIndex === index ? value : paragraph) }))} language={language} />
                     <dl>
-                      <div><dt>{tx('Dernier état', 'Latest condition')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.lastCondition')} value={editableCopy.conditionFacts.lastCondition} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, lastCondition: event.target.value } }))} aria-label={tx('Dernier état', 'Latest condition')} /> : <button {...aiFieldProps('condition.summary.lastCondition')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.lastCondition}</button>}</dd></div>
-                      <div><dt>Conclusion</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.conclusion')} value={editableCopy.conditionFacts.conclusion} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, conclusion: event.target.value } }))} aria-label="Conclusion" /> : <button {...aiFieldProps('condition.summary.conclusion')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.conclusion}</button>}</dd></div>
-                      <div><dt>{tx('Point ouvert', 'Open point')}</dt><dd>{editingBlock === 'condition-summary' ? <input {...aiFieldProps('condition.summary.openPoint')} value={editableCopy.conditionFacts.openPoint} onChange={(event) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, openPoint: event.target.value } }))} aria-label={tx('Point ouvert', 'Open point')} /> : <button {...aiFieldProps('condition.summary.openPoint')} type="button" className="editable-fact" onClick={() => canEdit && setEditingBlock('condition-summary')}>{editableCopy.conditionFacts.openPoint}</button>}</dd></div>
+                      <div><dt>{tx('Dernier état', 'Latest condition')}</dt><dd><EditableFact aiField="condition.summary.lastCondition" value={editableCopy.conditionFacts.lastCondition} editing={editingBlock === 'condition-summary'} onChange={(value) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, lastCondition: value } }))} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} label={tx('Dernier état', 'Latest condition')} language={language} /></dd></div>
+                      <div><dt>Conclusion</dt><dd><EditableFact aiField="condition.summary.conclusion" value={editableCopy.conditionFacts.conclusion} editing={editingBlock === 'condition-summary'} onChange={(value) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, conclusion: value } }))} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} label="Conclusion" language={language} /></dd></div>
+                      <div><dt>{tx('Point ouvert', 'Open point')}</dt><dd><EditableFact aiField="condition.summary.openPoint" value={editableCopy.conditionFacts.openPoint} editing={editingBlock === 'condition-summary'} onChange={(value) => setEditableCopy((current) => ({ ...current, conditionFacts: { ...current.conditionFacts, openPoint: value } }))} onActivate={canEdit ? () => setEditingBlock('condition-summary') : undefined} label={tx('Point ouvert', 'Open point')} language={language} /></dd></div>
                     </dl>
                   </article>
                 </section>
+                )}
 
+                {schemaHas('condition.documentation') && (
                 <section>
-                  <SectionTitle eyebrow={tx('Ensemble associé', 'Associated set')} title={tx('Papiers, documentation et accessoires', 'Papers, documentation and accessories')} publish={publishProps('condition-documentation')} />
+                  <SectionTitle eyebrow={tx('Ensemble associé', 'Associated set')} title={tx('Papiers, documentation et accessoires', 'Papers, documentation and accessories')} publish={publishProps('condition-documentation', true)} />
+                  {editingBlock === 'condition-documentation' ? (<>
                   <div className="documentation-register">
                     <div className="documentation-register__head"><span>{tx('Catégorie', 'Category')}</span><span>Description</span><span>{tx('État', 'Condition')}</span><span /></div>
                     {documentationItems.map((item) => (
                       <div key={item.id} data-ai-scope="condition.documentation[]" data-ai-instance={item.id}>
-                        <select {...aiFieldProps('condition.documentation[].category', item.id)} value={item.category} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'category', event.target.value as DocumentationCategory)} aria-label={tx('Catégorie documentaire', 'Document category')}>
+                        <select {...aiFieldProps('condition.documentation[].category', item.id)} value={item.category} onChange={(event) => updateDocumentationItem(item.id, 'category', event.target.value as DocumentationCategory)} aria-label={tx('Catégorie documentaire', 'Document category')}>
                           {(['Facture', 'Garantie', 'Assurances', 'Boîte', 'Écrin', 'Manuel', 'Certificat', 'Accessoire', 'Autre'] as DocumentationCategory[]).map((category) => <option key={category} value={category}>{documentationCategoryLabel(category)}</option>)}
                         </select>
-                        <AutoResizeTextarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
-                        <select {...aiFieldProps('condition.documentation[].state', item.id)} value={item.state} disabled={!canEdit} onChange={(event) => updateDocumentationItem(item.id, 'state', event.target.value as DocumentationState)} aria-label={tx(`État ${item.category}`, `${item.category} condition`)}>
+                        <AutoResizeTextarea {...aiFieldProps('condition.documentation[].description', item.id)} value={item.description} onChange={(event) => updateDocumentationItem(item.id, 'description', event.target.value)} aria-label={`Description ${item.category}`} rows={2} />
+                        <select {...aiFieldProps('condition.documentation[].state', item.id)} value={item.state} onChange={(event) => updateDocumentationItem(item.id, 'state', event.target.value as DocumentationState)} aria-label={tx(`État ${item.category}`, `${item.category} condition`)}>
                           {(['Présent', 'Complet', 'Incomplet', 'Manquant', 'À vérifier'] as DocumentationState[]).map((state) => <option key={state} value={state}>{documentationStateLabel(state)}</option>)}
                         </select>
-                        {canEdit && <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: documentationItems, setItems: setDocumentationItems, id: item.id, targetLabel: item.category })} aria-label={tx(`Supprimer ${item.category}`, `Delete ${item.category}`)}><Trash2 size={15} /></button>}
+                        <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: documentationItems, setItems: setDocumentationItems, id: item.id, targetLabel: item.category })} aria-label={tx(`Supprimer ${item.category}`, `Delete ${item.category}`)}><Trash2 size={15} /></button>
                       </div>
                     ))}
                   </div>
-                  {canEdit && (
-                    <button type="button" className="button button--quiet no-print" onClick={() => setDocumentationItems((current) => [...current, { id: newId('documentation'), category: 'Autre', description: '', state: 'À vérifier' }])}><Plus size={14} /> {tx('Ajouter un élément', 'Add item')}</button>
-                  )}
+                  <button type="button" className="button button--quiet no-print" onClick={() => setDocumentationItems((current) => [...current, { id: newId('documentation'), category: 'Autre', description: '', state: 'À vérifier' }])}><Plus size={14} /> {tx('Ajouter un élément', 'Add item')}</button>
+                  </>) : <DocumentationRegisterReadOnly items={documentationItems} categoryLabel={documentationCategoryLabel} stateLabel={documentationStateLabel} language={language} />}
                   <div className="documentation-media">
                     <div className="documentation-media__heading">
                       <h3>{tx('Fichiers liés', 'Linked files')}</h3>
@@ -3275,7 +2743,7 @@ function App() {
                                 ? <FileText size={28} aria-hidden="true" />
                                 : asset.type === 'video'
                                   ? <Video size={28} aria-hidden="true" />
-                                : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" />}
+                                : <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 50vw, 25vw" role="thumbnail" />}
                               {asset.type === 'video' && <Play size={13} fill="currentColor" aria-hidden="true" />}
                             </span>
                             <strong>{asset.name}</strong>
@@ -3289,7 +2757,9 @@ function App() {
                     )}
                   </div>
                 </section>
+                )}
 
+                {schemaHas('condition.reports') && (
                 <section>
                   <SectionTitle eyebrow={tx('Rapports et notes', 'Reports and notes')} title={tx("Rapport sur l’état de l’objet", 'Object condition report')} />
                   <div className="condition-layout">
@@ -3308,7 +2778,7 @@ function App() {
                           </header>
                           {editingBlock === 'condition-reference-report'
                             ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="condition-entry__note-input" value={referenceConditionReport.note} rows={5} onChange={(event) => setConditionEntries((current) => current.map((entry) => entry.id === referenceConditionReport.id ? { ...entry, note: event.target.value } : entry))} aria-label={tx('Modifier le rapport de référence', 'Edit reference report')} />
-                            : referenceConditionReport.note && <p {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className="editable-click-target" onClick={() => canEdit && setEditingBlock('condition-reference-report')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{referenceConditionReport.note}</p>}
+                            : referenceConditionReport.note && <p {...aiFieldProps('condition.reports[].note', referenceConditionReport.id)} className={canEdit ? 'editable-click-target' : undefined} onClick={canEdit ? () => setEditingBlock('condition-reference-report') : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{referenceConditionReport.note}</p>}
                           {referenceConditionReport.attachments.length > 0 && (
                             <ul className="attachment-list">
                               {referenceConditionReport.attachments.map((attachment, index) => <li key={`${referenceConditionReport.id}-${attachment.name}-${index}`}><Paperclip size={13} />{attachment.url ? <a href={attachment.url} download={attachment.name}>{attachment.name}</a> : <span>{attachment.name}</span>}{attachment.size && <small>{Math.ceil(attachment.size / 1024)} ko</small>}</li>)}
@@ -3333,7 +2803,7 @@ function App() {
                             </header>
                             {editingBlock === 'condition-prior-reviews'
                               ? <AutoResizeTextarea {...aiFieldProps('condition.reports[].note', entry.id)} className="condition-entry__note-input" value={entry.note} rows={4} onChange={(event) => setConditionEntries((current) => current.map((item) => item.id === entry.id ? { ...item, note: event.target.value } : item))} aria-label={tx('Modifier la revue antérieure', 'Edit previous review')} />
-                              : entry.note && <p {...aiFieldProps('condition.reports[].note', entry.id)} className="editable-click-target" onClick={() => canEdit && setEditingBlock('condition-prior-reviews')} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{entry.note}</p>}
+                              : entry.note && <p {...aiFieldProps('condition.reports[].note', entry.id)} className={canEdit ? 'editable-click-target' : undefined} onClick={canEdit ? () => setEditingBlock('condition-prior-reviews') : undefined} title={canEdit ? tx('Cliquer pour modifier', 'Click to edit') : undefined}>{entry.note}</p>}
                             {entry.attachments.length > 0 && (
                               <ul className="attachment-list">
                                 {entry.attachments.map((attachment, index) => <li key={`${entry.id}-${attachment.name}-${index}`}><Paperclip size={13} />{attachment.url ? <a href={attachment.url} download={attachment.name}>{attachment.name}</a> : <span>{attachment.name}</span>}{attachment.size && <small>{Math.ceil(attachment.size / 1024)} ko</small>}</li>)}
@@ -3351,30 +2821,26 @@ function App() {
                         <label>{tx('Titre', 'Title')}<input {...aiFieldProps('condition.reports[].title', 'new')} type="text" name="title" placeholder={tx('Rapport, constat, note…', 'Report, observation, note…')} /></label>
                         <label>Note<AutoResizeTextarea {...aiFieldProps('condition.reports[].note', 'new')} name="note" rows={7} placeholder={tx('Saisir un texte libre', 'Enter free text')} /></label>
                         <label className="file-drop"><Upload size={18} /><span>{tx('Ajouter des documents', 'Add documents')}</span><input {...aiFieldProps('condition.reports[].documents', 'new')} type="file" name="documents" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple /></label>
-                        <button type="submit" className="button button--primary">{tx('Enregistrer', 'Save')}</button>
+                        <button type="submit" className="button button--primary" disabled={mediaImportBusy}>{tx('Enregistrer', 'Save')}</button>
                       </form>
                     )}
                   </div>
                 </section>
-              </>
-            ) : (
-              <AccessRestricted title={tx("Rapports et notes de l’objet", 'Object reports and notes')} language={language} />
-            )}
+                )}
 
-            {showCompleteContent && (
               <section>
-                <SectionTitle eyebrow={tx('Correspondance pseudonymisée', 'Pseudonymous correspondence')} title={tx('Transmission', 'Transmission')} publish={publishProps('cover-transmission')} />
+                <SectionTitle eyebrow={tx('Correspondance pseudonymisée', 'Pseudonymous correspondence')} title={tx('Transmission', 'Transmission')} publish={publishProps('cover-transmission', true)} />
                 <article className="storage-card storage-code-card">
-                  <VaultCodeHandoffControl handoff={vaultCodeHandoff} disabled={isDemoCartulary} />
+                  {editingBlock === 'cover-transmission' && <VaultCodeHandoffControl handoff={vaultCodeHandoff} />}
                   <header className="storage-card__heading">
                     <div><span className="eyebrow">{tx('Personnes du Coffre personnel', 'Personal Vault people')}</span></div>
                     <span>{transmissionCodes.length} {language === 'FR' ? `personne${transmissionCodes.length > 1 ? 's' : ''}` : `person${transmissionCodes.length === 1 ? '' : 's'}`}</span>
                   </header>
-                  {transmissionCodes.length > 0 ? <div className="storage-code-list">{transmissionCodes.map((reference, index) => (
+                  {editingBlock !== 'cover-transmission' ? <VaultCodeListReadOnly items={transmissionCodes} emptyLabel={tx('Aucune personne sélectionnée.', 'No person selected.')} language={language} /> : transmissionCodes.length > 0 ? <div className="storage-code-list">{transmissionCodes.map((reference, index) => (
                     <div key={reference.id}>
                       <span>{String(index + 1).padStart(2, '0')}</span>
                       <select
-                        value={isDemoCartulary && reference.codeName ? `demo:${reference.id}` : reference.correspondenceCode || (reference.codeName ? `legacy:${reference.id}` : '')}
+                        value={reference.correspondenceCode || (reference.codeName ? `legacy:${reference.id}` : '')}
                         onChange={(event) => {
                           const option = transmissionPersonOptions.find((entry) => entry.code === event.target.value);
                           ownerCommands.updateTransmissionCode(reference.id, { correspondenceCode: option?.code || '', codeName: option?.genericLabel || '' });
@@ -3382,7 +2848,6 @@ function App() {
                         aria-label={tx(`Personne chargée de la transmission ${index + 1}`, `Transmission person ${index + 1}`)}
                       >
                         <option value="">{tx('Choisir une personne', 'Select a person')}</option>
-                        {isDemoCartulary && reference.codeName && <option value={`demo:${reference.id}`}>{reference.codeName}</option>}
                         {!reference.correspondenceCode && reference.codeName && <option value={`legacy:${reference.id}`}>{reference.codeName}</option>}
                         {reference.correspondenceCode && !transmissionPersonOptions.some((option) => option.code === reference.correspondenceCode) && <option value={reference.correspondenceCode}>{reference.codeName || reference.correspondenceCode} · {tx('référence conservée, codes à actualiser', 'saved reference, refresh codes')}</option>}
                         {transmissionPersonOptions.map((option) => <option key={option.code} value={option.code}>{option.genericLabel} · {option.code}</option>)}
@@ -3391,24 +2856,22 @@ function App() {
                       <button type="button" className="icon-button no-print" onClick={() => requestCollectionDeletion({ items: transmissionCodes, setItems: setTransmissionCodes, id: reference.id, targetLabel: reference.codeName || tx(`la personne ${index + 1}`, `person ${index + 1}`) })} aria-label={tx('Supprimer cette personne', 'Delete this person')}><Trash2 size={15} /></button>
                     </div>
                   ))}</div> : <p className="storage-empty">{tx('Aucune personne sélectionnée.', 'No person selected.')}</p>}
-                  <button type="button" className="button button--quiet no-print" onClick={addTransmissionCode}><Plus size={14} /> {tx('Ajouter une personne', 'Add a person')}</button>
+                  {editingBlock === 'cover-transmission' && <button type="button" className="button button--quiet no-print" onClick={addTransmissionCode}><Plus size={14} /> {tx('Ajouter une personne', 'Add a person')}</button>}
                 </article>
               </section>
-            )}
-            </fieldset>
+            <GenericSchemaPageSections page="condition" {...genericPageProps} />
         </ConditionPage>
 
         <ValuePage active={activePage === 'value'}>
             <PageIntroduction number="04" title={tx('Valorisation', 'Valuation')} />
-            <fieldset className="cartulary-readonly-scope" disabled={!canEdit}>
 
-            {showCompleteContent ? (
+            {schemaHas('value.market_depth') && (
               <section>
-                <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} publish={publishProps('value-market')} />
+                <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} publish={publishProps('value-market', true)} />
                 <div className="market-grid">
                   <article className="market-chart-card">
-                    <div className="market-chart-card__heading"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><button type="button" className="button button--quiet no-print" onClick={() => setIsMarketHistoryEditorOpen(true)}><Plus size={14} /> {tx('Ajouter une évaluation', 'Add valuation')}</button></div>
-                    <div className="market-bars" aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>
+                    <div className="market-chart-card__heading"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span>{canEdit && <button type="button" className="button button--quiet no-print" onClick={() => setIsMarketHistoryEditorOpen(true)}><Plus size={14} /> {tx('Ajouter une évaluation', 'Add valuation')}</button>}</div>
+                    <div className="market-bars" role="group" tabIndex={0} aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>
                       {marketValues.map((valuation) => (
                         <div key={valuation.id} data-ai-scope="value.market.valuations[]" data-ai-instance={valuation.id}>
                           <span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} />
@@ -3421,6 +2884,7 @@ function App() {
                   </article>
 
                   <article className="market-depth-card">
+                  {editingBlock === 'value-market' ? (<>
                   <div className="market-depth-card__heading">
                     <span className="eyebrow">{tx('Profondeur de marché', 'Market depth')}</span>
                     <label>{tx('Date de l’analyse', 'Analysis date')}<input {...aiFieldProps('value.market.analysisDate')} type="date" value={marketDepth.analysisDate} onChange={(event) => setMarketDepth((current) => ({ ...current, analysisDate: event.target.value }))} /></label>
@@ -3438,6 +2902,7 @@ function App() {
                       <label>{tx('Valeur haute', 'High value')}<input {...aiFieldProps('value.market.highValue')} type="number" min="0" step="100" value={marketDepth.highValue} onChange={(event) => setMarketDepth((current) => ({ ...current, highValue: Math.max(0, Number(event.target.value)) }))} /></label>
                     </div>
                   </div>
+                  </>) : <MarketDepthReadOnly marketDepth={marketDepth} currency={watch.currency} language={language} />}
                   </article>
 
                   <article className="retained-value-card">
@@ -3445,6 +2910,7 @@ function App() {
                       <span className="eyebrow">{tx('Décision du propriétaire', 'Owner decision')}</span>
                       <h3>{tx('Niveaux de valorisation', 'Valuation levels')}</h3>
                     </div>
+                    {editingBlock === 'value-market' ? (<>
                     <label className="retained-value-card__amount">{tx('Valorisation brute', 'Gross valuation')}
                       <span>
                         <input {...aiFieldProps('value.retained.amount')} type="number" min="0" step="100" value={retainedValuation.amount} onChange={(event) => setRetainedValuation((current) => ({ ...current, amount: Math.max(0, Number(event.target.value)) }))} />
@@ -3461,6 +2927,7 @@ function App() {
                     <label className="retained-value-card__explanation">{tx('Explication de la valeur retenue', 'Retained value explanation')}
                       <AutoResizeTextarea {...aiFieldProps('value.retained.explanation')} value={retainedValuation.explanation} rows={4} onChange={(event) => setRetainedValuation((current) => ({ ...current, explanation: event.target.value }))} placeholder={tx('Expliquez le montant retenu, les ajustements et les réserves éventuelles.', 'Explain the retained amount, adjustments and any reservations.')} />
                     </label>
+                    </>) : <ValuationLevelsReadOnly retained={retainedValuation} currentValue={marketDepth.midValue} net={retainedNetValuation} netAfterTax={retainedNetAfterTaxValuation} currency={watch.currency} language={language} />}
                     <aside className="ownership-valuation-note" {...aiFieldProps('value.provenance.ownershipAssessment')}>
                       <strong>{tx('Critère de provenance', 'Provenance criterion')}</strong>
                       <p>{ownershipAssessment}</p>
@@ -3468,20 +2935,19 @@ function App() {
                   </article>
                 </div>
               </section>
-            ) : (
-              <AccessRestricted title={tx('Analyse de marché', 'Market analysis')} language={language} />
             )}
 
-            {showCompleteContent && (
+            {schemaHas('value.comparables') && (
               <section>
                 <SectionTitle eyebrow={tx('Analyse de marché', 'Market analysis')} title={tx('Comparables', 'Comparable items')} />
                 <div className="comparable-groups">
-                  <ComparableTable title={tx('Annonces en cours', 'Current listings')} items={listingComparables} selection={publishProps('value-comparables-listings')} onUpdate={canEdit ? updateComparable : undefined} onDelete={canEdit ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={canEdit ? () => addComparable('Annonce') : undefined} language={language} />
-                  <ComparableTable title={tx('Transactions réalisées', 'Completed transactions')} items={transactionComparables} selection={publishProps('value-comparables-transactions')} onUpdate={canEdit ? updateComparable : undefined} onDelete={canEdit ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={canEdit ? () => addComparable('Transaction') : undefined} language={language} />
+                  <ComparableTable title={tx('Annonces en cours', 'Current listings')} items={listingComparables} selection={publishProps('value-comparables-listings', true)} onUpdate={editingBlock === 'value-comparables-listings' ? updateComparable : undefined} onDelete={editingBlock === 'value-comparables-listings' ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={editingBlock === 'value-comparables-listings' ? () => addComparable('Annonce') : undefined} language={language} />
+                  <ComparableTable title={tx('Transactions réalisées', 'Completed transactions')} items={transactionComparables} selection={publishProps('value-comparables-transactions', true)} onUpdate={editingBlock === 'value-comparables-transactions' ? updateComparable : undefined} onDelete={editingBlock === 'value-comparables-transactions' ? (id) => { const item = comparables.find((candidate) => candidate.id === id); if (item) requestCollectionDeletion({ items: comparables, setItems: setComparables, id, targetLabel: item.description || tx('Comparable sans titre', 'Untitled comparable') }); } : undefined} onAdd={editingBlock === 'value-comparables-transactions' ? () => addComparable('Transaction') : undefined} language={language} />
                 </div>
 
                 <div className="comparables-analysis">
-                  <div className="comparables-analysis__heading"><h3>{tx('Synthèse de l’analyse', 'Analysis summary')}</h3><BlockMarkers selection={publishProps('value-comparables-analysis')} label={tx('Synthèse de l’analyse des comparables', 'Comparable analysis summary')} /></div>
+                  <div className="comparables-analysis__heading"><h3>{tx('Synthèse de l’analyse', 'Analysis summary')}</h3><BlockMarkers selection={publishProps('value-comparables-analysis', true)} label={tx('Synthèse de l’analyse des comparables', 'Comparable analysis summary')} /></div>
+                  {editingBlock === 'value-comparables-analysis' ? (<>
                   <div className="comparables-analysis-table" role="table" aria-label={tx('Synthèse de l’analyse des comparables', 'Comparable analysis summary')}>
                     <div className="comparables-analysis-table__head" role="row">
                       <span>{tx('Angle d’analyse', 'Analysis angle')}</span><span>{tx('Constat', 'Finding')}</span><span>{tx('Lecture', 'Interpretation')}</span>
@@ -3496,15 +2962,17 @@ function App() {
                     ))}
                   </div>
                   <button type="button" className="button button--quiet no-print" onClick={() => setComparableAnalysis((current) => [...current, { id: newId('analysis'), angle: '', finding: '', reading: '' }])}><Plus size={14} /> {tx('Ajouter une ligne d’analyse', 'Add analysis row')}</button>
+                  </>) : <AnalysisRowsReadOnly rows={comparableAnalysis} language={language} />}
                   <small>{language === 'FR' ? `ÉCHANTILLON INTERNE · ${comparables.length} OBSERVATION${comparables.length > 1 ? 'S' : ''} · CONCLUSIONS À CONFIRMER PAR UN ÉCHANTILLON ÉLARGI` : `INTERNAL SAMPLE · ${comparables.length} OBSERVATION${comparables.length === 1 ? '' : 'S'} · CONCLUSIONS TO BE CONFIRMED USING A LARGER SAMPLE`}</small>
                 </div>
               </section>
             )}
 
-            {showCompleteContent && (
+            {schemaHas('value.cost_basis') && (
               <section>
-                <SectionTitle eyebrow={tx('Acquisition', 'Acquisition')} title={tx('Prix de revient', 'Cost basis')} publish={publishProps('value-cost-basis')} />
+                <SectionTitle eyebrow={tx('Acquisition', 'Acquisition')} title={tx('Prix de revient', 'Cost basis')} publish={publishProps('value-cost-basis', true)} />
                 <div className="cost-basis-card">
+                  {editingBlock === 'value-cost-basis' ? (<>
                   <div className="purchase-fields">
                     <label>{tx('Date d’achat', 'Purchase date')}<input {...aiFieldProps('value.purchase.date')} type="date" value={purchase.date} onChange={(event) => setPurchase({ ...purchase, date: event.target.value })} /></label>
                     <label>{tx('Valeur d’achat', 'Purchase value')}<input {...aiFieldProps('value.purchase.price')} type="number" min="0" step="1" value={purchase.purchasePrice} onChange={(event) => setPurchase({ ...purchase, purchasePrice: Number(event.target.value) })} /></label>
@@ -3528,6 +2996,7 @@ function App() {
                     className="button button--quiet no-print"
                     onClick={() => setPurchaseExpenses((current) => [...current, { id: newId('expense'), kind: 'Autre', date: '', label: '', amount: 0 }])}
                   ><Plus size={14} /> {tx('Ajouter une dépense', 'Add expense')}</button>
+                  </>) : <CostBasisReadOnly purchase={purchase} expenses={purchaseExpenses} kindLabel={expenseKindLabel} currency={watch.currency} language={language} />}
                   <div {...aiFieldProps('value.computed.costBasis')} className="cost-basis-total">
                     <Calculator size={20} />
                     <span>{tx('Prix de revient', 'Cost basis')}</span>
@@ -3537,15 +3006,17 @@ function App() {
               </section>
             )}
 
-            {showCompleteContent && (
+            {schemaHas('value.performance') && (
               <section>
-                <SectionTitle eyebrow={tx('Performance de détention', 'Holding performance')} title={tx('Plus-value, moins-value et TRI', 'Capital gain, loss and IRR')} publish={publishProps('value-performance')} />
+                <SectionTitle eyebrow={tx('Performance de détention', 'Holding performance')} title={tx('Plus-value, moins-value et TRI', 'Capital gain, loss and IRR')} publish={publishProps('value-performance', true)} />
                 <div className="performance-card">
+                  {editingBlock === 'value-performance' ? (
                   <div className="exit-fields">
                     <label>{tx('Date de vente', 'Sale date')}<input {...aiFieldProps('value.exit.saleDate')} type="date" min={purchase.date} value={exitAssumptions.saleDate} onChange={(event) => setExitAssumptions({ ...exitAssumptions, saleDate: event.target.value })} /></label>
                     <label>{tx('Prix de vente', 'Sale price')}<input {...aiFieldProps('value.exit.salePrice')} type="number" min="0" step="100" value={exitAssumptions.salePrice} onChange={(event) => setExitAssumptions({ ...exitAssumptions, salePrice: Number(event.target.value) })} /></label>
                     <label>{tx('Coût de cession', 'Disposal cost')}<input {...aiFieldProps('value.exit.disposalCostPct')} type="number" min="0" max="100" step="0.5" value={exitAssumptions.disposalCostPct} onChange={(event) => setExitAssumptions({ ...exitAssumptions, disposalCostPct: Number(event.target.value) })} /><span>%</span></label>
                   </div>
+                  ) : <ExitAssumptionsReadOnly exit={exitAssumptions} currency={watch.currency} language={language} />}
                   <div className="performance-results">
                     <div><span>{tx('Prix de revient', 'Cost basis')}</span><strong>{formatMoney(costBasis, watch.currency)}</strong></div>
                     <div><span>{tx('Coût de cession', 'Disposal cost')}</span><strong>− {formatMoney(disposalCost, watch.currency)}</strong></div>
@@ -3565,17 +3036,19 @@ function App() {
               </section>
             )}
 
-            {showCompleteContent && (
+            {schemaHas('value.sensitivity') && (
               <section>
-                <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} publish={publishProps('value-sensitivity')} />
+                <SectionTitle eyebrow={tx('Sensibilité', 'Sensitivity')} title={tx('Prix de vente et coût de cession', 'Sale price and disposal cost')} publish={publishProps('value-sensitivity', true)} />
                 <div {...aiFieldProps('value.computed.sensitivity')} className="sensitivity-stack">
+                  {editingBlock === 'value-sensitivity' && (
                   <div className="sensitivity-parameters no-print">
                     <div><span>{tx('Prix de vente testés', 'Tested sale prices')}</span>{sensitivityPrices.map((price, index) => <label key={`price-input-${index}`}>{tx('Scénario', 'Scenario')} {index + 1}<input {...aiFieldProps('value.sensitivity.prices[]', index)} type="number" min="0" step="100" value={price} onChange={(event) => setSensitivityPrices((current) => current.map((item, itemIndex) => itemIndex === index ? Math.max(0, Number(event.target.value)) : item))} /></label>)}</div>
                     <div><span>{tx('Coûts de cession testés', 'Tested disposal costs')}</span>{sensitivityCosts.map((cost, index) => <label key={`cost-input-${index}`}>{tx('Scénario', 'Scenario')} {index + 1}<span><input {...aiFieldProps('value.sensitivity.costs[]', index)} type="number" min="0" max="100" step="0.5" value={cost} onChange={(event) => setSensitivityCosts((current) => current.map((item, itemIndex) => itemIndex === index ? Math.min(100, Math.max(0, Number(event.target.value))) : item))} /><strong>%</strong></span></label>)}</div>
                   </div>
+                  )}
                   <div>
                     <h3>{tx('Plus-value ou moins-value nette', 'Net capital gain or loss')}</h3>
-                    <div className="sensitivity-table" role="table" aria-label={tx('Sensibilité de la plus-value ou moins-value', 'Capital gain or loss sensitivity')}>
+                    <div className="sensitivity-table" role="table" tabIndex={0} aria-label={tx('Sensibilité de la plus-value ou moins-value', 'Capital gain or loss sensitivity')}>
                       <div className="sensitivity-table__head" role="row"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>
                       {sensitivityCosts.map((costPct, costIndex) => (
                         <div role="row" key={`${costPct}-${costIndex}`}>
@@ -3590,7 +3063,7 @@ function App() {
                   </div>
                   <div>
                     <h3>{tx('TRI annualisé', 'Annualized IRR')}</h3>
-                    <div className="sensitivity-table sensitivity-table--irr" role="table" aria-label={tx('Sensibilité du TRI annualisé', 'Annualized IRR sensitivity')}>
+                    <div className="sensitivity-table sensitivity-table--irr" role="table" tabIndex={0} aria-label={tx('Sensibilité du TRI annualisé', 'Annualized IRR sensitivity')}>
                       <div className="sensitivity-table__head" role="row"><span>{tx('Coût \\ Prix', 'Cost \\ Price')}</span>{sensitivityPrices.map((price, index) => <strong key={`${price}-${index}`}>{formatMoney(price, watch.currency)}</strong>)}</div>
                       {sensitivityCosts.map((costPct, costIndex) => (
                         <div role="row" key={`${costPct}-${costIndex}`}>
@@ -3606,12 +3079,14 @@ function App() {
                 </div>
               </section>
             )}
-            </fieldset>
+            <GenericSchemaPageSections page="value" {...genericPageProps} />
         </ValuePage>
 
         <PublicationPage active={activePage === 'publication'}>
           <PageIntroduction number="05" title={tx('Publication', 'Publication')} />
+          {canManagePublication ? (
           <div className="publication-center">
+            <PublicationSelectionTable language={language} selections={{ website: publishedBlocks, collection: collectionBlocks, community: communityBlocks, report: reportBlocks }} canEdit={canEdit} onToggle={togglePublicationBlock} onReplace={replacePublicationBlocks} />
             <article className="publication-scope publication-scope--cartulary">
               <header>
                 <div><span className="eyebrow">01</span><h2>{tx('Mini-site de votre objet', 'Your object website')}</h2></div>
@@ -3624,9 +3099,8 @@ function App() {
                   <a className="button button--primary" href={localPublicationPreviewUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder', 'Open')}</a>
                 </div>
               )}
-              {renderPublicationBlockSelector('website', publishedBlocks)}
               <WebsiteDraftWarnings blocks={websiteDraft} language={language} />
-              <PublicWebsitePublicationPanel cartularyId={mockCartulary.id} blocks={websiteDraftRequest(websiteDraft)} beforePublish={persistence.syncNow} readOnly={isDemoCartulary} language={language} />
+              <PublicWebsitePublicationPanel cartularyId={mockCartulary.id} blocks={websiteDraftRequest(websiteDraft)} beforePublish={persistence.syncNow} readOnly={isDemoCartulary} language={language} onStateChanged={() => setWebsitePublicationCheck((value) => value + 1)} />
             </article>
 
             <article className="publication-scope publication-scope--collection">
@@ -3664,13 +3138,13 @@ function App() {
               {publicationCollectionError && <p className="publication-inline-error" role="alert">{publicationCollectionError}</p>}
               {collectionPublicationEnabled && publicationCollectionIds.length > 0 && collectionContext && (
                 <div className="publication-url-panel">
-                  <label><span>{tx('Mini-site des Collections sélectionnées', 'Selected Collections mini-site')}</span><input value={localCollectionWebsiteUrl} readOnly /></label>
+                  <label><span>{tx('Aperçu local des Collections sélectionnées', 'Local preview of the selected Collections')}</span><input value={localCollectionWebsiteUrl} readOnly /></label>
                   <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localCollectionWebsiteUrl, setCollectionUrlCopied)}>{collectionUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
-                  <a className="button button--primary" href={localCollectionWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder au mini-site', 'Open mini-site')}</a>
+                  <a className="button button--primary" href={localCollectionWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Ouvrir l’aperçu local', 'Open the local preview')}</a>
                 </div>
               )}
-              {collectionPublicationEnabled && publicationCollectionIds.length === 0 && <p className="publication-report-message" role="status">{tx('Sélectionnez au moins une Collection pour ouvrir son mini-site.', 'Select at least one Collection to open its mini-site.')}</p>}
-              {renderPublicationBlockSelector('collection', collectionBlocks)}
+              {collectionPublicationEnabled && publicationCollectionIds.length === 0 && <p className="publication-report-message" role="status">{tx('Sélectionnez au moins une Collection pour ouvrir son aperçu local.', 'Select at least one Collection to open its local preview.')}</p>}
+              <p className="publication-summary__detail">{tx('La Collection renvoie au mini-site de l’objet ; aucune sélection de contenus propre.', 'The Collection links to the object website; it has no content selection of its own.')}</p>
             </article>
 
             <article className="publication-scope publication-scope--community">
@@ -3680,12 +3154,12 @@ function App() {
               </header>
               {communityPublicationEnabled && (
                 <div className="publication-url-panel">
-                  <label><span>{tx('Adresse du site Le Cercle', 'The Circle website address')}</span><input value={localCommunityWebsiteUrl} readOnly /></label>
+                  <label><span>{tx('Adresse du Cercle (aperçu local)', 'The Circle address (local preview)')}</span><input value={localCommunityWebsiteUrl} readOnly /></label>
                   <button type="button" className="button button--quiet" onClick={() => void copyShareUrl(localCommunityWebsiteUrl, setCommunityUrlCopied)}>{communityUrlCopied ? tx('Copiée', 'Copied') : tx('Copier', 'Copy')}</button>
                   <a className="button button--primary" href={localCommunityWebsiteUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />{tx('Accéder au Cercle', 'Open The Circle')}</a>
                 </div>
               )}
-              {renderPublicationBlockSelector('community', communityBlocks)}
+              <p className="publication-summary__detail">{communityPublicationNote(language)}</p>
             </article>
 
             <article className="publication-scope publication-scope--report">
@@ -3695,9 +3169,22 @@ function App() {
               </header>
               {reportExportMessage && <p className="publication-report-message" role="status">{reportExportMessage}</p>}
               <p className="publication-report-message" role="status">{reportPreparation.phase === 'error' ? tx('Une image reste indisponible. Réessayez la préparation ou retirez le bloc concerné de la sélection ; aucune impression incomplète n’a été lancée.', 'An image is unavailable. Retry preparation or deselect its block; no incomplete print was started.') : reportPreparation.phase === 'ready' ? tx('Images chargées. Vous pouvez maintenant imprimer le rapport.', 'Images loaded. You can now print the report.') : tx('La préparation charge les images sélectionnées avant d’ouvrir l’impression.', 'Preparation loads selected images before opening print.')}</p>
-              {renderPublicationBlockSelector('report', reportBlocks)}
             </article>
           </div>
+          ) : (
+            <PublicationReadOnlySummary
+              language={language}
+              selections={{ website: publishedBlocks, collection: collectionBlocks, community: communityBlocks, report: reportBlocks }}
+              previewUrl={localPublicationPreviewUrl}
+              collectionName={isDemoCartulary ? DEMO_ACCOUNT.collectionName : authoritative.collectionName}
+              publishedWebsiteUrl={publishedWebsiteUrl}
+              publishedWebsiteBlockIds={publishedWebsiteBlockIds}
+              demonstration={isDemoCartulary}
+              onPrintReport={handleReportPrint}
+              reportState={{ phase: reportPreparation.phase, message: reportExportMessage }}
+            />
+          )}
+            <GenericSchemaPageSections page="publication" {...genericPageProps} />
         </PublicationPage>
 
         <nav className="page-turner no-print" aria-label={language === 'FR' ? 'Navigation entre les pages' : 'Page navigation'}>
@@ -3721,15 +3208,15 @@ function App() {
       </main>
 
       <footer className="editorial-footer">
-        <div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Cartulaire {mockCartulary.publicCode}</span></span><span>Prototype v2.1 · 2026</span></div>
+        <div className="container"><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>Cartulaire {cartularyPublicCode}</span></span><span>Prototype v2.1 · 2026</span></div>
       </footer>
 
       {orderedReportBlocks.length > 0 && reportPreparation.active && (
         <div className="report-print-view" key={reportPreparation.attempt}>
           <header className="report-print-view__header">
             <BrandLogo className="report-print-view__logo" variant="monochrome" />
-            <span className="eyebrow">{tx('Rapport Cartularia', 'Cartularia report')} · {mockCartulary.publicCode}</span>
-            <h1>{specificationValue('Marque', watch.reference.brand)}<br />{specificationValue('Modèle', watch.reference.model)}</h1>
+            <span className="eyebrow">{tx('Rapport Cartularia', 'Cartularia report')} · {cartularyPublicCode}</span>
+            <h1>{specificationValue('Marque', watch.reference.brand)}{' '}{specificationValue('Modèle', watch.reference.model)}</h1>
             <dl>
               <div><dt>{tx('Référence', 'Reference')}</dt><dd>{specificationValue('Numéro de référence', watch.reference.reference)}</dd></div>
               <div><dt>{tx('Date du rapport', 'Report date')}</dt><dd>{new Intl.DateTimeFormat(interfaceLocale, { dateStyle: 'long' }).format(new Date())}</dd></div>
@@ -3770,7 +3257,7 @@ function App() {
               </section>
             ))}
           </main>
-          <footer><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>{tx('Rapport généré depuis le Cartulaire', 'Report generated from the Cartulary')}</span></span><span>{mockCartulary.publicCode}</span></footer>
+          <footer><span className="brand-signature"><BrandLogo variant="symbol" decorative /><span>{tx('Rapport généré depuis le Cartulaire', 'Report generated from the Cartulary')}</span></span><span>{cartularyPublicCode}</span></footer>
         </div>
       )}
 
@@ -3794,137 +3281,20 @@ function App() {
               journal={journal}
               cartularyId={mockCartulary.id}
               language={language}
-              publicShareCode={mockCartulary.seal?.supportCode}
+              publicShareCode={cartularyPublicCode}
               snapshot={integritySnapshot}
-              publicShareUrl={publicShareUrl}
               refreshToken={eventTrigger}
               persistence={persistence}
               onDeleteAllData={handleDeleteAllData}
               onJournalUpdate={() => setEventTrigger((previous) => previous + 1)}
+              readOnly={!canEdit}
+              demonstration={isDemoCartulary}
+              demoRegistryProofsHref={isDemoCartulary ? registryHref(DEMO_ACCOUNT.registryId, 'integrity') : null}
+              publishedWebsiteUrl={publishedWebsiteUrl}
             />
           </Suspense>
         </aside>
       </>}
-
-      {publicationIntent && (
-        <div className="modal-overlay" onClick={() => {
-          if (!isPublicationSubmitting && performance.now() - publicationDialogOpenedAtRef.current > 350) {
-            closePublicationDialog();
-          }
-        }}>
-          <div
-            ref={publicationDialogRef}
-            className="modal-content modal-content--publication"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="publication-dialog-title"
-            aria-describedby="publication-dialog-description"
-            data-focus-layer="true"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <span className="eyebrow">{tx('Préparation de la sélection', 'Selection preparation')} · {destinationMarker(publicationIntent.destination)}</span>
-                <strong id="publication-dialog-title">
-                  {publicationIntent.action === 'revoke'
-                    ? tx('Révoquer la sélection', 'Revoke selection')
-                    : publicationIntent.action === 'validate' ? tx('Valider une sélection existante', 'Validate existing selection') : tx('Valider avant sélection', 'Validate before selection')}
-                </strong>
-              </div>
-              <button type="button" onClick={closePublicationDialog} disabled={isPublicationSubmitting} aria-label={tx('Fermer la validation de publication', 'Close publication validation')}><X size={18} /></button>
-            </div>
-            <div className="publication-dialog__body">
-              <div className="publication-dialog__summary">
-                <span className={`publication-destination publication-destination--${publicationIntent.destination}`}>{destinationMarker(publicationIntent.destination)}</span>
-                <div>
-                  <span className="eyebrow">{language === 'FR' ? destinationLabel(publicationIntent.destination) : publicationIntent.destination === 'website' ? 'External publication' : publicationIntent.destination === 'collection' ? 'Collection' : publicationIntent.destination === 'report' ? 'PDF report' : 'Circle'}</span>
-                  <h3>{publicationIntent.blockLabel}</h3>
-                  <code>{publicationIntent.blockId}</code>
-                </div>
-              </div>
-
-              <p id="publication-dialog-description" className="publication-dialog__explanation">
-                {publicationIntent.destination === 'website'
-                  ? tx('Cette décision autorise le contenu dans la publication extérieure. La publication publique réelle reste un acte serveur distinct, lié à la révision et contrôlé par liste blanche.', 'This decision authorizes the content in the external publication. Actual public publication remains a separate server act, tied to the revision and controlled by an allowlist.')
-                  : publicationIntent.destination === 'collection'
-                    ? tx('Cette décision autorise le contenu dans les Collections sélectionnées. La projection du Registre reste filtrée côté serveur.', 'This decision authorizes the content in the selected Collections. The Registry projection remains server-filtered.')
-                  : publicationIntent.destination === 'report'
-                    ? tx('Cette décision autorise le contenu dans le prochain rapport PDF. Le rapport reste une projection privée du propriétaire.', 'This decision authorizes the content in the next PDF report. The report remains a private owner projection.')
-                    : tx('Cette décision prépare le contenu pour Le Cercle. Aucun contenu n’est envoyé tant que la commande serveur correspondante n’est pas reliée.', 'This decision prepares the content for the Circle. No content is sent until the corresponding server command is connected.')}
-              </p>
-
-              {publicationIntent.action !== 'revoke' && (
-                <section className="publication-dialog__checks" aria-labelledby="publication-prerequisites-title">
-                  <div className="publication-dialog__section-heading">
-                    <h4 id="publication-prerequisites-title">{tx('Informations minimales de l’objet', 'Minimum object information')}</h4>
-                    <span>{publicationIntent.eligibility.prerequisites.filter((item) => item.satisfied).length}/3</span>
-                  </div>
-                  <ul>
-                    {publicationIntent.eligibility.prerequisites.map((item) => (
-                      <li className={item.satisfied ? 'is-valid' : 'is-blocking'} key={item.id}>
-                        <span aria-hidden="true">{item.satisfied ? '✓' : '×'}</span>
-                        <div><strong>{language === 'FR' ? item.label : item.id === 'brand' ? 'Brand' : item.id === 'model' ? 'Model' : 'Main photo'}</strong><small>{language === 'FR' ? item.detail : item.satisfied ? item.detail : item.id === 'brand' ? 'Not provided' : item.id === 'model' ? 'Not provided' : 'An archived main image with visibility compatible with this destination is required'}</small></div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              <div className={`publication-dialog__policy ${publicationIntent.policy.allowed ? 'is-valid' : 'is-blocking'}`} role={publicationIntent.policy.allowed ? undefined : 'alert'}>
-                <strong>{publicationIntent.policy.allowed ? tx('Politique de destination conforme', 'Destination policy satisfied') : tx('Destination interdite pour ce bloc', 'Destination forbidden for this block')}</strong>
-                <p>{language === 'FR' ? publicationIntent.policy.reason : publicationIntent.destination === 'report'
-                  ? 'The PDF report remains a private owner projection.'
-                  : publicationIntent.destination === 'website'
-                    ? (publicationIntent.policy.allowed ? 'Content allowed by the publication allowlist; it remains server-controlled.' : 'This content is excluded from external publication.')
-                    : publicationIntent.destination === 'collection'
-                      ? (publicationIntent.policy.allowed ? 'Content allowed for Collection publication.' : 'This content remains private.')
-                    : (publicationIntent.policy.allowed ? 'Block allowed for a server-filtered Circle projection.' : 'This block contains private data incompatible with a Circle projection.')}</p>
-              </div>
-
-              <dl className="publication-dialog__proof">
-                <div><dt>{tx('Révision source', 'Source revision')}</dt><dd>{effectivePublicationSourceRevision || '—'}</dd></div>
-                <div><dt>{tx('Empreinte source', 'Source digest')}</dt><dd><code>{effectivePublicationSourceDigest ? `${effectivePublicationSourceDigest.slice(0, 23)}…` : tx('Calcul en cours…', 'Computing…')}</code></dd></div>
-                <div><dt>{tx('Identifiant de décision', 'Decision identifier')}</dt><dd><code>{publicationIntent.requestId.slice(0, 27)}…</code></dd></div>
-              </dl>
-
-              {publicationError && <p className="publication-dialog__error" role="alert">{publicationError}</p>}
-
-              <label className="publication-dialog__acknowledgement">
-                <input
-                  type="checkbox"
-                  checked={publicationAcknowledged}
-                  onChange={(event) => setPublicationAcknowledged(event.target.checked)}
-                  disabled={isPublicationSubmitting}
-                />
-                <span>{tx('Je confirme être le propriétaire à l’origine de cette décision et avoir contrôlé la destination', 'I confirm that I am the owner making this decision and that I have checked destination')} {destinationMarker(publicationIntent.destination)}.</span>
-              </label>
-
-              <div className="publication-dialog__actions">
-                {publicationIntent.action === 'validate' && (
-                  <button type="button" className="button button--quiet" onClick={() => void confirmPublicationIntent('revoke')} disabled={isPublicationSubmitting}>
-                    {tx('Retirer la sélection historique', 'Remove previous selection')}
-                  </button>
-                )}
-                <button type="button" className="button button--quiet" onClick={closePublicationDialog} disabled={isPublicationSubmitting}>{tx('Annuler', 'Cancel')}</button>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={() => void confirmPublicationIntent()}
-                  disabled={isPublicationSubmitting
-                    || !publicationAcknowledged
-                    || !effectivePublicationSourceDigest
-                    || (publicationIntent.action !== 'revoke' && (!publicationIntent.eligibility.isEligible || !publicationIntent.policy.allowed))}
-                >
-                  {isPublicationSubmitting
-                    ? tx('Enregistrement…', 'Saving…')
-                    : publicationIntent.action === 'revoke' ? tx('Confirmer la révocation', 'Confirm revocation') : tx('Confirmer la décision', 'Confirm decision')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {isMarketHistoryEditorOpen && <MarketHistoryDialog
         values={marketValues}
@@ -3951,7 +3321,8 @@ function App() {
         onToggleTag={toggleMediaTag}
         onChangeVisibility={(id, visibility) => { if (!canEdit) return; setMediaAssets((current) => current.map((asset) => asset.id === id ? { ...asset, visibility } : asset)); }}
         onDelete={deleteMediaAsset}
-        readOnly={isDemoCartulary}
+        readOnly={!canEdit}
+        originalOnDemand={authoritative.canManage}
       />}
 
       {pendingDeletion && <DeletionDialog
@@ -3971,7 +3342,9 @@ function App() {
         onDismiss={async () => { await undoNotice.onExpire?.(); setUndoNotice(null); }}
       />}
       {deletionError && !pendingDeletion && <div className="deletion-error-toast no-print" role="alert">{deletionError}</div>}
-      {fileImportError && <div className="deletion-error-toast no-print" role="alert">{fileImportError}</div>}
+      {(fileImportError || mediaState.persistenceError || conditionState.persistenceError) && (
+        <div className="deletion-error-toast no-print" role="alert">{fileImportError || mediaState.persistenceError || conditionState.persistenceError}</div>
+      )}
     </div>
   );
 }

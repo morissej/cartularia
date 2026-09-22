@@ -48,7 +48,7 @@ describe('gabarit universel du lecteur multi-actifs', () => {
     expect(screen.getByRole('heading', { name: 'Rapports sur la référence' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /05Publication/ }));
-    expect(screen.getByRole('heading', { name: 'Publiez un mini -site de votre Cartulaire' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Publiez un mini-site de votre Cartulaire' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Publiez votre objet dans une Collection' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Publiez votre objet dans Le Cercle' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Rapport PDF' })).toBeTruthy();

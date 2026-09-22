@@ -6,6 +6,7 @@ import { emptyPersonalVaultPayload } from '../../src/personalVault/types';
 import { decryptPersonalPayload, encryptPersonalPayload } from '../../src/personalVault/crypto';
 
 const mocks = vi.hoisted(() => ({ authenticate: vi.fn(), load: vi.fn(), save: vi.fn() }));
+vi.mock('../../src/personalVault/sessionSecurity', () => ({ observePersonalVaultSession: () => () => {}, personalVaultSessionMatches: () => true }));
 vi.mock('../../src/personalVault/firebase', () => ({ personalVaultIsConfigured: true }));
 vi.mock('../../src/personalVault/repository', () => ({ authenticatePersonalVault: mocks.authenticate, loadPersonalVault: mocks.load, savePersonalVault: mocks.save, lockPersonalVault: vi.fn() }));
 vi.mock('../../src/personalVault/codeBridgeRepository', () => ({ loadOwnerObjectCodes: async () => new Map(), saveCodeCorrespondences: async () => undefined }));

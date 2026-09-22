@@ -43,9 +43,18 @@ export const observeRegistryItems = (
   (error) => onError(error),
 );
 
+/** Les règles refusent la lecture d'une publication absente ou révoquée : même issue qu'une absence. */
+const isPermissionDenied = (error: unknown) => (error as { code?: string } | null)?.code === 'permission-denied';
+
 export const loadPublicProjection = async (publicCode: string): Promise<LoadedPublicProjection | null> => {
   const publicationRef = doc(db, 'publications', publicCode);
-  const publicationSnapshot = await getDoc(publicationRef);
+  let publicationSnapshot: Awaited<ReturnType<typeof getDoc>>;
+  try {
+    publicationSnapshot = await getDoc(publicationRef);
+  } catch (error) {
+    if (isPermissionDenied(error)) return null;
+    throw error;
+  }
   if (!publicationSnapshot.exists()) return null;
 
   const publication = publicationSnapshot.data() as PublicPublicationProjection;
@@ -70,17 +79,38 @@ export const loadPublicProjection = async (publicCode: string): Promise<LoadedPu
   };
 };
 
-/** Lightweight link eligibility; inaccessible publications are never advertised. */
-export const loadPublicPublicationStatuses = async (codes: string[]): Promise<Record<string, boolean>> => {
+export interface PublicPublicationSummary {
+  published: boolean;
+  /** Blocs réellement en ligne (`publications/{code}.blockIds`) ; vide si non publié. */
+  blockIds: string[];
+}
+
+/**
+ * État constaté d'une publication : statut et blocs réellement en ligne. Une publication absente,
+ * révoquée ou refusée par les règles (permission-denied) vaut « non publiée » ; jamais de faux « publié ».
+ */
+export const loadPublicPublicationSummaries = async (codes: string[]): Promise<Record<string, PublicPublicationSummary>> => {
   const entries = await Promise.all([...new Set(codes.filter(Boolean))].map(async (code) => {
-    try { const snapshot = await getDoc(doc(db, 'publications', code)); return [code, snapshot.exists() && snapshot.data().status === 'published'] as const; }
-    catch (error) {
-      if ((error as { code?: string }).code === 'permission-denied') return [code, false] as const;
+    try {
+      const snapshot = await getDoc(doc(db, 'publications', code));
+      const data = snapshot.exists() ? (snapshot.data() as Partial<PublicPublicationProjection>) : null;
+      const published = data?.status === 'published';
+      const blockIds = published && Array.isArray(data?.blockIds)
+        ? data.blockIds.filter((blockId): blockId is string => typeof blockId === 'string')
+        : [];
+      return [code, { published, blockIds }] as const;
+    } catch (error) {
+      if (isPermissionDenied(error)) return [code, { published: false, blockIds: [] }] as const;
       throw error;
     }
   }));
   return Object.fromEntries(entries);
 };
+
+/** Lightweight link eligibility; inaccessible publications are never advertised. */
+export const loadPublicPublicationStatuses = async (codes: string[]): Promise<Record<string, boolean>> => Object.fromEntries(
+  Object.entries(await loadPublicPublicationSummaries(codes)).map(([code, summary]) => [code, summary.published]),
+);
 
 export const loadReportProjection = async (
   cartularyId: string,

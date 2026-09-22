@@ -66,6 +66,8 @@ const seedFoundations = async () => {
   const now = new Date('2026-08-14T14:00:00.000Z');
   await Promise.all([
     adminFirestore.doc('users/wave1-owner').set({ uid: ownerUid, status: 'active' }),
+    adminFirestore.doc(`users/${readerUid}`).set({ uid: readerUid, status: 'active' }),
+    adminFirestore.doc('users/community-new-member').set({ uid: 'community-new-member', status: 'active' }),
     adminFirestore.doc('users/wave1-owner/private/profile').set({
       email: 'owner.private@example.test',
       legalName: 'Identité privée de test',

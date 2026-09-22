@@ -1,21 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  mergeCartularyFollowUpTodos,
-  type CartularyFollowUpTodo,
-  type FollowUpCategory,
+import type {
+  CartularyFollowUpTodo,
+  FollowUpCategory,
 } from '../../../domain/followUp.ts';
 import { persistCartulariaJson, readCartulariaStorage } from '../../../persistence/localVault.ts';
 import {
-  createCartularyFollowUpTodo,
   deleteCartularyFollowUpTodo,
   observeCartularyFollowUpTodos,
-  updateCartularyFollowUpTodo,
+  syncCartularyFollowUpTodo,
 } from '../../../services/followUp.ts';
 import { removeItemById, restoreItemAtIndex, type RemovedItem } from '../../../utils/undoableDeletion.ts';
 
 const TODO_STORAGE_KEY = 'cartularia-todos';
 const TODO_REMOTE_MIGRATION_KEY = 'cartularia-todos-remote-migrated-v1';
-const TODO_PENDING_STORAGE_KEY = 'cartularia-todos-pending-v1';
+const TODO_LEGACY_PENDING_STORAGE_KEY = 'cartularia-todos-pending-v1';
+const TODO_OPERATION_STORAGE_KEY = 'cartularia-todos-operations-v2';
+
+type FollowUpOperation = {
+  operationId: string;
+  cartularyId: string;
+  todoId: string;
+  kind: 'upsert' | 'delete';
+  todo?: CartularyFollowUpTodo;
+  queuedAt: number;
+};
 
 const normalizeTodos = (value: unknown): CartularyFollowUpTodo[] => {
   if (!Array.isArray(value)) return [];
@@ -46,21 +54,97 @@ const readStoredTodos = (): CartularyFollowUpTodo[] => {
   }
 };
 
-const readStoredPendingTodos = (): { upserts: CartularyFollowUpTodo[]; deletes: string[] } => {
+const createOperationId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `follow-up-${crypto.randomUUID()}`;
+  }
+  return `follow-up-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const createTodoId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `todo-${crypto.randomUUID()}`;
+  }
+  return `todo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const normalizeOperations = (value: unknown, cartularyId: string): FollowUpOperation[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate): FollowUpOperation[] => {
+    if (!candidate || typeof candidate !== 'object') return [];
+    const operation = candidate as Partial<FollowUpOperation>;
+    if (
+      typeof operation.operationId !== 'string'
+      || operation.cartularyId !== cartularyId
+      || typeof operation.todoId !== 'string'
+      || !['upsert', 'delete'].includes(operation.kind || '')
+    ) return [];
+    if (operation.kind === 'upsert') {
+      const [todo] = normalizeTodos([operation.todo]);
+      if (!todo || todo.id !== operation.todoId) return [];
+      return [{
+        operationId: operation.operationId,
+        cartularyId,
+        todoId: operation.todoId,
+        kind: 'upsert',
+        todo,
+        queuedAt: typeof operation.queuedAt === 'number' ? operation.queuedAt : 0,
+      }];
+    }
+    return [{
+      operationId: operation.operationId,
+      cartularyId,
+      todoId: operation.todoId,
+      kind: 'delete',
+      queuedAt: typeof operation.queuedAt === 'number' ? operation.queuedAt : 0,
+    }];
+  });
+};
+
+const readStoredOperations = (cartularyId: string): FollowUpOperation[] => {
   try {
-    const stored = readCartulariaStorage(TODO_PENDING_STORAGE_KEY);
-    if (!stored) return { upserts: [], deletes: [] };
-    const parsed = JSON.parse(stored) as { upserts?: unknown; deletes?: unknown };
-    return {
-      upserts: normalizeTodos(parsed.upserts),
-      deletes: Array.isArray(parsed.deletes) ? parsed.deletes.filter((id): id is string => typeof id === 'string') : [],
-    };
+    const current = readCartulariaStorage(TODO_OPERATION_STORAGE_KEY);
+    if (current !== null) return normalizeOperations(JSON.parse(current) as unknown, cartularyId);
+    const legacy = readCartulariaStorage(TODO_LEGACY_PENDING_STORAGE_KEY);
+    if (!legacy) return [];
+    const parsed = JSON.parse(legacy) as { upserts?: unknown; deletes?: unknown };
+    const queuedAt = Date.now();
+    const upserts = normalizeTodos(parsed.upserts).map((todo): FollowUpOperation => ({
+      operationId: createOperationId(),
+      cartularyId,
+      todoId: todo.id,
+      kind: 'upsert',
+      todo,
+      queuedAt,
+    }));
+    const deletes = Array.isArray(parsed.deletes) ? parsed.deletes.flatMap((todoId): FollowUpOperation[] => (
+      typeof todoId === 'string' ? [{
+        operationId: createOperationId(),
+        cartularyId,
+        todoId,
+        kind: 'delete',
+        queuedAt,
+      }] : []
+    )) : [];
+    return [...upserts, ...deletes];
   } catch {
-    return { upserts: [], deletes: [] };
+    return [];
   }
 };
 
-const createTodoId = () => `todo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const applyOperations = (
+  remoteTodos: CartularyFollowUpTodo[],
+  operations: FollowUpOperation[],
+  cartularyId: string,
+) => {
+  const projected = new Map(remoteTodos.map((todo) => [todo.id, todo]));
+  for (const operation of operations) {
+    if (operation.cartularyId !== cartularyId) continue;
+    if (operation.kind === 'delete') projected.delete(operation.todoId);
+    else if (operation.todo) projected.set(operation.todoId, operation.todo);
+  }
+  return [...projected.values()];
+};
 
 export interface CartularyFollowUpController {
   todos: CartularyFollowUpTodo[];
@@ -83,83 +167,154 @@ export const useCartularyFollowUp = ({
   const [todos, setTodos] = useState<CartularyFollowUpTodo[]>(() => readOnlyPreview ? [] : readStoredTodos());
   const [remoteHydrationComplete, setRemoteHydrationComplete] = useState(false);
   const [syncError, setSyncError] = useState('');
-  const pendingUpsertsRef = useRef(new Map<string, CartularyFollowUpTodo>());
-  const pendingDeletesRef = useRef(new Set<string>());
-  const pendingLoadedRef = useRef(false);
-  if (!readOnlyPreview && !pendingLoadedRef.current) {
-    const pending = readStoredPendingTodos();
-    pending.upserts.forEach((todo) => pendingUpsertsRef.current.set(todo.id, todo));
-    pending.deletes.forEach((id) => pendingDeletesRef.current.add(id));
-    pendingLoadedRef.current = true;
+  const todosRef = useRef(todos);
+  const operationsRef = useRef<FollowUpOperation[] | null>(null);
+  const operationsScopeRef = useRef(cartularyId);
+  const requestDrainRef = useRef<() => void>(() => undefined);
+  if (operationsRef.current === null || operationsScopeRef.current !== cartularyId) {
+    operationsScopeRef.current = cartularyId;
+    operationsRef.current = readOnlyPreview ? [] : readStoredOperations(cartularyId);
   }
   const isFrench = language === 'FR';
 
-  const persistPendingTodos = useCallback(() => {
+  const replaceTodos = useCallback((nextTodos: CartularyFollowUpTodo[]) => {
+    todosRef.current = nextTodos;
+    setTodos(nextTodos);
+  }, []);
+
+  const persistOperations = useCallback(async (nextOperations: FollowUpOperation[]) => {
     if (readOnlyPreview) return;
-    void persistCartulariaJson(TODO_PENDING_STORAGE_KEY, {
-      upserts: Array.from(pendingUpsertsRef.current.values()),
-      deletes: Array.from(pendingDeletesRef.current.values()),
-    }).catch((error: unknown) => console.error('Persistance des suivis en attente impossible', error));
+    operationsRef.current = nextOperations;
+    await persistCartulariaJson(TODO_OPERATION_STORAGE_KEY, nextOperations);
   }, [readOnlyPreview]);
+
+  const queueOperation = useCallback((operation: FollowUpOperation, persistenceError: string) => {
+    const nextOperations = [...(operationsRef.current || []), operation];
+    operationsRef.current = nextOperations;
+    void persistOperations(nextOperations)
+      .then(() => requestDrainRef.current())
+      .catch((error: unknown) => {
+        console.error('Persistance de la file de suivi impossible', error);
+        setSyncError(persistenceError);
+      });
+  }, [persistOperations]);
 
   useEffect(() => {
     if (readOnlyPreview) {
-      setTodos([]);
+      replaceTodos([]);
       setSyncError('');
       setRemoteHydrationComplete(false);
       return;
     }
     let active = true;
+    let draining = false;
     let firstSnapshot = true;
+    let observerFailed = false;
+    let latestSnapshotIsAuthoritative = false;
     const localTodosAtStart = readStoredTodos();
     const shouldMigrateLocalTodos = readCartulariaStorage(TODO_REMOTE_MIGRATION_KEY) !== 'true';
+
+    const reportPending = () => {
+      setSyncError(isFrench
+        ? 'Une modification est conservée localement et reste à synchroniser.'
+        : 'A change is saved locally and still needs syncing.');
+    };
+
+    const drain = async () => {
+      if (!active || draining || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+      draining = true;
+      try {
+        while (active) {
+          const operation = operationsRef.current?.[0];
+          if (!operation) {
+            if (!observerFailed && latestSnapshotIsAuthoritative) setSyncError('');
+            return;
+          }
+          try {
+            if (operation.kind === 'delete') {
+              await deleteCartularyFollowUpTodo(operation.cartularyId, operation.todoId);
+            } else if (operation.todo) {
+              await syncCartularyFollowUpTodo(operation.cartularyId, { ...operation.todo, source: 'cartulary' });
+            }
+          } catch {
+            if (active) reportPending();
+            return;
+          }
+          if (!active) return;
+          const currentOperations = operationsRef.current || [];
+          if (!currentOperations.some((candidate) => candidate.operationId === operation.operationId)) continue;
+          const remaining = currentOperations.filter((candidate) => candidate.operationId !== operation.operationId);
+          try {
+            await persistOperations(remaining);
+          } catch (error) {
+            console.error('Acquittement local de la file de suivi impossible', error);
+            if (active) reportPending();
+            return;
+          }
+        }
+      } finally {
+        draining = false;
+      }
+    };
+
+    const requestDrain = () => { void drain(); };
+    requestDrainRef.current = requestDrain;
+    window.addEventListener('online', requestDrain);
     setRemoteHydrationComplete(false);
     setSyncError('');
-    const unsubscribe = observeCartularyFollowUpTodos(cartularyId, (remoteTodos) => {
+
+    const unsubscribe = observeCartularyFollowUpTodos(cartularyId, (remoteTodos, metadata = { hasPendingWrites: false, fromCache: false }) => {
       if (!active) return;
+      observerFailed = false;
+      latestSnapshotIsAuthoritative = !metadata.hasPendingWrites && !metadata.fromCache;
       if (firstSnapshot) {
         firstSnapshot = false;
-        if (!shouldMigrateLocalTodos) {
-          const pendingUpserts = Array.from(pendingUpsertsRef.current.values());
-          setTodos(mergeCartularyFollowUpTodos(remoteTodos, pendingUpserts).filter((todo) => !pendingDeletesRef.current.has(todo.id)));
-          setRemoteHydrationComplete(true);
-          return;
+        if (shouldMigrateLocalTodos) {
+          const remoteIds = new Set(remoteTodos.map((todo) => todo.id));
+          const alreadyQueuedIds = new Set((operationsRef.current || [])
+            .filter((operation) => operation.kind === 'upsert')
+            .map((operation) => operation.todoId));
+          const migrationOperations = localTodosAtStart
+            .filter((candidate) => !remoteIds.has(candidate.id) && !alreadyQueuedIds.has(candidate.id))
+            .map((todo): FollowUpOperation => ({
+              operationId: createOperationId(),
+              cartularyId,
+              todoId: todo.id,
+              kind: 'upsert',
+              todo,
+              queuedAt: Date.now(),
+            }));
+          const nextOperations = [...(operationsRef.current || []), ...migrationOperations];
+          operationsRef.current = nextOperations;
+          void persistOperations(nextOperations)
+            .then(() => persistCartulariaJson(TODO_LEGACY_PENDING_STORAGE_KEY, { upserts: [], deletes: [] }))
+            .then(() => persistCartulariaJson(TODO_REMOTE_MIGRATION_KEY, true))
+            .then(requestDrain)
+            .catch((error: unknown) => {
+              console.error('Migration durable des suivis impossible', error);
+              if (active) reportPending();
+            });
         }
-        const remoteIds = new Set(remoteTodos.map((todo) => todo.id));
-        const localTodosToMigrate = localTodosAtStart.filter((candidate) => !remoteIds.has(candidate.id));
-        localTodosToMigrate.forEach((todo) => pendingUpsertsRef.current.set(todo.id, todo));
-        persistPendingTodos();
-        setTodos(mergeCartularyFollowUpTodos(remoteTodos, localTodosAtStart));
         setRemoteHydrationComplete(true);
-        void Promise.all(localTodosToMigrate.map((todo) => createCartularyFollowUpTodo(cartularyId, { ...todo, source: 'cartulary' })))
-          .then(() => persistCartulariaJson(TODO_REMOTE_MIGRATION_KEY, true))
-          .catch(() => { if (active) setSyncError(isFrench ? 'Une tâche locale reste à synchroniser.' : 'A local task still needs syncing.'); });
-        return;
       }
-      const remoteById = new Map(remoteTodos.map((todo) => [todo.id, todo]));
-      pendingUpsertsRef.current.forEach((pending, id) => {
-        const remote = remoteById.get(id);
-        if (remote && remote.text === pending.text && remote.dueAt === pending.dueAt && remote.category === pending.category && remote.status === pending.status) {
-          pendingUpsertsRef.current.delete(id);
-        }
-      });
-      pendingDeletesRef.current.forEach((id) => {
-        if (!remoteById.has(id)) pendingDeletesRef.current.delete(id);
-      });
-      persistPendingTodos();
-      const pendingUpserts = Array.from(pendingUpsertsRef.current.values());
-      setTodos(mergeCartularyFollowUpTodos(remoteTodos, pendingUpserts).filter((todo) => !pendingDeletesRef.current.has(todo.id)));
-      setSyncError('');
+      replaceTodos(applyOperations(remoteTodos, operationsRef.current || [], cartularyId));
+      if (!metadata.hasPendingWrites && !metadata.fromCache && (operationsRef.current?.length || 0) === 0) {
+        setSyncError('');
+      }
     }, () => {
       if (!active) return;
+      observerFailed = true;
       setRemoteHydrationComplete(true);
       setSyncError(isFrench ? 'Synchronisation momentanément indisponible.' : 'Sync is temporarily unavailable.');
     });
+    requestDrain();
     return () => {
       active = false;
+      requestDrainRef.current = () => undefined;
+      window.removeEventListener('online', requestDrain);
       unsubscribe();
     };
-  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
+  }, [cartularyId, isFrench, persistOperations, readOnlyPreview, replaceTodos]);
 
   useEffect(() => {
     if (readOnlyPreview || !remoteHydrationComplete) return;
@@ -170,60 +325,66 @@ export const useCartularyFollowUp = ({
     if (readOnlyPreview) return;
     const todo: CartularyFollowUpTodo = { id: createTodoId(), ...input, text: input.text.trim(), status: 'planned' };
     if (!todo.text) return;
-    pendingDeletesRef.current.delete(todo.id);
-    pendingUpsertsRef.current.set(todo.id, todo);
-    persistPendingTodos();
-    setTodos((current) => [...current, todo]);
+    replaceTodos([...todosRef.current, todo]);
     setSyncError('');
-    void createCartularyFollowUpTodo(cartularyId, { ...todo, source: 'cartulary' })
-      .catch(() => setSyncError(isFrench ? 'La tâche est conservée localement, mais pas encore synchronisée.' : 'The task is saved locally but not synced yet.'));
-  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
+    queueOperation({
+      operationId: createOperationId(),
+      cartularyId,
+      todoId: todo.id,
+      kind: 'upsert',
+      todo,
+      queuedAt: Date.now(),
+    }, isFrench ? 'La tâche reste affichée, mais sa sauvegarde locale a échoué.' : 'The task remains visible, but its local save failed.');
+  }, [cartularyId, isFrench, queueOperation, readOnlyPreview, replaceTodos]);
 
   const updateTodo = useCallback((id: string, patch: Partial<Pick<CartularyFollowUpTodo, 'text' | 'dueAt' | 'category' | 'status'>>) => {
     if (readOnlyPreview) return;
     const normalizedPatch = patch.text === undefined ? patch : { ...patch, text: patch.text.trim() };
     if (normalizedPatch.text === '') return;
-    setTodos((current) => current.map((todo) => {
-      if (todo.id !== id) return todo;
-      const updated = { ...todo, ...normalizedPatch };
-      pendingUpsertsRef.current.set(id, updated);
-      persistPendingTodos();
-      return updated;
-    }));
+    const current = todosRef.current.find((todo) => todo.id === id);
+    if (!current) return;
+    const updated = { ...current, ...normalizedPatch };
+    replaceTodos(todosRef.current.map((todo) => todo.id === id ? updated : todo));
     setSyncError('');
-    void updateCartularyFollowUpTodo(cartularyId, id, normalizedPatch)
-      .catch(() => setSyncError(isFrench ? 'La modification reste à synchroniser.' : 'The change still needs syncing.'));
-  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
+    queueOperation({
+      operationId: createOperationId(),
+      cartularyId,
+      todoId: id,
+      kind: 'upsert',
+      todo: updated,
+      queuedAt: Date.now(),
+    }, isFrench ? 'La modification reste affichée, mais sa sauvegarde locale a échoué.' : 'The change remains visible, but its local save failed.');
+  }, [cartularyId, isFrench, queueOperation, readOnlyPreview, replaceTodos]);
 
   const removeTodo = useCallback((id: string) => {
     if (readOnlyPreview) return null;
-    const removed = removeItemById(todos, id);
+    const removed = removeItemById(todosRef.current, id);
     if (!removed) return null;
-    pendingUpsertsRef.current.delete(id);
-    pendingDeletesRef.current.add(id);
-    persistPendingTodos();
-    setTodos(removed.remaining);
+    replaceTodos(removed.remaining);
     setSyncError('');
-    void deleteCartularyFollowUpTodo(cartularyId, id).catch(() => {
-      pendingDeletesRef.current.delete(id);
-      pendingUpsertsRef.current.set(id, removed.item);
-      persistPendingTodos();
-      setTodos((current) => restoreItemAtIndex(current, removed.item, removed.index));
-      setSyncError(isFrench ? 'Suppression impossible : la tâche a été restaurée.' : 'Unable to delete: the task was restored.');
-    });
+    queueOperation({
+      operationId: createOperationId(),
+      cartularyId,
+      todoId: id,
+      kind: 'delete',
+      queuedAt: Date.now(),
+    }, isFrench ? 'La suppression reste affichée, mais sa sauvegarde locale a échoué.' : 'The deletion remains visible, but its local save failed.');
     return removed;
-  }, [cartularyId, isFrench, persistPendingTodos, todos, readOnlyPreview]);
+  }, [cartularyId, isFrench, queueOperation, readOnlyPreview, replaceTodos]);
 
   const restoreTodo = useCallback((removed: RemovedItem<CartularyFollowUpTodo>) => {
     if (readOnlyPreview) return;
-    pendingDeletesRef.current.delete(removed.item.id);
-    pendingUpsertsRef.current.set(removed.item.id, removed.item);
-    persistPendingTodos();
-    setTodos((current) => restoreItemAtIndex(current, removed.item, removed.index));
+    replaceTodos(restoreItemAtIndex(todosRef.current, removed.item, removed.index));
     setSyncError('');
-    void createCartularyFollowUpTodo(cartularyId, { ...removed.item, source: 'cartulary' })
-      .catch(() => setSyncError(isFrench ? 'La restauration reste à synchroniser.' : 'The restored task still needs syncing.'));
-  }, [cartularyId, isFrench, persistPendingTodos, readOnlyPreview]);
+    queueOperation({
+      operationId: createOperationId(),
+      cartularyId,
+      todoId: removed.item.id,
+      kind: 'upsert',
+      todo: removed.item,
+      queuedAt: Date.now(),
+    }, isFrench ? 'La restauration reste affichée, mais sa sauvegarde locale a échoué.' : 'The restoration remains visible, but its local save failed.');
+  }, [cartularyId, isFrench, queueOperation, readOnlyPreview, replaceTodos]);
 
   return { todos, syncError, addTodo, updateTodo, removeTodo, restoreTodo };
 };

@@ -13,6 +13,8 @@ interface MediaCarouselProps {
   eyebrow?: string;
   onOpen: (asset: Asset) => void;
   compact?: boolean;
+  /** `false` : aucun lien de téléchargement (aperçu local d'un binaire privé, V4 G1 : l'original n'est jamais offert à la place de la copie). */
+  downloads?: boolean;
 }
 
 export function MediaCarousel({
@@ -21,6 +23,7 @@ export function MediaCarousel({
   eyebrow,
   onOpen,
   compact = false,
+  downloads = true,
 }: MediaCarouselProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const currentIndex = Math.max(0, assets.findIndex((asset) => asset.id === selectedId));
@@ -67,7 +70,7 @@ export function MediaCarousel({
           ) : current.type === 'video' ? (
             <MediaVideo asset={current} language={language} controls={false} muted />
           ) : (
-            <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} sizes="(max-width: 720px) 100vw, 900px" eager />
+            <PrivateMediaImage asset={current} sourceOverride={poster} alt={current.name} sizes="(max-width: 720px) 100vw, 900px" eager role="stage" />
           )}
           {current.type === 'video' && (
             <span className="media-carousel__play" aria-hidden="true">
@@ -112,7 +115,7 @@ export function MediaCarousel({
           )}
         </div>
         <div className="media-carousel__actions">
-          <MediaDownloadLink media={current} language={language} compact />
+          {downloads && <MediaDownloadLink media={current} language={language} compact />}
           <div className="media-carousel__count">
             <span>{String(currentIndex + 1).padStart(2, '0')}</span>
             <span>/</span>
@@ -122,7 +125,7 @@ export function MediaCarousel({
       </div>
 
       {assets.length > 1 && (
-        <div className="media-carousel__thumbs" aria-label={language === 'FR' ? 'Choisir un média' : 'Choose media'}>
+        <div className="media-carousel__thumbs" role="group" aria-label={language === 'FR' ? 'Choisir un média' : 'Choose media'}>
           {assets.map((asset, index) => {
             const thumbnail = asset.posterUrl || asset.thumbnailUrl || asset.url;
             const videoPoster = asset.posterUrl || asset.thumbnailUrl;
@@ -140,8 +143,9 @@ export function MediaCarousel({
                   : asset.type === 'video'
                     ? videoPoster
                       ? <PresentationImage src={videoPoster} alt="" sizes="70px" loading="lazy" decoding="async" />
-                      : <span className="media-carousel__thumb-placeholder" aria-hidden="true" />
-                    : <PrivateMediaImage asset={asset} sourceOverride={thumbnail} alt="" sizes="70px" />}
+                      // Vidéo sans dérivé (aucun transcodage en production) : état honnête, jamais « Accès restreint » (P-D3).
+                      : <span className="media-carousel__thumb-placeholder" role="img" aria-label={language === 'FR' ? 'Aucune vignette disponible' : 'No thumbnail available'} title={language === 'FR' ? 'Aucune vignette disponible' : 'No thumbnail available'} />
+                    : <PrivateMediaImage asset={asset} sourceOverride={thumbnail} alt="" sizes="70px" role="thumbnail" />}
                 {asset.type === 'video' && <Play size={11} fill="currentColor" aria-hidden="true" />}
               </button>
             );

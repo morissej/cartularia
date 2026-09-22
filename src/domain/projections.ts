@@ -1,3 +1,5 @@
+import type { RegistryItemMediaKind, RegistryItemThumbnail, RegistryItemThumbnailStatus } from './registryThumbnail.ts';
+
 export type PublicProjectionStatus = 'published' | 'revoked';
 
 export interface RegistryItemProjection {
@@ -25,6 +27,14 @@ export interface RegistryItemProjection {
   valuationCurrency?: string | null;
   completenessLevel: string;
   primaryAssetId: string | null;
+  /**
+   * Aides de présentation écrites par le serveur Admin, hors `contentHash` (contrat V3, K3) : vignette de la
+   * couverture (inline ou bundle) et nature de la couverture ; absentes sur les items antérieurs à V3.
+   */
+  thumbnail?: RegistryItemThumbnail | null;
+  primaryMediaKind?: RegistryItemMediaKind | null;
+  /** État de la vignette écrit par le serveur (K3 étendu) : 'ready' | 'pending' | 'failed' | 'none' ; absent avant le tour 4. */
+  thumbnailStatus?: RegistryItemThumbnailStatus | null;
   sourceRevision: number;
   projectionStatus: 'active' | 'withdrawn';
   contentHash: string;

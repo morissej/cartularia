@@ -7,6 +7,8 @@ import {
   type Auth,
   type User,
 } from 'firebase/auth';
+import { requestPrivateSessionLock } from './privateSessionEvents.ts';
+import { isDemoCartularyId } from '../data/demoCartularies.ts';
 
 export const SESSION_IDLE_TIMEOUT_MS = 30 * 60_000;
 export const SESSION_HIDDEN_TIMEOUT_MS = 15 * 60_000;
@@ -88,14 +90,20 @@ const writeLockMarker = (locked: boolean) => {
   }
 };
 
-const clearSessionLockScreen = () => {
+export const clearSessionLockAfterAuthentication = () => {
   document.getElementById(SESSION_LOCK_SCREEN_ID)?.remove();
   writeLockMarker(false);
 };
 
 const showSessionLockScreen = () => {
   writeLockMarker(true);
-  if (window.location.pathname !== '/' || document.getElementById(SESSION_LOCK_SCREEN_ID)) return;
+  requestPrivateSessionLock();
+  const pathname = window.location.pathname.replace(/\/$/, '');
+  const parameters = new URLSearchParams(window.location.search);
+  const privateRoute = pathname === '/cartulary' || pathname === '/cartulary-view'
+    || pathname === '/registry' || pathname.startsWith('/registry/') || pathname === '/administration'
+    || (pathname === '/watch-website' && parameters.get('preview') === 'local');
+  if (!privateRoute || isDemoCartularyId(parameters.get('cartularyId') || '') || document.getElementById(SESSION_LOCK_SCREEN_ID)) return;
 
   const overlay = document.createElement('div');
   overlay.id = SESSION_LOCK_SCREEN_ID;
@@ -124,10 +132,10 @@ const showSessionLockScreen = () => {
   title.textContent = 'Session verrouillée';
   title.style.cssText = 'margin:0;font:600 28px/1.2 Georgia,serif';
   const explanation = document.createElement('p');
-  explanation.textContent = 'Votre session privée a été fermée après une période d’inactivité. Le coffre local est intact et aucune modification n’a été perdue.';
+  explanation.textContent = 'Votre session privée a été verrouillée après une période d’inactivité. Les brouillons déjà enregistrés sur cet appareil sont conservés.';
   explanation.style.cssText = 'margin:0;color:#d7cdbd;line-height:1.55';
   const link = document.createElement('a');
-  link.href = '/registry';
+  link.href = `/account/sign-in?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
   link.textContent = 'Se reconnecter';
   link.style.cssText = 'justify-self:start;padding:10px 16px;background:#f7f3eb;color:#1a1815;text-decoration:none;font-weight:700';
   panel.append(eyebrow, title, explanation, link);
@@ -148,7 +156,10 @@ export const installSessionLock = (auth: Auth, options: SessionLockOptions = {})
   let locking = false;
 
   const markActivity = () => {
-    if (document.visibilityState === 'visible') lastActivityAt = now();
+    if (document.visibilityState !== 'visible') return;
+    if (sessionLockReason({ now: now(), lastActivityAt, hiddenAt, idleTimeoutMs, hiddenTimeoutMs })) {
+      void lockIfNeeded().catch(() => false);
+    } else lastActivityAt = now();
   };
 
   const lockIfNeeded = async () => {
@@ -166,10 +177,8 @@ export const installSessionLock = (auth: Auth, options: SessionLockOptions = {})
     try {
       await signOut(auth);
       return true;
-    } catch (error) {
-      clearSessionLockScreen();
-      throw error;
     } finally {
+      // A failed remote sign-out must never reopen local private data.
       locking = false;
     }
   };
@@ -191,7 +200,7 @@ export const installSessionLock = (auth: Auth, options: SessionLockOptions = {})
   const interval = window.setInterval(() => void lockIfNeeded().catch(() => false), checkIntervalMs);
   const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
     if (user) {
-      clearSessionLockScreen();
+      if (readLockMarker()) { showSessionLockScreen(); return; }
       lastActivityAt = now();
       hiddenAt = document.visibilityState === 'hidden' ? now() : null;
     } else if (readLockMarker()) {

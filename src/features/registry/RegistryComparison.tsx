@@ -26,6 +26,7 @@ import {
 import { buildCartularyHref, isRegistryReturnPath } from './registryCatalog.ts';
 import { assetTypeLabel } from './registryPresentation.ts';
 import { useRegistryCollections } from './useRegistryCollections.ts';
+import { announceComparisonSelection } from './comparisonSelection.ts';
 
 type ComparisonLoadState = 'loading' | 'ready' | 'error';
 
@@ -94,6 +95,10 @@ export function RegistryComparison({ registry }: { registry: RegistryDocument })
     window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
   }, [fallbackReturnTo, returnTo, selectedIds]);
 
+  // Même contrat que le Catalogue : la coquille suit la sélection de la vue courante, vidée à sa disparition.
+  useEffect(() => { announceComparisonSelection(selectedIds); }, [selectedIds]);
+  useEffect(() => () => announceComparisonSelection([]), []);
+
   useEffect(() => {
     if (!candidateId && availableItems.length > 0) setCandidateId(availableItems[0].cartularyId);
     if (candidateId && !availableItems.some((item) => item.cartularyId === candidateId)) {
@@ -123,7 +128,7 @@ export function RegistryComparison({ registry }: { registry: RegistryDocument })
     <section className="registry-comparison" aria-labelledby="registry-comparison-title">
       <header className="registry-page-heading registry-comparison__heading">
         <div>
-          <p className="registry-kicker">Outil ponctuel du Catalogue</p>
+          <p className="registry-kicker">Comparaison</p>
           <h1 id="registry-comparison-title">Comparer les Cartulaires</h1>
           <p>Deux à quatre dossiers rapprochés sur leur noyau commun autorisé, sans ouvrir ni recopier leur contenu patrimonial.</p>
         </div>

@@ -38,7 +38,7 @@ Le reçu `rfc3161-v1` conserve :
 - Le faux motif QR est remplacé par un QR réellement encodé vers `/watch-website?publicCode=…` ; ouvrir ce lien ne publie rien.
 - Le rapport R imprime la révision, l'empreinte complète du contenu, la tête de chaîne, la racine Merkle horodatée, l'empreinte du jeton, la date signée, le fournisseur et le statut eIDAS.
 - Si le contenu a changé depuis le reçu, le rapport dit « Contenu non encore couvert par un horodatage tiers ».
-- La fixture locale est conservée uniquement dans le tiroir « Simulation technique » et porte toujours `TestReceipt`.
+- La fixture locale était conservée uniquement dans le tiroir « Simulation technique » et porte toujours `TestReceipt`. *Note du 2026-09-15 (V5, P-D1) : ce tiroir n’existe plus ; la fixture n’est plus créée que par les tests (`createLocalTestTimestamp`, sans appelant d’interface — voir ADR-024, amendement du 2026-09-15).*
 
 ## Avertissement — correction à risque
 

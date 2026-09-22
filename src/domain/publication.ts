@@ -243,6 +243,13 @@ export const filterPublicationBlockIds = (destination: PublicationDestination, i
   publicationBlockIdsFor(destination).filter((id) => ids.includes(id))
 );
 
+/** Mini-site « en ligne » : publication confirmée portant au moins un bloc admis pour le Web (V4, P-C6).
+ *  Même critère que le rendu de /watch-website (App.tsx : filterPublicationBlockIds('website', …)).
+ *  Le catalogue privé du Registre garde volontairement le seul critère `status === 'published'` (décision D1). */
+export const websiteHasPublishedContent = (blockIds: readonly string[]) => (
+  filterPublicationBlockIds('website', blockIds).length > 0
+);
+
 const latestDecision = (
   decisions: readonly PublicationDecision[],
   destination: PublicationDestination,

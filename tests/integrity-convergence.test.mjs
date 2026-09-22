@@ -117,9 +117,21 @@ test('le vocabulaire réserve le Sceau à la projection publique et nomme claire
   assert.doesNotMatch(auditPanel, /Ancrage blockchain public : différé/);
   assert.doesNotMatch(auditPanel, /Exporter la preuve portable/);
   assert.match(auditPanel, /Exporter le carnet local/);
-  assert.match(auditPanel, /Simulation technique/);
+  // V5 P-D1 : plus de tiroir technique en production ; l'export est rangé avec le carnet, la migration
+  // n'est proposée que sous une rupture constatée, la suppression est isolée dans sa propre section.
+  assert.doesNotMatch(auditPanel, /Simulation technique|Technical Simulation|simulateTampering|createLocalTestTimestamp|Falsifier|fixture locale/);
+  assert.match(auditPanel, /Suppression des données/);
+  assert.match(auditPanel, /Migrer la chaîne rompue/);
+  // V5 relecture (R-11) : la documentation ne présente plus le tiroir comme existant (ADR-024 amendée, vague 4 annotée).
+  const adr = readFileSync(new URL('../docs/ADR-024-convergence-preuve-serveur-et-carnet-local.md', import.meta.url), 'utf8');
+  const wave4 = readFileSync(new URL('../docs/CORRECTIVE_WAVE_4_TIMESTAMPING.md', import.meta.url), 'utf8');
+  assert.match(adr, /## Amendement du 2026-09-15 \(V5, décision P-D1\)/);
+  assert.doesNotMatch(adr, /: uniquement le tiroir qui falsifie/);
+  assert.match(wave4, /Note du 2026-09-15 \(V5, P-D1\) : ce tiroir n’existe plus/);
+  assert.doesNotMatch(wave4, /est conservée uniquement dans le tiroir/);
   assert.match(app, /Le Sceau public identifie une publication émise par le serveur/);
   assert.match(app, /Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert/);
   assert.match(registry, /Chaîne serveur & preuves/);
+  assert.match(registry, /Vérification complète/);
   assert.doesNotMatch(registry, /Confiance blockchain-ready/);
 });

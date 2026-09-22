@@ -1,0 +1,53 @@
+{
+  "_comment": "V6 (D17) — exceptions de l'audit axe (scripts/audit-accessibility.mjs). Chaque entrée : rule (id axe), scenes (motifs, * accepté ; absent = toutes), target (sous-chaîne du sélecteur du nœud ; absent = tous), reason, since (AAAA-MM-JJ), until (échéance). Seules les violations serious/critical bloquent ; les entrées moderate/minor documentent un constat connu. Une entrée inutilisée est signalée par le résumé : la retirer. V7 (D13, 16 septembre 2026) : les six échéances « V7 » sont reportées à « V8 » avec leur motif daté ; until n'est pas contrôlé mécaniquement contre la vague courante (dette consignée au journal V7).",
+  "entries": [
+    {
+      "rule": "region",
+      "scenes": ["demo-*"],
+      "target": ".cartulary-registry-return",
+      "reason": "« Retour au Registre démo » est un lien isolé entre la barre du dossier et les onglets, hors de tout repère (App.tsx:2352) ; l'envelopper touche App.tsx (borne D14). Reportée à V8 le 16 septembre 2026 (D13) : l'enveloppe ajouterait 2 lignes à App.tsx, à 2 lignes du plafond 3 473 ; à traiter avec la relève de la borne.",
+      "since": "2026-09-16",
+      "until": "V8"
+    },
+    {
+      "rule": "aria-required-children",
+      "scenes": ["demo-value"],
+      "target": ".sensitivity-table",
+      "reason": "role=\"table\" posé sur le conteneur défilant des tableaux de sensibilité, lignes sans cellules role=cell (App.tsx) ; à refondre en V7 avec la colonne « Coût \\ Prix » collante. Reportée à V8 le 16 septembre 2026 (D13) : refonte du tableau (cellules role=cell, colonne collante) hors des trois points V7.",
+      "since": "2026-09-16",
+      "until": "V8"
+    },
+    {
+      "rule": "heading-order",
+      "scenes": ["demo-preuves"],
+      "target": "#persistence-title",
+      "reason": "Tiroir Preuves : saut h2 → h4 (AuditPanel.tsx) ; hiérarchie du tiroir à revoir en V7 avec la refonte des preuves. Reportée à V8 le 16 septembre 2026 (D13) : hiérarchie du tiroir à revoir avec sa refonte, hors V7.",
+      "since": "2026-09-16",
+      "until": "V8"
+    },
+    {
+      "rule": "region",
+      "scenes": ["demo-*"],
+      "target": ".cartulary-access-notice",
+      "reason": "Bandeau d'accès <aside role=\"note\"> (littéral du contrat V5, CartularyAccessNotice.tsx) : le rôle note retire le repère complementary ; constat moderate, non bloquant, à trancher en V7 (repère ou note). Reportée à V8 le 16 septembre 2026 (D13) : le choix repère / note n'a pas été tranché en V7.",
+      "since": "2026-09-16",
+      "until": "V8"
+    },
+    {
+      "rule": "region",
+      "scenes": ["demo-*"],
+      "target": "aside > ",
+      "reason": "Même bandeau d'accès, sélecteur abrégé par axe (aside > strong, aside > span) sur les pages 00, 01 et 05. Reportée à V8 le 16 septembre 2026 (D13), avec l'entrée précédente.",
+      "since": "2026-09-16",
+      "until": "V8"
+    },
+    {
+      "rule": "aria-allowed-role",
+      "scenes": ["demo-preuves"],
+      "target": ".drawer-panel",
+      "reason": "Tiroir Preuves : <aside role=\"dialog\"> (App.tsx:3391) ; constat minor, non bloquant ; balise à changer en V7 avec la hiérarchie des titres du tiroir. Reportée à V8 le 16 septembre 2026 (D13) : balise à changer avec la hiérarchie des titres du tiroir.",
+      "since": "2026-09-16",
+      "until": "V8"
+    }
+  ]
+}

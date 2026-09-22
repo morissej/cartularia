@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { RegistryDocument } from '../../domain/foundations.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
+import { normalizeRegistryThumbnail, REGISTRY_THUMBNAIL_STATE_LABELS, registryThumbnailSrc, registryThumbnailState } from '../../domain/registryThumbnail.ts';
 import { loadPublicPublicationStatuses, loadScopedRegistryItems, observeRegistryItems } from '../../services/projections.ts';
 import {
   buildRegistryComparisonHref,
@@ -39,9 +40,11 @@ import {
   labelFromIdentifier,
   LIFECYCLE_LABELS,
   POSSESSION_LABELS,
+  REVIEW_SIGNAL_EXPLANATION,
 } from './registryPresentation.ts';
 import { RegistryFilterPanel } from './RegistryFilterPanel.tsx';
 import { useRegistryCollections } from './useRegistryCollections.ts';
+import { announceComparisonSelection } from './comparisonSelection.ts';
 
 type CatalogView = 'grid' | 'list';
 type CatalogLoadState = 'loading' | 'ready' | 'error';
@@ -53,6 +56,33 @@ const AssetIcon = ({ assetType }: { assetType: string }) => {
   if (assetType === 'art') return <Palette aria-hidden="true" />;
   if (assetType === 'real_estate') return <Landmark aria-hidden="true" />;
   return <Package aria-hidden="true" />;
+};
+
+/**
+ * Visuel de carte (contrat V3, K5) : vignette depuis `item.thumbnail` seulement (0 lecture d'assets, 0 Storage) ;
+ * sans vignette, icône du type et état honnête (« Vignette en préparation » pour une couverture image connue,
+ * « Aucune vignette disponible » pour une couverture vidéo, document ou de nature inconnue).
+ */
+const ItemVisual = ({ item }: { item: RegistryItemProjection }) => {
+  const label = ASSET_TYPE_LABELS[item.assetType] || labelFromIdentifier(item.assetType);
+  const thumbnail = normalizeRegistryThumbnail(item.thumbnail);
+  const thumbnailSrc = registryThumbnailSrc(item.thumbnail);
+  const state = registryThumbnailState(item);
+  if (state === 'ready') {
+    return (
+      <div className={`registry-item__visual registry-item__visual--${item.assetType} registry-item__visual--with-thumbnail`} data-thumbnail-state="ready">
+        {thumbnail && thumbnailSrc && <img className="registry-item__thumbnail" src={thumbnailSrc} alt="" width={thumbnail.width} height={thumbnail.height} loading="lazy" decoding="async" />}
+        <span className="registry-item__badge"><AssetIcon assetType={item.assetType} />{label}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`registry-item__visual registry-item__visual--${item.assetType}`} data-thumbnail-state={state}>
+      <AssetIcon assetType={item.assetType} />
+      <span>{label}</span>
+      {state !== 'none' && <small className="registry-item__thumbnail-state">{REGISTRY_THUMBNAIL_STATE_LABELS[state]}</small>}
+    </div>
+  );
 };
 
 const optionValues = (items: RegistryItemProjection[], field: 'assetType' | 'collectionId') =>
@@ -75,6 +105,8 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
   const [patrimonialStatus, setPatrimonialStatus] = useState(() => readInitialParameter('status', 'all'));
   const [lifecycleStatus, setLifecycleStatus] = useState(() => readInitialParameter('lifecycle', 'all'));
   const [possessionStatus, setPossessionStatus] = useState(() => readInitialParameter('possession', 'all'));
+  // `?review=1` : filtre « à revoir » du tableau de bord, même prédicat que son indicateur (P-C5).
+  const [needsReview, setNeedsReview] = useState(() => readInitialParameter('review', '') === '1');
   const [sort, setSort] = useState<RegistryCatalogSort>(() => {
     const candidate = readInitialParameter('sort', DEFAULT_REGISTRY_CATALOG_FILTERS.sort);
     return candidate === 'title-asc' || candidate === 'year-desc' ? candidate : 'updated-desc';
@@ -125,28 +157,34 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     if (patrimonialStatus !== 'all') params.set('status', patrimonialStatus);
     if (lifecycleStatus !== 'all') params.set('lifecycle', lifecycleStatus);
     if (possessionStatus !== 'all') params.set('possession', possessionStatus);
+    if (needsReview) params.set('review', '1');
     if (sort !== 'updated-desc') params.set('sort', sort);
     if (view !== 'grid') params.set('view', view);
     if (comparisonIds.length > 0) params.set('compare', comparisonIds.join(','));
     return params.toString();
-  }, [assetType, collectionId, comparisonIds, patrimonialStatus, lifecycleStatus, possessionStatus, query, sort, view]);
+  }, [assetType, collectionId, comparisonIds, patrimonialStatus, lifecycleStatus, needsReview, possessionStatus, query, sort, view]);
 
   useEffect(() => {
     const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
     window.history.replaceState(null, '', nextUrl);
   }, [queryString]);
 
+  // La coquille du Registre suit la sélection de comparaison de cette vue (sans persistance) ;
+  // elle est vidée quand la vue disparaît, la sélection ne vivant que dans son URL.
+  useEffect(() => { announceComparisonSelection(comparisonIds); }, [comparisonIds]);
+  useEffect(() => () => announceComparisonSelection([]), []);
+
   const filteredItems = useMemo(() => filterAndSortRegistryItems(items, {
     query,
     assetType,
     collectionId,
     patrimonialStatus,
-    lifecycleStatus, possessionStatus,
+    lifecycleStatus, possessionStatus, needsReview,
     sort,
-  }), [assetType, collectionId, items, patrimonialStatus, lifecycleStatus, possessionStatus, query, sort]);
+  }), [assetType, collectionId, items, patrimonialStatus, lifecycleStatus, needsReview, possessionStatus, query, sort]);
   const assetTypes = useMemo(() => optionValues(items, 'assetType'), [items]);
   const collections = useMemo(() => [...new Set(items.flatMap(registryItemCollectionIds))].sort((left, right) => left.localeCompare(right, 'fr')), [items]);
-  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', patrimonialStatus !== 'all', lifecycleStatus !== 'all', possessionStatus !== 'all']
+  const activeFilterCount = [query.trim(), assetType !== 'all', collectionId !== 'all', patrimonialStatus !== 'all', lifecycleStatus !== 'all', possessionStatus !== 'all', needsReview]
     .filter(Boolean).length;
   const returnTo = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
   const comparisonHref = buildRegistryComparisonHref(registry.id, comparisonIds, returnTo);
@@ -158,6 +196,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
     setPatrimonialStatus('all');
     setLifecycleStatus('all');
     setPossessionStatus('all');
+    setNeedsReview(false);
     setSort('updated-desc');
   };
 
@@ -230,7 +269,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
       </RegistryFilterPanel>
 
       <div className="registry-results-heading">
-        {(lifecycleStatus !== 'all' || possessionStatus !== 'all') && <p>Filtre d’alerte : {lifecycleStatus !== 'all' ? (LIFECYCLE_LABELS[lifecycleStatus] || lifecycleStatus) : 'Perte, vol ou destruction'} <button type="button" onClick={() => { setLifecycleStatus('all'); setPossessionStatus('all'); }}>Retirer ce filtre</button></p>}
+        {(needsReview || lifecycleStatus !== 'all' || possessionStatus !== 'all') && <p>Filtre d’alerte : {needsReview ? 'Cartulaires à revoir' : lifecycleStatus !== 'all' ? (LIFECYCLE_LABELS[lifecycleStatus] || lifecycleStatus) : 'Perte, vol ou destruction'} <button type="button" onClick={() => { setLifecycleStatus('all'); setPossessionStatus('all'); setNeedsReview(false); }}>Retirer ce filtre</button></p>}
         <p aria-live="polite">
           <strong>{filteredItems.length}</strong> Cartulaire{filteredItems.length > 1 ? 's' : ''}
           {filteredItems.length !== items.length && <span> sur {items.length}</span>}
@@ -240,6 +279,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
           <button type="button" aria-label="Vue en liste" aria-pressed={view === 'list'} onClick={() => setView('list')}><List aria-hidden="true" /></button>
         </div>
       </div>
+      {needsReview && <p className="registry-dashboard-note" role="note">{REVIEW_SIGNAL_EXPLANATION}</p>}
 
       {comparisonIds.length > 0 && (
         <aside className="registry-comparison-tray" aria-live="polite">
@@ -284,10 +324,7 @@ export function RegistryItems({ registry, canCreateCartularies = false, invitati
         <div className={`registry-item-grid registry-item-grid--${view}`}>
           {filteredItems.map((item) => (
             <article className={`registry-item${comparisonIds.includes(item.cartularyId) ? ' registry-item--selected' : ''}`} key={item.cartularyId}>
-              <div className={`registry-item__visual registry-item__visual--${item.assetType}`}>
-                <AssetIcon assetType={item.assetType} />
-                <span>{ASSET_TYPE_LABELS[item.assetType] || labelFromIdentifier(item.assetType)}</span>
-              </div>
+              <ItemVisual item={item} />
               <div className="registry-item__body">
                 <div className="registry-item__context">
                   <span><Building2 aria-hidden="true" />{collectionName(item.collectionId)}</span>

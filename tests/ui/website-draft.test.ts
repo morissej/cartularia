@@ -14,6 +14,42 @@ describe('contrat unique de projection publique', () => {
     expect(websiteDraftRequest(draft)[0].assets).toEqual([{ assetId: 'photo_01', binaryId: 'binary_01' }]);
     expect(websiteDraftPreview(draft)[0].assets[0].downloadUrl).toBeNull();
     expect(JSON.stringify(websiteDraftRequest(draft))).not.toContain('blob:private-original');
+    // V4 point 1 : la source privée d'aperçu ne porte que l'identité du binaire (jamais d'URL ni de chemin) et ne part jamais au serveur.
+    expect(websiteDraftPreview(draft)[0].assets[0].localPreview).toEqual({ binaryId: 'binary_01', cartularyId: undefined, privatePresentation: undefined });
+    expect(JSON.stringify(websiteDraftPreview(draft))).not.toContain('blob:private-original');
+    expect(JSON.stringify(websiteDraftRequest(draft))).not.toContain('localPreview');
+  });
+  it('un média non enregistré dans le dossier n’a ni adresse ni source privée d’aperçu', () => {
+    const draft = buildWebsiteDraft({ brand: 'Atelier', model: 'Objet', reference: 'REF', assets: [{ ...media, visibility: 'Tous', binaryId: undefined, url: 'blob:x' }] }, ['media-hero']);
+    const [asset] = websiteDraftPreview(draft)[0].assets;
+    expect(asset.downloadUrl).toBeNull();
+    expect('localPreview' in asset).toBe(false);
+    expect(JSON.stringify(websiteDraftPreview(draft))).not.toContain('blob:x');
+    expect(websiteDraftRequest(draft)[0].assets).toEqual([{ assetId: 'photo_01', binaryId: '' }]);
+  });
+  it('l’aperçu et la demande sont deux projections du même brouillon', () => {
+    const bundle: Asset = { ...media, id: 'bundle_01', name: 'Vue du bundle', url: '/assets/x.jpg', binaryId: undefined, visibility: 'Tous', tags: ['main-photo', 'slideshow'] };
+    const uploaded: Asset = { ...media, id: 'upload_01', name: 'Vue téléversée', url: '', visibility: 'Tous', cartularyId: 'cart_x', tags: ['main-photo', 'slideshow'] };
+    const secret: Asset = { ...media, id: 'secret_01', name: 'Vue secrète', tags: ['main-photo', 'slideshow'] };
+    const draft = buildWebsiteDraft({ brand: 'Atelier', model: 'Objet', reference: 'REF', assets: [bundle, uploaded, secret],
+      heroSummary: 'Présentation publique.', history: ['Histoire publiable', 'Propriétaire : personne privée'],
+    }, ['media-hero', 'media-slideshow', 'reference-history', 'cover-owner']);
+    const preview = websiteDraftPreview(draft);
+    const request = websiteDraftRequest(draft);
+    expect(preview.map((block) => block.blockId)).toEqual(['media-hero', 'media-slideshow', 'reference-history']);
+    expect(preview.map((block) => [block.blockId, block.title, block.payload, block.assets.map((asset) => asset.assetId)]))
+      .toEqual(request.map((block) => [block.id, block.title, block.payload, block.assets.map((asset) => asset.assetId)]));
+    expect(preview[0].assets.map((asset) => [asset.assetId, asset.downloadUrl, asset.localPreview?.binaryId ?? null]))
+      .toEqual([['bundle_01', '/assets/x.jpg', null], ['upload_01', null, 'binary_01']]);
+    expect(JSON.stringify(preview)).not.toContain('personne privée');
+    expect(JSON.stringify(preview)).not.toContain('secret_01');
+  });
+  it('un média du bundle porteur d’un binaryId est une source privée seule, jamais une adresse (V4 relecture F3, M03)', () => {
+    const draft = buildWebsiteDraft({ brand: 'Atelier', model: 'Objet', reference: 'REF', assets: [{ ...media, url: '/assets/x.jpg', visibility: 'Tous' }] }, ['media-hero']);
+    const [asset] = websiteDraftPreview(draft)[0].assets;
+    expect(asset.downloadUrl).toBeNull();
+    expect(asset.localPreview?.binaryId).toBe('binary_01');
+    expect(JSON.stringify(websiteDraftPreview(draft))).not.toContain('/assets/x.jpg');
   });
   it('conserve les descriptions légitimes et compte les omissions sans exposer leur texte', () => {
     const draft = buildWebsiteDraft({ brand: 'Atelier', model: 'Objet', reference: 'REF', assets: [],

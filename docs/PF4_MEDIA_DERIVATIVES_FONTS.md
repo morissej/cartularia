@@ -29,11 +29,18 @@ réencodés. PF4 crée donc une couche de présentation distincte.
   1 200 px pour le diaporama. Un média privé distant sans dérivé autorisé garde
   son parcours sécurisé existant.
 - Les posters vidéo du carrousel et de la modale utilisent un WebP 768 px.
-- L'`@import` Google Fonts a été supprimé. Le document déclare désormais les
+- L'`@import` Google Fonts a été supprimé. Le document déclarait alors les
   deux `preconnect` et la feuille de style directement dans le `<head>`.
 
-L'auto-hébergement WOFF2 reste une option ultérieure : il n'est pas nécessaire
-pour supprimer la chaîne de découverte CSS traitée par cette vague.
+Depuis V7 (V-B5, commit C4, 16 septembre 2026), les polices sont hébergées avec
+le site : `src/styles/fonts.css` déclare trois `@font-face` (Archivo, JetBrains
+Mono, Newsreader — sous-ensemble latin, fichiers variables identiques à ceux que
+Google Fonts servait, licence SIL OFL 1.1 dans `src/assets/fonts/<famille>/OFL.txt`),
+`index.html` et `personal-vault.html` ne portent plus qu'un `preload` de
+Newsreader (police du `h1`) et les CSP ne citent plus `fonts.googleapis.com` ni
+`fonts.gstatic.com`. Verrous : `tests/fonts-contract.test.mjs`,
+`measure:surfaces --check` (0 requête tierce) ; journal
+`docs/audits/2026-09-16-execution-v7.md` § 4.
 
 ## Intégrité et reproductibilité
 

@@ -10,6 +10,10 @@ const MAXIMUM_CONCURRENT_SPIN_PRELOADS = 2;
 
 const spinPresentationUrl = (source: string) => presentationDerivativeUrl(source, 768) || source;
 
+/** Un seul chargement différé du service privé, partagé par les préchargements concurrents. */
+let privateMediaModule: Promise<typeof import('../services/privateMedia.ts')> | null = null;
+const loadPrivateMedia = () => (privateMediaModule ??= import('../services/privateMedia.ts'));
+
 const preloadFrame = (url: string, signal?: AbortSignal): Promise<boolean> => new Promise((resolve) => {
   if (signal?.aborted) {
     resolve(false);
@@ -53,7 +57,8 @@ export const Spin360: React.FC<Spin360Props> = ({
   const [decoded, setDecoded] = useState<{ key: string; status: 'ready' | 'error' }>({ key: '', status: 'ready' });
   const boundedIndex = Math.min(currentIndex, Math.max(0, images.length - 1));
   const currentImage = images[boundedIndex];
-  const source = useMediaSource(currentImage || { url: posterImageUrl });
+  // Vue affichée : variante de scène (768/1200) pour un binaire privé, jamais l'original (K6, G1).
+  const source = useMediaSource(currentImage || { url: posterImageUrl }, true, { role: 'stage' });
   const imageSignature = images.map((asset) => `${asset.id}:${asset.cartularyId || ''}:${asset.binaryId || ''}:${asset.publicStoragePath || ''}:${asset.publicContentHash || ''}:${asset.url}`).join('|');
   const frameKey = `${imageSignature}:${boundedIndex}:${source.url || ''}:${attempt}`;
   const currentFrame = useRef(frameKey); currentFrame.current = frameKey;
@@ -98,8 +103,9 @@ export const Spin360: React.FC<Spin360Props> = ({
         try {
           if (direct) loaded = await preloadFrame(spinPresentationUrl(direct), signal);
           else if (asset.binaryId) {
-            const { acquirePrivateMediaObjectUrl } = await import('../services/privateMedia.ts');
-            const lease = await acquirePrivateMediaObjectUrl(asset.binaryId, asset.cartularyId);
+            // Préchargement des vues privées par leurs variantes de scène (K6) : aucun original n'est transféré (G1).
+            const { acquirePrivatePresentationObjectUrl } = await loadPrivateMedia();
+            const lease = await acquirePrivatePresentationObjectUrl({ binaryId: asset.binaryId, cartularyId: asset.cartularyId, asset, role: 'stage' });
             try { loaded = await preloadFrame(lease.url, signal); } finally { lease.release(); }
           }
         } catch { /* The displayed frame exposes its own retriable resolution error. */ }

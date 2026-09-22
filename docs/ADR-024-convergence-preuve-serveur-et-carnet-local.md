@@ -28,7 +28,7 @@ Si la preuve serveur est indisponible, l’interface l’indique. Elle ne rempla
 - **Carnet local de travail** : historique du navigateur, conservé pour le travail hors ligne et la reprise, sans autorité partagée.
 - **Sceau public** : projection publique minimale associée à W. Il ne désigne ni la chaîne serveur ni le carnet local.
 - **Trace locale du rapport** : preuve attachée à l’export R produit depuis l’état local ; elle est explicitement distincte de la chaîne serveur.
-- **Simulation technique** : uniquement le tiroir qui falsifie volontairement un événement local ou crée une fixture locale. Le terme reste exact à cet endroit et disparaît des garanties réelles.
+- **Simulation technique** : à l’origine, uniquement le tiroir qui falsifiait volontairement un événement local ou créait une fixture locale. Depuis l’amendement du 2026-09-15 (ci-dessous), aucune interface ne porte plus ce terme ; il ne désigne plus que des outils de test.
 
 Le Registre remplace « Confiance blockchain-ready » par « Preuve serveur portable » et nomme explicitement la chaîne serveur, la tête serveur et sa source autoritaire.
 
@@ -75,7 +75,11 @@ Le rejeu de l’initialisation ne crée aucun événement supplémentaire et ne 
 - **Supprimer le journal local** : cela détruirait des historiques existants et ferait perdre le fonctionnement hors ligne.
 - **Importer les événements locaux dans la chaîne serveur comme s’ils avaient toujours été autoritaires** : cela réécrirait leur nature et surévaluerait leur garantie.
 - **Afficher le carnet local quand la chaîne serveur échoue** : ce repli silencieux transformerait une panne en fausse preuve.
-- **Masquer toute simulation** : les outils de démonstration restent utiles pour vérifier la détection d’altération, à condition d’être isolés et nommés comme tels.
+- **Masquer toute simulation** : les outils de démonstration restent utiles pour vérifier la détection d’altération, à condition d’être isolés et nommés comme tels. *Option reprise par l’amendement du 2026-09-15 : la vérification se fait désormais par les tests seuls, sans interface.*
+
+## Amendement du 2026-09-15 (V5, décision P-D1)
+
+Le tiroir « Simulation technique » du panneau Preuves est supprimé de l’interface. Les méthodes `simulateTampering` et `createLocalTestTimestamp` de `src/utils/integrityJournal.ts` sont conservées pour les tests seulement (`tests/local-integrity-journal.test.mjs`) et n’ont plus aucun appelant d’interface ; le contrat `tests/cartulary-presentation-contract.test.mjs` et `tests/integrity-convergence.test.mjs` l’interdisent. L’export du carnet local est rangé avec le carnet, la migration n’est proposée que sous une rupture constatée, la suppression des données est isolée dans sa propre section. Une fixture déjà persistée conserve sa mention « simulation » à l’affichage. Journal : `docs/audits/2026-09-15-execution-v5.md`.
 
 ## Limites assumées et exploitation
 

@@ -1,11 +1,21 @@
 export const CARTULARY_PAGE_IDS = ['cover', 'media', 'reference', 'condition', 'value', 'publication'] as const;
 export type CartularyPage = (typeof CARTULARY_PAGE_IDS)[number];
 export type InterfaceLanguage = 'FR' | 'EN';
-export type ApplicationRoute = 'home' | 'code-handoff-return' | 'service-information' | 'account-recovery' | 'account-create' | 'account-sign-in' | 'administration' | 'cartulary' | 'cartulary-demo' | 'watch-website' | 'collection-website' | 'cartulary-view' | 'community' | 'registry' | 'invitation' | 'personal-vault' | 'not-found';
+export type ApplicationRoute = 'home' | 'public-editorial' | 'privacy-policy' | 'code-handoff-return' | 'service-information' | 'account-recovery' | 'account-create' | 'account-sign-in' | 'administration' | 'cartulary' | 'cartulary-demo' | 'watch-website' | 'collection-website' | 'cartulary-view' | 'community' | 'registry' | 'invitation' | 'personal-vault' | 'not-found';
 
 export const INTERFACE_LANGUAGE_STORAGE_KEY = 'cartularia-interface-language';
 
 export const normalizeInterfaceLanguage = (value: unknown): InterfaceLanguage => value === 'EN' ? 'EN' : 'FR';
+/** V6 (V-D9) : langue de l'interface du Cartulaire tant que la bascule FR/EN est masquée (traduction partielle). */
+export const DEFAULT_INTERFACE_LANGUAGE: InterfaceLanguage = 'FR';
+
+/**
+ * V6 relecture (F7) : retour en haut de page au changement d'onglet. Un `behavior: 'smooth'` explicite ignore la feuille
+ * (`scroll-behavior: auto !important` sous prefers-reduced-motion ne gouverne que `auto`, CSSOM View) : la préférence est lue
+ * à chaque appel ; jsdom, sans `matchMedia`, obtient `smooth`.
+ */
+export const pageScrollBehavior = (view: { matchMedia?: (query: string) => { matches: boolean } } = window): ScrollBehavior =>
+  view.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'instant' : 'smooth';
 
 export const cartularyPageFromHash = (hash: string): CartularyPage => {
   const candidate = hash.replace(/^#/, '');
@@ -23,8 +33,10 @@ export const adjacentCartularyPage = (
 export const applicationRouteFromPathname = (pathname: string): ApplicationRoute => {
   const normalized = pathname === '/' ? '' : pathname.replace(/\/$/, '');
   if (normalized === '') return 'home';
+  if (normalized === '/confidentialite') return 'privacy-policy';
+  if (['/objets', '/aide-documentaire', '/conseils-photo-video'].includes(normalized) || normalized.startsWith('/livrables/')) return 'public-editorial';
   if (normalized === '/code-handoff-return') return 'code-handoff-return';
-  if (['/conditions', '/confidentialite', '/accessibilite', '/service'].includes(normalized)) return 'service-information';
+  if (['/conditions', '/accessibilite', '/service'].includes(normalized)) return 'service-information';
   if (normalized === '/account/create') return 'account-create';
   if (normalized === '/account/sign-in') return 'account-sign-in';
   if (normalized === '/account/recovery' || normalized === '/account/security') return 'account-recovery';
@@ -42,7 +54,7 @@ export const applicationRouteFromPathname = (pathname: string): ApplicationRoute
 };
 
 export const applicationRouteLabel = (pathname: string): string => ({
-  home: 'Accueil public', 'service-information': 'Informations sur le service',
+  home: 'Accueil public', 'public-editorial': 'Pages publiques', 'privacy-policy': 'Politique de confidentialité', 'service-information': 'Informations sur le service',
   'code-handoff-return': 'Retour des codes',
   'account-create': 'Création d’accès', 'account-sign-in': 'Connexion', 'account-recovery': 'Secours du Registre',
   administration: 'Administration', cartulary: 'Cartulaire privé', 'cartulary-demo': 'Cartulaire de démonstration',

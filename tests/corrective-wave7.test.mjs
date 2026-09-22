@@ -13,7 +13,7 @@ test('la synchronisation descendante notifie React sans rechargement de page', a
 
 test('les nouveaux profils de montre disposent d’un repli neutre distinct des deux démonstrateurs', async () => {
   const source = await readProjectFile('src/App.tsx');
-  assert.match(source, /isRolexCartulary \? \[/);
+  assert.doesNotMatch(source, /isRolexCartulary|isIwcCartulary/);
   assert.match(source, /Calibre à documenter/);
   assert.match(source, /Histoire de la référence/);
   assert.match(source, /Configuration et accessoires à inventorier/);

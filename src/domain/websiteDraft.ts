@@ -1,6 +1,6 @@
 import { filterPublicationBlockIds, PUBLICATION_BLOCK_CATALOG } from './publication';
-import type { PublicBlockProjection } from './projections';
-import type { Asset } from '../types';
+import type { PublicBlockProjection, PublicDerivativeProjection } from './projections';
+import type { Asset, PrivatePresentation } from '../types';
 import { findPrivatePublicTextToken } from '../../scripts/lib/public-text-policy.mjs';
 
 export interface WebsiteDraftBlock {
@@ -21,6 +21,15 @@ export interface WebsiteDraftContent {
   reports?: Array<{ title: string; date: string; note?: string }>;
   resources?: Array<{ name: string; url: string }>;
 }
+/**
+ * Aperçu local du propriétaire (V4 point 1) : source privée d'un média téléversé, résolue par PrivateMediaImage
+ * (variantes de présentation V3, rôles thumbnail/stage) comme sur les pages du Cartulaire — même binaire, même
+ * vérification que la copie que le serveur copiera vers public/. Jamais d'URL ni de chemin, jamais envoyée au serveur
+ * (websiteDraftRequest ne la lit pas).
+ */
+export interface LocalPreviewMediaSource { binaryId: string; cartularyId?: string; privatePresentation?: PrivatePresentation }
+export type PreviewDerivativeProjection = PublicDerivativeProjection & { localPreview?: LocalPreviewMediaSource };
+export type PreviewBlockProjection = Omit<PublicBlockProjection, 'assets'> & { assets: PreviewDerivativeProjection[] };
 const safePreviewUrl = (asset: Asset) => asset.visibility === 'Tous' && !asset.binaryId && asset.url.startsWith('/assets/') ? asset.url : null;
 
 export function buildWebsiteDraft(content: WebsiteDraftContent, selection: readonly string[]) {
@@ -64,11 +73,22 @@ export function websiteDraftRequest(blocks: ReturnType<typeof buildWebsiteDraft>
   }));
 }
 
-export function websiteDraftPreview(blocks: ReturnType<typeof buildWebsiteDraft>): PublicBlockProjection[] {
+/**
+ * Vidéos téléversées retenues par la sélection sans copie publique vérifiée connue du client : le serveur refuse toute
+ * la publication (derivative_not_ready) tant qu'il n'a pas produit de copie transcodée. Le client n'écrit jamais 'ready'
+ * lui-même (App.tsx pose 'pending' à tout téléversement vidéo) ; l'avertissement dit donc ce que l'aperçu sait, sans plus.
+ */
+export const websiteDraftVideosWithoutPublicCopy = (blocks: ReturnType<typeof buildWebsiteDraft>) => [...new Map(blocks
+  .flatMap((block) => block.assets)
+  .filter((asset) => asset.type === 'video' && Boolean(asset.binaryId) && asset.derivativeStatus !== 'ready')
+  .map((asset) => [asset.id, asset])).values()];
+
+export function websiteDraftPreview(blocks: ReturnType<typeof buildWebsiteDraft>): PreviewBlockProjection[] {
   return blocks.map((block) => ({ blockId: block.id, title: block.title, payload: block.payload, sourceRevision: 0,
     publicationStatus: 'published', contentHash: '', assets: block.assets.map((asset) => ({
       assetId: asset.id, derivativeId: `preview-${asset.id}`, mediaKind: asset.type, mimeType: asset.mimeType || '',
       storagePath: '', contentHash: '', downloadUrl: safePreviewUrl(asset),
+      ...(asset.binaryId ? { localPreview: { binaryId: asset.binaryId, cartularyId: asset.cartularyId, privatePresentation: asset.privatePresentation } } : {}),
     })),
   }));
 }

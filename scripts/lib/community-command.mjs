@@ -205,11 +205,21 @@ export const admitCommunityMember = async ({
   const receiptRef = firestore.doc(`communityCommandReceipts/${requestId}`);
 
   return firestore.runTransaction(async (transaction) => {
-    const [receipt, actorMembership, targetMembership] = await Promise.all([
+    const [receipt, actorMembership, targetMembership, actorAccount, targetAccount, targetAccess, actorAccess] = await Promise.all([
       transaction.get(receiptRef),
       transaction.get(actorMembershipRef),
       transaction.get(targetMembershipRef),
+      transaction.get(firestore.doc(`users/${actorId}`)),
+      transaction.get(firestore.doc(`users/${targetUid}`)),
+      transaction.get(firestore.doc(`accountAccess/${targetUid}`)),
+      transaction.get(firestore.doc(`accountAccess/${actorId}`)),
     ]);
+    if (!actorAccount.exists || actorAccount.data().status !== 'active'
+      || !targetAccount.exists || targetAccount.data().status !== 'active'
+      || [actorAccess, targetAccess].some((access) => access.exists && (access.data().status !== 'active'
+        || !Number.isInteger(access.data().validAfter) || access.data().validAfter < 0))) {
+      throw new CommunityCommandError('permission_denied', 'Les comptes doivent être actifs pour cette admission.');
+    }
     const replay = replayOrThrow(receipt, inputDigest);
     if (replay) return replay;
     assertCommunityPermission(actorMembership, actorId, 'community.moderate');
@@ -222,6 +232,7 @@ export const admitCommunityMember = async ({
       permissions: [...MEMBER_PERMISSIONS],
       status: 'active',
       admittedBy: actorId,
+      ...(targetAccess.exists ? { accountAccess: { status: 'active', validAfter: targetAccess.data().validAfter } } : {}),
       admittedAt: Timestamp.fromDate(new Date(occurredAt)),
       revokedAt: null,
     });

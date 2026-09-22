@@ -198,12 +198,28 @@ export const acceptRegistryInvitation = async ({ firestore, actorUid, actorEmail
   const emailHash = digest(normalizeEmail(actorEmail));
   const tokenHash = digest(String(token));
   const invitationRef = firestore.doc(`registryInvitations/${invitationId}`);
+  const userRef = firestore.doc(`users/${actorUid}`);
+  const accountAccessRef = firestore.doc(`accountAccess/${actorUid}`);
 
   return firestore.runTransaction(async (transaction) => {
-    const invitation = await transaction.get(invitationRef);
+    const [invitation, user, accountAccessSnapshot] = await Promise.all([
+      transaction.get(invitationRef), transaction.get(userRef), transaction.get(accountAccessRef),
+    ]);
+    const access = accountAccessSnapshot.exists ? accountAccessSnapshot.data() : null;
+    if ((accountAccessSnapshot.exists && (!access || access.status !== 'active' || !Number.isInteger(access.validAfter) || access.validAfter < 0))
+      || (user.exists && user.data().status !== 'active')) {
+      throw new InvitationCommandError('permission_denied', 'Ce compte ne peut pas accepter cette invitation.');
+    }
+    const accountAccess = access ? { status: 'active', validAfter: access.validAfter } : null;
+    const mirrorExistingProfile = () => {
+      if (user.exists && accountAccess && (user.data().accountAccess?.status !== accountAccess.status || user.data().accountAccess?.validAfter !== accountAccess.validAfter)) {
+        transaction.update(userRef, { accountAccess });
+      }
+    };
     if (!invitation.exists) throw new InvitationCommandError('not_found', 'Invitation introuvable.');
     const data = invitation.data();
     if (data.status === 'active' && data.acceptedBy === actorUid) {
+      mirrorExistingProfile();
       return { registryId: data.registryId, scopeType: data.scopeType, scopeId: data.scopeId, replayed: true };
     }
     if (data.status !== 'pending') throw new InvitationCommandError('failed_precondition', "Cette invitation n’est plus active.");
@@ -212,9 +228,8 @@ export const acceptRegistryInvitation = async ({ firestore, actorUid, actorEmail
       throw new InvitationCommandError('permission_denied', "Cette invitation ne correspond pas au compte connecté.");
     }
     const membershipRef = firestore.doc(`organizations/${data.organizationId}/memberships/${actorUid}`);
-    const userRef = firestore.doc(`users/${actorUid}`);
     const accessRef = firestore.doc(`registries/${data.registryId}/accesses/${invitationId}`);
-    const [membership, user] = await Promise.all([transaction.get(membershipRef), transaction.get(userRef)]);
+    const membership = await transaction.get(membershipRef);
     const currentMembership = membership.exists ? membership.data() : null;
     if (currentMembership && currentMembership.status === 'active' && currentMembership.invitationManaged !== true) {
       // Un membre existant conserve ses droits supérieurs : l'invitation ne peut jamais les réduire.
@@ -237,6 +252,7 @@ export const acceptRegistryInvitation = async ({ firestore, actorUid, actorEmail
     if (!user.exists) {
       transaction.create(userRef, {
         uid: actorUid,
+        ...(accountAccess ? { accountAccess } : {}),
         email: normalizeEmail(actorEmail),
         displayName: '',
         status: 'active',
@@ -245,6 +261,7 @@ export const acceptRegistryInvitation = async ({ firestore, actorUid, actorEmail
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
+    mirrorExistingProfile();
     transaction.update(invitationRef, { status: 'active', acceptedAt: FieldValue.serverTimestamp(), acceptedBy: actorUid });
     transaction.update(accessRef, { sourceStatus: 'active', sourceRevision: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
     return { registryId: data.registryId, scopeType: data.scopeType, scopeId: data.scopeId, replayed: false };

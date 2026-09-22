@@ -71,16 +71,24 @@ export const loadCartularyFollowUpTodos = async (cartularyId: string): Promise<C
   });
 };
 
+export interface FollowUpSnapshotMetadata {
+  hasPendingWrites: boolean;
+  fromCache: boolean;
+}
+
 export const observeCartularyFollowUpTodos = (
   cartularyId: string,
-  onTodos: (todos: CartularyFollowUpTodo[]) => void,
+  onTodos: (todos: CartularyFollowUpTodo[], metadata: FollowUpSnapshotMetadata) => void,
   onError?: (error: Error) => void,
-) => onSnapshot(collection(db, 'cartularies', cartularyId, 'reminders'), (snapshot) => {
+) => onSnapshot(collection(db, 'cartularies', cartularyId, 'reminders'), { includeMetadataChanges: true }, (snapshot) => {
   onTodos(snapshot.docs.flatMap((reminderSnapshot) => {
     const reminder = reminderSnapshot.data() as CartularyReminderDocument;
     const todo = reminderToTodo(cartularyId, reminderSnapshot.id, reminder);
     return todo ? [todo] : [];
-  }));
+  }), {
+    hasPendingWrites: snapshot.metadata.hasPendingWrites,
+    fromCache: snapshot.metadata.fromCache,
+  });
 }, (error) => onError?.(error));
 
 const loadCartularyWriteContext = async (cartularyId: string) => {
@@ -129,6 +137,28 @@ export const updateCartularyFollowUpTodo = async (
   await updateDoc(doc(db, 'cartularies', cartularyId, 'reminders', reminderId), data);
 };
 
+/**
+ * Replays a durable local upsert without changing the original creation audit
+ * fields when the reminder already exists. The returned promise resolves only
+ * once Firestore has acknowledged the selected server write.
+ */
+export const syncCartularyFollowUpTodo = async (
+  cartularyId: string,
+  todo: CartularyFollowUpWriteInput,
+) => {
+  const reminder = await getDoc(doc(db, 'cartularies', cartularyId, 'reminders', todo.id));
+  if (!reminder.exists()) {
+    await createCartularyFollowUpTodo(cartularyId, todo);
+    return;
+  }
+  await updateCartularyFollowUpTodo(cartularyId, todo.id, {
+    text: todo.text,
+    dueAt: todo.dueAt,
+    category: todo.category,
+    status: todo.status,
+  });
+};
+
 export const deleteCartularyFollowUpTodo = (
   cartularyId: string,
   reminderId: string,
@@ -166,20 +196,72 @@ export const loadRegistryFollowUpsFromItems = async (
   return reminders.flat();
 };
 
+export type RegistryFollowUpCoverageState = 'loading' | 'partial' | 'ready' | 'error';
+
+export interface RegistryFollowUpCoverage {
+  state: RegistryFollowUpCoverageState;
+  totalCartularies: number;
+  completeCartularies: number;
+  partialCartularies: number;
+  loadingCartularies: number;
+  failedCartularies: number;
+}
+
+type CartularyFollowUpLoadState = 'loading' | 'partial' | 'ready' | 'error';
+
 export const observeRegistryFollowUpsFromItems = (
   items: RegistryItemProjection[],
-  onItems: (items: RegistryFollowUpItem[]) => void,
+  onItems: (items: RegistryFollowUpItem[], coverage: RegistryFollowUpCoverage) => void,
   onError?: (error: Error) => void,
 ) => {
-  const activeItems = items.filter((item) => item.projectionStatus === 'active');
+  const activeItems = [...new Map(items
+    .filter((item) => item.projectionStatus === 'active')
+    .map((item) => [item.cartularyId, item])).values()];
   if (activeItems.length === 0) {
-    onItems([]);
+    onItems([], {
+      state: 'ready',
+      totalCartularies: 0,
+      completeCartularies: 0,
+      partialCartularies: 0,
+      loadingCartularies: 0,
+      failedCartularies: 0,
+    });
     return () => undefined;
   }
   const remindersByCartulary = new Map<string, RegistryFollowUpItem[]>();
-  const emit = () => onItems(activeItems.flatMap((item) => remindersByCartulary.get(item.cartularyId) || []));
+  const states = new Map<string, CartularyFollowUpLoadState>(
+    activeItems.map((item) => [item.cartularyId, 'loading']),
+  );
+  const coverage = (): RegistryFollowUpCoverage => {
+    const values = [...states.values()];
+    const completeCartularies = values.filter((state) => state === 'ready').length;
+    const partialCartularies = values.filter((state) => state === 'partial').length;
+    const loadingCartularies = values.filter((state) => state === 'loading').length;
+    const failedCartularies = values.filter((state) => state === 'error').length;
+    const state: RegistryFollowUpCoverageState = completeCartularies === values.length
+      ? 'ready'
+      : failedCartularies === values.length
+        ? 'error'
+        : loadingCartularies === values.length
+          ? 'loading'
+          : 'partial';
+    return {
+      state,
+      totalCartularies: values.length,
+      completeCartularies,
+      partialCartularies,
+      loadingCartularies,
+      failedCartularies,
+    };
+  };
+  const emit = () => onItems(
+    activeItems.flatMap((item) => remindersByCartulary.get(item.cartularyId) || []),
+    coverage(),
+  );
+  emit();
   const unsubscribes = activeItems.map((item) => onSnapshot(
     collection(db, 'cartularies', item.cartularyId, 'reminders'),
+    { includeMetadataChanges: true },
     (snapshot) => {
       remindersByCartulary.set(item.cartularyId, snapshot.docs.flatMap((reminderSnapshot) => {
         const reminder = reminderSnapshot.data() as CartularyReminderDocument;
@@ -199,9 +281,14 @@ export const observeRegistryFollowUpsFromItems = (
           visibility: 'secret',
         } satisfies RegistryFollowUpItem];
       }));
+      states.set(item.cartularyId, snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites ? 'partial' : 'ready');
       emit();
     },
-    (error) => onError?.(error),
+    (error) => {
+      states.set(item.cartularyId, 'error');
+      emit();
+      onError?.(error);
+    },
   ));
   return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
 };

@@ -39,8 +39,17 @@ test('une modification locale non encore synchronisée reste prioritaire sans ma
 
 test('le cache local historique n’est migré qu’une fois afin de ne pas ressusciter une tâche supprimée', () => {
   assert.match(controllerSource, /cartularia-todos-remote-migrated-v1/);
-  assert.match(controllerSource, /if \(!shouldMigrateLocalTodos\) \{\s*const pendingUpserts/);
-  assert.match(controllerSource, /pendingUpsertsRef\.current\.set/);
+  assert.match(controllerSource, /if \(shouldMigrateLocalTodos\) \{/);
+  assert.match(controllerSource, /migrationOperations/);
+  assert.match(controllerSource, /cartularia-todos-operations-v2/);
+});
+
+test('la file durable est acquittée par identifiant après la réponse serveur, jamais par un snapshot local', () => {
+  assert.match(controllerSource, /candidate\.operationId === operation\.operationId/);
+  assert.match(controllerSource, /await syncCartularyFollowUpTodo/);
+  assert.match(controllerSource, /await deleteCartularyFollowUpTodo/);
+  assert.doesNotMatch(controllerSource, /remote\.text === pending\.text/);
+  assert.match(controllerSource, /window\.addEventListener\('online', requestDrain\)/);
 });
 
 test('la page Accueil et le bouton A Faire partagent un contrôleur unique et les mêmes opérations', () => {

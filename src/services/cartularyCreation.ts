@@ -1,7 +1,7 @@
 import type { User } from 'firebase/auth';
 import {
   doc,
-  getDoc,
+  onSnapshot,
   runTransaction,
   serverTimestamp,
   setDoc,
@@ -14,17 +14,24 @@ import {
   CARTULARY_CREATION_TIMEOUT_MESSAGE,
   CARTULARY_CREATION_PROFILE_VERSION,
   SUPPORTED_CREATION_PROFILES,
+  buildCreationSpecificationGroups,
+  slugifyCartularyLabel,
+  summarizeCreationMedia,
+  type CartularyCreationPhase,
   type CartularyCreationProfile,
+  type CartularyCreationServerStatus,
   type SupportedCreationAssetType,
   type CartularyCreationMediaAsset,
   type CartularyCreationResult,
   type WatchCartularyCreationProfile,
 } from '../domain/cartularyCreation.ts';
 import { db, storage } from '../firebase.ts';
-import { scopedStorageForCartulary } from '../persistence/localVault.ts';
+import { scopedStorageForIdentity } from '../persistence/localVault.ts';
 import { validateFileForUpload, type TrustedFileInspection } from '../security/fileValidation.ts';
+import { runBoundedPreloadQueue } from '../utils/boundedPreloadQueue.ts';
 import { waitForPrivateUploadVerification } from './privateUploadVerification.ts';
 import { generateCorrespondenceCode } from '../domain/correspondenceCodes.ts';
+import { loadCreationSchemaVersion } from './schemaCatalog.ts';
 
 export interface CreateWatchCartularyInput {
   assetType?: SupportedCreationAssetType;
@@ -38,8 +45,9 @@ export interface CreateWatchCartularyInput {
 }
 
 export interface CartularyCreationProgress {
-  phase: 'preparing' | 'hashing' | 'uploading' | 'verifying' | 'finalizing' | 'processing';
-  fileName: string | null;
+  phase: CartularyCreationPhase;
+  /** Fichiers en vol (hachage, téléversement ou vérification), dans l'ordre d'entrée ; vide hors phase fichiers. */
+  activeFileNames: string[];
   completedFiles: number;
   totalFiles: number;
   uploadedBytes: number;
@@ -76,13 +84,13 @@ const RETRYABLE_CREATION_ERROR_CODES = new Set([
   'unavailable',
 ]);
 
-const slugify = (value: string) => value
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, '_')
-  .replace(/^_+|_+$/g, '')
-  .slice(0, 44);
+/**
+ * = `maxInstances` de `verifyPrivateDraftUpload` (`scripts/firebase-functions.mjs`), `concurrency: 1` par instance :
+ * jamais plus de vérifications en vol que d'instances, aucun événement Storage retenu en file (V5, décision D3 (a)).
+ * Verrouillé par `tests/cartulary-create-wiring.test.mjs` (borne client ≤ `maxInstances` lu dans le source serveur).
+ * Repli en un mot si la recette montrait un délai de vérification : 1 (comportement série antérieur).
+ */
+export const MAXIMUM_CONCURRENT_CREATION_UPLOADS = 2;
 
 const randomToken = (length = 12) => {
   const bytes = crypto.getRandomValues(new Uint8Array(Math.ceil(length / 2)));
@@ -104,6 +112,17 @@ const uniqueFiles = (coverFile: File, files: File[]) => {
 const sha256 = async (file: File): Promise<string> => {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
   return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+};
+
+/**
+ * Hachage sérialisé : téléversements et vérifications se recouvrent, mais un seul `arrayBuffer()` existe à la
+ * fois — pic mémoire identique au pipeline série (jusqu'à 500 Mio pour une vidéo, `security/fileValidation.ts`).
+ */
+let hashingChain: Promise<unknown> = Promise.resolve();
+const sha256Serialized = (file: File): Promise<string> => {
+  const next = hashingChain.then(() => sha256(file));
+  hashingChain = next.catch(() => undefined);
+  return next;
 };
 
 const fileSizeLabel = (size: number) => size >= 1024 * 1024
@@ -161,7 +180,7 @@ export const uploadVerifiedCartularyMedia = async ({ user, cartularyId, file, in
 }): Promise<CartularyCreationMediaAsset> => {
   const inspection = inspected || await validateFileForUpload({ blob: file, fileName: file.name, declaredMimeType: file.type });
   onProgress?.('hashing', 0);
-  const digest = await sha256(file);
+  const digest = await sha256Serialized(file);
   const binaryId = `bin_${randomToken(28)}`;
   const assetId = `asset_${randomToken(28)}`;
   const storagePath = `private-drafts/${user.uid}/${cartularyId}/${binaryId}/${digest.slice('sha256:'.length)}/original`;
@@ -180,7 +199,9 @@ export const uploadVerifiedCartularyMedia = async ({ user, cartularyId, file, in
     category: inspection.kind === 'document' ? 'documentation' : 'ensemble', visibility: 'Secret', fileSize: fileSizeLabel(file.size),
     derivativeStatus: verification.derivativeStatus,
     capturedAt: verification.capturedAt || (Number.isFinite(file.lastModified) && file.lastModified > 0 ? new Date(file.lastModified).toISOString() : new Date().toISOString()),
-    timestampSource: verification.timestampSource || 'file.lastModified' };
+    timestampSource: verification.timestampSource || 'file.lastModified',
+    // Référence figée des variantes v3 (K4) : le lecteur les affiche sans relire le manifeste ; jamais l'original.
+    ...(verification.privatePresentation ? { privatePresentation: verification.privatePresentation } : {}) };
 };
 
 export const createCartulary = async ({
@@ -195,7 +216,8 @@ export const createCartulary = async ({
 }: CreateWatchCartularyInput): Promise<CartularyCreationResult> => {
   const definition = SUPPORTED_CREATION_PROFILES[assetType];
   if (!definition) throw new Error('Ce type d’objet n’est pas encore proposé à la création.');
-  const cartularySlug = slugify([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'objet';
+  const schemaVersion = await loadCreationSchemaVersion(definition.schemaId);
+  const cartularySlug = slugifyCartularyLabel([profile.brand, profile.model, profile.reference].filter(Boolean).join(' ')) || 'objet';
   const cartularyId = `cart_${cartularySlug}_${randomToken()}`;
   const publicCode = generateCorrespondenceCode('object', profile.brand || 'WCH');
   const requestId = `create_${randomToken(28)}`;
@@ -213,16 +235,16 @@ export const createCartulary = async ({
   let uploadedBytes = 0;
   let completedFiles = 0;
 
-  const emit = (phase: CartularyCreationProgress['phase'], fileName: string | null) => onProgress?.({
+  const emit = (phase: CartularyCreationPhase, activeFileNames: string[]) => onProgress?.({
     phase,
-    fileName,
+    activeFileNames,
     completedFiles,
     totalFiles: allFiles.length,
     uploadedBytes,
     totalBytes,
   });
 
-  emit('preparing', null);
+  emit('preparing', []);
   const draftRef = doc(db, 'privateDrafts', user.uid, 'cartularies', cartularyId);
   await setDoc(draftRef, {
     ownerUid: user.uid,
@@ -235,37 +257,53 @@ export const createCartulary = async ({
     updatedAt: serverTimestamp(),
   });
 
+  // Pipeline borné (V5, P-B1) : au plus MAXIMUM_CONCURRENT_CREATION_UPLOADS fichiers en vol (téléversement + attente
+  // de vérification), index pris dans l'ordre (la couverture, index 0, part la première et garde `main-photo`),
+  // octets comptés par fichier, arrêt de la prise de nouveaux fichiers au premier échec ; le fichier encore en vol
+  // termine seul (écoute du manifeste auto-désabonnée à l'issue ou au délai). La demande n'est écrite qu'après
+  // l'acceptation de tous les manifestes (invariant serveur `privateBinaryIsVerified`).
   const mediaAssets: CartularyCreationMediaAsset[] = [];
-  for (const [index, file] of allFiles.entries()) {
-    const uploadedBefore = uploadedBytes;
-    const asset = await uploadVerifiedCartularyMedia({ user, cartularyId, file, inspection: inspections.get(file), onProgress: (phase, bytes) => { uploadedBytes = uploadedBefore + bytes; emit(phase, file.name); } });
-    uploadedBytes = uploadedBefore + file.size;
-    completedFiles += 1;
-    mediaAssets.push({ ...asset, ...(index === 0 ? { tags: ['main-photo', 'slideshow'] } : {}) });
-    emit('uploading', file.name);
-  }
+  const uploadedByFile = allFiles.map(() => 0);
+  const active = new Set<number>();
+  const activeNames = () => [...active].sort((a, b) => a - b).map((index) => allFiles[index].name);
+  const sumUploaded = () => uploadedByFile.reduce((total, bytes) => total + bytes, 0);
+  const abort = new AbortController();
+  await runBoundedPreloadQueue({
+    items: allFiles,
+    concurrency: MAXIMUM_CONCURRENT_CREATION_UPLOADS,
+    signal: abort.signal,
+    load: async (file, index) => {
+      active.add(index);
+      try {
+        const asset = await uploadVerifiedCartularyMedia({ user, cartularyId, file, inspection: inspections.get(file), onProgress: (phase, bytes) => {
+          uploadedByFile[index] = Math.min(file.size, bytes);
+          uploadedBytes = sumUploaded();
+          emit(phase, activeNames());
+        } });
+        uploadedByFile[index] = file.size;
+        uploadedBytes = sumUploaded();
+        completedFiles += 1;
+        active.delete(index);
+        mediaAssets[index] = { ...asset, ...(index === 0 ? { tags: ['main-photo', 'slideshow'] } : {}) };
+        emit('verifying', activeNames());
+      } catch (error) {
+        active.delete(index);
+        abort.abort();
+        throw error;
+      }
+    },
+  });
 
-  uploadedBytes = totalBytes;
-  emit('finalizing', null);
+  emit('finalizing', []);
   const creationProfile: CartularyCreationProfile = {
     profileVersion: CARTULARY_CREATION_PROFILE_VERSION,
     assetType,
-    schemaId: definition.schemaId,
-    schemaVersion: definition.schemaVersion,
+    schemaId: definition.schemaId as SupportedCreationAssetType,
+    schemaVersion,
     ...profile,
     assertedAt: new Date().toISOString(),
   };
-  const specifications = [{
-    id: 'identity',
-    label: 'Identification',
-    items: [
-      { id: 'brand', label: definition.makerLabel, value: profile.brand },
-      { id: 'model', label: 'Modèle', value: profile.model },
-      { id: 'reference', label: definition.referenceLabel, value: profile.reference },
-      { id: 'year', label: 'Année de fabrication', value: profile.manufactureYear ? String(profile.manufactureYear) : '' },
-      { id: 'caliber', label: definition.technicalLabel, value: profile.caliber },
-    ],
-  }];
+  const specifications = buildCreationSpecificationGroups(definition, profile);
 
   const writeState = (key: string, value: unknown) => setDoc(doc(draftRef, 'state', key), {
     ownerUid: user.uid,
@@ -284,7 +322,7 @@ export const createCartulary = async ({
     writeState('cartularia-public-code', publicCode),
   ]);
 
-  const targetStorage = scopedStorageForCartulary(window.localStorage, cartularyId);
+  const targetStorage = scopedStorageForIdentity(window.localStorage, user.uid, cartularyId);
   targetStorage.setItem('cartularia-creation-profile', JSON.stringify(creationProfile));
   targetStorage.setItem('cartularia-specification-groups', JSON.stringify(specifications));
   targetStorage.setItem('cartularia-media-assets-v3', JSON.stringify(mediaAssets));
@@ -302,32 +340,52 @@ export const createCartulary = async ({
     requestedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  emit('processing', null);
-  return { cartularyId, requestId, publicCode, uploadedFileCount: allFiles.length, uploadedBytes: totalBytes };
+  emit('processing', []);
+  return { cartularyId, requestId, publicCode, uploadedFileCount: allFiles.length, uploadedBytes: totalBytes, media: summarizeCreationMedia(mediaAssets) };
 };
 
 /** Compatibility for callers explicitly creating a watch. */
 export const createWatchCartulary = (input: CreateWatchCartularyInput) => createCartulary({ ...input, assetType: 'watch' });
 
-export const waitForCartularyCreation = async (
+/**
+ * Attente de la prise en charge serveur par écoute de `cartularyCreateRequests/{id}` (V5, P-B1) : chaque état est
+ * reçu (`pending` → `processing` → `processed` ou `failed`), la fenêtre `processing` n'est plus manquée comme avec
+ * le sondage. Même permission que le sondage (`allow get` propriétaire, motif `waitForAuthoritativeSyncCycle`),
+ * mêmes délais de rejeu (1 s, 2,5 s), même transaction (document entier réécrit à `pending`), mêmes erreurs,
+ * même délai global de 120 s.
+ */
+export const waitForCartularyCreation = (
   cartularyId: string,
-  timeoutMs = 120_000,
-): Promise<void> => {
+  options: { timeoutMs?: number; onStatus?: (status: CartularyCreationServerStatus) => void } = {},
+): Promise<void> => new Promise<void>((resolve, reject) => {
+  const { timeoutMs = 120_000, onStatus } = options;
   const requestRef = doc(db, 'cartularyCreateRequests', cartularyId);
-  const startedAt = Date.now();
+  let unsubscribe: () => void = () => undefined;
+  let settled = false;
+  let retrying = false;
   let retryAttempt = 0;
-  while (Date.now() - startedAt < timeoutMs) {
-    const snapshot = await getDoc(requestRef);
-    if (!snapshot.exists()) throw new Error('La demande de création a disparu.');
+  const finish = (error?: unknown) => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    unsubscribe();
+    if (error) reject(error);
+    else resolve();
+  };
+  const timeout = window.setTimeout(() => finish(new CartularyCreationTimeoutError(CARTULARY_CREATION_TIMEOUT_MESSAGE)), timeoutMs);
+  unsubscribe = onSnapshot(requestRef, (snapshot) => {
+    if (settled || retrying) return;
+    if (!snapshot.exists()) return finish(new Error('La demande de création a disparu.'));
     const request = snapshot.data() as CreationRequestDocument;
-    if (request.status === 'processed') return;
-    if (request.status === 'failed') {
-      const errorCode = request.errorCode || 'create_failed';
-      const retryDelay = CREATION_RETRY_DELAYS_MS[retryAttempt];
-      if (retryDelay !== undefined && RETRYABLE_CREATION_ERROR_CODES.has(errorCode)) {
-        retryAttempt += 1;
-        await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
-        await runTransaction(db, async (transaction) => {
+    if (request.status === 'processed') return finish();
+    if (request.status === 'pending' || request.status === 'processing') return onStatus?.(request.status);
+    const errorCode = request.errorCode || 'create_failed';
+    const retryDelay = CREATION_RETRY_DELAYS_MS[retryAttempt];
+    if (retryDelay !== undefined && RETRYABLE_CREATION_ERROR_CODES.has(errorCode)) {
+      retryAttempt += 1;
+      retrying = true;
+      window.setTimeout(() => {
+        runTransaction(db, async (transaction) => {
           const currentSnapshot = await transaction.get(requestRef);
           if (!currentSnapshot.exists()) throw new Error('La demande de création a disparu.');
           const current = currentSnapshot.data() as CreationRequestDocument;
@@ -344,12 +402,12 @@ export const waitForCartularyCreation = async (
             requestedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
-        });
-        continue;
-      }
-      throw new CartularyCreationFailedError(request.errorMessage || `Création refusée (${request.errorCode || 'erreur inconnue'}).`);
+        })
+          .then(() => { retrying = false; onStatus?.('pending'); })
+          .catch((error) => finish(error));
+      }, retryDelay);
+      return;
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 1_500));
-  }
-  throw new CartularyCreationTimeoutError(CARTULARY_CREATION_TIMEOUT_MESSAGE);
-};
+    finish(new CartularyCreationFailedError(request.errorMessage || `Création refusée (${request.errorCode || 'erreur inconnue'}).`));
+  }, (error) => finish(error));
+});

@@ -10,8 +10,7 @@ vi.mock('../../src/persistence/localVault.ts', () => ({
 }));
 
 vi.mock('../../src/services/followUp.ts', () => ({
-  createCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
-  updateCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
+  syncCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
   deleteCartularyFollowUpTodo: vi.fn(() => Promise.resolve()),
   observeCartularyFollowUpTodos: vi.fn((_cartularyId: string, onData: (todos: unknown[]) => void) => {
     onData([]);
@@ -22,7 +21,7 @@ vi.mock('../../src/services/followUp.ts', () => ({
 const Harness = () => {
   const followUp = useCartularyFollowUp({ cartularyId: 'cart_test', language: 'FR' });
   return <>
-    <BarreDossier publicCode="TEST-1" brand="Objet" model="Test" language="FR" setLanguage={() => undefined} followUp={followUp} />
+    <BarreDossier publicCode="TEST-1" brand="Objet" model="Test" language="FR" followUp={followUp} />
     <CartularyTodoBoard followUp={followUp} language="FR" />
   </>;
 };

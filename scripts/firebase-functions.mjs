@@ -26,6 +26,7 @@ import { markTransferRequestFailed, processTransferRequest } from './lib/transfe
 import {
   processPrivateDraftUpload,
   processPrivateDraftUploadBacklog,
+  PrivateUploadRetryableError,
 } from './lib/private-upload-command.mjs';
 import {
   acceptRegistryInvitation,
@@ -37,6 +38,8 @@ import { deleteEmptyRegistryCollection, saveRegistryCollectionCommand } from './
 import { createPersonalRecoveryCommands } from './lib/personal-recovery-command.mjs';
 import { createRegistryRecoveryCommands } from './lib/registry-recovery-command.mjs';
 import { getWebsitePublicationState, publishWebsite, revokeWebsite } from './lib/website-publication-command.mjs';
+import { assertActiveAccountSession } from './lib/account-access-command.mjs';
+import { assertActiveQueuedAccount } from './lib/queued-account-access.mjs';
 import {
   loadAdministrationOverview as loadAdministrationOverviewCommand,
   loadAdministrationUserDashboard,
@@ -63,6 +66,7 @@ const invitationCallableOptions = {
 export const activateRegistryAccount = onCall(invitationCallableOptions, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
   try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth, allowMissingProfile: true });
     const result = await activateRegistryAccountCommand({
       firestore,
       uid: request.auth.uid,
@@ -90,6 +94,7 @@ const callableError = (error) => {
 export const deleteRegistryCollection = onCall(invitationCallableOptions, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
   try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth });
     return await deleteEmptyRegistryCollection({ firestore, uid: request.auth.uid,
       registryId: request.data?.registryId, collectionId: request.data?.collectionId,
       expectedVersion: request.data?.expectedVersion,
@@ -100,6 +105,7 @@ export const deleteRegistryCollection = onCall(invitationCallableOptions, async 
 export const saveRegistryCollection = onCall(invitationCallableOptions, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
   try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth });
     return await saveRegistryCollectionCommand({
       firestore, uid: request.auth.uid, registryId: request.data?.registryId,
       collectionId: request.data?.collectionId, mode: request.data?.mode,
@@ -123,14 +129,17 @@ const configuredProjectServices = (name, projectId, registryProjectId) => {
 
 const administrationSources = () => {
   const registryProjectId = String(app.options.projectId || process.env.GCLOUD_PROJECT || '').trim();
+  const personalProjectId = String(process.env.ADMIN_PERSONAL_FIREBASE_PROJECT_ID || '').trim();
+  const bridgeProjectId = String(process.env.ADMIN_CODE_BRIDGE_FIREBASE_PROJECT_ID || '').trim();
+  const secondaryProjectsAreDistinct = !personalProjectId || !bridgeProjectId || personalProjectId !== bridgeProjectId;
   const personal = configuredProjectServices(
     'cartularia-administration-personal',
-    process.env.ADMIN_PERSONAL_FIREBASE_PROJECT_ID,
+    secondaryProjectsAreDistinct ? personalProjectId : '',
     registryProjectId,
   );
   const bridge = configuredProjectServices(
     'cartularia-administration-bridge',
-    process.env.ADMIN_CODE_BRIDGE_FIREBASE_PROJECT_ID,
+    secondaryProjectsAreDistinct ? bridgeProjectId : '',
     registryProjectId,
   );
   return [
@@ -163,9 +172,9 @@ const personalRecovery = () => {
   const sources = administrationSources();
   const personal = sources.find((source) => source.id === 'personal');
   const bridge = sources.find((source) => source.id === 'bridge');
-  if (!personal?.firestore || !personal.auth || !bridge?.auth
+  if (!personal?.firestore || !personal.auth || !bridge?.auth || !bridge.firestore
     || personal.firestore.projectId === bridge.firestore?.projectId) throw new HttpsError('failed-precondition', 'Les espaces de secours ne sont pas raccordés séparément.');
-  return createPersonalRecoveryCommands({ personalDb: personal.firestore, personalAuth: personal.auth, bridgeAuth: bridge.auth });
+  return createPersonalRecoveryCommands({ personalDb: personal.firestore, personalAuth: personal.auth, bridgeDb: bridge.firestore, bridgeAuth: bridge.auth });
 };
 export const enrollRegistryRecovery = runRecovery((request) => registryRecovery().enroll(request.auth, request.data));
 export const getRegistryRecoveryStatus = runRecovery((request) => registryRecovery().status(request.auth));
@@ -188,7 +197,10 @@ const websiteCallableOptions = {
   concurrency: 1,
 };
 const runWebsiteCommand = (operation) => onCall(websiteCallableOptions, async (request) => {
-  try { return await operation(request); }
+  try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth });
+    return await operation(request);
+  }
   catch (error) { logger.warn('Publication non confirmée.', { code: error?.code || 'internal' }); throw callableError(error); }
 });
 export const getCartularyWebsiteState = runWebsiteCommand((request) => getWebsitePublicationState({ firestore, requestAuth: request.auth, cartularyId: request.data?.cartularyId }));
@@ -197,7 +209,7 @@ export const revokeCartularyWebsite = runWebsiteCommand((request) => revokeWebsi
 
 export const getAdministrationOverview = onCall(invitationCallableOptions, async (request) => {
   try {
-    requireAdministrator(request.auth);
+    await requireAdministrator({ auth, firestore, requestAuth: request.auth });
     return await loadAdministrationOverviewCommand({
       sources: administrationSources(),
       pageSize: request.data?.pageSize,
@@ -210,7 +222,7 @@ export const getAdministrationOverview = onCall(invitationCallableOptions, async
 
 export const getAdministrationUserDashboard = onCall(invitationCallableOptions, async (request) => {
   try {
-    requireAdministrator(request.auth);
+    await requireAdministrator({ auth, firestore, requestAuth: request.auth });
     return await loadAdministrationUserDashboard({
       sources: administrationSources(),
       databaseId: request.data?.database,
@@ -224,7 +236,7 @@ export const getAdministrationUserDashboard = onCall(invitationCallableOptions, 
 
 export const setAdministrationUserState = onCall(invitationCallableOptions, async (request) => {
   try {
-    const actorUid = requireAdministrator(request.auth);
+    const actorUid = await requireAdministrator({ auth, firestore, requestAuth: request.auth });
     const sources = administrationSources();
     const source = sources.find((candidate) => candidate.id === request.data?.database);
     if (!source) throw Object.assign(new Error('Base d’administration invalide.'), { code: 'invalid_argument' });
@@ -232,7 +244,7 @@ export const setAdministrationUserState = onCall(invitationCallableOptions, asyn
       actorUid,
       source,
       targetUid: request.data?.uid,
-      disabled: request.data?.disabled === true,
+      disabled: request.data?.disabled,
       reason: request.data?.reason,
       auditFirestore: firestore,
       timestamp: FieldValue.serverTimestamp(),
@@ -253,6 +265,7 @@ export const setAdministrationUserState = onCall(invitationCallableOptions, asyn
 export const createRegistryInvitation = onCall(invitationCallableOptions, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
   try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth });
     const result = await issueRegistryInvitation({
       firestore,
       auth,
@@ -281,6 +294,9 @@ export const acceptRegistryInvitationLink = onCall(invitationCallableOptions, as
     throw new HttpsError('unauthenticated', 'Une adresse électronique vérifiée est requise.');
   }
   try {
+    // A newly invited identity may not yet have its Registry profile. Existing
+    // suspended profiles and revoked sessions must still be refused.
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth, allowMissingProfile: true });
     return await acceptRegistryInvitation({
       firestore,
       actorUid: request.auth.uid,
@@ -297,6 +313,7 @@ export const acceptRegistryInvitationLink = onCall(invitationCallableOptions, as
 export const revokeRegistryInvitationLink = onCall(invitationCallableOptions, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
   try {
+    await assertActiveAccountSession({ auth, firestore, requestAuth: request.auth });
     return await revokeRegistryInvitation({
       firestore,
       actorUid: request.auth.uid,
@@ -314,9 +331,14 @@ export const verifyPrivateDraftUpload = onObjectFinalized({
   memory: '1GiB',
   timeoutSeconds: 540,
   maxInstances: 2,
-  retry: false,
+  // Variantes v3 + copie principale décodées par sharp dans la même instance (mesure locale 24 MP : pic 326 Mo) :
+  // un original à la fois par instance, jamais de multiplication du pic par la concurrence par défaut.
+  concurrency: 1,
+  retry: true,
 }, async (event) => {
   const result = await processPrivateDraftUpload({ firestore, storage, object: event.data });
+  // A duplicate event must remain retryable while another worker holds the lease: it may crash.
+  if (result.status === 'deferred') throw new PrivateUploadRetryableError('verification_deferred', 'Une vérification ou son délai de reprise est encore en cours.', result.retryAt);
   if (result.status === 'rejected') logger.warn('Original privé refusé après inspection.', result);
   else if (result.status === 'accepted') logger.info('Original privé vérifié.', result);
 });
@@ -384,6 +406,7 @@ export const processCartularyTransfer = onDocumentWritten({
   if (!after?.exists || after.data()?.status !== 'pending') return;
   const requestDocumentId = event.params.requestDocumentId;
   try {
+    await assertActiveQueuedAccount({ auth, firestore, requestDocument: after.data() });
     const result = await processTransferRequest({ firestore, requestDocumentId });
     logger.info('Demande de cession traitée.', {
       requestDocumentId,
@@ -413,6 +436,7 @@ export const issueRfc3161TimestampReceipt = onDocumentWritten({
   const requestDocumentId = event.params.requestDocumentId;
   const requestId = after.data().requestId;
   try {
+    await assertActiveQueuedAccount({ auth, firestore, requestDocument: after.data() });
     const result = await processTimestampRequest({ firestore, requestDocumentId });
     logger.info('Demande RFC 3161 traitée.', {
       requestDocumentId,
@@ -442,14 +466,15 @@ export const createCartularyFromPrivateDraft = onDocumentWritten({
   const requestDocumentId = event.params.requestDocumentId;
   const requestId = after.data().requestId;
   try {
-    const result = await processCartularyCreateRequest({ firestore, requestDocumentId });
+    await assertActiveQueuedAccount({ auth, firestore, requestDocument: after.data() });
+    const result = await processCartularyCreateRequest({ firestore, storage, requestDocumentId });
     logger.info('Cartulaire créé depuis un brouillon privé.', {
       requestDocumentId,
       status: result.status,
       revision: result.revision,
     });
   } catch (error) {
-    await markCartularyCreateRequestFailed({ firestore, requestDocumentId, requestId, error });
+    await markCartularyCreateRequestFailed({ firestore, requestDocumentId, requestId, error, expectedRequestDocument: after.data() });
     logger.error('Échec de création du Cartulaire depuis le brouillon privé.', {
       requestDocumentId,
       code: error?.code || 'create_failed',
@@ -472,7 +497,8 @@ export const syncCartularyToRegistry = onDocumentWritten({
   const requestDocumentId = event.params.requestDocumentId;
   const requestId = after.data().requestId;
   try {
-    const result = await processCartularySyncRequest({ firestore, requestDocumentId });
+    await assertActiveQueuedAccount({ auth, firestore, requestDocument: after.data() });
+    const result = await processCartularySyncRequest({ firestore, storage, requestDocumentId });
     logger.info('Cartulaire raccordé au Registre.', {
       requestDocumentId,
       outcome: result.outcome,

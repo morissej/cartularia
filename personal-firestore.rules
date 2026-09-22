@@ -1,8 +1,26 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Server-only cutoff: refreshing an ID token keeps auth_time and cannot reopen a revoked session.
+    function accountSessionIsCurrent(uid) {
+      let accessPath = /databases/$(database)/documents/accountAccess/$(uid);
+      return !exists(accessPath)
+        || (get(accessPath).data.status == 'active'
+          && get(accessPath).data.validAfter is int
+          && get(accessPath).data.validAfter >= 0
+          && request.auth.token.auth_time is int
+          && request.auth.token.auth_time > get(accessPath).data.validAfter
+          && (request.auth.token.firebase.sign_in_provider != 'custom'
+            || (request.auth.token.cartulariaRecoveryIssuedAt is int
+              && request.auth.token.cartulariaRecoveryIssuedAt > get(accessPath).data.validAfter)));
+    }
+
+    match /accountAccess/{uid} {
+      allow read, write: if false;
+    }
+
     function ownsVault(uid) {
-      return request.auth != null && request.auth.uid == uid;
+      return request.auth != null && request.auth.uid == uid && accountSessionIsCurrent(uid);
     }
 
     function validEncryptedAccount(uid) {

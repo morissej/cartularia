@@ -78,6 +78,39 @@ describe('préchargement média PF1', () => {
   });
 });
 
+describe('miniatures du carrousel sur dérivés statiques (V3)', () => {
+  const demoImage = (index: number, stem: string): Asset => asset(`demo-${stem}`, 'image', {
+    name: `Vue ${index}`,
+    url: `/assets/demo-watches/breguet-classique/${stem}.jpg`,
+    thumbnailUrl: `/assets/demo-watches/breguet-classique/${stem}.jpg`,
+  });
+
+  it('sert les miniatures 70 px en WebP paresseux via le catalogue et garde la scène immédiate', () => {
+    render(<MediaCarousel assets={[demoImage(1, 'main'), demoImage(2, 'rear'), demoImage(3, 'full-set')]} language="FR" onOpen={() => undefined} />);
+    const stage = screen.getByRole('button', { name: 'Ouvrir Vue 1' }).querySelector('img')!;
+    expect(stage.getAttribute('loading')).toBe('eager');
+    expect(stage.closest('picture')?.querySelector('source[type="image/webp"]')?.getAttribute('srcset')).toContain('breguet-classique/main.1200.webp 1200w');
+    for (const [label, stem] of [['2. Vue 2', 'rear'], ['3. Vue 3', 'full-set']] as const) {
+      const thumb = screen.getByRole('button', { name: label });
+      const image = thumb.querySelector('img')!;
+      expect(image.getAttribute('loading')).toBe('lazy');
+      expect(image.getAttribute('sizes')).toBe('70px');
+      const webp = thumb.querySelector('picture source[type="image/webp"]')!;
+      expect(webp.getAttribute('sizes')).toBe('70px');
+      expect(webp.getAttribute('srcset')).toContain(`breguet-classique/${stem}.240.webp 240w`);
+      expect(image.getAttribute('src')).toBe(`/assets/demo-watches/breguet-classique/${stem}.jpg`);
+      expect(image.getAttribute('width')).toBe('1400');
+    }
+  });
+
+  it('laisse un actif hors catalogue sans srcset : aucune invention de dérivé', () => {
+    render(<MediaCarousel assets={[asset('privee', 'image'), demoImage(2, 'rear')]} language="FR" onOpen={() => undefined} />);
+    const thumb = screen.getByRole('button', { name: '1. privee' });
+    expect(thumb.querySelector('picture')).toBeNull();
+    expect(thumb.querySelector('img')?.getAttribute('src')).toBe('/privee.jpg');
+  });
+});
+
 describe('lecteur 360° PF1', () => {
   const originalImage = globalThis.Image;
 

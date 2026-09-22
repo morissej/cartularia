@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { normalizeCollectionWebsiteSlug } from '../scripts/lib/collection-policy.mjs';
 import {
   collectionWebsiteIsPublished,
   collectionWebsiteItemProjection,
@@ -59,4 +60,19 @@ test('la projection publique de Collection exclut les champs privés du Registre
   assert.equal(projection.publicCode, 'ROL-PUBLIC');
   assert.equal('purchasePrice' in projection, false);
   assert.equal('userAlias' in projection, false);
+});
+
+test('un nom de Collection trop long est tronqué sur une frontière de mot, identiquement côté client et serveur', () => {
+  const name = 'Collection privée des montres de plongée professionnelles et chronographes vintage de la famille';
+  const client = normalizeCollectionSlug(name);
+  const server = normalizeCollectionWebsiteSlug(name);
+  assert.equal(client, server);
+  assert.equal(client, 'collection-privee-des-montres-de-plongee-professionnelles-et');
+  assert.ok(client.length <= 64);
+  assert.doesNotMatch(client, /-$/);
+  const exact = `${'a'.repeat(30)}-${'b'.repeat(33)}`; // 64 caractères, mot complet à la limite
+  assert.equal(normalizeCollectionSlug(`${exact} suite`), exact);
+  assert.equal(normalizeCollectionWebsiteSlug(`${exact} suite`), exact);
+  assert.equal(normalizeCollectionSlug('x'.repeat(70)), 'x'.repeat(64));
+  assert.equal(normalizeCollectionWebsiteSlug('x'.repeat(70)), 'x'.repeat(64));
 });

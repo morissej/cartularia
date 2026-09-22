@@ -16,6 +16,7 @@ import {
   IWC_IMPORT_DATE,
   IWC_IMPORT_REQUEST_ID,
 } from '../src/migrations/iwcImport.ts';
+import { mockCartulary } from '../src/data/mockData.ts';
 import { importCartularyBundle } from '../scripts/lib/import-cartulary-command.mjs';
 import { sha256Digest } from '../scripts/lib/canonical-json.mjs';
 import { schemaContractDigest } from '../scripts/lib/schema-catalog-files.mjs';
@@ -219,7 +220,11 @@ test('le bundle IWC isole les données sensibles de l’enveloppe et neutralise 
   }
   assert.equal(bundle.envelope.defaultVisibility, 'secret');
   assert.equal(bundle.envelope.publicationStatus, 'none');
-  assert.equal(bundle.assets.length, 22);
+  // Le bundle porte exactement les médias de la fixture (20 depuis la révision du 2026-09-07 de
+  // src/data/mockData.ts : 19 images, 1 vidéo) ; le nombre suit la fixture, l'invariant porte sur
+  // la neutralisation ci-dessous.
+  assert.equal(bundle.assets.length, mockCartulary.assets.length);
+  assert.ok(bundle.assets.length >= 20);
   assert.ok(
     bundle.assets.every(
       (asset) =>

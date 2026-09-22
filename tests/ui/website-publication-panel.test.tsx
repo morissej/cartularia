@@ -5,7 +5,7 @@ const api = vi.hoisted(() => ({ load: vi.fn(), publish: vi.fn(), revoke: vi.fn()
 vi.mock('../../src/services/websitePublication', () => ({ loadWebsitePublicationState: api.load, publishWebsiteSelection: api.publish, revokeWebsiteSelection: api.revoke }));
 const state = { cartularyId: 'cart_test', publicCode: 'OBJ-PUB', revision: 1, status: 'draft', blockIds: [] };
 const blocks = [{ id: 'condition-summary', title: 'État', payload: { paragraphs: ['Bon état'] }, assets: [] }];
-beforeEach(() => { api.load.mockReset().mockResolvedValue(state); api.publish.mockReset(); api.revoke.mockReset(); });
+beforeEach(() => { sessionStorage.clear(); api.load.mockReset().mockResolvedValue(state); api.publish.mockReset(); api.revoke.mockReset(); });
 describe('publication confirmée uniquement après réponse serveur', () => {
   it('ne confond pas une erreur de lecture avec un brouillon', async () => {
     api.load.mockRejectedValue(new Error('unavailable'));
@@ -22,7 +22,8 @@ describe('publication confirmée uniquement après réponse serveur', () => {
     const button = screen.getByRole('button', { name: 'Publier le mini-site' });
     expect(button.hasAttribute('disabled')).toBe(true);
     fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(button);
-    await screen.findByRole('alert');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/^Connexion interrompue Demande conservée, confirmation serveur non reçue : le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon\.$/);
     expect(changed).not.toHaveBeenCalled();
     expect(screen.queryByRole('link', { name: 'Ouvrir le mini-site public' })).toBeNull();
     fireEvent.click(button);
@@ -31,6 +32,123 @@ describe('publication confirmée uniquement après réponse serveur', () => {
     expect(api.publish.mock.calls[0][0]).toEqual(api.publish.mock.calls[1][0]);
     expect(api.publish.mock.calls[0][0].confirmedNonPersonalMedia).toBe(true);
     await waitFor(() => expect(screen.getByRole('checkbox').hasAttribute('checked')).toBe(false));
+  });
+  it('n’annonce pas de demande conservée quand le serveur a refusé la demande', async () => {
+    // functions/invalid-argument est un code réellement émis par la fonction déployée (callableError conserve invalid_argument).
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('Sélection de blocs invalide.'), { code: 'functions/invalid-argument' })).mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Sélection de blocs invalide.');
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    await screen.findByRole('link', { name: 'Ouvrir le mini-site public' });
+    expect(api.publish.mock.calls[1][0].requestId).not.toBe(api.publish.mock.calls[0][0].requestId);
+  });
+  it('traduit les jetons nus du SDK (coupure réseau, délai) au lieu de les afficher (V4 relecture A2)', async () => {
+    // @firebase/functions fabrique message === code : FunctionsError('internal', 'internal') sur fetch rejeté, ('deadline-exceeded', 'deadline-exceeded') au délai.
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('internal'), { code: 'functions/internal' }));
+    const view = render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Connexion au serveur interrompue. Demande conservée, confirmation serveur non reçue : le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon.');
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).not.toBeNull();
+    view.unmount(); sessionStorage.clear();
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('deadline-exceeded'), { code: 'functions/deadline-exceeded' }));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} language="EN" />);
+    await screen.findByText('Draft · no published website');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publish website' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('The server did not respond in time. Request kept, no server confirmation received: the next click on the same button resumes this exact request, without duplication.');
+  });
+  it('un refus serveur replié en « internal » est conservé pour rejeu, sans prétendre qu’aucune réponse n’est arrivée (V4 relecture F1)', async () => {
+    // callableError (scripts/firebase-functions.mjs) replie tout code métier hors liste en internal + message générique.
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('L’opération n’a pas pu être confirmée. Réessayez.'), { code: 'functions/internal' })).mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('L’opération n’a pas pu être confirmée. Réessayez. Demande conservée : réponse serveur non concluante (erreur ou refus non détaillé) ; le prochain clic sur le même bouton reprend cette demande à l’identique, sans doublon.');
+    expect(alert.textContent).not.toMatch(/confirmation serveur non reçue/);
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    await screen.findByRole('link', { name: 'Ouvrir le mini-site public' });
+    expect(api.publish.mock.calls[1][0].requestId).toBe(api.publish.mock.calls[0][0].requestId);
+  });
+  it('traduit l’échec de lecture de l’état en anglais (V4 relecture A3)', async () => {
+    api.load.mockRejectedValue(new Error('unavailable'));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} language="EN" />);
+    expect(await screen.findByText('Publication status unknown')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe('Publication status unavailable. Sign in with the owner account and retry.');
+    expect(screen.getByRole('button', { name: 'Retry status check' })).toBeTruthy();
+  });
+  it('une réponse perdue après exécution serveur est constatée à la relecture : demande oubliée, hôtes prévenus (V4 relecture H6)', async () => {
+    const changed = vi.fn();
+    const publishedState = { ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] };
+    api.publish.mockRejectedValueOnce(Object.assign(new Error('deadline-exceeded'), { code: 'functions/deadline-exceeded' }));
+    api.load.mockResolvedValueOnce(state).mockResolvedValueOnce(state).mockResolvedValue(publishedState);
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} onStateChanged={changed} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('Le serveur n’a pas répondu dans le délai. Le serveur a répondu entre-temps : l’état affiché ci-dessus fait foi.');
+    expect(alert.textContent).not.toMatch(/Demande conservée/);
+    expect(screen.getByText('Mini-site publié')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Ouvrir le mini-site public' })).toBeTruthy();
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledWith(publishedState);
+    expect(sessionStorage.getItem('cartularia-website-request:cart_test')).toBeNull();
+    // Le clic suivant (case toujours cochée) prépare une demande neuve à la révision relue : rien n'est rejoué.
+    api.publish.mockResolvedValue({ ...publishedState, revision: 5 });
+    fireEvent.click(screen.getByRole('button', { name: 'Mettre à jour le mini-site' }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(2));
+    expect(api.publish.mock.calls[1][0].requestId).not.toBe(api.publish.mock.calls[0][0].requestId);
+    expect(api.publish.mock.calls[1][0].expectedRevision).toBe(3);
+  });
+  it('nomme la demande pendant l’appel, puis constate la publication', async () => {
+    let resolvePublish: (value: unknown) => void = () => undefined;
+    api.publish.mockImplementationOnce(() => new Promise((resolve) => { resolvePublish = resolve; }));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Brouillon · aucun mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Publier le mini-site' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Publication demandée · en cours (10 à 30 s)…'));
+    expect(screen.queryByText('Publication en cours…')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Publier le mini-site' }).hasAttribute('disabled')).toBe(true);
+    resolvePublish({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    await screen.findByText('Mini-site publié');
+    expect(screen.getByRole('link', { name: 'Ouvrir le mini-site public' })).toBeTruthy();
+  });
+  it('nomme le retrait pendant l’appel', async () => {
+    api.load.mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    let resolveRevoke: (value: unknown) => void = () => undefined;
+    api.revoke.mockImplementationOnce(() => new Promise((resolve) => { resolveRevoke = resolve; }));
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Mini-site publié');
+    fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Retirer le mini-site' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Retrait demandé · en cours…'));
+    resolveRevoke({ ...state, revision: 5, status: 'revoked', blockIds: [] });
+    await screen.findByText('Mini-site retiré');
+  });
+  it('signale l’écart entre la sélection et les contenus en ligne dans un élément séparé', async () => {
+    api.load.mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['condition-summary'] });
+    const twoBlocks = [...blocks, { id: 'provenance', title: 'Provenance', payload: { paragraphs: ['Achat neuf'] }, assets: [] }];
+    const view = render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={twoBlocks} />);
+    expect(await screen.findByText('Mini-site publié')).toBeTruthy();
+    expect(screen.getByRole('note').textContent).toBe('Sélection différente des contenus en ligne : 1 en ligne, 2 sélectionnés. « Mettre à jour le mini-site » publiera la sélection actuelle.');
+    view.rerender(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(screen.getByText('Mini-site publié')).toBeTruthy();
+  });
+  it('ne signale aucun écart pour la même sélection dans un autre ordre, ni sans publication', async () => {
+    api.load.mockResolvedValue({ ...state, revision: 3, status: 'published', blockIds: ['provenance', 'condition-summary'] });
+    const twoBlocks = [...blocks, { id: 'provenance', title: 'Provenance', payload: { paragraphs: ['Achat neuf'] }, assets: [] }];
+    const view = render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={twoBlocks} />);
+    await screen.findByText('Mini-site publié');
+    expect(screen.queryByRole('note')).toBeNull();
+    view.unmount();
+    api.load.mockResolvedValue({ ...state, status: 'revoked', revision: 4, blockIds: ['provenance'] });
+    render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} />);
+    await screen.findByText('Mini-site retiré');
+    expect(screen.queryByRole('note')).toBeNull();
   });
   it('un accès en lecture seule ne déclenche aucune commande et ne se prétend pas démonstration', () => {
     render(<PublicWebsitePublicationPanel cartularyId="cart_test" blocks={blocks} readOnly />);

@@ -23,14 +23,22 @@ function harness() {
     };
     const result = await callback(transaction); mutations.forEach((apply) => apply()); return result;
   } };
-  const bucket = { file: (path) => ({ download: async () => { assert.ok(blobs.has(path), `blob ${path}`); return [blobs.get(path).bytes]; },
+  const bucket = { name: 'publication-test.appspot.com', file: (path) => ({ getMetadata: async () => {
+    if (!blobs.has(path)) throw Object.assign(new Error('missing'), { code: 404 });
+    return [{ name: path, bucket: bucket.name, generation: '1', size: String(blobs.get(path).bytes.length), ...blobs.get(path).metadata }];
+  }, download: async () => { assert.ok(blobs.has(path), `blob ${path}`); return [blobs.get(path).bytes]; },
     save: async (bytes, options) => blobs.set(path, { bytes, options }), delete: async () => blobs.delete(path),
   }) };
   records.set('cartularies/cart_test', { id: 'cart_test', accountHolderId: 'owner_test', organizationId: 'org_test', registryId: 'reg_test', publicCode: 'OBJ-PUBLIC', revision: 1, assetType: 'car', schemaId: 'car', schemaVersion: '1.0.0', displayTitle: 'Objet de collection', makerName: 'Atelier', modelName: 'Modèle', referenceCode: 'REF-1' });
   records.set('users/owner_test', { status: 'active' });
   records.set('organizations/org_test/memberships/owner_test', { uid: 'owner_test', status: 'active', roles: ['legal_owner'], permissions: ['publication.manage'], scopes: { registryIds: ['reg_test'] } });
   const derivativePath = 'private-derivatives/owner_test/cart_test/binary_test/presentation.webp';
-  records.set('privateDrafts/owner_test/cartularies/cart_test/binaries/binary_test', { kind: 'media', sha256: 'sha256:original', verificationStatus: 'accepted', publicationEligible: true, presentationDerivative: { storagePath: derivativePath, metadataStripped: true, mimeType: 'image/webp', sourceSha256: 'sha256:original' } });
+  const original = Buffer.from('previously inspected original fixture');
+  const sha256 = `sha256:${createHash('sha256').update(original).digest('hex')}`;
+  const storagePath = `private-drafts/owner_test/cart_test/binary_test/${sha256.slice(7)}/original`;
+  const verificationIdentity = { schemaVersion: 'private-binary-identity@1.0.0', ownerUid: 'owner_test', cartularyId: 'cart_test', binaryId: 'binary_test', storagePath, sha256, size: original.length, bucket: bucket.name, generation: '1' };
+  records.set('privateDrafts/owner_test/cartularies/cart_test/binaries/binary_test', { ...verificationIdentity, verificationIdentity, kind: 'media', mimeType: 'image/jpeg', deleted: false, uploadStatus: 'ready', verificationStatus: 'accepted', publicationEligible: true, presentationDerivative: { storagePath: derivativePath, metadataStripped: true, mimeType: 'image/webp', sourceSha256: sha256 } });
+  blobs.set(storagePath, { bytes: original, metadata: { contentType: 'image/jpeg', metadata: { ownerUid: 'owner_test', cartularyId: 'cart_test', binaryId: 'binary_test', sha256, kind: 'media' } } });
   blobs.set(derivativePath, { bytes: Buffer.from('RIFF0000WEBPverified presentation fixture') });
   return { firestore, bucket, records, blobs, requestAuth: { uid: 'owner_test' } };
 }
@@ -101,11 +109,40 @@ test('un PDF reconstruit validé est publiable ; les documents personnels et cop
   record.kind = 'owner_document';
   await assert.rejects(publishWebsite({ ...env, input: request() }), { code: 'personal_document' });
   record.kind = 'condition_attachment';
+  env.blobs.get(record.storagePath).metadata.metadata.kind = 'condition_attachment';
   env.blobs.set(record.presentationDerivative.storagePath, { bytes: Buffer.from('%PDF-1.7 altered') });
   await assert.rejects(publishWebsite({ ...env, input: request() }), { code: 'derivative_integrity' });
   env.blobs.set(record.presentationDerivative.storagePath, { bytes });
   await publishWebsite({ ...env, input: request() });
   assert.equal(env.records.get('publications/OBJ-PUBLIC/blocks/media-hero').assets[0].mediaKind, 'document');
+});
+
+test('P3 : antidatation, substitution et original absent ne permettent aucune nouvelle publication', async () => {
+  for (const tamper of [
+    (env, record) => { delete record.verificationIdentity; delete record.verificationVersion; record.clientUpdatedAt = 1; },
+    (env, record) => { record.sha256 = `sha256:${'b'.repeat(64)}`; },
+    (env, record) => { record.storagePath = record.storagePath.replace('/binary_test/', '/another_binary/'); },
+    (env, record) => { env.blobs.delete(record.storagePath); },
+    (env, record) => { env.blobs.get(record.storagePath).metadata.generation = '2'; },
+  ]) {
+    const env = harness();
+    const record = env.records.get('privateDrafts/owner_test/cartularies/cart_test/binaries/binary_test');
+    tamper(env, record);
+    await assert.rejects(publishWebsite({ ...env, input: request() }), { code: 'derivative_not_ready' });
+    assert.equal(env.records.has('publications/OBJ-PUBLIC'), false);
+    assert.equal([...env.blobs.keys()].some((path) => path.startsWith('public/')), false);
+  }
+});
+
+test('P3 : une préparation mise en cache ne contourne pas la nouvelle vérification de l’original', async () => {
+  const env = harness();
+  const operationPath = 'cartularies/cart_test/websiteOperations/website_test1';
+  const record = env.records.get('privateDrafts/owner_test/cartularies/cart_test/binaries/binary_test');
+  const ref = { assetId: 'asset_test', binaryId: 'binary_test', verificationIdentity: record.verificationIdentity, derivativeId: 'cached_derivative', byteSize: 20 };
+  env.records.set(operationPath, { signature: createHash('sha256').update(JSON.stringify(request())).digest('hex'), previousPaths: [], refs: [ref], complete: false });
+  env.blobs.delete(record.storagePath);
+  await assert.rejects(publishWebsite({ ...env, input: request() }), { code: 'derivative_not_ready' });
+  assert.equal(env.records.has('publications/OBJ-PUBLIC'), false);
 });
 
 test('retrait interrompu, double demande concurrente et refresh : inventaire immuable puis reprise des anciennes copies', async () => {
@@ -152,3 +189,78 @@ test('nettoyage interrompu après mise à jour reste visible et bloque une nouve
   const published = await publishWebsite({ ...env, input: next });
   assert.equal(published.status, 'published'); assert.equal(published.cleanupPending, false); assert.equal(env.blobs.has(publicPath), false);
 });
+
+
+async function interruptAfterPreparation(env) {
+  const normalTransaction = env.firestore.runTransaction;
+  let count = 0;
+  env.firestore.runTransaction = async (callback) => {
+    if (++count === 2) throw new Error('Interrupted before approval.');
+    return normalTransaction(callback);
+  };
+  await assert.rejects(publishWebsite({ ...env, input: request() }), /Interrupted before approval/);
+  env.firestore.runTransaction = normalTransaction;
+  assert.ok(env.records.get('cartularies/cart_test/websiteOperations/website_test1').refs.length);
+  assert.equal(env.records.has('publications/OBJ-PUBLIC'), false);
+}
+
+test('P3 : une préparation interrompue reprend uniquement avec la même identité attestée', async () => {
+  const env = harness();
+  await interruptAfterPreparation(env);
+  const cached = env.records.get('cartularies/cart_test/websiteOperations/website_test1').refs[0];
+  assert.equal(cached.binaryId, 'binary_test');
+  assert.deepEqual(cached.verificationIdentity, env.records.get('privateDrafts/owner_test/cartularies/cart_test/binaries/binary_test').verificationIdentity);
+  const result = await publishWebsite({ ...env, input: request() });
+  assert.equal(result.status, 'published');
+  const published = env.records.get('publications/OBJ-PUBLIC/blocks/media-hero').assets[0];
+  assert.equal(published.derivativeId, cached.derivativeId);
+  assert.equal('verificationIdentity' in published, false);
+  assert.equal(JSON.stringify(env.records.get('publications/OBJ-PUBLIC')).includes('owner_test'), false);
+  const approval = [...env.records.entries()].find(([path]) => path.includes('/publicationApprovals/'))[1];
+  assert.deepEqual(approval.blocks[0].assetRefs, [{ assetId: cached.assetId, derivativeId: cached.derivativeId }]);
+});
+
+test('P3 : un original réattesté différent ne valide jamais une copie préparée pour l’ancien original', async () => {
+  const env = harness();
+  await interruptAfterPreparation(env);
+  const manifestPath = 'privateDrafts/owner_test/cartularies/cart_test/binaries/binary_test';
+  const previous = env.records.get(manifestPath);
+  const nextBytes = Buffer.from('independently verified replacement original');
+  const sha256 = `sha256:${createHash('sha256').update(nextBytes).digest('hex')}`;
+  const storagePath = `private-drafts/owner_test/cart_test/binary_test/${sha256.slice(7)}/original`;
+  const verificationIdentity = { ...previous.verificationIdentity, storagePath, sha256, size: nextBytes.length, generation: '2' };
+  env.records.set(manifestPath, { ...previous, ...verificationIdentity, verificationIdentity, presentationDerivative: null, publicationEligible: false });
+  env.blobs.delete(previous.storagePath);
+  env.blobs.set(storagePath, { bytes: nextBytes, metadata: { generation: '2', contentType: 'image/jpeg', metadata: {
+    ownerUid: 'owner_test', cartularyId: 'cart_test', binaryId: 'binary_test', sha256, kind: 'media',
+  } } });
+  await assert.rejects(publishWebsite({ ...env, input: request() }), (error) => error.code === 'derivative_not_ready' && /original a changé/.test(error.message));
+  assert.equal(env.records.has('publications/OBJ-PUBLIC'), false);
+  assert.equal(env.records.has('cartularies/cart_test/publicationApprovals/approval_' + createHash('sha256').update('website_test1').digest('hex').slice(0, 24)), false);
+  assert.equal(env.records.get('cartularies/cart_test').revision, 1);
+});
+
+test('P3 : un ancien cache sans identité refuse la reprise et demande une nouvelle publication', async () => {
+  const env = harness();
+  await interruptAfterPreparation(env);
+  const cached = env.records.get('cartularies/cart_test/websiteOperations/website_test1').refs[0];
+  delete cached.verificationIdentity;
+  await assert.rejects(publishWebsite({ ...env, input: request() }), (error) => error.code === 'derivative_not_ready' && /nouvelle demande/.test(error.message));
+  assert.equal(env.records.has('publications/OBJ-PUBLIC'), false);
+});
+
+
+for (const reason of ['publication ineligible', 'metadata not stripped', 'unsafe processing', 'derivative from another original']) {
+  test(`P3 : un cache ne contourne pas la condition actuelle ${reason}`, async () => {
+    const env = harness();
+    await interruptAfterPreparation(env);
+    const record = env.records.get('privateDrafts/owner_test/cartularies/cart_test/binaries/binary_test');
+    if (reason === 'publication ineligible') record.publicationEligible = false;
+    if (reason === 'metadata not stripped') record.presentationDerivative.metadataStripped = false;
+    if (reason === 'unsafe processing') record.presentationDerivative.mimeType = 'application/octet-stream';
+    if (reason === 'derivative from another original') record.presentationDerivative.sourceSha256 = `sha256:${'f'.repeat(64)}`;
+    await assert.rejects(publishWebsite({ ...env, input: request() }), { code: 'derivative_not_ready' });
+    assert.equal(env.records.has('publications/OBJ-PUBLIC'), false);
+    assert.equal(env.records.get('cartularies/cart_test').revision, 1);
+  });
+}

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { cartularyNeedsReview } from '../scripts/lib/cartulary-review-policy.mjs';
+import { buildRegistryAggregates } from '../src/features/registry/registryAggregates.ts';
 import {
   buildCartularyHref,
   DEFAULT_REGISTRY_CATALOG_FILTERS,
@@ -96,6 +98,22 @@ test('une collection secondaire retrouve aussi le Cartulaire sans casser la coll
   assert.deepEqual(result.map(({ cartularyId }) => cartularyId), ['watch-multi-collection']);
 });
 
+test('le filtre à revoir du catalogue liste exactement ce que l’indicateur compte (P-C5)', () => {
+  const catalog = [...fixtures, item({ cartularyId: 'watch-complete', displayTitle: 'Montre revue', completenessLevel: 'complete' })];
+  const listed = filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, needsReview: true });
+  assert.deepEqual(listed.map(({ cartularyId }) => cartularyId), ['car-bentley-gt', 'iwc-flieger-utc', 'watch-geneve']);
+  assert.ok(listed.every(cartularyNeedsReview));
+  assert.equal(listed.length, buildRegistryAggregates(catalog).needsReviewCount, 'même prédicat que le tableau de bord');
+  assert.equal(filterAndSortRegistryItems(catalog, DEFAULT_REGISTRY_CATALOG_FILTERS).length, 4, 'sans le drapeau, tout le catalogue');
+  assert.equal(filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, needsReview: false }).length, 4);
+  // `?lifecycle=review` ne suffirait pas : l'IWC est `active` mais reste `imported_unreviewed`.
+  const byLifecycle = filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, lifecycleStatus: 'review' });
+  assert.deepEqual(byLifecycle.map(({ cartularyId }) => cartularyId), ['car-bentley-gt']);
+  // Le drapeau se combine aux autres facettes.
+  const combined = filterAndSortRegistryItems(catalog, { ...DEFAULT_REGISTRY_CATALOG_FILTERS, needsReview: true, assetType: 'watch' });
+  assert.deepEqual(combined.map(({ cartularyId }) => cartularyId), ['iwc-flieger-utc', 'watch-geneve']);
+});
+
 test('les trois tris restent déterministes et ne modifient pas la source', () => {
   const sourceOrder = fixtures.map(({ cartularyId }) => cartularyId);
   const recent = filterAndSortRegistryItems(fixtures, DEFAULT_REGISTRY_CATALOG_FILTERS);
@@ -117,7 +135,7 @@ test('les trois tris restent déterministes et ne modifient pas la source', () =
 test('le lien Cartulaire conserve le contexte et encode les paramètres', () => {
   const href = buildCartularyHref('cartulary/à vérifier', '/registry/reg_demo/items?q=IWC UTC');
   const url = new URL(href, 'https://cartularia.test');
-  assert.equal(url.pathname, '/cartulary-view');
+  assert.equal(url.pathname, '/cartulary');
   assert.equal(url.searchParams.get('cartularyId'), 'cartulary/à vérifier');
   assert.equal(url.searchParams.get('returnTo'), '/registry/reg_demo/items?q=IWC UTC');
 });
@@ -142,6 +160,11 @@ test('le Cartulaire Rolex ouvre la même interface complète que l’IWC', () =>
 
 test('toute nouvelle montre est dirigée vers le Cartulaire complet', () => {
   const href = buildCartularyHref('cart_watch_future_0001', '/registry/reg_demo/items', 'watch');
+  assert.equal(new URL(href, 'https://cartularia.test').pathname, '/cartulary');
+});
+
+test('un objet d’une autre verticale ouvre le même lecteur unique (ADR-028)', () => {
+  const href = buildCartularyHref('cart_car_future_0001', '/registry/reg_demo/items', 'car');
   assert.equal(new URL(href, 'https://cartularia.test').pathname, '/cartulary');
 });
 

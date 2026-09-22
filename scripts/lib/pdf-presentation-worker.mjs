@@ -11,7 +11,7 @@ export async function renderPdfPresentation(inputPath, outputPath) {
   const bytes = new Uint8Array(await readFile(inputPath));
   if (bytes.length > 50 * 1024 * 1024) fail('file_too_large', 'PDF trop volumineux.');
   // Data-only input: no remote URL, script execution, XFA or system font lookup.
-  const task = getDocument({ data: bytes, isEvalSupported: false, enableXfa: false, useSystemFonts: false, useWorkerFetch: false, stopAtErrors: true, verbosity: 0 });
+  const task = getDocument({ data: bytes, enableScripting: false, isEvalSupported: false, enableXfa: false, useSystemFonts: false, useWorkerFetch: false, stopAtErrors: true, verbosity: 0 });
   const source = await task.promise;
   const output = await PDFDocument.create({ updateMetadata: false });
   let totalPixels = 0;

@@ -3,9 +3,11 @@ import type { User } from 'firebase/auth';
 import type { CloudSyncReport } from './cloudDraft';
 import {
   cartulariaLocalVault,
+  LocalVaultAccessError,
   DEFAULT_LOCAL_CARTULARY_ID,
   VAULT_UPDATED_EVENT,
 } from './localVault';
+import { PRIVATE_SESSION_LOCK_EVENT } from '../security/privateSessionEvents.ts';
 import {
   AUTHORITATIVE_SYNC_FOLLOW_UP_DELAY_MS,
   cloudSyncRetryDelay,
@@ -62,11 +64,55 @@ export function useHybridPersistence(
   const [cloudStatus, setCloudStatus] = useState<CloudPersistenceStatus>('signed-out');
   const [report, setReport] = useState(emptyReport);
   const [error, setError] = useState<string | null>(null);
+  // Keep this handle immutable: a callback from account A must never target account B's export.
+  const vault = useRef(cartulariaLocalVault).current;
+  const lifecycle = useRef({ mounted: false, closed: false, terminal: false, epoch: 0, uid: vault?.identityUid ?? null });
   const syncInFlight = useRef<Promise<void> | null>(null);
   const syncNowRef = useRef<() => Promise<void>>(async () => undefined);
   const followUpTimer = useRef<number | undefined>(undefined);
   const retryAttempt = useRef(0);
   const rerunRequested = useRef(false);
+
+  const invalidate = useCallback(() => {
+    lifecycle.current.closed = true;
+    lifecycle.current.epoch += 1;
+    if (followUpTimer.current !== undefined) window.clearTimeout(followUpTimer.current);
+    followUpTimer.current = undefined;
+    retryAttempt.current = 0;
+    rerunRequested.current = false;
+    syncInFlight.current = null;
+  }, []);
+
+  useEffect(() => {
+    const session = lifecycle.current;
+    session.mounted = true;
+    session.closed = session.terminal;
+    const onLock = () => {
+      session.terminal = true;
+      invalidate();
+      setUser(null);
+      setCloudStatus('signed-out');
+      setReport(emptyReport);
+    };
+    window.addEventListener(PRIVATE_SESSION_LOCK_EVENT, onLock);
+    return () => {
+      session.mounted = false;
+      invalidate();
+      window.removeEventListener(PRIVATE_SESSION_LOCK_EVENT, onLock);
+    };
+  }, [invalidate, cartularyId, remoteSyncEnabled]);
+
+  const captureOperation = useCallback(() => {
+    const epoch = lifecycle.current.epoch;
+    const isCurrent = () => Boolean(vault?.isAccessible && vault.cartularyId === cartularyId && lifecycle.current.mounted
+      && !lifecycle.current.closed && lifecycle.current.epoch === epoch
+      && (!remoteSyncEnabled || (user && lifecycle.current.uid === user.uid)));
+    const assertActive = () => {
+      if (!isCurrent()) throw new LocalVaultAccessError();
+      vault!.assertAccessible();
+    };
+    return { isCurrent, assertActive };
+  }, [user, vault, cartularyId, remoteSyncEnabled]);
 
   useEffect(() => {
     if (!remoteSyncEnabled) {
@@ -83,12 +129,26 @@ export function useHybridPersistence(
     ]).then(([{ onAuthStateChanged }, { auth }]) => {
       if (!active) return;
       unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+        if (!active || !lifecycle.current.mounted || lifecycle.current.closed) return;
+        if (!nextUser || (lifecycle.current.uid && lifecycle.current.uid !== nextUser.uid)) {
+          lifecycle.current.terminal = true;
+          invalidate();
+          vault?.revokeAccess();
+          setUser(null);
+          setCloudStatus('signed-out');
+          setReport(emptyReport);
+          return;
+        }
+        lifecycle.current.uid = nextUser.uid;
         setUser(nextUser);
-        setCloudStatus(nextUser ? 'syncing' : 'signed-out');
-        if (!nextUser) setReport(emptyReport);
+        setCloudStatus('syncing');
       });
     }).catch((authError: unknown) => {
-      if (!active) return;
+      if (!active || lifecycle.current.closed) return;
+      lifecycle.current.terminal = true;
+      invalidate();
+      vault?.revokeAccess();
+      setUser(null);
       setCloudStatus('error');
       setError(messageFromError(authError));
     });
@@ -96,13 +156,14 @@ export function useHybridPersistence(
       active = false;
       unsubscribe();
     };
-  }, [remoteSyncEnabled]);
+  }, [remoteSyncEnabled, invalidate, vault]);
 
   const syncNow = useCallback(async () => {
-    if (!cartulariaLocalVault) return;
-    const vault = cartulariaLocalVault;
+    const { isCurrent, assertActive } = captureOperation();
+    if (!vault || !isCurrent()) return;
     if (!remoteSyncEnabled || !user) {
       await vault.flush();
+      if (!isCurrent()) return;
       setLocalStatus('ready');
       setCloudStatus('signed-out');
       return;
@@ -125,16 +186,20 @@ export function useHybridPersistence(
           synchronizePrivateDraft,
           waitForAuthoritativeSyncCycle,
         } = await import('./cloudDraft.ts');
-        await markUserActivity(user.uid).catch(() => undefined);
-        const nextReport = await synchronizePrivateDraft({ uid: user.uid, cartularyId, vault });
+        assertActive();
+        await markUserActivity(user.uid, assertActive).catch(() => undefined);
+        assertActive();
+        const nextReport = await synchronizePrivateDraft({ uid: user.uid, cartularyId, vault, assertActive });
+        if (!isCurrent()) return;
         setReport({
-          lastSyncedAt: nextReport.lastSyncedAt,
-          pendingCount: nextReport.pushed + nextReport.pulled,
+          lastSyncedAt: nextReport.status === 'synced' ? nextReport.lastSyncedAt : null,
+          pendingCount: nextReport.pendingCount,
           conflicts: nextReport.conflicts,
         });
         setCloudStatus(nextReport.status === 'remote_deleted'
           ? 'remote-deleted'
-          : nextReport.status);
+          : nextReport.status === 'pending' ? 'syncing' : nextReport.status);
+        if (nextReport.status === 'pending') rerunRequested.current = true;
         setLocalStatus('ready');
         notifyCloudPullApplied({
           cartularyId,
@@ -148,9 +213,11 @@ export function useHybridPersistence(
           && nextReport.pushed > 0
         ) {
           await waitForAuthoritativeSyncCycle(cartularyId, nextReport.authoritativeRequestId);
+          if (!isCurrent()) return;
           rerunRequested.current = true;
         }
       } catch (syncError) {
+        if (!isCurrent()) return;
         const retryDelay = cloudSyncRetryDelay(retryAttempt.current);
         if (retryDelay === null) {
           setCloudStatus('error');
@@ -160,23 +227,24 @@ export function useHybridPersistence(
           setCloudStatus('syncing');
           followUpTimer.current = window.setTimeout(() => {
             followUpTimer.current = undefined;
-            void syncNowRef.current();
+            if (isCurrent()) void syncNowRef.current();
           }, retryDelay);
         }
       }
     })();
     syncInFlight.current = operation;
     await operation.finally(() => {
-      syncInFlight.current = null;
+      if (syncInFlight.current === operation) syncInFlight.current = null;
+      if (!isCurrent()) return;
       if (rerunRequested.current && followUpTimer.current === undefined) {
         rerunRequested.current = false;
         followUpTimer.current = window.setTimeout(() => {
           followUpTimer.current = undefined;
-          void syncNowRef.current();
+          if (isCurrent()) void syncNowRef.current();
         }, AUTHORITATIVE_SYNC_FOLLOW_UP_DELAY_MS);
       }
     });
-  }, [cartularyId, remoteSyncEnabled, user]);
+  }, [cartularyId, remoteSyncEnabled, user, vault, captureOperation]);
 
   useEffect(() => {
     syncNowRef.current = syncNow;
@@ -190,19 +258,24 @@ export function useHybridPersistence(
   }, [cartularyId, user?.uid]);
 
   useEffect(() => {
-    if (!cartulariaLocalVault) return;
-    const vault = cartulariaLocalVault;
+    const { isCurrent } = captureOperation();
+    if (!vault || !isCurrent()) return;
+    let active = true;
     let timer: number | undefined;
     const handleUpdate = () => {
+      if (!active || !isCurrent()) return;
       setLocalStatus('saving');
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
+        if (!active || !isCurrent()) return;
         void vault.flush()
           .then(() => {
+            if (!active || !isCurrent()) return;
             setLocalStatus('ready');
             return syncNow();
           })
           .catch((localError: unknown) => {
+            if (!active || !isCurrent()) return;
             setLocalStatus('error');
             setError(messageFromError(localError));
           });
@@ -211,50 +284,61 @@ export function useHybridPersistence(
     window.addEventListener(VAULT_UPDATED_EVENT, handleUpdate);
     void syncNow();
     return () => {
+      active = false;
       window.removeEventListener(VAULT_UPDATED_EVENT, handleUpdate);
       window.clearTimeout(timer);
     };
-  }, [syncNow]);
+  }, [syncNow, vault, captureOperation]);
 
   const deleteAllData = useCallback(async () => {
-    if (!cartulariaLocalVault) return;
+    const { isCurrent, assertActive } = captureOperation();
+    if (!vault || !isCurrent()) return;
     setError(null);
     try {
       if (remoteSyncEnabled && user) {
         const { deletePrivateCloudDraft } = await import('./cloudDraft.ts');
-        await deletePrivateCloudDraft(user.uid, cartularyId);
+        assertActive();
+        await deletePrivateCloudDraft(user.uid, cartularyId, assertActive);
       }
-      await cartulariaLocalVault.deleteAllLocalData();
+      assertActive();
+      await vault.deleteAllLocalData();
+      if (!isCurrent()) return;
       setLocalStatus('deleted');
       setCloudStatus(user ? 'remote-deleted' : 'signed-out');
     } catch (deleteError) {
+      if (!isCurrent()) return;
       setError(messageFromError(deleteError));
       throw deleteError;
     }
-  }, [cartularyId, remoteSyncEnabled, user]);
+  }, [cartularyId, remoteSyncEnabled, user, vault, captureOperation]);
 
   const resolveConflict = useCallback(async (
     conflict: CloudSyncReport['conflicts'][number],
     strategy: 'keep-local' | 'take-cloud',
   ) => {
-    if (!cartulariaLocalVault || !user) return;
+    const { isCurrent, assertActive } = captureOperation();
+    if (!vault || !user || !isCurrent()) return;
     setCloudStatus('syncing');
     setError(null);
     try {
       const { resolvePrivateDraftConflict } = await import('./cloudDraft.ts');
+      assertActive();
       const nextReport = await resolvePrivateDraftConflict({
         uid: user.uid,
         cartularyId,
-        vault: cartulariaLocalVault,
+        vault,
+        assertActive,
         conflict,
         strategy,
       });
+      if (!isCurrent()) return;
       setReport({
-        lastSyncedAt: nextReport.lastSyncedAt,
-        pendingCount: nextReport.pushed + nextReport.pulled,
+        lastSyncedAt: nextReport.status === 'synced' ? nextReport.lastSyncedAt : null,
+        pendingCount: nextReport.pendingCount,
         conflicts: nextReport.conflicts,
       });
-      setCloudStatus(nextReport.status === 'remote_deleted' ? 'remote-deleted' : nextReport.status);
+      setCloudStatus(nextReport.status === 'remote_deleted' ? 'remote-deleted' : nextReport.status === 'pending' ? 'syncing' : nextReport.status);
+      if (nextReport.status === 'pending') void syncNowRef.current();
       notifyCloudPullApplied({
         cartularyId,
         stateKeys: [
@@ -267,10 +351,11 @@ export function useHybridPersistence(
         ],
       });
     } catch (resolutionError) {
+      if (!isCurrent()) return;
       setCloudStatus('error');
       setError(messageFromError(resolutionError));
     }
-  }, [cartularyId, user]);
+  }, [cartularyId, user, vault, captureOperation]);
 
   return {
     localStatus,

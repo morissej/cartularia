@@ -19,7 +19,10 @@ import type {
 } from '../../domain/foundations.ts';
 import type { RegistryFollowUpItem } from '../../domain/followUp.ts';
 import type { RegistryItemProjection } from '../../domain/projections.ts';
-import { observeRegistryFollowUpsFromItems } from '../../services/followUp.ts';
+import {
+  observeRegistryFollowUpsFromItems,
+  type RegistryFollowUpCoverageState,
+} from '../../services/followUp.ts';
 import { loadRegistryItems, observeRegistryItems } from '../../services/projections.ts';
 import { buildRegistryAggregates } from './registryAggregates.ts';
 import { ROLE_LABELS } from './registryAdministration.ts';
@@ -29,6 +32,7 @@ import {
   assetTypeLabel,
   completenessLabel,
   lifecycleLabel,
+  REVIEW_SIGNAL_EXPLANATION,
 } from './registryPresentation.ts';
 
 type OverviewLoadState = 'loading' | 'ready' | 'error';
@@ -63,6 +67,7 @@ export function RegistryOverview({ registry, organization, membership }: {
   const { collectionName } = useRegistryCollections(registry.id);
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [followUps, setFollowUps] = useState<RegistryFollowUpItem[]>([]);
+  const [followUpState, setFollowUpState] = useState<RegistryFollowUpCoverageState>('loading');
   const [loadState, setLoadState] = useState<OverviewLoadState>('loading');
   const roles = membership.roles.map((role) => ROLE_LABELS[role] || role);
   const canReadCartularies = membership.permissions.includes('cartulary.read');
@@ -90,7 +95,7 @@ export function RegistryOverview({ registry, organization, membership }: {
     }, () => {
       if (!active) return;
       setItems([]);
-      setFollowUps([]);
+      setFollowUpState('error');
       setLoadState('error');
     });
     return () => {
@@ -102,9 +107,13 @@ export function RegistryOverview({ registry, organization, membership }: {
   useEffect(() => {
     if (!canReadCartularies) {
       setFollowUps([]);
+      setFollowUpState('error');
       return () => undefined;
     }
-    return observeRegistryFollowUpsFromItems(items, setFollowUps, () => setFollowUps([]));
+    return observeRegistryFollowUpsFromItems(items, (nextFollowUps, coverage) => {
+      setFollowUps(nextFollowUps);
+      setFollowUpState(coverage.state);
+    });
   }, [canReadCartularies, items]);
 
   const summary = useMemo(() => buildRegistryAggregates(items), [items]);
@@ -150,7 +159,13 @@ export function RegistryOverview({ registry, organization, membership }: {
         <article className={summary.needsReviewCount > 0 ? 'registry-fact--attention' : undefined}>
           <span>À revoir</span>
           <strong>{loadState === 'ready' ? summary.needsReviewCount : '—'}</strong>
-          <small>{loadState === 'ready' && summary.needsReviewCount === 0 ? 'Aucun signal de revue' : 'Statut ou import à vérifier'}</small>
+          <small>
+            {loadState === 'ready' && summary.needsReviewCount === 0
+              ? 'Aucun signal de revue'
+              : loadState === 'ready'
+                ? <a href={`${registrySectionHref(registry.id, 'items')}?review=1`}>Voir les Cartulaires à revoir</a>
+                : 'Déclarations non encore revues'}
+          </small>
         </article>
       </section>
 
@@ -205,19 +220,29 @@ export function RegistryOverview({ registry, organization, membership }: {
               ))}
             </div>
             <p className="registry-dashboard-note">Quantité et niveau de revue des informations et pièces réunies dans chaque Cartulaire.</p>
+            {summary.needsReviewCount > 0 && <p className="registry-dashboard-note">{REVIEW_SIGNAL_EXPLANATION}</p>}
           </section>
 
           <section className="registry-dashboard-panel registry-dashboard-panel--attention">
             <header><div><span className="registry-step">Actions</span><h2>Alertes à traiter</h2></div><AlertTriangle aria-hidden="true" /></header>
-            {actionableAttentionCount === 0 ? (
+            {actionableAttentionCount === 0 && followUpState === 'ready' ? (
               <div className="registry-attention-clear"><CircleCheck aria-hidden="true" /><span>Aucune alerte opérationnelle en cours.</span></div>
-            ) : (
+            ) : actionableAttentionCount > 0 ? (
               <div className="registry-attention-list">
                 {summary.attention.suspended > 0 && <div><a href={`${registrySectionHref(registry.id, 'items')}?lifecycle=suspended`}>Dossiers suspendus</a><strong>{summary.attention.suspended}</strong></div>}
                 {summary.attention.sensitivePossession > 0 && <div><a href={`${registrySectionHref(registry.id, 'items')}?possession=sensitive`}>Situation de possession sensible</a><strong>{summary.attention.sensitivePossession}</strong></div>}
                 {followUpSummary.overdue > 0 && <div><span>Échéances en retard</span><strong>{followUpSummary.overdue}</strong></div>}
                 {followUpSummary.dueSoon > 0 && <div><span>Échéances dans les 30 jours</span><strong>{followUpSummary.dueSoon}</strong></div>}
               </div>
+            ) : null}
+            {followUpState === 'loading' && (
+              <div className="registry-dashboard-loading" role="status"><LoaderCircle className="registry-spinner" aria-hidden="true" /><span>Chargement des rappels autorisés…</span></div>
+            )}
+            {followUpState === 'partial' && (
+              <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><div><h3>Alertes partielles</h3><p>Les alertes affichées sont connues, mais certains Cartulaires ne sont pas encore confirmés.</p></div></div>
+            )}
+            {followUpState === 'error' && (
+              <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><div><h3>Alertes non confirmées</h3><p>{canReadCartularies ? 'Les rappels n’ont pas pu être chargés. Une liste vide ne signifie pas qu’il n’existe aucune alerte.' : 'Vos droits actuels ne permettent pas de lire les rappels Secrets.'}</p></div></div>
             )}
             <p className="registry-dashboard-note">Uniquement les situations qui demandent une action : suspension, perte, vol ou échéance.</p>
             <a href={registrySectionHref(registry.id, 'follow-up')}>Ouvrir le centre de suivi <ArrowRight aria-hidden="true" /></a>
@@ -238,7 +263,13 @@ export function RegistryOverview({ registry, organization, membership }: {
       )}
 
       {loadState === 'ready' && canReadCartularies && (
-        <section className="registry-todo-board"><header><div><h2>À faire</h2><p>{followUpSummary.overdue + followUpSummary.dueSoon} échéance(s) à traiter en priorité.</p></div><a href={registrySectionHref(registry.id, 'follow-up')}>Gérer toutes les tâches <ArrowRight aria-hidden="true" /></a></header></section>
+        <section className="registry-todo-board"><header><div><h2>À faire</h2><p>{followUpState === 'ready'
+          ? `${followUpSummary.overdue + followUpSummary.dueSoon} échéance(s) à traiter en priorité.`
+          : followUpState === 'partial'
+            ? `${followUpSummary.overdue + followUpSummary.dueSoon} échéance(s) connue(s) ; liste partielle.`
+            : followUpState === 'loading'
+              ? 'Chargement des échéances autorisées…'
+              : 'Les échéances ne sont pas confirmées actuellement.'}</p></div><a href={registrySectionHref(registry.id, 'follow-up')}>Gérer toutes les tâches <ArrowRight aria-hidden="true" /></a></header></section>
       )}
 
       <section className="registry-dashboard-account">

@@ -1,3 +1,4 @@
+import { cartularyNeedsReview } from '../../../scripts/lib/cartulary-review-policy.mjs';
 import type { RegistryItemProjection } from '../../domain/projections.ts';
 
 export interface RegistryAggregateCount {
@@ -42,10 +43,8 @@ const timestampValue = (item: RegistryItemProjection) => item.updatedAt
 
 export const buildRegistryAggregates = (sourceItems: RegistryItemProjection[]): RegistryAggregateSummary => {
   const items = sourceItems.filter((item) => item.projectionStatus === 'active');
-  const reviewItems = items.filter((item) => (
-    item.lifecycleStatus === 'review'
-    || item.completenessLevel === 'imported_unreviewed'
-  ));
+  // « À revoir » : prédicat partagé avec le catalogue (`?review=1`), jamais redéfini ici (P-C5).
+  const reviewItems = items.filter(cartularyNeedsReview);
   const suspended = items.filter((item) => item.lifecycleStatus === 'suspended').length;
   const sensitivePossession = items.filter((item) => ['lost', 'stolen', 'destroyed'].includes(item.possessionStatus)).length;
 

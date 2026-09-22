@@ -12,6 +12,8 @@ export type CartularyPossessionStatus =
   | 'recovered'
   | 'transferred';
 export type CartularyPublicationStatus = 'none' | 'draft' | 'published' | 'suspended' | 'revoked';
+/** Niveau de complétude affiché par le Registre : « Données à vérifier », « Partiel », « Complet ». */
+export type CartularyCompletenessLevel = 'imported_unreviewed' | 'partial' | 'complete';
 export type CartularyProofStatus =
   | 'observed'
   | 'documented'
@@ -53,7 +55,7 @@ export interface CartularyEnvelope {
   defaultVisibility: 'secret';
   publicationStatus: CartularyPublicationStatus;
   primaryAssetId: string | null;
-  completenessLevel: 'imported_unreviewed';
+  completenessLevel: CartularyCompletenessLevel;
   lastVerifiedAt: string | null;
   revision: 1;
   integrityHead: string;
@@ -85,6 +87,8 @@ export interface CartularySectionDocument {
   status: 'imported_unreviewed' | 'imported_unmapped';
   fields: Record<string, unknown>;
   extensions?: Record<string, unknown>;
+  /** Posé par une remontée de schéma (ADR-031) quand la version cible ne connaît plus la section. */
+  retiredFromSchema?: { version: string; reason: 'section_removed' };
   revision: 1;
 }
 

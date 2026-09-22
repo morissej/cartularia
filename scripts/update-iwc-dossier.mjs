@@ -7,12 +7,20 @@ import { getStorage } from 'firebase-admin/storage';
 import { IWC_CARTULARY_ID } from '../src/domain/cartularyIds.ts';
 import {
   processPrivateDraftUpload,
-  PRIVATE_UPLOAD_VERIFICATION_VERSION,
+  assertPrivateBinaryOriginal,
+  privateBinaryIsVerified,
 } from './lib/private-upload-command.mjs';
 import { processCartularySyncRequest } from './lib/live-sync-command.mjs';
+import {
+  buildIwcCreationProfile,
+  buildIwcEditableCopy,
+  IWC_PUBLIC_CODE,
+  IWC_SENSITIVITY_PRICES,
+  IWC_UPDATE_DATE,
+} from './lib/iwc-dossier-values.mjs';
 
 const OWNER_UID = process.env.CARTULARIA_OWNER_UID || 'wave1-owner';
-const UPDATE_DATE = '2026-08-29';
+const UPDATE_DATE = IWC_UPDATE_DATE;
 const sourceDirectoryInput = process.env.IWC_SOURCE_DIRECTORY;
 if (!sourceDirectoryInput) throw new Error('IWC_SOURCE_DIRECTORY est requis.');
 const sourceDirectory = resolve(sourceDirectoryInput);
@@ -100,7 +108,7 @@ const mediaDescriptionFor = (relativePath) => {
 const buildSpecificationGroups = () => [
   {
     id: 'basic', title: 'Données de base', items: [
-      { id: 'ad-code', label: 'Code annonce', value: 'Non applicable · dossier OP-4892-XZ9' },
+      { id: 'ad-code', label: 'Code annonce', value: `Non applicable · dossier ${IWC_PUBLIC_CODE}` },
       { id: 'brand', label: 'Marque', value: 'IWC Schaffhausen' },
       { id: 'collection', label: 'Collection', value: 'Pilot’s Watches' },
       { id: 'model', label: 'Modèle', value: 'Flieger UTC (Die Fliegeruhr)' },
@@ -173,28 +181,7 @@ const identificationChecks = [
   { id: 'lume-transition', title: 'Matière lumineuse', note: 'Exemplaire de 2002 en période de transition tritium / Super-LumiNova ; nature exacte à déterminer par marquage et test de luminescence.', checked: false },
 ];
 
-const editableCopy = {
-  heroSummary: 'IWC Flieger UTC 3251-001 en acier de 39 mm, achetée neuve le 8 mars 2002. Le dossier réunit la facture d’origine, la boîte IWC, des vues d’état de 2022 et 2026, le mouvement ouvert, une vidéo et cinq analyses.',
-  originParagraphs: [
-    'Introduite en 1998, la Fliegeruhr UTC 3251 associe la lisibilité des montres de pilote IWC à une complication de voyage : l’heure de référence demeure sur un disque de 24 heures à 12 heures, tandis que l’heure locale se règle par sauts d’une heure sans arrêter la trotteuse.',
-    'La référence 3251-001 est la version acier à cadran noir livrée sur cuir. Son calibre IWC 37526 et son module TZC sont protégés par une cage interne en fer doux. Les sources recoupées retiennent 39,0 mm, 13,5 mm, 60 m et 21 rubis.',
-    'Deux divergences restent ouvertes : la base ETA est mieux étayée comme 2893-2, tandis que certains rapports citent 2892-A2 ; la fin de production du calibre 37526 est donnée en 2003 ou 2005 selon les sources. La transition tritium / Super-LumiNova autour de 2002 n’est pas datée assez précisément pour conclure sur cet exemplaire.',
-  ],
-  originKnowledge: 'Les affirmations d’authenticité restent graduées : la facture et le numéro de fond sont corrélés, le mouvement signé et 21 rubis sont observés, mais la couronne, le lume, le fonctionnement du TZC et le niveau de polissage restent à vérifier.',
-  watchDescription: [
-    'L’exemplaire porte le numéro 2715537, visible sur le fond extérieur et intérieur, identique au numéro porté sur la facture Aldebert du 08.03.2002. Le calibre automatique IWC signé, avec rotor doré marqué 21 jewels, a été photographié ouvert le 05.08.2026.',
-    'Le cadran noir, le disque UTC, le guichet de date, le bracelet cuir marron et la boîte IWC sont documentés. La facture originale est conservée comme pièce privée car elle contient des données personnelles.',
-  ],
-  conditionSummary: [
-    'Les photographies montrent un cadran lisible et cohérent, un boîtier en état d’usage avec marques superficielles visibles, ainsi qu’un bracelet cuir très patiné et usé. La boîte est présente mais son revêtement blanc est fortement écaillé et dégradé.',
-    'L’ouverture du fond documente le mouvement et la correspondance du numéro de boîtier. Les images seules ne permettent pas de conclure au fonctionnement du module TZC, à la précision, à la réserve de marche, à l’étanchéité, à l’authenticité de la couronne ni à l’absence de sur-polissage.',
-  ],
-  conditionFacts: {
-    lastCondition: '28/08/2026',
-    conclusion: 'Configuration cohérente et traçabilité forte · contrôle fonctionnel à compléter',
-    openPoint: 'TZC, marche, étanchéité, couronne, lume et historique de service',
-  },
-};
+const editableCopy = buildIwcEditableCopy();
 
 const marketHistory = [
   { id: 'val-2026-conservative', date: '2026-08-18', lowValue: 2500, midValue: 2900, highValue: 3300, currency: 'EUR', confidence: 'Moyenne', source: 'Croisement note de cession du 18/08/2026 et revue Chrono24 du 08/08/2026 ; scénarios selon boîte et révision', visibility: 'Secret' },
@@ -303,10 +290,9 @@ for (const record of records.filter((candidate) => candidate.uploadSupported)) {
     existing.exists
     && existingData?.sha256 === record.sha256
     && existingData?.storagePath === storagePath
-    && existingData?.uploadStatus === 'ready'
-    && existingData?.verificationStatus === 'accepted'
-    && existingData?.verificationVersion === PRIVATE_UPLOAD_VERIFICATION_VERSION
+    && privateBinaryIsVerified(existingData)
   ) {
+    await assertPrivateBinaryOriginal({ bucket, manifest: existingData, uid: OWNER_UID, cartularyId: IWC_CARTULARY_ID, binaryId: record.binaryId });
     reused += 1;
     acceptedBinaryIds.add(record.binaryId);
     console.log(JSON.stringify({ event: 'IWC_FILE_REUSED', path: record.relativePath, size: record.size }));
@@ -331,23 +317,27 @@ for (const record of records.filter((candidate) => candidate.uploadSupported)) {
     verificationStatus: 'processing',
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
-  console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_STARTED', path: record.relativePath, size: record.size }));
-  await bucket.upload(record.path, {
-    destination: storagePath,
-    resumable: false,
-    metadata: {
-      contentType: record.mimeType,
+  const [originalExists] = await bucket.file(storagePath).exists();
+  if (!originalExists) {
+    console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_STARTED', path: record.relativePath, size: record.size }));
+    await bucket.upload(record.path, {
+      destination: storagePath,
+      preconditionOpts: { ifGenerationMatch: 0 },
+      resumable: false,
       metadata: {
-        ownerUid: OWNER_UID,
-        cartularyId: IWC_CARTULARY_ID,
-        binaryId: record.binaryId,
-        sha256: record.sha256,
-        kind,
-        sourceRelativePath: record.relativePath,
+        contentType: record.mimeType,
+        metadata: {
+          ownerUid: OWNER_UID,
+          cartularyId: IWC_CARTULARY_ID,
+          binaryId: record.binaryId,
+          sha256: record.sha256,
+          kind,
+          sourceRelativePath: record.relativePath,
+        },
       },
-    },
-  });
-  console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_FINISHED', path: record.relativePath, size: record.size }));
+    });
+    console.log(JSON.stringify({ event: 'IWC_FILE_UPLOAD_FINISHED', path: record.relativePath, size: record.size }));
+  }
   const [objectMetadata] = await bucket.file(storagePath).getMetadata();
   console.log(JSON.stringify({ event: 'IWC_FILE_VERIFICATION_STARTED', path: record.relativePath }));
   const verification = await processPrivateDraftUpload({ firestore, storage, object: objectMetadata });
@@ -355,7 +345,8 @@ for (const record of records.filter((candidate) => candidate.uploadSupported)) {
     throw new Error(`Fichier refusé après contrôle : ${record.relativePath} (${verification.reason || 'motif inconnu'}).`);
   }
   acceptedBinaryIds.add(record.binaryId);
-  uploaded += 1;
+  if (originalExists) reused += 1;
+  else uploaded += 1;
   console.log(JSON.stringify({ event: 'IWC_FILE_ACCEPTED', path: record.relativePath, format: verification.format }));
 }
 
@@ -464,7 +455,13 @@ const ownerDocuments = records
     sha256: record.sha256,
   }));
 
+const creationProfile = buildIwcCreationProfile();
+
 const stateValues = new Map([
+  // ADR-029 : le Cartulaire complet n'a plus de repli IWC codé ; le brouillon privé porte tout.
+  ['cartularia-creation-profile', creationProfile],
+  ['cartularia-public-code', IWC_PUBLIC_CODE],
+  ['cartularia-sensitivity-prices', IWC_SENSITIVITY_PRICES],
   ['cartularia-specification-groups', buildSpecificationGroups()],
   ['cartularia-identification-checks', identificationChecks],
   ['cartularia-condition-entries', conditionEntries],
@@ -518,7 +515,7 @@ await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).set({
   requestedAt: FieldValue.serverTimestamp(),
   updatedAt: FieldValue.serverTimestamp(),
 });
-const sync = await processCartularySyncRequest({ firestore, requestDocumentId: IWC_CARTULARY_ID });
+const sync = await processCartularySyncRequest({ firestore, storage, requestDocumentId: IWC_CARTULARY_ID });
 
 console.log(JSON.stringify({
   event: 'IWC_DOSSIER_UPDATED',

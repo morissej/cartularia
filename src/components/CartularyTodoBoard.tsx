@@ -7,7 +7,10 @@ import type { RemovedItem } from '../utils/undoableDeletion';
 interface CartularyTodoBoardProps {
   followUp: CartularyFollowUpController;
   language: 'FR' | 'EN';
+  /** Lecture (V5 point 1) : chaque ligne en texte pur, aucun formulaire, aucun message de synchronisation. */
   readOnly?: boolean;
+  /** Texte seul (ADR-026) : la lecture est nommée « démonstration » ou simple « lecture seule ». */
+  demonstration?: boolean;
 }
 
 const categoryOptions: Array<{ value: FollowUpCategory; fr: string; en: string }> = [
@@ -17,7 +20,7 @@ const categoryOptions: Array<{ value: FollowUpCategory; fr: string; en: string }
   { value: 'maintenance', fr: 'Entretien', en: 'Maintenance' },
 ];
 
-export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp, language, readOnly = false }) => {
+export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp, language, readOnly = false, demonstration = false }) => {
   const { todos, syncError, addTodo, updateTodo, removeTodo, restoreTodo } = followUp;
   const [newText, setNewText] = useState('');
   const [newDueAt, setNewDueAt] = useState(() => new Date().toISOString().slice(0, 10));
@@ -26,6 +29,10 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
   const [editingText, setEditingText] = useState('');
   const [deletedTodo, setDeletedTodo] = useState<RemovedItem<CartularyFollowUpTodo> | null>(null);
   const isFrench = language === 'FR';
+  const categoryLabel = (category: FollowUpCategory) => {
+    const option = categoryOptions.find((entry) => entry.value === category) ?? categoryOptions[0];
+    return isFrench ? option.fr : option.en;
+  };
 
   useEffect(() => {
     if (!deletedTodo) return;
@@ -91,18 +98,29 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
         <button type="submit" disabled={!newText.trim()}><Plus size={16} />{isFrench ? 'Ajouter' : 'Add'}</button>
       </form>}
 
-      {readOnly && <p className="demo-read-only-hint">{isFrench ? 'Démonstration en lecture seule' : 'Read-only demonstration'}</p>}
+      {readOnly && <p className="demo-read-only-hint">{demonstration ? (isFrench ? 'Démonstration en lecture seule' : 'Read-only demonstration') : (isFrench ? 'Lecture seule' : 'Read-only')}</p>}
 
-      {syncError && <p className="todo-sync-error" role="status">{syncError}</p>}
+      {/* Un lecteur ne synchronise rien : l'état de synchronisation n'est montré qu'à l'éditeur (V5 M1). */}
+      {!readOnly && syncError && <p className="todo-sync-error" role="status">{syncError}</p>}
 
       {todos.length > 0 ? (
         <ul className="cover-todo-board__list">
-          {todos.map((todo) => (
+          {todos.map((todo) => readOnly ? (
+            // Lecture : la ligne est du texte (état lu par le lecteur d'écran, échéance datée, nature), sans aucun contrôle.
+            <li key={todo.id} className={todo.status === 'completed' ? 'is-completed' : undefined}>
+              <span className="cover-todo-board__status cover-todo-board__status--static">
+                <span aria-hidden="true">{todo.status === 'completed' ? <Check size={16} /> : <Circle size={16} />}</span>
+                <span className="sr-only">{todo.status === 'completed' ? (isFrench ? 'Terminée' : 'Completed') : (isFrench ? 'Planifiée' : 'Planned')}</span>
+              </span>
+              <strong>{todo.text}</strong>
+              <time dateTime={todo.dueAt || undefined}>{todo.dueAt || (isFrench ? 'Sans échéance' : 'No due date')}</time>
+              <span className="cover-todo-board__category">{categoryLabel(todo.category)}</span>
+            </li>
+          ) : (
             <li key={todo.id} className={todo.status === 'completed' ? 'is-completed' : undefined}>
               <button
                 type="button"
                 className="cover-todo-board__status"
-                disabled={readOnly}
                 onClick={() => updateTodo(todo.id, { status: todo.status === 'completed' ? 'planned' : 'completed' })}
                 aria-label={todo.status === 'completed' ? (isFrench ? `Rouvrir : ${todo.text}` : `Reopen: ${todo.text}`) : (isFrench ? `Terminer : ${todo.text}` : `Complete: ${todo.text}`)}
               >
@@ -122,22 +140,20 @@ export const CartularyTodoBoard: React.FC<CartularyTodoBoardProps> = ({ followUp
               <input
                 type="date"
                 value={todo.dueAt}
-                disabled={readOnly}
                 onChange={(event) => updateTodo(todo.id, { dueAt: event.target.value })}
                 aria-label={isFrench ? `Échéance de ${todo.text}` : `Due date for ${todo.text}`}
               />
               <select
                 value={todo.category}
-                disabled={readOnly}
                 onChange={(event) => updateTodo(todo.id, { category: event.target.value as FollowUpCategory })}
                 aria-label={isFrench ? `Nature de ${todo.text}` : `Category for ${todo.text}`}
               >
                 {categoryOptions.map((option) => <option key={option.value} value={option.value}>{isFrench ? option.fr : option.en}</option>)}
               </select>
-              {!readOnly && <div className="cover-todo-board__actions">
+              <div className="cover-todo-board__actions">
                 <button type="button" onClick={() => { setEditingId(todo.id); setEditingText(todo.text); }} aria-label={`${isFrench ? 'Modifier' : 'Edit'} : ${todo.text}`}><Pencil size={15} /></button>
                 <button type="button" onClick={() => deleteTodo(todo)} aria-label={`${isFrench ? 'Supprimer' : 'Delete'} : ${todo.text}`}><Trash2 size={15} /></button>
-              </div>}
+              </div>
             </li>
           ))}
         </ul>

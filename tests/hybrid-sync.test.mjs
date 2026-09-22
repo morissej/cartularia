@@ -75,3 +75,39 @@ test('les saisies rapprochées sont regroupées et les reprises restent bornées
   assert.equal(cloudSyncRetryDelay(CLOUD_SYNC_RETRY_DELAYS_MS.length), null);
   assert.equal(cloudSyncRetryDelay(-1), null);
 });
+
+const pendingBinaryPair = (patch = {}) => {
+  const local = {
+    id: 'cart::binary', cartularyId: 'cart', binaryId: 'binary', kind: 'media', fileName: 'proof.png',
+    mimeType: 'image/png', size: 5, sha256: `sha256:${'a'.repeat(64)}`, blob: new Blob(['proof']),
+    updatedAt: 100, dirty: true, deleted: false, cloudRevision: 1, cloudStoragePath: null,
+  };
+  const cloud = { ...local, ownerUid: 'uid', revision: 1,
+    storagePath: `private-drafts/uid/cart/binary/${'a'.repeat(64)}/original`,
+    clientUpdatedAt: 100, uploadStatus: 'pending_upload', ...patch };
+  return [local, cloud];
+};
+for (const [patch, expected] of [
+  [{ uploadStatus: 'pending_upload' }, 'resume'],
+  [{ uploadStatus: 'verifying', verificationStatus: 'processing' }, 'wait'],
+  [{ uploadStatus: 'failed', verificationStatus: 'rejected' }, 'rejected'],
+  [{ uploadStatus: 'ready', verificationStatus: 'accepted' }, 'wait'],
+]) {
+  test(`un manifeste ${JSON.stringify(patch)} ne vaut pas succès`, () => {
+    const pair = pendingBinaryPair(patch);
+    assert.equal(decideBinarySync(...pair), expected);
+    pair[0].dirty = false;
+    assert.equal(decideBinarySync(...pair), expected);
+  });
+}
+
+test('seule une attestation de l’original exact autorise noop', () => {
+  const [local, cloud] = pendingBinaryPair({ uploadStatus: 'ready', verificationStatus: 'accepted' });
+  cloud.verificationIdentity = {
+    schemaVersion: 'private-binary-identity@1.0.0', ownerUid: 'uid', cartularyId: 'cart', binaryId: 'binary',
+    storagePath: cloud.storagePath, size: cloud.size, sha256: cloud.sha256, bucket: 'test', generation: '5',
+  };
+  assert.equal(decideBinarySync(local, cloud), 'noop');
+  cloud.verificationIdentity.sha256 = `sha256:${'b'.repeat(64)}`;
+  assert.equal(decideBinarySync(local, cloud), 'wait');
+});

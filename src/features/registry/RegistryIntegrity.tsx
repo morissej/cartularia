@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import type { RegistryIntegrityEntry } from '../../domain/integrity.ts';
 import type { RegistryDocument } from '../../domain/foundations.ts';
-import { loadRegistryIntegrity, observeRegistryIntegrity } from '../../services/registryIntegrity.ts';
+import { observeRegistryIntegrity } from '../../services/registryIntegrity.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
 import { auditActionLabel, shortDigest } from './registryIntegrity.ts';
 
@@ -60,18 +60,13 @@ export function RegistryIntegrity({ registry, canReadCartularies }: {
 }) {
   const [entries, setEntries] = useState<RegistryIntegrityEntry[]>([]);
   const [loadState, setLoadState] = useState<IntegrityLoadState>('loading');
+  const [verificationAttempt, setVerificationAttempt] = useState(0);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(() => {
     if (!canReadCartularies) return;
     setLoadState('loading');
-    try {
-      setEntries(await loadRegistryIntegrity(registry.id));
-      setLoadState('ready');
-    } catch {
-      setEntries([]);
-      setLoadState('error');
-    }
-  }, [canReadCartularies, registry.id]);
+    setVerificationAttempt((current) => current + 1);
+  }, [canReadCartularies]);
 
   useEffect(() => {
     if (!canReadCartularies) return undefined;
@@ -80,10 +75,9 @@ export function RegistryIntegrity({ registry, canReadCartularies }: {
       setEntries(nextEntries);
       setLoadState('ready');
     }, () => {
-      setEntries([]);
       setLoadState('error');
     });
-  }, [canReadCartularies, registry.id]);
+  }, [canReadCartularies, registry.id, verificationAttempt]);
 
   const facts = useMemo(() => ({
     cartularyCount: entries.length,
@@ -131,7 +125,7 @@ export function RegistryIntegrity({ registry, canReadCartularies }: {
           <h1 id="registry-integrity-title">Chaîne serveur & preuves</h1>
           <p>La chaîne transactionnelle de chaque Cartulaire est recalculée ici. Le Cartulaire serveur reste l’unique autorité ; le Registre n’en présente qu’une lecture vérifiée.</p>
         </div>
-        <button type="button" className="registry-integrity__refresh" onClick={() => void reload()} disabled={loadState === 'loading'}><RefreshCw className={loadState === 'loading' ? 'registry-spinner' : undefined} aria-hidden="true" />Actualiser</button>
+        <button type="button" className="registry-integrity__refresh" onClick={reload} disabled={loadState === 'loading'}><RefreshCw className={loadState === 'loading' ? 'registry-spinner' : undefined} aria-hidden="true" />Vérification complète</button>
       </header>
 
       <section className="registry-integrity-pipeline" aria-label="Preuve serveur Cartularia">

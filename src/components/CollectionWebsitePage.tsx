@@ -5,14 +5,17 @@ import { auth } from '../firebase.ts';
 import { buildCartularyHref } from '../features/registry/registryCatalog.ts';
 import {
   collectionLabelFromIdentifier,
+  collectionWebsiteIsPublished,
   type CollectionWebsiteItemProjection,
   type CollectionWebsitePublication,
   type RegistryCollectionDocument,
 } from '../domain/collections.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../domain/projections.ts';
+import { websiteHasPublishedContent } from '../domain/publication.ts';
 import { loadCollectionWebsitePublication, loadRegistryCollections } from '../services/collections.ts';
-import { loadRegistryItems, loadPublicPublicationStatuses } from '../services/projections.ts';
+import { loadRegistryItems, loadPublicPublicationSummaries } from '../services/projections.ts';
 import { BrandLogo } from './BrandLogo.tsx';
+import { registryCollectionsHref, signedOutRegistryLinks } from '../features/registry/registryReturn.ts';
 
 type CollectionWebsiteState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'not-published' | 'denied' | 'invalid' | 'error';
 
@@ -26,13 +29,20 @@ const parseCollectionWebsiteSelection = (search: string) => {
     .split(',')
     .map((value) => safeIdentifier(value.trim()))
     .filter((value): value is string => Boolean(value)))];
+  // Une adresse publique (publicationId) ignore tout paramètre d'aperçu : aucun lien d'aperçu ni
+  // « Ouvrir le Cartulaire » n'est obtenable par forgeage d'URL (V4, P-C6).
+  const isPublicAddress = Boolean(publicationId);
   return {
     publicationId,
-    preview: parameters.get('preview') === 'local',
+    preview: !isPublicAddress && parameters.get('preview') === 'local',
     registryId,
     collectionIds,
-    previewCartularyId: safeIdentifier(parameters.get('cartularyId') || ''),
-    cartularyUrl: (() => { const value = parameters.get('cartularyUrl'); return value?.startsWith('/watch-website?') ? value : null; })(),
+    previewCartularyId: isPublicAddress ? null : safeIdentifier(parameters.get('cartularyId') || ''),
+    cartularyUrl: (() => {
+      if (isPublicAddress) return null;
+      const value = parameters.get('cartularyUrl');
+      return value?.startsWith('/watch-website?') ? value : null;
+    })(),
   };
 };
 
@@ -41,6 +51,24 @@ const assetTypeLabel = (assetType: string) => assetType === 'watch'
   : assetType === 'car'
     ? 'Automobiles'
     : assetType || 'Autres objets';
+
+/**
+ * Statuts de lien par code public : un objet n'est lié que si sa publication est confirmée et porte au
+ * moins un bloc admis pour le Web (même critère que le rendu de /watch-website). `unknown` si la lecture
+ * a échoué : la Collection reste servie, aucun lien, jamais un faux état.
+ */
+const loadWebsiteLinkStatuses = async (codes: string[]) => {
+  try {
+    const summaries = await loadPublicPublicationSummaries(codes);
+    return {
+      statuses: Object.fromEntries(Object.entries(summaries)
+        .map(([code, summary]): [string, boolean] => [code, summary.published && websiteHasPublishedContent(summary.blockIds)])),
+      unknown: false,
+    };
+  } catch {
+    return { statuses: {} as Record<string, boolean>, unknown: true };
+  }
+};
 
 export const CollectionWebsitePage = () => {
   const selection = useMemo(() => parseCollectionWebsiteSelection(window.location.search), []);
@@ -53,6 +81,7 @@ export const CollectionWebsitePage = () => {
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [assetType, setAssetType] = useState('all');
   const [publicStatuses, setPublicStatuses] = useState<Record<string, boolean>>({});
+  const [publicStatusesUnknown, setPublicStatusesUnknown] = useState(false);
 
   useEffect(() => {
     if (selection.publicationId) {
@@ -65,7 +94,9 @@ export const CollectionWebsitePage = () => {
           }
           setPublication(result.publication);
           setPublicationItems(result.items);
-          setPublicStatuses(await loadPublicPublicationStatuses(result.items.flatMap((item) => item.publicCode ? [item.publicCode] : [])));
+          const { statuses, unknown } = await loadWebsiteLinkStatuses(result.items.flatMap((item) => item.publicCode ? [item.publicCode] : []));
+          setPublicStatuses(statuses);
+          setPublicStatusesUnknown(unknown);
           setState('ready');
         })
         .catch((error: { code?: string }) => setState(error.code === 'permission-denied' ? 'not-published' : 'error'));
@@ -82,9 +113,19 @@ export const CollectionWebsitePage = () => {
       Promise.all([
         loadRegistryCollections(registryId),
         loadRegistryItems(registryId),
-      ]).then(([loadedCollections, loadedItems]) => {
+      ]).then(async ([loadedCollections, loadedItems]) => {
+        const activeItems = loadedItems.filter((entry) => entry.projectionStatus === 'active');
         setCollections(loadedCollections.filter((entry) => selection.collectionIds.includes(entry.id)));
-        setItems(loadedItems.filter((entry) => entry.projectionStatus === 'active'));
+        setItems(activeItems);
+        // L'aperçu propriétaire lit les mêmes statuts publics que la page publique (G1), limités aux
+        // objets qui seront affichés (Collections sélectionnées et objet courant), jamais tout le Registre.
+        const codes = activeItems
+          .filter((entry) => entry.cartularyId === selection.previewCartularyId
+            || registryItemCollectionIds(entry).some((collectionId) => selection.collectionIds.includes(collectionId)))
+          .flatMap((entry) => entry.objectCode ? [entry.objectCode] : []);
+        const { statuses, unknown } = await loadWebsiteLinkStatuses(codes);
+        setPublicStatuses(statuses);
+        setPublicStatusesUnknown(unknown);
         setState('ready');
       }).catch(() => setState('denied'));
     });
@@ -132,7 +173,12 @@ export const CollectionWebsitePage = () => {
         <BrandLogo href="/" />
         <h1>{heading}</h1>
         <p>Ce mini-site lit uniquement une projection de publication dédiée et ne donne jamais accès aux Cartulaires maîtres ni aux données privées du Registre.</p>
-        <a className="button button--quiet" href={selection.preview && selection.registryId ? `/registry/${encodeURIComponent(selection.registryId)}/collections` : '/'}>{selection.preview ? 'Retour au Registre' : 'Retour à Cartularia'}</a>
+        {state === 'signed-out' ? <>
+          <a className="button button--primary" href={`/account/sign-in?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Se connecter pour voir l’aperçu</a>
+          {signedOutRegistryLinks(selection.registryId).map((link) => <a className="button button--quiet" href={link.href} key={link.kind}>{link.label}</a>)}
+        </> : selection.preview && selection.registryId
+          ? <a className="button button--quiet" href={registryCollectionsHref(selection.registryId)}>Retour au Registre</a>
+          : <a className="button button--quiet" href="/">Retour à l’accueil</a>}
         {state === 'error' && <button type="button" onClick={() => window.location.reload()}>Réessayer</button>}
       </main>
     );
@@ -142,13 +188,25 @@ export const CollectionWebsitePage = () => {
     || publication?.registryId
     || (selection.publicationId ? selection.publicationId.split('--')[0] : null)
     || '';
+  // Aperçu propriétaire : l'en-tête dit l'état réel des Collections sélectionnées (statut, consentement, objets en ligne),
+  // lu dans leurs documents ; le public ne voit que la projection des objets sélectionnés d'une Collection publiée.
+  const previewStatus = (() => {
+    if (!selection.preview) return null;
+    const published = collections.filter((entry) => selection.collectionIds.includes(entry.id) && collectionWebsiteIsPublished(entry));
+    if (published.length === 0) return selection.collectionIds.length > 1 ? 'Collections non publiées' : 'Collection non publiée';
+    const online = new Set(published.flatMap((entry) => entry.publishedCartularyIds ?? [])).size;
+    const label = published.length < selection.collectionIds.length
+      ? `${published.length} Collection${published.length > 1 ? 's' : ''} publiée${published.length > 1 ? 's' : ''} sur ${selection.collectionIds.length}`
+      : published.length > 1 ? `${published.length} Collections publiées` : 'Collection publiée';
+    return `${label} (${online} objet${online > 1 ? 's' : ''} en ligne)`;
+  })();
 
   return (
     <div className="catalog-site">
       <header className="catalog-site__header">
         <BrandLogo href={selection.preview ? `/registry/${encodeURIComponent(activeRegistryId)}/collections` : '/'} />
         <div>
-          <span className="eyebrow">Mini-site de Collection</span>
+          <span className="eyebrow">{previewStatus ? `Aperçu local · ${previewStatus}` : 'Mini-site de Collection'}</span>
           <h1>{selectedCollections.map((entry) => entry.websiteTitle || entry.name).join(' · ')}</h1>
           <p>{selectedCollections.length > 1 ? `${selectedCollections.length} Collections sélectionnées` : selectedCollections[0]?.description || 'Une sélection d’objets publiée depuis Cartularia.'}</p>
         </div>
@@ -194,7 +252,7 @@ export const CollectionWebsitePage = () => {
                         {hasPublicWebsite ? <a className="is-primary" href={watchWebsiteHref} target="_blank" rel="noreferrer">
                           <Globe2 size={13} aria-hidden="true" />
                           Voir le mini-site
-                        </a> : <span>Mini-site de l’objet non publié</span>}
+                        </a> : <span>{publicStatusesUnknown ? 'État du mini-site indisponible' : 'Mini-site de l’objet non publié'}</span>}
                         {selection.preview && <a href={cartularyHref}>
                           <FileText size={13} aria-hidden="true" />
                           Ouvrir le Cartulaire

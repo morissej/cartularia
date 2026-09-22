@@ -18,7 +18,7 @@ const recoveryError = (error: unknown) => {
   return 'L’opération de secours n’a pas été confirmée. Conservez votre kit et réessayez.';
 };
 
-export function RecoveryAccessForm({ disabled, onRecovered, onBusy }: { disabled: boolean; onRecovered: (session: RecoveredPersonalSession) => void; onBusy?: (busy: boolean) => void }) {
+export function RecoveryAccessForm({ disabled, onRecovered, onBusy }: { disabled: boolean; onRecovered: (session: RecoveredPersonalSession) => void | Promise<void>; onBusy?: (busy: boolean) => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -29,7 +29,7 @@ export function RecoveryAccessForm({ disabled, onRecovered, onBusy }: { disabled
     setBusy(true);
     onBusy?.(true);
     setMessage('');
-    try { onRecovered(await recoverPersonalVault(await file.text())); }
+    try { await onRecovered(await recoverPersonalVault(await file.text())); }
     catch (error) { setMessage(recoveryError(error)); }
     finally { setBusy(false); onBusy?.(false); }
   };

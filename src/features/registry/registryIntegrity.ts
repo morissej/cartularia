@@ -1,6 +1,8 @@
 export const REGISTRY_AUDIT_ACTION_LABELS: Record<string, string> = {
   'cartulary.created': 'Cartulaire créé',
   'cartulary.live_state.synced': 'Modifications du Cartulaire raccordées',
+  'cartulary.review.confirmed': 'Revue du propriétaire confirmée',
+  'cartulary.schema.upgraded': 'Remontée du Cartulaire vers la version de schéma en vigueur',
   'registry.projected': 'Projection du Registre actualisée',
   'projection.approved': 'Projection approuvée',
   'publication.published': 'Publication réalisée',
@@ -14,6 +16,11 @@ export const REGISTRY_AUDIT_ACTION_LABELS: Record<string, string> = {
   'cartulary.transfer.completed': 'Changement de propriétaire effectif',
   'cartulary.transfer.rejected': 'Cession refusée par l’acquéreur',
   'cartulary.transfer.expired': 'Proposition de cession expirée',
+  // Chaîne des Cartulaires de démonstration (scripts/seed-demo-account.mjs, scripts/lib/demo-data-repair.mjs) :
+  // aucun libellé technique ne doit atteindre le visiteur de la page Preuves du Registre démo.
+  'cartulary.demo.created': 'Cartulaire de démonstration créé',
+  'cartulary.demo.data_repaired': 'Données de démonstration réparées',
+  'cartulary.demo.enriched': 'Données de démonstration enrichies',
 };
 
 export const auditActionLabel = (action: string) => REGISTRY_AUDIT_ACTION_LABELS[action]

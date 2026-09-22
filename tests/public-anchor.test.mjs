@@ -52,6 +52,8 @@ before(async () => {
   firestore = getFirestore(adminApp);
   await testEnvironment.clearFirestore();
   await Promise.all([
+    firestore.doc(`users/${ownerUid}`).set({ uid: ownerUid, status: 'active' }),
+    firestore.doc(`users/${outsiderUid}`).set({ uid: outsiderUid, status: 'active' }),
     firestore.doc('organizations/org_demo').set({ id: 'org_demo', status: 'active' }),
     firestore.doc('registries/reg_collection_privee').set({
       id: 'reg_collection_privee', organizationId: 'org_demo', status: 'active', visibility: 'secret',

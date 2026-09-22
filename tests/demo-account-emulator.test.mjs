@@ -3,15 +3,16 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, setDoc } from 'firebase/firestore';
+import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, orderBy, query, setDoc } from 'firebase/firestore';
 import { DEMO_ACCOUNT, DEMO_CARTULARIES, DEMO_SUBMARINER_CARTULARY_ID } from '../src/data/demoCartularies.ts';
+import { buildDemoAccessDocuments, buildDemoReminderDocuments } from '../src/data/demoCartularyDocuments.ts';
 
 const hostAndPort = (value, fallbackPort) => {
   const [host = '127.0.0.1', port = String(fallbackPort)] = String(value || '').split(':');
   return { host, port: Number(port) };
 };
 
-test('le compte Firebase démo lit cinq Cartulaires et ne peut pas écrire', async () => {
+test('le compte Firebase démo lit cinq Cartulaires « Complet », leurs rappels et accès fictifs, et ne peut pas écrire', async () => {
   const projectId = process.env.GCLOUD_PROJECT || 'cartularia-demo-test';
   const app = initializeApp({ apiKey: 'demo-api-key', projectId }, `demo-${Date.now()}`);
   const auth = getAuth(app);
@@ -56,6 +57,29 @@ test('le compte Firebase démo lit cinq Cartulaires et ne peut pas écrire', asy
       }),
       /permission-denied|Missing or insufficient permissions/,
     );
+    // Enrichissement v2 : dossiers « Complet », rappels de Suivi et projections d'Accès lisibles par la démo.
+    assert.ok(items.docs.every((entry) => entry.data().completenessLevel === 'complete'), 'aucune carte « Données à vérifier »');
+    const expectedReminderIds = DEMO_CARTULARIES.flatMap((cartulary) => buildDemoReminderDocuments(cartulary).map(({ id }) => id)).sort();
+    const reminderIds = [];
+    for (const cartulary of DEMO_CARTULARIES) {
+      const reminders = await getDocs(collection(firestore, 'cartularies', cartulary.id, 'reminders'));
+      reminderIds.push(...reminders.docs.map((entry) => entry.id));
+      assert.ok(reminders.docs.every((entry) => entry.data().visibility === 'secret' && entry.data().cartularyId === cartulary.id && entry.data().createdBy === auth.currentUser?.uid));
+    }
+    assert.deepEqual(reminderIds.sort(), expectedReminderIds);
+    assert.ok(expectedReminderIds.some((id) => id.includes('rolex-submariner')), 'la Submariner porte au moins un rappel');
+    assert.equal(reminderIds.length, 6);
+
+    const accesses = await getDocs(query(collection(firestore, 'registries', DEMO_ACCOUNT.registryId, 'accesses'), orderBy('updatedAt', 'desc')));
+    assert.deepEqual(accesses.docs.map((entry) => entry.id).sort(), buildDemoAccessDocuments().map(({ id }) => id).sort());
+    assert.ok(accesses.docs.every((entry) => entry.data().projectionStatus === 'active' && entry.data().registryId === DEMO_ACCOUNT.registryId));
+    assert.ok(accesses.docs.every((entry) => !/^[^\s@*]+@[^\s@]+$/.test(entry.data().recipientLabel)), 'aucune adresse réelle projetée');
+    await assert.rejects(getDoc(doc(firestore, 'registryInvitations', 'acc_demo_invitation_expert')), /permission-denied|Missing or insufficient permissions/);
+    await assert.rejects(
+      setDoc(doc(firestore, 'registries', DEMO_ACCOUNT.registryId, 'accesses', 'demo_access_forbidden'), { ...buildDemoAccessDocuments()[0], id: 'demo_access_forbidden', contentHash: 'sha256:forbidden' }),
+      /permission-denied|Missing or insufficient permissions/,
+    );
+
     await assert.rejects(
       setDoc(doc(firestore, 'privateDrafts', auth.currentUser.uid, 'cartularies', DEMO_SUBMARINER_CARTULARY_ID), {
         ownerUid: auth.currentUser.uid,

@@ -2,16 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEFAULT_INTERFACE_LANGUAGE,
   adjacentCartularyPage,
   applicationRouteFromPathname,
   cartularyPageFromHash,
   normalizeInterfaceLanguage,
+  pageScrollBehavior,
 } from '../src/utils/interfaceState.ts';
 import {
   cartularyIdFromLocation,
   IWC_CARTULARY_ID,
   ROLEX_CARTULARY_ID,
 } from '../src/domain/cartularyIds.ts';
+import { DEMO_SUBMARINER_CARTULARY_ID } from '../src/data/demoCartularies.ts';
 
 test('les fragments absents ou inconnus reviennent sur une page d’accueil valide', () => {
   assert.equal(cartularyPageFromHash(''), 'cover');
@@ -30,6 +33,11 @@ test('la navigation précédente et suivante ne peut jamais produire undefined',
 
 test('les routes inconnues ne sont pas assimilées au Cartulaire privé', () => {
   assert.equal(applicationRouteFromPathname('/'), 'home');
+  assert.equal(applicationRouteFromPathname('/objets'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/aide-documentaire'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/conseils-photo-video'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/livrables/cartulaire'), 'public-editorial');
+  assert.equal(applicationRouteFromPathname('/confidentialite'), 'privacy-policy');
   assert.equal(applicationRouteFromPathname('/account/create'), 'account-create');
   assert.equal(applicationRouteFromPathname('/account/sign-in'), 'account-sign-in');
   assert.equal(applicationRouteFromPathname('/administration'), 'administration');
@@ -58,7 +66,45 @@ test('la route Cartulaire conserve l’identifiant demandé sans contaminer les 
   );
 });
 
+test('la route de démonstration ne retombe jamais sur un Cartulaire privé', () => {
+  assert.equal(DEMO_SUBMARINER_CARTULARY_ID, 'cart_demo_rolex_submariner_124060');
+  // Adresse tapée à la main ou lien tronqué : la Submariner, pas l’IWC (qui exigerait une session).
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '' }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo/', search: '?returnTo=%2Fregistry' }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '?cartularyId=../../secret' }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: `?cartularyId=${ROLEX_CARTULARY_ID}` }), DEMO_SUBMARINER_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-demo', search: '?cartularyId=cart_demo_ap_royal_oak_15510st' }), 'cart_demo_ap_royal_oak_15510st');
+  // Le repli propriétaire reste inchangé hors de la route de démonstration.
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary', search: '' }), IWC_CARTULARY_ID);
+  assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-view', search: '' }), IWC_CARTULARY_ID);
+});
+
 test('les préférences persistées invalides utilisent des valeurs sûres', () => {
   assert.equal(normalizeInterfaceLanguage('EN'), 'EN');
   assert.equal(normalizeInterfaceLanguage('DE'), 'FR');
+  // V6 (V-D9, G2) : bascule masquée, la langue de l'interface du Cartulaire est FR ; une clé résiduelle « EN » n'est plus relue.
+  assert.equal(DEFAULT_INTERFACE_LANGUAGE, 'FR');
+});
+
+test('V6 relecture (F7) : le retour en haut de page est immédiat sous prefers-reduced-motion, lisse sinon, et tolère un environnement sans matchMedia', () => {
+  const queries = [];
+  assert.equal(pageScrollBehavior({ matchMedia: (query) => { queries.push(query); return { matches: true }; } }), 'instant');
+  assert.equal(pageScrollBehavior({ matchMedia: () => ({ matches: false }) }), 'smooth');
+  assert.equal(pageScrollBehavior({}), 'smooth', 'jsdom (tests/ui) n’implémente pas matchMedia');
+  assert.deepEqual(queries, ['(prefers-reduced-motion: reduce)']);
+});
+
+test('ADR-029 (V7, décision b) : un code public ne sélectionne plus de Cartulaire côté client — /watch-website?publicCode=ROL-… ne charge plus le Rolex', () => {
+  const website = cartularyIdFromLocation({ pathname: '/watch-website', search: '' });
+  const reader = cartularyIdFromLocation({ pathname: '/cartulary', search: '' });
+  assert.equal(website, IWC_CARTULARY_ID);
+  for (const code of ['ROL-487D9CAD', 'ROLEX-1675-01', 'OP-4892-XZ9', 'DEMO-ROL-124060', 'WCH-ABCDEF12']) {
+    // Le mini-site ne dépend que de la projection publique `publications/{code}` (App.tsx) ; l'identifiant local reste celui par défaut.
+    assert.equal(cartularyIdFromLocation({ pathname: '/watch-website', search: `?publicCode=${code}` }), website, code);
+    assert.notEqual(cartularyIdFromLocation({ pathname: '/watch-website', search: `?publicCode=${code}` }), ROLEX_CARTULARY_ID, code);
+    assert.equal(cartularyIdFromLocation({ pathname: '/cartulary', search: `?publicCode=${code}` }), reader, code);
+    assert.equal(cartularyIdFromLocation({ pathname: '/cartulary-view', search: `?publicCode=${code}` }), reader, code);
+  }
+  // Un identifiant explicite garde la priorité, code public ou non.
+  assert.equal(cartularyIdFromLocation({ pathname: '/watch-website', search: `?publicCode=ROL-487D9CAD&cartularyId=${ROLEX_CARTULARY_ID}` }), ROLEX_CARTULARY_ID);
 });

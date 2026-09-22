@@ -14,15 +14,18 @@ import {
 import {
   deleteObject,
   getDownloadURL,
+  getMetadata,
   ref,
   uploadBytes,
 } from 'firebase/storage';
 import { db, storage } from '../firebase.ts';
-import type { CartulariaLocalVault, LocalBinaryRecord, LocalStateRecord } from './localVault.ts';
+import { LocalVaultAccessError, type CartulariaLocalVault, type LocalBinaryRecord, type LocalStateRecord } from './localVault.ts';
 import {
   assertCloudStateSize,
   decideBinarySync,
   decideStateSync,
+  cloudBinaryIsAccepted,
+  sameBinaryContent,
 } from './syncModel.ts';
 import type { CloudBinaryRecord, CloudStateRecord } from './syncModel.ts';
 import { validateFileForUpload } from '../security/fileValidation.ts';
@@ -31,6 +34,13 @@ import { isRegistrySafeBinaryKind, isRegistrySafeStateKey } from '../domain/pers
 
 const RETENTION_POLICY_VERSION = 'inactive-plus-2y-v1';
 const STATE_DOCUMENT_MAXIMUM_BYTES = 900_000;
+type SessionGuard = () => void;
+const noSessionGuard: SessionGuard = () => undefined;
+const vaultSessionGuard = (vault: CartulariaLocalVault, uid: string, cartularyId: string, assertActive = noSessionGuard): SessionGuard => () => {
+  vault.assertAccessible();
+  if ((vault.identityUid !== null && vault.identityUid !== uid) || vault.cartularyId !== cartularyId) throw new LocalVaultAccessError();
+  assertActive();
+};
 
 export interface SyncConflict {
   kind: 'state' | 'binary';
@@ -40,9 +50,10 @@ export interface SyncConflict {
 }
 
 export interface CloudSyncReport {
-  status: 'synced' | 'conflict' | 'remote_deleted';
+  status: 'synced' | 'pending' | 'conflict' | 'remote_deleted';
   authoritativeSyncStatus: 'not_requested' | 'requested' | 'in_progress';
   authoritativeRequestId: string | null;
+  pendingCount: number;
   pushed: number;
   pulled: number;
   pulledStateKeys: string[];
@@ -73,14 +84,19 @@ export const requestAuthoritativeCartularySync = async ({
   uid,
   cartularyId,
   reason = 'private_draft_synchronized',
+  assertActive = noSessionGuard,
 }: {
   uid: string;
   cartularyId: string;
   reason?: string;
+  assertActive?: SessionGuard;
 }) => {
+  assertActive();
   const reference = authoritativeSyncRequestRef(cartularyId);
   return runTransaction(db, async (transaction) => {
+    assertActive();
     const snapshot = await transaction.get(reference);
+    assertActive();
     const current = snapshot.data() as { requestId?: unknown; status?: unknown } | undefined;
     if (current?.status === 'pending' || current?.status === 'processing') {
       return {
@@ -139,6 +155,10 @@ const parseCloudState = (key: string, data: Record<string, unknown>): CloudState
 
 const parseCloudBinary = (binaryId: string, data: Record<string, unknown>): CloudBinaryRecord => ({
   binaryId,
+  ownerUid: typeof data.ownerUid === 'string' ? data.ownerUid : undefined,
+  cartularyId: typeof data.cartularyId === 'string' ? data.cartularyId : undefined,
+  verificationIdentity: data.verificationIdentity && typeof data.verificationIdentity === 'object'
+    ? data.verificationIdentity as Record<string, unknown> : null,
   deleted: data.deleted === true,
   revision: Number.isInteger(data.revision) ? Number(data.revision) : 0,
   fileName: typeof data.fileName === 'string' ? data.fileName : binaryId,
@@ -152,7 +172,7 @@ const parseCloudBinary = (binaryId: string, data: Record<string, unknown>): Clou
     ? 'deleted'
     : ['pending_upload', 'verifying', 'ready', 'failed'].includes(String(data.uploadStatus))
       ? data.uploadStatus as CloudBinaryRecord['uploadStatus']
-      : 'ready',
+      : 'pending_upload',
   verificationStatus: ['processing', 'accepted', 'rejected'].includes(String(data.verificationStatus))
     ? data.verificationStatus as CloudBinaryRecord['verificationStatus']
     : null,
@@ -170,9 +190,12 @@ const deleteStorageObjectIfPresent = async (storagePath: string) => {
   }
 };
 
-const downloadStorageBlob = async (storagePath: string) => {
+const downloadStorageBlob = async (storagePath: string, assertActive: SessionGuard) => {
+  assertActive();
   const downloadUrl = await getDownloadURL(ref(storage, storagePath));
+  assertActive();
   const response = await fetch(downloadUrl);
+  assertActive();
   if (!response.ok) throw new Error(`Téléchargement Storage impossible (${response.status}) pour ${storagePath}.`);
   return response.blob();
 };
@@ -181,8 +204,10 @@ const applyCloudBinaryMetadata = async (
   vault: CartulariaLocalVault,
   cartularyId: string,
   cloud: CloudBinaryRecord,
+  expected: LocalBinaryRecord | null,
+  allowDirty = false,
 ) => {
-  await vault.applyCloudBinary({
+  return vault.applyCloudBinary({
     id: '',
     cartularyId,
     binaryId: cloud.binaryId,
@@ -197,7 +222,7 @@ const applyCloudBinaryMetadata = async (
     deleted: cloud.deleted,
     cloudRevision: cloud.revision,
     cloudStoragePath: cloud.storagePath,
-  });
+  }, expected, { allowDirty });
 };
 
 const syncStateRecord = async (
@@ -205,11 +230,15 @@ const syncStateRecord = async (
   cartularyId: string,
   vault: CartulariaLocalVault,
   local: LocalStateRecord,
-): Promise<{ decision: 'push' | 'pull' | 'noop' | 'conflict'; cloud: CloudStateRecord | null }> => {
+  assertActive: SessionGuard,
+): Promise<{ decision: 'push' | 'pull' | 'noop' | 'conflict' | 'deferred'; cloud: CloudStateRecord | null }> => {
+  assertActive();
   assertCloudStateSize(local.value, STATE_DOCUMENT_MAXIMUM_BYTES);
   const reference = stateRef(uid, cartularyId, local.key);
   const result = await runTransaction(db, async (transaction) => {
+    assertActive();
     const snapshot = await transaction.get(reference);
+    assertActive();
     const cloud = snapshot.exists() ? parseCloudState(local.key, snapshot.data()) : null;
     const decision = decideStateSync(local, cloud);
     if (decision === 'push') {
@@ -229,20 +258,23 @@ const syncStateRecord = async (
     return { decision, cloud };
   });
 
+  assertActive();
+
   if (result.decision === 'push' && result.cloud) {
-    await vault.markStateCloudSynced(local.key, result.cloud.revision);
+    if (!await vault.markStateCloudSynced(local.key, result.cloud.revision, local)) return { ...result, decision: 'deferred' };
   } else if (result.decision === 'pull' && result.cloud) {
     assertCloudStateSize(result.cloud.value, STATE_DOCUMENT_MAXIMUM_BYTES);
-    await vault.applyCloudState({
+    const applied = await vault.applyCloudState({
       ...local,
       value: result.cloud.value,
       deleted: result.cloud.deleted,
       updatedAt: result.cloud.clientUpdatedAt,
       dirty: false,
       cloudRevision: result.cloud.revision,
-    });
+    }, local);
+    if (!applied) return { ...result, decision: 'deferred' };
   } else if (result.decision === 'noop' && result.cloud) {
-    await vault.markStateCloudSynced(local.key, result.cloud.revision);
+    if (!await vault.markStateCloudSynced(local.key, result.cloud.revision, local)) return { ...result, decision: 'deferred' };
   }
   return result;
 };
@@ -250,9 +282,11 @@ const syncStateRecord = async (
 const pullCloudStateWithoutLocal = async (
   vault: CartulariaLocalVault,
   cloud: CloudStateRecord,
+  expected: LocalStateRecord | null = null,
+  allowDirty = false,
 ) => {
   assertCloudStateSize(cloud.value, STATE_DOCUMENT_MAXIMUM_BYTES);
-  await vault.applyCloudState({
+  return vault.applyCloudState({
     id: '',
     cartularyId: vault.cartularyId,
     key: cloud.key,
@@ -261,7 +295,84 @@ const pullCloudStateWithoutLocal = async (
     dirty: false,
     deleted: cloud.deleted,
     cloudRevision: cloud.revision,
-  });
+  }, expected, { allowDirty });
+};
+
+// A completed transfer and an accepted verification are separate checkpoints.
+// Never replace an original merely because its previous upload response was lost.
+const ensureCloudBinaryAccepted = async (
+  uid: string,
+  cartularyId: string,
+  cloud: CloudBinaryRecord,
+  local: LocalBinaryRecord | null,
+  assertActive: SessionGuard,
+): Promise<CloudBinaryRecord> => {
+  if (cloud.deleted) return cloud;
+  const path = `private-drafts/${uid}/${cartularyId}/${cloud.binaryId}/${cloud.sha256.replace(/^sha256:/, '')}/original`;
+  if (cloud.storagePath !== path || cloud.ownerUid !== uid || cloud.cartularyId !== cartularyId) {
+    throw new Error(`Identité de l’original incohérente pour ${cloud.binaryId}.`);
+  }
+  if (cloud.uploadStatus === 'failed' || cloud.verificationStatus === 'rejected') {
+    throw new Error(`Le fichier ${cloud.fileName} a été refusé. Conservez l’original et importez une nouvelle version corrigée.`);
+  }
+  const object = ref(storage, path);
+  const readMetadata = async () => {
+    assertActive();
+    try {
+      const metadata = await getMetadata(object);
+      assertActive();
+      return metadata;
+    } catch (error) {
+      assertActive();
+      if ((error as { code?: string }).code === 'storage/object-not-found') return null;
+      throw error;
+    }
+  };
+  let metadata = await readMetadata();
+  if (!metadata) {
+    if (cloud.verificationStatus === 'accepted') throw new Error(`Original accepté absent pour ${cloud.binaryId}.`);
+    if (!local?.blob || !sameBinaryContent(local, cloud)) throw new Error(`Transfert inachevé : original local nécessaire pour ${cloud.binaryId}.`);
+    const inspection = await validateFileForUpload({ blob: local.blob, fileName: local.fileName, declaredMimeType: local.mimeType });
+    assertActive();
+    try {
+      await uploadBytes(object, local.blob, {
+        contentType: inspection.canonicalMimeType,
+        customMetadata: { ownerUid: uid, cartularyId, binaryId: local.binaryId, sha256: local.sha256,
+          kind: local.kind, originalFileName: local.fileName, inspectionRequested: 'true' },
+      });
+    } catch (error) {
+      // A concurrent tab may have completed the immutable upload, or the
+      // network may have lost its response. Re-read; do not delete/overwrite.
+      metadata = await readMetadata();
+      if (!metadata) throw error;
+    }
+    assertActive();
+    metadata = await readMetadata();
+    if (!metadata) throw new Error(`Transfert non confirmé pour ${cloud.binaryId}.`);
+  }
+  const custom = metadata.customMetadata;
+  if (metadata.size !== cloud.size || custom?.ownerUid !== uid || custom?.cartularyId !== cartularyId
+    || custom?.binaryId !== cloud.binaryId || custom?.sha256 !== cloud.sha256 || custom?.kind !== cloud.kind) {
+    throw new Error(`L’original distant ne correspond pas au fichier ${cloud.binaryId}.`);
+  }
+  if (!cloudBinaryIsAccepted(cloud)) {
+    await waitForPrivateUploadVerification({ uid, cartularyId, binaryId: cloud.binaryId,
+      expectedOriginal: { storagePath: path, sha256: cloud.sha256, size: cloud.size, generation: metadata.generation },
+      assertActive });
+    assertActive();
+  }
+  // Read the final manifest even after a no-op. A snapshot captured before
+  // verification (or in another tab) is never a successful acknowledgement.
+  const snapshot = await getDoc(binaryRef(uid, cartularyId, cloud.binaryId));
+  assertActive();
+  if (!snapshot.exists()) throw new Error(`Manifeste disparu pour ${cloud.binaryId}.`);
+  const accepted = parseCloudBinary(cloud.binaryId, snapshot.data());
+  if (!cloudBinaryIsAccepted(accepted) || accepted.storagePath !== path || accepted.sha256 !== cloud.sha256
+    || accepted.size !== cloud.size || accepted.verificationIdentity?.generation !== metadata.generation
+    || accepted.verificationIdentity?.bucket !== metadata.bucket) {
+    throw new Error(`La validation de l’original ${cloud.binaryId} reste à confirmer.`);
+  }
+  return accepted;
 };
 
 const syncBinaryRecord = async (
@@ -269,122 +380,80 @@ const syncBinaryRecord = async (
   cartularyId: string,
   vault: CartulariaLocalVault,
   local: LocalBinaryRecord,
-  knownCloud: CloudBinaryRecord | null,
-): Promise<{ decision: 'push' | 'pull' | 'noop' | 'conflict'; cloud: CloudBinaryRecord | null }> => {
-  const initialDecision = decideBinarySync(local, knownCloud);
-  if (initialDecision === 'pull' && knownCloud) {
-    if (knownCloud.deleted || !knownCloud.storagePath) {
-      await vault.applyCloudBinary({
-        ...local,
-        blob: null,
-        deleted: true,
-        dirty: false,
-        cloudRevision: knownCloud.revision,
-        cloudStoragePath: knownCloud.storagePath,
-        updatedAt: knownCloud.clientUpdatedAt,
-      });
-    } else {
-      // Les originaux peuvent représenter plusieurs centaines de Mo. La
-      // synchronisation de démarrage ne rapatrie que leur manifeste ; le corps
-      // binaire est chargé et mis en cache lorsqu'un média devient visible.
-      await applyCloudBinaryMetadata(vault, cartularyId, knownCloud);
-    }
-    return { decision: 'pull', cloud: knownCloud };
-  }
-  if (initialDecision === 'conflict') return { decision: 'conflict', cloud: knownCloud };
-  if (initialDecision === 'noop' && knownCloud) {
-    await vault.markBinaryCloudSynced(local.binaryId, knownCloud.revision, knownCloud.storagePath);
-    return { decision: 'noop', cloud: knownCloud };
-  }
-
-  const storagePath = local.deleted ? knownCloud?.storagePath ?? local.cloudStoragePath : uploadPathFor(uid, cartularyId, local);
-  let uploadInspection: Awaited<ReturnType<typeof validateFileForUpload>> | null = null;
-  if (!local.deleted) {
-    if (!local.blob) throw new Error(`Original local absent pour ${local.binaryId}.`);
-    uploadInspection = await validateFileForUpload({
-      blob: local.blob,
-      fileName: local.fileName,
-      declaredMimeType: local.mimeType,
-    });
-  }
-
+  assertActive: SessionGuard,
+): Promise<{ decision: 'push' | 'pull' | 'noop' | 'conflict' | 'deferred'; cloud: CloudBinaryRecord | null }> => {
+  assertActive();
   const reference = binaryRef(uid, cartularyId, local.binaryId);
   const result = await runTransaction(db, async (transaction) => {
+    assertActive();
     const snapshot = await transaction.get(reference);
-    const currentCloud = snapshot.exists() ? parseCloudBinary(local.binaryId, snapshot.data()) : null;
-    const decision = decideBinarySync(local, currentCloud);
-    if (decision !== 'push') return { decision, cloud: currentCloud };
-    const revision = (currentCloud?.revision ?? 0) + 1;
-    const cloud: CloudBinaryRecord = {
-      binaryId: local.binaryId,
-      deleted: local.deleted,
-      revision,
-      fileName: local.fileName,
-      mimeType: local.mimeType,
-      size: local.size,
-      sha256: local.sha256,
-      kind: local.kind,
-      storagePath: local.deleted ? null : storagePath!,
-      clientUpdatedAt: local.updatedAt,
-      uploadStatus: local.deleted
-        ? 'deleted'
-        : currentCloud?.storagePath === storagePath && currentCloud.uploadStatus === 'ready'
-          ? 'ready'
-          : 'pending_upload',
-    };
-    transaction.set(reference, {
-      ownerUid: uid,
-      cartularyId,
-      ...cloud,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    return { decision, cloud };
-  });
-
-  if (result.decision === 'push' && result.cloud) {
-    if (local.deleted && storagePath) await deleteStorageObjectIfPresent(storagePath);
-    if (!local.deleted && result.cloud.uploadStatus === 'pending_upload') {
-      await uploadBytes(ref(storage, storagePath!), local.blob!, {
-        contentType: uploadInspection!.canonicalMimeType,
-        customMetadata: {
-          ownerUid: uid,
-          cartularyId,
-          binaryId: local.binaryId,
-          sha256: local.sha256,
-          kind: local.kind,
-          originalFileName: local.fileName,
-          inspectionRequested: 'true',
-        },
-      });
-      await waitForPrivateUploadVerification({ uid, cartularyId, binaryId: local.binaryId });
+    assertActive();
+    const current = snapshot.exists() ? parseCloudBinary(local.binaryId, snapshot.data()) : null;
+    const decision = decideBinarySync(local, current);
+    if (decision !== 'push') return { decision, cloud: current, previousPath: current?.storagePath };
+    // Accepted identities cannot be substituted (also enforced by P3 rules).
+    if (!local.deleted && current?.verificationStatus === 'accepted' && !sameBinaryContent(local, current)) {
+      return { decision: 'conflict' as const, cloud: current, previousPath: current.storagePath };
     }
-    await vault.markBinaryCloudSynced(local.binaryId, result.cloud.revision, result.cloud.storagePath);
-  } else if (result.decision === 'noop' && result.cloud) {
-    if (local.deleted && local.cloudStoragePath) await deleteStorageObjectIfPresent(local.cloudStoragePath);
-    await vault.markBinaryCloudSynced(local.binaryId, result.cloud.revision, result.cloud.storagePath);
-  } else if (result.decision === 'conflict' && !local.deleted && storagePath && storagePath !== result.cloud?.storagePath) {
-    await deleteStorageObjectIfPresent(storagePath);
+    const cloud: CloudBinaryRecord = {
+      ownerUid: uid, cartularyId, binaryId: local.binaryId, deleted: local.deleted,
+      revision: (current?.revision ?? 0) + 1, fileName: local.fileName, mimeType: local.mimeType,
+      size: local.size, sha256: local.sha256, kind: local.kind,
+      storagePath: local.deleted ? null : uploadPathFor(uid, cartularyId, local), clientUpdatedAt: local.updatedAt,
+      uploadStatus: local.deleted ? 'deleted' : current && cloudBinaryIsAccepted(current) ? 'ready' : 'pending_upload',
+    };
+    transaction.set(reference, { ...cloud, updatedAt: serverTimestamp() }, { merge: true });
+    return { decision, cloud: { ...current, ...cloud }, previousPath: current?.storagePath };
+  });
+  assertActive();
+  if (result.decision === 'conflict' || !result.cloud) return { decision: 'conflict', cloud: result.cloud };
+  let cloud = result.cloud;
+  if (result.decision === 'push') await vault.rebaseBinaryCloudRevision(local.binaryId, cloud.revision, local);
+  if (!cloud.deleted) cloud = await ensureCloudBinaryAccepted(uid, cartularyId, cloud, local, assertActive);
+  assertActive();
+  if (result.decision === 'pull' || (!local.dirty && cloud.fileName !== local.fileName)) {
+    const applied = await applyCloudBinaryMetadata(vault, cartularyId, cloud, local);
+    return { decision: applied ? 'pull' : 'deferred', cloud };
   }
-  return result;
+  if (!local.deleted && cloud.fileName !== local.fileName) {
+    await vault.rebaseBinaryCloudRevision(local.binaryId, cloud.revision, local);
+    return { decision: 'deferred', cloud };
+  }
+  if (local.deleted) {
+    // A crash may leave the cloud tombstone committed before object deletion,
+    // including when the first upload was never acknowledged locally.
+    const originalPath = result.previousPath || local.cloudStoragePath || uploadPathFor(uid, cartularyId, local);
+    await deleteStorageObjectIfPresent(originalPath);
+    assertActive();
+  }
+  const cleaned = await vault.markBinaryCloudSynced(local.binaryId, cloud.revision, cloud.storagePath, local);
+  return { decision: !cleaned ? 'deferred' : result.decision === 'noop' ? 'noop' : 'push', cloud };
 };
 
 export const synchronizePrivateDraft = async ({
   uid,
   cartularyId,
   vault,
+  assertActive,
 }: {
   uid: string;
   cartularyId: string;
   vault: CartulariaLocalVault;
+  assertActive?: SessionGuard;
 }): Promise<CloudSyncReport> => {
+  const assertSession = vaultSessionGuard(vault, uid, cartularyId, assertActive);
+  assertSession();
   await vault.mirrorLocalStorage();
+  assertSession();
   const root = draftRef(uid, cartularyId);
   const existingRoot = await getDoc(root);
+  assertSession();
   if (existingRoot.exists() && existingRoot.data().status === 'deleted') {
     return {
       status: 'remote_deleted',
       authoritativeSyncStatus: 'not_requested',
       authoritativeRequestId: null,
+      pendingCount: 0,
       pushed: 0,
       pulled: 0,
       pulledStateKeys: [],
@@ -402,6 +471,7 @@ export const synchronizePrivateDraft = async ({
     lastActiveAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+  assertSession();
 
   const [allLocalStates, allLocalBinaries, cloudStatesSnapshot, cloudBinariesSnapshot] = await Promise.all([
     vault.listStateRecords(),
@@ -409,6 +479,7 @@ export const synchronizePrivateDraft = async ({
     getDocs(collection(root, 'state')),
     getDocs(collection(root, 'binaries')),
   ]);
+  assertSession();
   const localStates = allLocalStates.filter((record) => isRegistrySafeStateKey(record.key));
   const localBinaries = allLocalBinaries.filter((record) => isRegistrySafeBinaryKind(record.kind));
   const cloudStates = new Map(cloudStatesSnapshot.docs
@@ -420,11 +491,14 @@ export const synchronizePrivateDraft = async ({
   const conflicts: SyncConflict[] = [];
   const pulledStateKeys: string[] = [];
   const pulledBinaryIds: string[] = [];
+  let deferred = false;
   let pushed = 0;
   let pulled = 0;
 
   for (const local of localStates) {
-    const result = await syncStateRecord(uid, cartularyId, vault, local);
+    const result = await syncStateRecord(uid, cartularyId, vault, local, assertSession);
+    assertSession();
+    if (result.decision === 'deferred') deferred = true;
     if (result.decision === 'push') pushed += 1;
     if (result.decision === 'pull') {
       pulled += 1;
@@ -436,13 +510,17 @@ export const synchronizePrivateDraft = async ({
     cloudStates.delete(local.key);
   }
   for (const cloud of cloudStates.values()) {
-    await pullCloudStateWithoutLocal(vault, cloud);
-    pulled += 1;
-    pulledStateKeys.push(cloud.key);
+    assertSession();
+    if (await pullCloudStateWithoutLocal(vault, cloud)) {
+      pulled += 1;
+      pulledStateKeys.push(cloud.key);
+    }
   }
 
   for (const local of localBinaries) {
-    const result = await syncBinaryRecord(uid, cartularyId, vault, local, cloudBinaries.get(local.binaryId) ?? null);
+    const result = await syncBinaryRecord(uid, cartularyId, vault, local, assertSession);
+    assertSession();
+    if (result.decision === 'deferred') deferred = true;
     if (result.decision === 'push') pushed += 1;
     if (result.decision === 'pull') {
       pulled += 1;
@@ -454,14 +532,22 @@ export const synchronizePrivateDraft = async ({
     cloudBinaries.delete(local.binaryId);
   }
   for (const cloud of cloudBinaries.values()) {
+    assertSession();
     if (cloud.deleted || !cloud.storagePath) continue;
-    await applyCloudBinaryMetadata(vault, cartularyId, cloud);
-    pulled += 1;
-    pulledBinaryIds.push(cloud.binaryId);
+    const accepted = await ensureCloudBinaryAccepted(uid, cartularyId, cloud, null, assertSession);
+    if (await applyCloudBinaryMetadata(vault, cartularyId, accepted, null)) {
+      pulled += 1;
+      pulledBinaryIds.push(cloud.binaryId);
+    } else deferred = true;
   }
 
+  const [remainingState, remainingBinaries] = await Promise.all([vault.listStateRecords(), vault.listBinaryRecords()]);
+  assertSession();
+  const pendingCount = remainingState.filter((record) => isRegistrySafeStateKey(record.key) && record.dirty).length
+    + remainingBinaries.filter((record) => isRegistrySafeBinaryKind(record.kind) && record.dirty).length;
   const report: CloudSyncReport = {
-    status: conflicts.length > 0 ? 'conflict' : 'synced',
+    status: conflicts.length > 0 ? 'conflict' : pendingCount > 0 || deferred ? 'pending' : 'synced',
+    pendingCount,
     authoritativeSyncStatus: 'not_requested',
     authoritativeRequestId: null,
     pushed,
@@ -471,6 +557,7 @@ export const synchronizePrivateDraft = async ({
     conflicts,
     lastSyncedAt: new Date().toISOString(),
   };
+  assertSession();
   await updateDoc(root, {
     lastSyncStatus: report.status,
     conflictCount: conflicts.length,
@@ -478,11 +565,22 @@ export const synchronizePrivateDraft = async ({
     binaryRecordCount: localBinaries.length + cloudBinaries.size,
     updatedAt: serverTimestamp(),
   });
+  assertSession();
   if (report.status === 'synced') {
-    const authoritativeRequest = await requestAuthoritativeCartularySync({ uid, cartularyId });
+    const authoritativeRequest = await requestAuthoritativeCartularySync({ uid, cartularyId, assertActive: assertSession });
+    assertSession();
     report.authoritativeSyncStatus = authoritativeRequest.status;
     report.authoritativeRequestId = authoritativeRequest.requestId;
   }
+  // Another tab can close after staging a durable intent but before its IDB
+  // transaction. Include that edit before reporting a fully saved draft.
+  await vault.mirrorLocalStorage();
+  assertSession();
+  const [finalStates, finalBinaries] = await Promise.all([vault.listStateRecords(), vault.listBinaryRecords()]);
+  assertSession();
+  report.pendingCount = finalStates.filter((record) => isRegistrySafeStateKey(record.key) && record.dirty).length
+    + finalBinaries.filter((record) => isRegistrySafeBinaryKind(record.kind) && record.dirty).length;
+  if (report.status === 'synced' && report.pendingCount > 0) report.status = 'pending';
   return report;
 };
 
@@ -492,18 +590,22 @@ export const primePrivateDraftState = async ({
   vault,
   readTimeoutMs = 5_000,
   authoritativeHydration,
+  assertActive,
 }: {
   uid: string;
   cartularyId: string;
   vault: CartulariaLocalVault;
   readTimeoutMs?: number;
+  assertActive?: SessionGuard;
   authoritativeHydration?: {
     id: string;
     stateKeys: readonly string[];
   };
 }) => {
+  const assertSession = vaultSessionGuard(vault, uid, cartularyId, assertActive);
+  assertSession();
   const hydrationMarkerKey = authoritativeHydration
-    ? `cartularia:cloud-hydration:${cartularyId}:${authoritativeHydration.id}`
+    ? `cartularia:cloud-hydration:${encodeURIComponent(uid)}:${cartularyId}:${authoritativeHydration.id}`
     : null;
   let hydrationAlreadyApplied = false;
   if (hydrationMarkerKey) {
@@ -519,6 +621,7 @@ export const primePrivateDraftState = async ({
   const localStates = new Map((await vault.listStateRecords())
     .filter((record) => isRegistrySafeStateKey(record.key))
     .map((record) => [record.key, record]));
+  assertSession();
   const cloudStates = await new Promise<Awaited<ReturnType<typeof getDocs>>>((resolve, reject) => {
     let settled = false;
     const finish = (operation: () => void) => {
@@ -533,17 +636,19 @@ export const primePrivateDraftState = async ({
       (error) => finish(() => reject(error)),
     );
   });
+  assertSession();
   let pulled = 0;
   for (const snapshot of cloudStates.docs) {
+    assertSession();
     if (!isRegistrySafeStateKey(snapshot.id)) continue;
     const cloud = parseCloudState(snapshot.id, snapshot.data() as Record<string, unknown>);
     const local = localStates.get(cloud.key);
     const cloudIsAuthoritative = authoritativeStateKeys.has(cloud.key);
-    if (local?.dirty && !cloudIsAuthoritative) continue;
+    if (local?.dirty) continue;
     if (local && local.cloudRevision >= cloud.revision && !cloudIsAuthoritative) continue;
-    await pullCloudStateWithoutLocal(vault, cloud);
-    pulled += 1;
+    if (await pullCloudStateWithoutLocal(vault, cloud, local ?? null)) pulled += 1;
   }
+  assertSession();
   if (hydrationMarkerKey && !hydrationAlreadyApplied) {
     try {
       globalThis.localStorage?.setItem(hydrationMarkerKey, 'done');
@@ -554,11 +659,13 @@ export const primePrivateDraftState = async ({
   return pulled;
 };
 
-export const markUserActivity = async (uid: string) => {
+export const markUserActivity = async (uid: string, assertActive = noSessionGuard) => {
+  assertActive();
   await updateDoc(doc(db, 'users', uid), {
     lastActiveAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  assertActive();
 };
 
 export const resolvePrivateDraftConflict = async ({
@@ -567,60 +674,91 @@ export const resolvePrivateDraftConflict = async ({
   vault,
   conflict,
   strategy,
+  assertActive,
 }: {
   uid: string;
   cartularyId: string;
   vault: CartulariaLocalVault;
   conflict: SyncConflict;
   strategy: 'keep-local' | 'take-cloud';
+  assertActive?: SessionGuard;
 }) => {
+  const assertSession = vaultSessionGuard(vault, uid, cartularyId, assertActive);
+  assertSession();
   if (conflict.kind === 'state') {
     if (!isRegistrySafeStateKey(conflict.id)) throw new Error('Cette donnée personnelle relève du Coffre personnel.');
+    const local = (await vault.listStateRecords()).find((record) => record.key === conflict.id) ?? null;
+    assertSession();
     const snapshot = await getDoc(stateRef(uid, cartularyId, conflict.id));
+    assertSession();
     if (!snapshot.exists()) throw new Error(`Version cloud absente pour ${conflict.id}.`);
     const cloud = parseCloudState(conflict.id, snapshot.data());
-    if (strategy === 'keep-local') await vault.prepareStateConflictResolution(conflict.id, cloud.revision);
-    else await pullCloudStateWithoutLocal(vault, cloud);
+    const applied = strategy === 'keep-local'
+      ? local && await vault.prepareStateConflictResolution(conflict.id, cloud.revision, local)
+      : await pullCloudStateWithoutLocal(vault, cloud, local, true);
+    if (!applied) throw new Error('La saisie a changé pendant la résolution. Relancez la comparaison des versions.');
   } else {
+    const local = await vault.getBinary(conflict.id);
+    assertSession();
     const snapshot = await getDoc(binaryRef(uid, cartularyId, conflict.id));
+    assertSession();
     if (!snapshot.exists()) throw new Error(`Original cloud absent pour ${conflict.id}.`);
-    const cloud = parseCloudBinary(conflict.id, snapshot.data());
+    let cloud = parseCloudBinary(conflict.id, snapshot.data());
     if (!isRegistrySafeBinaryKind(cloud.kind)) throw new Error('Ce document personnel relève du Coffre personnel.');
+    let applied: boolean;
     if (strategy === 'keep-local') {
-      await vault.prepareBinaryConflictResolution(conflict.id, cloud.revision);
-    } else if (cloud.deleted || !cloud.storagePath) {
-      const local = await vault.getBinary(conflict.id);
-      if (!local) throw new Error(`Original local absent pour ${conflict.id}.`);
-      await vault.applyCloudBinary({ ...local, blob: null, deleted: true, dirty: false, cloudRevision: cloud.revision, cloudStoragePath: null, updatedAt: cloud.clientUpdatedAt });
+      applied = Boolean(local && await vault.prepareBinaryConflictResolution(conflict.id, cloud.revision, local));
     } else {
-      const blob = await downloadStorageBlob(cloud.storagePath);
-      await vault.applyCloudBinary({
+      if (!cloud.deleted) cloud = await ensureCloudBinaryAccepted(uid, cartularyId, cloud, null, assertSession);
+      const blob = cloud.deleted || !cloud.storagePath ? null : await downloadStorageBlob(cloud.storagePath, assertSession);
+      assertSession();
+      applied = await vault.applyCloudBinary({
         id: '', cartularyId, binaryId: cloud.binaryId, kind: cloud.kind,
         fileName: cloud.fileName, mimeType: cloud.mimeType, size: cloud.size,
         sha256: cloud.sha256, blob, updatedAt: cloud.clientUpdatedAt, dirty: false,
-        deleted: false, cloudRevision: cloud.revision, cloudStoragePath: cloud.storagePath,
-      });
+        deleted: cloud.deleted, cloudRevision: cloud.revision, cloudStoragePath: cloud.storagePath,
+      }, local, { allowDirty: true });
     }
+    if (!applied) throw new Error('Le fichier local a changé pendant la résolution. Relancez la comparaison des versions.');
   }
-  return synchronizePrivateDraft({ uid, cartularyId, vault });
+  assertSession();
+  return synchronizePrivateDraft({ uid, cartularyId, vault, assertActive: assertSession });
 };
 
-export const deletePrivateCloudDraft = async (uid: string, cartularyId: string) => {
+export const deletePrivateCloudDraft = async (uid: string, cartularyId: string, assertActive = noSessionGuard) => {
+  assertActive();
   const root = draftRef(uid, cartularyId);
   const [states, binaries] = await Promise.all([
     getDocs(collection(root, 'state')),
     getDocs(collection(root, 'binaries')),
   ]);
-  await Promise.all(binaries.docs.map((snapshot) => {
-    const cloud = parseCloudBinary(snapshot.id, snapshot.data());
-    return cloud.storagePath ? deleteStorageObjectIfPresent(cloud.storagePath) : Promise.resolve();
-  }));
-  const references = [...states.docs, ...binaries.docs].map((snapshot) => snapshot.ref);
-  for (let index = 0; index < references.length; index += 400) {
+  assertActive();
+  // Accepted manifests are immutable attestations: P3 permits a logical
+  // tombstone, never hard deletion/recreation under the same binary ID.
+  const records = binaries.docs.map((snapshot) => ({ reference: snapshot.ref, cloud: parseCloudBinary(snapshot.id, snapshot.data()) }));
+  const writes = [
+    ...states.docs.map((snapshot) => ({ kind: 'state' as const, reference: snapshot.ref })),
+    ...records.map(({ reference, cloud }) => ({ kind: 'binary' as const, reference, cloud })),
+  ];
+  for (let index = 0; index < writes.length; index += 400) {
+    assertActive();
     const batch = writeBatch(db);
-    references.slice(index, index + 400).forEach((reference) => batch.delete(reference));
+    for (const write of writes.slice(index, index + 400)) {
+      if (write.kind === 'state') batch.delete(write.reference);
+      else batch.set(write.reference, { deleted: true, storagePath: null, uploadStatus: 'deleted',
+        revision: write.cloud.revision + 1, updatedAt: serverTimestamp() }, { merge: true });
+    }
     await batch.commit();
   }
+  assertActive();
+  await Promise.all(records.map(({ cloud }) => {
+    assertActive();
+    // Recover the canonical path even if an earlier attempt already wrote its tombstone.
+    const canonical = /^sha256:[a-f0-9]{64}$/.test(cloud.sha256)
+      ? `private-drafts/${uid}/${cartularyId}/${cloud.binaryId}/${cloud.sha256.slice(7)}/original` : null;
+    return cloud.storagePath || canonical ? deleteStorageObjectIfPresent(cloud.storagePath || canonical!) : Promise.resolve();
+  }));
+  assertActive();
   await setDoc(root, {
     ownerUid: uid,
     cartularyId,
@@ -630,6 +768,7 @@ export const deletePrivateCloudDraft = async (uid: string, cartularyId: string) 
     purgeAfter: null,
     updatedAt: serverTimestamp(),
   });
+  assertActive();
 };
 
 export const purgePrivateCloudDraftTombstone = async (uid: string, cartularyId: string) => {

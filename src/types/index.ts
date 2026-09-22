@@ -1,3 +1,7 @@
+import type { PrivatePresentation } from '../domain/presentationVariants.ts';
+
+export type { PrivatePresentation, PrivatePresentationThumbnail, PrivatePresentationVariant } from '../domain/presentationVariants.ts';
+
 // Visibilité
 export type VisibilityLevel = 'Secret' | 'Communauté' | 'Tous';
 
@@ -96,6 +100,11 @@ export interface Asset {
   cloudStoragePath?: string;
   derivativeStatus?: 'not-required' | 'pending' | 'ready' | 'failed';
   sourceSection?: 'reference-report';
+  /**
+   * Miroir Admin des variantes privées (contrat V3 : cartularies/{id}/assets/{assetId}.privatePresentation).
+   * Vignettes et scène se résolvent depuis ces variantes ; l'original n'est chargé que sur action explicite.
+   */
+  privatePresentation?: PrivatePresentation;
 }
 
 export interface SpinSet {

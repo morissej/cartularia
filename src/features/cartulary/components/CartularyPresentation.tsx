@@ -1,32 +1,25 @@
-import { Lock, Pencil, Play, Plus, Trash2, Video } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import { Pencil, Play, Plus, Trash2, Video } from 'lucide-react';
 import type { AIFieldId } from '../../../ai/fieldCatalog.ts';
 import { aiFieldProps } from '../../../ai/fieldCatalog.ts';
 import { PrivateMediaImage } from '../../../components/PrivateMediaImage.tsx';
 import { AutoResizeTextarea } from '../../../components/AutoResizeTextarea.tsx';
 import type { PublishedBlockId } from '../../../domain/publication.ts';
+import { isDuplicateSpecificationLabel } from '../../../domain/specificationGroups.ts';
 import type { Asset, ComparableTransaction } from '../../../types/index.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
 import { formatDate, formatMoney } from '../../../utils/formatting.ts';
 
+// V5 point 1 : le crayon n'existe que si l'édition est possible (`edit` absent sinon) ; jamais rendu grisé.
 export interface MarkerState {
   active: boolean;
   onToggle: () => void;
-  disabled?: boolean;
 }
 
-export interface PublicationMarkerState {
-  active: boolean;
-  pendingValidation: boolean;
-  onToggle: (label: string) => void;
-  disabled?: boolean;
-}
-
+// V4 D5 : plus aucun marqueur de destination sur les blocs ; la sélection se fait dans la table de la page Publication.
 export interface BlockMarkerState {
   blockId: PublishedBlockId;
   language: InterfaceLanguage;
-  website: PublicationMarkerState;
-  report: PublicationMarkerState;
-  community: PublicationMarkerState;
   edit?: MarkerState;
 }
 
@@ -42,7 +35,6 @@ export function BlockMarkers({ selection, label }: { selection: BlockMarkerState
         type="button"
         className={`content-marker content-marker--edit no-print ${selection.edit.active ? 'is-active' : ''}`}
         onClick={selection.edit.onToggle}
-        disabled={selection.edit.disabled}
         aria-pressed={selection.edit.active}
         aria-label={`${selection.language === 'FR' ? (selection.edit.active ? 'Terminer la modification de' : 'Modifier') : (selection.edit.active ? 'Finish editing' : 'Edit')} ${label}`}
         title={selection.language === 'FR' ? 'Modifier le texte' : 'Edit text'}
@@ -86,6 +78,105 @@ export function EditableParagraphs({
         <AutoResizeTextarea key={index} {...(aiField ? aiFieldProps(aiField, index) : {})} value={value} rows={4} onChange={(event) => onChange(index, event.target.value)} aria-label={language === 'FR' ? `Modifier le paragraphe ${index + 1}` : `Edit paragraph ${index + 1}`} />
       ) : <p key={index} {...(aiField ? aiFieldProps(aiField, index) : {})}>{value}</p>)}
     </div>
+  );
+}
+
+/**
+ * V5 point 1 : fait éditable à la demande. Texte pur par défaut ; bouton d'entrée en édition seulement si
+ * `onActivate` est fourni (droit de gérer reconnu) ; champ pendant l'édition du bloc. L'ancre IA reste sur
+ * l'élément rendu dans les trois cas.
+ */
+export function EditableFact({ aiField, value, editing, onChange, onActivate, label, language = 'FR' }: {
+  aiField: AIFieldId;
+  value: string;
+  editing: boolean;
+  onChange: (value: string) => void;
+  onActivate?: () => void;
+  label: string;
+  language?: InterfaceLanguage;
+}) {
+  if (editing) return <input {...aiFieldProps(aiField)} type="text" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label} />;
+  // V5 relecture (A3) : nom accessible garanti même si la valeur a été effacée (libellé du fait) ; l'action est
+  // annoncée par le même titre que les autres cibles d'édition.
+  if (onActivate) return <button {...aiFieldProps(aiField)} type="button" className="editable-fact" onClick={onActivate} aria-label={value ? undefined : label} title={language === 'FR' ? 'Cliquer pour modifier' : 'Click to edit'}>{value}</button>;
+  return <span {...aiFieldProps(aiField)}>{value}</span>;
+}
+
+/**
+ * V5 point 3 (P-C4) : formulaire d'ajout d'une ligne dans un groupe de spécifications. La ligne
+ * n'entre dans l'état qu'à la validation d'un libellé non vide et unique dans le groupe (à la casse
+ * et aux espaces près) ; la valeur est facultative. Après validation, le formulaire reste ouvert,
+ * vidé, le focus revenant sur le libellé pour une saisie en chaîne ; « Terminer » ou Échap le ferme.
+ * La règle d'unicité est doublée côté commande (`appendSpecification`).
+ */
+export function SpecificationAddForm({
+  language,
+  groupTitle,
+  existingLabels,
+  onAdd,
+  onClose,
+}: {
+  language: InterfaceLanguage;
+  groupTitle: string;
+  existingLabels: readonly string[];
+  onAdd: (label: string, value: string) => void;
+  onClose: () => void;
+}) {
+  const [label, setLabel] = useState('');
+  const [value, setValue] = useState('');
+  const formRef = useRef<HTMLFormElement>(null);
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const duplicateMessageId = useId();
+  const isFrench = language === 'FR';
+  const trimmedLabel = label.trim();
+  const duplicate = isDuplicateSpecificationLabel(existingLabels, trimmedLabel);
+  const canSubmit = trimmedLabel.length > 0 && !duplicate;
+  // V5 relecture (A2, WCAG 2.4.3) : à la fermeture, le formulaire est démonté et le bouton « Ajouter une donnée »
+  // (`.specification-add`) reprend sa place dans le même hôte ; le focus lui revient au lieu de retomber sur <body>.
+  const close = () => {
+    const host = formRef.current?.parentElement;
+    onClose();
+    window.requestAnimationFrame(() => host?.querySelector<HTMLElement>('.specification-add')?.focus());
+  };
+  return (
+    <form
+      ref={formRef}
+      className="specification-add-form no-print"
+      aria-label={isFrench ? `Ajouter une donnée dans ${groupTitle}` : `Add data to ${groupTitle}`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!canSubmit) return;
+        onAdd(trimmedLabel, value.trim());
+        setLabel('');
+        setValue('');
+        labelInputRef.current?.focus();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        close();
+      }}
+    >
+      <label>
+        <span>{isFrench ? 'Libellé' : 'Label'}</span>
+        <input
+          ref={labelInputRef}
+          autoFocus
+          type="text"
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          aria-invalid={duplicate || undefined}
+          aria-describedby={duplicate ? duplicateMessageId : undefined}
+        />
+      </label>
+      <label>
+        <span>{isFrench ? 'Valeur' : 'Value'}</span>
+        <input type="text" value={value} onChange={(event) => setValue(event.target.value)} />
+      </label>
+      <button type="submit" className="button button--primary" disabled={!canSubmit}><Plus size={14} aria-hidden="true" /> {isFrench ? 'Ajouter' : 'Add'}</button>
+      <button type="button" className="button button--quiet" onClick={close}>{isFrench ? 'Terminer' : 'Done'}</button>
+      {duplicate && <p id={duplicateMessageId} role="status">{isFrench ? 'Ce libellé existe déjà dans ce groupe.' : 'This label already exists in this group.'}</p>}
+    </form>
   );
 }
 
@@ -162,8 +253,4 @@ export function ComparableTable({
       </div>
     </div>
   );
-}
-
-export function AccessRestricted({ title, language = 'FR' }: { title: string; language?: InterfaceLanguage }) {
-  return <div className="restricted-card"><Lock size={18} /><span className="eyebrow">{language === 'FR' ? 'Accès restreint' : 'Restricted access'}</span><h3>{title}</h3></div>;
 }

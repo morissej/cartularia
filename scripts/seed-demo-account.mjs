@@ -9,9 +9,19 @@ import {
   buildDemoCartularySections,
   buildDemoRegistryItem,
   buildDemoAssetDocuments,
+  buildDemoReminderDocuments,
 } from '../src/data/demoCartularyDocuments.ts';
 import { CANONICALIZATION_VERSION, sha256Digest } from './lib/canonical-json.mjs';
-import { demoRepairOptions, runDemoDataRepair } from './lib/demo-data-repair.mjs';
+import { buildDemoAccessProjections, demoRepairOptions, runDemoDataRepair } from './lib/demo-data-repair.mjs';
+
+// Deux voies :
+//   --data-only : migration additive et rejouable (simulation par défaut), seule voie autorisée
+//                 contre la production ; Auth exclusivement lu.
+//   seed complet : émulateurs uniquement. Il crée ou réinitialise le compte Auth et écrase les
+//                 documents (revision 1) : rejoué en production, il casserait la chaîne d'audit
+//                 déjà prolongée par les migrations v1/v2 et par la publication démo.
+// Les deux voies produisent le même jeu enrichi (dossiers « Complet », rappels, accès) : après un
+// seed complet, `--data-only --expect-no-writes` doit rapporter zéro écriture.
 
 const repairOptions = demoRepairOptions(process.argv.slice(2), process.env);
 const projectId = repairOptions.projectId || 'cartularia-demo-local';
@@ -240,6 +250,15 @@ for (const cartulary of DEMO_CARTULARIES) {
     generatedAt: now,
     updatedAt: now,
   });
+  // Rappels de Suivi fictifs (contrat de firestore.rules : createdBy = compte démo, dates serveur).
+  for (const reminder of buildDemoReminderDocuments(cartulary, demoUser.uid)) {
+    batch.set(firestore.doc(`cartularies/${cartulary.id}/reminders/${reminder.id}`), { ...reminder, createdAt: now, updatedAt: now });
+  }
+}
+
+// Projections d'Accès fictives : aucune registryInvitation, aucun document mail, aucun envoi.
+for (const access of buildDemoAccessProjections()) {
+  batch.set(firestore.doc(`registries/${DEMO_ACCOUNT.registryId}/accesses/${access.id}`), { ...access, generatedAt: now, updatedAt: now });
 }
 
 await batch.commit();

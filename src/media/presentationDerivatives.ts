@@ -1,84 +1,86 @@
+import { PRESENTATION_CATALOG, type PresentationCatalogEntry } from './presentationCatalog.generated.ts';
+
 export type PresentationImageFormat = 'avif' | 'webp';
+export type { PresentationCatalogEntry } from './presentationCatalog.generated.ts';
 
 export interface PresentationImageSet {
   source: string;
   width: number;
   height: number;
   aspectRatio: string;
+  /** Vide lorsque la racine ne publie pas d'AVIF : un `<source>` au srcset vide est ignoré par le navigateur. */
   avifSrcSet: string;
   webpSrcSet: string;
 }
 
-const IWC_IMAGE_DIMENSIONS: Record<string, readonly [width: number, height: number]> = {
-  'Focus Shift White Back.jpg': [1200, 801],
-  'Focus Shift White Front.jpg': [1200, 800],
-  '_DSC0975-3.jpg': [1200, 800],
-  '_DSC0976-3.jpg': [1200, 800],
-  '_DSC0977-3.jpg': [1200, 800],
-  '_DSC0978-3.jpg': [1200, 800],
-  '_DSC0980-3.jpg': [800, 1200],
-  '_DSC0981-3.jpg': [800, 1200],
-  '_DSC0985-3.jpg': [800, 1200],
-  '_DSC0988-3.jpg': [1200, 800],
-  '_DSC0990-3.jpg': [1200, 800],
-  '_DSC0991-3.jpg': [1200, 800],
-  '_DSC0992-3.jpg': [1200, 800],
-  '_DSC0993-3.jpg': [1200, 800],
-  '_DSC0994-3.jpg': [800, 1200],
-  '_DSC1009-3.jpg': [800, 1200],
-  '_DSC1012-2.jpg': [1200, 800],
-  '_DSC1016-2.jpg': [1200, 800],
-  '_DSC1019-3.jpg': [1200, 800],
-};
+/** Vignette de bundle (plus petite variante WebP) d'un original catalogué : contrat `item.thumbnail` kind 'bundle'. */
+export interface PresentationBundleThumbnail {
+  path: string;
+  width: number;
+  height: number;
+  sha256: string;
+}
 
-const presentationWidths = (sourceWidth: number) => (
-  [...new Set([240, 480, 768, sourceWidth])].filter((width) => width <= sourceWidth)
-);
-
-const normalizedIwcFilename = (source: string) => {
+const publicPathOf = (source: string): string | null => {
   const path = source.split(/[?#]/, 1)[0];
-  if (!path.startsWith('/assets/IWC/') || !path.toLowerCase().endsWith('.jpg')) return null;
+  if (!path.startsWith('/assets/') || path.startsWith('//')) return null;
   try {
-    return decodeURIComponent(path.slice('/assets/IWC/'.length));
+    return decodeURIComponent(path);
   } catch {
     return null;
   }
 };
 
-const derivativeUrl = (filename: string, width: number, format: PresentationImageFormat) => {
-  const stem = filename.slice(0, -4);
-  return `/assets/IWC/derivatives/${encodeURIComponent(stem)}.${width}.${format}`;
+/** Entrée du catalogue statique pour une URL same-origin du bundle ; `null` pour toute autre source (blob, https, privée). */
+export const presentationCatalogEntryFor = (source: string | undefined): PresentationCatalogEntry | null => {
+  if (!source) return null;
+  const path = publicPathOf(source);
+  if (!path) return null;
+  return Object.hasOwn(PRESENTATION_CATALOG, path) ? PRESENTATION_CATALOG[path] : null;
 };
 
+const variantUrl = (entry: PresentationCatalogEntry, width: number, format: PresentationImageFormat) => `${entry.base}.${width}.${format}`;
+
+const srcSetFor = (entry: PresentationCatalogEntry, format: PresentationImageFormat) => (
+  entry.formats.includes(format)
+    ? entry.variants.map((variant) => `${variantUrl(entry, variant.width, format)} ${variant.width}w`).join(', ')
+    : ''
+);
+
 export const presentationImageSetFor = (source: string | undefined): PresentationImageSet | null => {
-  if (!source) return null;
-  const filename = normalizedIwcFilename(source);
-  const dimensions = filename ? IWC_IMAGE_DIMENSIONS[filename] : undefined;
-  if (!filename || !dimensions) return null;
-  const [width, height] = dimensions;
-  const srcSet = (format: PresentationImageFormat) => presentationWidths(width)
-    .map((candidateWidth) => `${derivativeUrl(filename, candidateWidth, format)} ${candidateWidth}w`)
-    .join(', ');
+  const entry = presentationCatalogEntryFor(source);
+  if (!source || !entry) return null;
   return {
     source,
-    width,
-    height,
-    aspectRatio: `${width} / ${height}`,
-    avifSrcSet: srcSet('avif'),
-    webpSrcSet: srcSet('webp'),
+    width: entry.width,
+    height: entry.height,
+    aspectRatio: `${entry.width} / ${entry.height}`,
+    avifSrcSet: srcSetFor(entry, 'avif'),
+    webpSrcSet: srcSetFor(entry, 'webp'),
   };
 };
 
+/**
+ * Plus petite variante dont la largeur atteint `preferredWidth` (sinon la plus grande), dans le
+ * format demandé s'il est publié, sinon en WebP ; la source est rendue telle quelle hors catalogue.
+ */
 export const presentationDerivativeUrl = (
   source: string | undefined,
   preferredWidth: number,
   format: PresentationImageFormat = 'webp',
 ) => {
-  if (!source) return source;
-  const filename = normalizedIwcFilename(source);
-  const dimensions = filename ? IWC_IMAGE_DIMENSIONS[filename] : undefined;
-  if (!filename || !dimensions) return source;
-  const widths = presentationWidths(dimensions[0]);
-  const width = widths.find((candidate) => candidate >= preferredWidth) ?? widths.at(-1)!;
-  return derivativeUrl(filename, width, format);
+  const entry = presentationCatalogEntryFor(source);
+  if (!source || !entry) return source;
+  const chosenFormat = entry.formats.includes(format) ? format : 'webp';
+  if (!entry.formats.includes(chosenFormat)) return source;
+  const variant = entry.variants.find((candidate) => candidate.width >= preferredWidth) ?? entry.variants.at(-1);
+  return variant ? variantUrl(entry, variant.width, chosenFormat) : source;
+};
+
+export const presentationBundleThumbnailFor = (source: string | undefined): PresentationBundleThumbnail | null => {
+  const entry = presentationCatalogEntryFor(source);
+  if (!entry) return null;
+  const smallest = entry.variants[0];
+  if (!smallest) return null;
+  return { path: variantUrl(entry, smallest.width, 'webp'), width: entry.thumbnail.width, height: entry.thumbnail.height, sha256: entry.thumbnail.sha256 };
 };

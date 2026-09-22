@@ -1,0 +1,2094 @@
+{
+  "date": "2026-09-16",
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "fonts": "réseau coupé hors 127.0.0.1 (polices servies par dist/)",
+  "cache": "désactivé et vidé avant chaque surface",
+  "results": [
+    {
+      "surface": "accueil",
+      "path": "/",
+      "viewport": "desktop-1440",
+      "ready": true,
+      "readyAfterMs": 511,
+      "domContentLoaded": 17,
+      "load": 18,
+      "lcp": 384,
+      "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/HomePage-CBTCy4yp.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/registryCatalog-cNvFQ2G6.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/public-site-e8vVAg3S.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 19,
+        "octets": 691402,
+        "distant": 0,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 8,
+          "échecs": 0,
+          "octets": 305703,
+          "gzip": 95736,
+          "distant": 0
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 164494,
+          "gzip": 26373,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 4,
+          "échecs": 0,
+          "octets": 19642,
+          "gzip": 0,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 8,
+        "initiaux": 8,
+        "octetsBruts": 303889,
+        "gzip": 95736,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "HomePage-CBTCy4yp.js",
+          "raw": 32309,
+          "gzip": 9238,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [],
+      "tiers": []
+    },
+    {
+      "surface": "connexion",
+      "path": "/account/sign-in",
+      "viewport": "desktop-1440",
+      "ready": true,
+      "readyAfterMs": 513,
+      "domContentLoaded": 23,
+      "load": 23,
+      "lcp": 356,
+      "title": "Connexion · Cartularia",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/AccountAccessPage-BOLs8Mpg.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/personalDataBoundary-kRAOoDWj.js",
+        "/assets/foundations-CGY6cebR.js",
+        "/assets/index.esm-avlOvUzk.js",
+        "/assets/index.esm-DRo0ZM8h.js",
+        "/assets/firebase-Cua6VH5-.js",
+        "/assets/publicRoutes-DS-O10kQ.js",
+        "/assets/RegistryApp-CHGozIKj.js",
+        "/assets/index-CBFIhEXE.js",
+        "/assets/registryCatalog-cNvFQ2G6.js",
+        "/assets/projections-CcW_nv0s.js",
+        "/assets/followUp-TgYMdKVm.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/comparisonSelection-ToGQ0Qwa.js",
+        "/assets/collections-uoQiniEe.js",
+        "/assets/RegistryItems-_aed4Wbk.js",
+        "/assets/RegistryFilterPanel-Dqq1yx7c.js",
+        "/assets/registryThumbnail-DPo4XDK7.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/public-site-e8vVAg3S.css",
+        "/assets/registry-Fb27gfFh.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 33,
+        "octets": 1510861,
+        "distant": 1,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 23,
+          "échecs": 1,
+          "octets": 1019406,
+          "gzip": 307680,
+          "distant": 1
+        },
+        "css": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 280068,
+          "gzip": 40728,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 9824,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 22,
+        "initiaux": 12,
+        "octetsBruts": 1014420,
+        "gzip": 307680,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "index.esm-DRo0ZM8h.js",
+          "raw": 460963,
+          "gzip": 133624,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index.esm-avlOvUzk.js",
+          "raw": 155605,
+          "gzip": 44738,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "firebase-Cua6VH5-.js",
+          "raw": 44102,
+          "gzip": 14680,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "RegistryApp-CHGozIKj.js",
+          "raw": 37201,
+          "gzip": 10702,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "RegistryItems-_aed4Wbk.js",
+          "raw": 12914,
+          "gzip": 4037,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "AccountAccessPage-BOLs8Mpg.js",
+          "raw": 11773,
+          "gzip": 4218,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "comparisonSelection-ToGQ0Qwa.js",
+          "raw": 5553,
+          "gzip": 2433,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "collections-uoQiniEe.js",
+          "raw": 3555,
+          "gzip": 1626,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "followUp-TgYMdKVm.js",
+          "raw": 3345,
+          "gzip": 1221,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "foundations-CGY6cebR.js",
+          "raw": 2212,
+          "gzip": 1135,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "projections-CcW_nv0s.js",
+          "raw": 2050,
+          "gzip": 906,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "registryThumbnail-DPo4XDK7.js",
+          "raw": 1461,
+          "gzip": 719,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "RegistryFilterPanel-Dqq1yx7c.js",
+          "raw": 926,
+          "gzip": 472,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "personalDataBoundary-kRAOoDWj.js",
+          "raw": 708,
+          "gzip": 373,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "publicRoutes-DS-O10kQ.js",
+          "raw": 472,
+          "gzip": 298,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [
+        {
+          "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
+          "status": null,
+          "bytes": 0,
+          "failed": true,
+          "error": "net::ERR_NAME_NOT_RESOLVED"
+        }
+      ],
+      "tiers": []
+    },
+    {
+      "surface": "demo-cover",
+      "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "viewport": "desktop-1440",
+      "ready": true,
+      "readyAfterMs": 506,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 360,
+      "title": "Cartulaire Rolex Submariner · Cartularia",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/App-CBFhLMjQ.js",
+        "/assets/index.esm-avlOvUzk.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/cartularyCreation-D_Pi9bPR.js",
+        "/assets/fileValidation-Bi0URrWL.js",
+        "/assets/localVault-D0yTLDJj.js",
+        "/assets/cartularyIds-C6IXxZRd.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/index.esm-DRo0ZM8h.js",
+        "/assets/firebase-Cua6VH5-.js",
+        "/assets/privateUploadVerification-DM-rPaET.js",
+        "/assets/presentationVariants-BX8qBmZV.js",
+        "/assets/correspondenceCodes-DkOGrRgD.js",
+        "/assets/schemaLabels-Ckqz0Zbo.js",
+        "/assets/cloudDraft-CFun4vWU.js",
+        "/assets/personalDataBoundary-kRAOoDWj.js",
+        "/assets/registryCatalog-cNvFQ2G6.js",
+        "/assets/collections-uoQiniEe.js",
+        "/assets/projections-CcW_nv0s.js",
+        "/assets/useDialogFocus-CM-lNfim.js",
+        "/assets/PrivateMediaImage-BAFTM904.js",
+        "/assets/publicMediaReference-BCsH0gmZ.js",
+        "/assets/publication-DhP1lWPQ.js",
+        "/assets/followUp-TgYMdKVm.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/foundations-CGY6cebR.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/App-BAUgnReO.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 41,
+        "octets": 1807894,
+        "distant": 1,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 30,
+          "échecs": 1,
+          "octets": 1426241,
+          "gzip": 413696,
+          "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 134923,
+          "gzip": 21081,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 4,
+          "échecs": 0,
+          "octets": 45167,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 29,
+        "initiaux": 29,
+        "octetsBruts": 1419667,
+        "gzip": 413696,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "index.esm-DRo0ZM8h.js",
+          "raw": 460963,
+          "gzip": 133624,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "App-CBFhLMjQ.js",
+          "raw": 327837,
+          "gzip": 88349,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index.esm-avlOvUzk.js",
+          "raw": 155605,
+          "gzip": 44738,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "schemaLabels-Ckqz0Zbo.js",
+          "raw": 67256,
+          "gzip": 14239,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "firebase-Cua6VH5-.js",
+          "raw": 44102,
+          "gzip": 14680,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "PrivateMediaImage-BAFTM904.js",
+          "raw": 23864,
+          "gzip": 6097,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "cartularyCreation-D_Pi9bPR.js",
+          "raw": 16598,
+          "gzip": 6053,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "cloudDraft-CFun4vWU.js",
+          "raw": 11950,
+          "gzip": 4092,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "localVault-D0yTLDJj.js",
+          "raw": 11323,
+          "gzip": 3347,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "fileValidation-Bi0URrWL.js",
+          "raw": 5417,
+          "gzip": 1847,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "publication-DhP1lWPQ.js",
+          "raw": 4241,
+          "gzip": 1218,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "collections-uoQiniEe.js",
+          "raw": 3555,
+          "gzip": 1626,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "followUp-TgYMdKVm.js",
+          "raw": 3345,
+          "gzip": 1221,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "foundations-CGY6cebR.js",
+          "raw": 2212,
+          "gzip": 1135,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "presentationVariants-BX8qBmZV.js",
+          "raw": 2199,
+          "gzip": 945,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "projections-CcW_nv0s.js",
+          "raw": 2050,
+          "gzip": 906,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "privateUploadVerification-DM-rPaET.js",
+          "raw": 1612,
+          "gzip": 793,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "useDialogFocus-CM-lNfim.js",
+          "raw": 1405,
+          "gzip": 686,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "publicMediaReference-BCsH0gmZ.js",
+          "raw": 760,
+          "gzip": 468,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "personalDataBoundary-kRAOoDWj.js",
+          "raw": 708,
+          "gzip": 373,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "cartularyIds-C6IXxZRd.js",
+          "raw": 670,
+          "gzip": 435,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "correspondenceCodes-DkOGrRgD.js",
+          "raw": 415,
+          "gzip": 326,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [
+        {
+          "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
+          "status": null,
+          "bytes": 0,
+          "failed": true,
+          "error": "net::ERR_NAME_NOT_RESOLVED"
+        }
+      ],
+      "tiers": []
+    },
+    {
+      "surface": "registre",
+      "path": "/registry",
+      "viewport": "desktop-1440",
+      "ready": true,
+      "readyAfterMs": 508,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 340,
+      "title": "Registre · Cartularia",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/RegistryApp-CHGozIKj.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/index.esm-DRo0ZM8h.js",
+        "/assets/index.esm-avlOvUzk.js",
+        "/assets/firebase-Cua6VH5-.js",
+        "/assets/registryCatalog-cNvFQ2G6.js",
+        "/assets/projections-CcW_nv0s.js",
+        "/assets/followUp-TgYMdKVm.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/foundations-CGY6cebR.js",
+        "/assets/personalDataBoundary-kRAOoDWj.js",
+        "/assets/comparisonSelection-ToGQ0Qwa.js",
+        "/assets/collections-uoQiniEe.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/registry-Fb27gfFh.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 27,
+        "octets": 1451830,
+        "distant": 1,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 18,
+          "échecs": 1,
+          "octets": 990728,
+          "gzip": 297936,
+          "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 249715,
+          "gzip": 35122,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 9824,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 17,
+        "initiaux": 17,
+        "octetsBruts": 986874,
+        "gzip": 297936,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "index.esm-DRo0ZM8h.js",
+          "raw": 460963,
+          "gzip": 133624,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index.esm-avlOvUzk.js",
+          "raw": 155605,
+          "gzip": 44738,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "firebase-Cua6VH5-.js",
+          "raw": 44102,
+          "gzip": 14680,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "RegistryApp-CHGozIKj.js",
+          "raw": 37201,
+          "gzip": 10702,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "comparisonSelection-ToGQ0Qwa.js",
+          "raw": 5553,
+          "gzip": 2433,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "collections-uoQiniEe.js",
+          "raw": 3555,
+          "gzip": 1626,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "followUp-TgYMdKVm.js",
+          "raw": 3345,
+          "gzip": 1221,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "foundations-CGY6cebR.js",
+          "raw": 2212,
+          "gzip": 1135,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "projections-CcW_nv0s.js",
+          "raw": 2050,
+          "gzip": 906,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "personalDataBoundary-kRAOoDWj.js",
+          "raw": 708,
+          "gzip": 373,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [
+        {
+          "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
+          "status": null,
+          "bytes": 0,
+          "failed": true,
+          "error": "net::ERR_NAME_NOT_RESOLVED"
+        }
+      ],
+      "tiers": []
+    },
+    {
+      "surface": "accueil",
+      "path": "/",
+      "viewport": "mobile-390",
+      "ready": true,
+      "readyAfterMs": 510,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 364,
+      "title": "Cartularia · Le dossier vivant de vos objets patrimoniaux & horlogers",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/HomePage-CBTCy4yp.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/registryCatalog-cNvFQ2G6.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/public-site-e8vVAg3S.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 19,
+        "octets": 691402,
+        "distant": 0,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 8,
+          "échecs": 0,
+          "octets": 305703,
+          "gzip": 95736,
+          "distant": 0
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 164494,
+          "gzip": 26373,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 4,
+          "échecs": 0,
+          "octets": 19642,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 8,
+        "initiaux": 8,
+        "octetsBruts": 303889,
+        "gzip": 95736,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "HomePage-CBTCy4yp.js",
+          "raw": 32309,
+          "gzip": 9238,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [],
+      "tiers": []
+    },
+    {
+      "surface": "connexion",
+      "path": "/account/sign-in",
+      "viewport": "mobile-390",
+      "ready": true,
+      "readyAfterMs": 515,
+      "domContentLoaded": 23,
+      "load": 23,
+      "lcp": 348,
+      "title": "Connexion · Cartularia",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/AccountAccessPage-BOLs8Mpg.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/personalDataBoundary-kRAOoDWj.js",
+        "/assets/foundations-CGY6cebR.js",
+        "/assets/index.esm-avlOvUzk.js",
+        "/assets/index.esm-DRo0ZM8h.js",
+        "/assets/firebase-Cua6VH5-.js",
+        "/assets/publicRoutes-DS-O10kQ.js",
+        "/assets/RegistryApp-CHGozIKj.js",
+        "/assets/index-CBFIhEXE.js",
+        "/assets/registryCatalog-cNvFQ2G6.js",
+        "/assets/projections-CcW_nv0s.js",
+        "/assets/followUp-TgYMdKVm.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/comparisonSelection-ToGQ0Qwa.js",
+        "/assets/collections-uoQiniEe.js",
+        "/assets/RegistryItems-_aed4Wbk.js",
+        "/assets/RegistryFilterPanel-Dqq1yx7c.js",
+        "/assets/registryThumbnail-DPo4XDK7.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/public-site-e8vVAg3S.css",
+        "/assets/registry-Fb27gfFh.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 33,
+        "octets": 1510861,
+        "distant": 1,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 23,
+          "échecs": 1,
+          "octets": 1019406,
+          "gzip": 307680,
+          "distant": 1
+        },
+        "css": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 280068,
+          "gzip": 40728,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 9824,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 22,
+        "initiaux": 12,
+        "octetsBruts": 1014420,
+        "gzip": 307680,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "index.esm-DRo0ZM8h.js",
+          "raw": 460963,
+          "gzip": 133624,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index.esm-avlOvUzk.js",
+          "raw": 155605,
+          "gzip": 44738,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "firebase-Cua6VH5-.js",
+          "raw": 44102,
+          "gzip": 14680,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "RegistryApp-CHGozIKj.js",
+          "raw": 37201,
+          "gzip": 10702,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "RegistryItems-_aed4Wbk.js",
+          "raw": 12914,
+          "gzip": 4037,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "AccountAccessPage-BOLs8Mpg.js",
+          "raw": 11773,
+          "gzip": 4218,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "comparisonSelection-ToGQ0Qwa.js",
+          "raw": 5553,
+          "gzip": 2433,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "collections-uoQiniEe.js",
+          "raw": 3555,
+          "gzip": 1626,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "followUp-TgYMdKVm.js",
+          "raw": 3345,
+          "gzip": 1221,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "foundations-CGY6cebR.js",
+          "raw": 2212,
+          "gzip": 1135,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "projections-CcW_nv0s.js",
+          "raw": 2050,
+          "gzip": 906,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "registryThumbnail-DPo4XDK7.js",
+          "raw": 1461,
+          "gzip": 719,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "RegistryFilterPanel-Dqq1yx7c.js",
+          "raw": 926,
+          "gzip": 472,
+          "icône": false,
+          "initial": false
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "personalDataBoundary-kRAOoDWj.js",
+          "raw": 708,
+          "gzip": 373,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "publicRoutes-DS-O10kQ.js",
+          "raw": 472,
+          "gzip": 298,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [
+        {
+          "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
+          "status": null,
+          "bytes": 0,
+          "failed": true,
+          "error": "net::ERR_NAME_NOT_RESOLVED"
+        }
+      ],
+      "tiers": []
+    },
+    {
+      "surface": "demo-cover",
+      "path": "/cartulary-demo?cartularyId=cart_demo_rolex_submariner_124060#cover",
+      "viewport": "mobile-390",
+      "ready": true,
+      "readyAfterMs": 511,
+      "domContentLoaded": 15,
+      "load": 15,
+      "lcp": 344,
+      "title": "Cartulaire Rolex Submariner · Cartularia",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/App-CBFhLMjQ.js",
+        "/assets/index.esm-avlOvUzk.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/cartularyCreation-D_Pi9bPR.js",
+        "/assets/fileValidation-Bi0URrWL.js",
+        "/assets/localVault-D0yTLDJj.js",
+        "/assets/cartularyIds-C6IXxZRd.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/index.esm-DRo0ZM8h.js",
+        "/assets/firebase-Cua6VH5-.js",
+        "/assets/privateUploadVerification-DM-rPaET.js",
+        "/assets/presentationVariants-BX8qBmZV.js",
+        "/assets/correspondenceCodes-DkOGrRgD.js",
+        "/assets/schemaLabels-Ckqz0Zbo.js",
+        "/assets/cloudDraft-CFun4vWU.js",
+        "/assets/personalDataBoundary-kRAOoDWj.js",
+        "/assets/registryCatalog-cNvFQ2G6.js",
+        "/assets/collections-uoQiniEe.js",
+        "/assets/projections-CcW_nv0s.js",
+        "/assets/useDialogFocus-CM-lNfim.js",
+        "/assets/PrivateMediaImage-BAFTM904.js",
+        "/assets/publicMediaReference-BCsH0gmZ.js",
+        "/assets/publication-DhP1lWPQ.js",
+        "/assets/followUp-TgYMdKVm.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/foundations-CGY6cebR.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/App-BAUgnReO.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 41,
+        "octets": 1807894,
+        "distant": 1,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 30,
+          "échecs": 1,
+          "octets": 1426241,
+          "gzip": 413696,
+          "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 134923,
+          "gzip": 21081,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 4,
+          "échecs": 0,
+          "octets": 45167,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 29,
+        "initiaux": 29,
+        "octetsBruts": 1419667,
+        "gzip": 413696,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "index.esm-DRo0ZM8h.js",
+          "raw": 460963,
+          "gzip": 133624,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "App-CBFhLMjQ.js",
+          "raw": 327837,
+          "gzip": 88349,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index.esm-avlOvUzk.js",
+          "raw": 155605,
+          "gzip": 44738,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "schemaLabels-Ckqz0Zbo.js",
+          "raw": 67256,
+          "gzip": 14239,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "firebase-Cua6VH5-.js",
+          "raw": 44102,
+          "gzip": 14680,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "PrivateMediaImage-BAFTM904.js",
+          "raw": 23864,
+          "gzip": 6097,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "cartularyCreation-D_Pi9bPR.js",
+          "raw": 16598,
+          "gzip": 6053,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "cloudDraft-CFun4vWU.js",
+          "raw": 11950,
+          "gzip": 4092,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "localVault-D0yTLDJj.js",
+          "raw": 11323,
+          "gzip": 3347,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "fileValidation-Bi0URrWL.js",
+          "raw": 5417,
+          "gzip": 1847,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "publication-DhP1lWPQ.js",
+          "raw": 4241,
+          "gzip": 1218,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "collections-uoQiniEe.js",
+          "raw": 3555,
+          "gzip": 1626,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "followUp-TgYMdKVm.js",
+          "raw": 3345,
+          "gzip": 1221,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "foundations-CGY6cebR.js",
+          "raw": 2212,
+          "gzip": 1135,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "presentationVariants-BX8qBmZV.js",
+          "raw": 2199,
+          "gzip": 945,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "projections-CcW_nv0s.js",
+          "raw": 2050,
+          "gzip": 906,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "privateUploadVerification-DM-rPaET.js",
+          "raw": 1612,
+          "gzip": 793,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "useDialogFocus-CM-lNfim.js",
+          "raw": 1405,
+          "gzip": 686,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "publicMediaReference-BCsH0gmZ.js",
+          "raw": 760,
+          "gzip": 468,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "personalDataBoundary-kRAOoDWj.js",
+          "raw": 708,
+          "gzip": 373,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "cartularyIds-C6IXxZRd.js",
+          "raw": 670,
+          "gzip": 435,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "correspondenceCodes-DkOGrRgD.js",
+          "raw": 415,
+          "gzip": 326,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [
+        {
+          "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
+          "status": null,
+          "bytes": 0,
+          "failed": true,
+          "error": "net::ERR_NAME_NOT_RESOLVED"
+        }
+      ],
+      "tiers": []
+    },
+    {
+      "surface": "registre",
+      "path": "/registry",
+      "viewport": "mobile-390",
+      "ready": true,
+      "readyAfterMs": 507,
+      "domContentLoaded": 16,
+      "load": 16,
+      "lcp": 356,
+      "title": "Registre · Cartularia",
+      "modulepreload": [
+        "/assets/rolldown-runtime-hePW80VL.js",
+        "/assets/react-DHQQvKuQ.js",
+        "/assets/RegistryApp-CHGozIKj.js",
+        "/assets/icons-CaennByB.js",
+        "/assets/demoCartularies-Dl9Sy6ps.js",
+        "/assets/index.esm-DRo0ZM8h.js",
+        "/assets/index.esm-avlOvUzk.js",
+        "/assets/firebase-Cua6VH5-.js",
+        "/assets/registryCatalog-cNvFQ2G6.js",
+        "/assets/projections-CcW_nv0s.js",
+        "/assets/followUp-TgYMdKVm.js",
+        "/assets/registryReturn-CesYsGbK.js",
+        "/assets/foundations-CGY6cebR.js",
+        "/assets/personalDataBoundary-kRAOoDWj.js",
+        "/assets/comparisonSelection-ToGQ0Qwa.js",
+        "/assets/collections-uoQiniEe.js"
+      ],
+      "preload": [
+        "preload /assets/newsreader-v26-latin-opsz-wght-DBQoWVJ5.woff2"
+      ],
+      "stylesheets": [
+        "/assets/index-0etb8sXI.css",
+        "/assets/registry-Fb27gfFh.css"
+      ],
+      "fontFaces": [
+        "Archivo 400 700 loaded",
+        "JetBrains Mono 400 700 loaded",
+        "Newsreader 500 600 loaded"
+      ],
+      "totals": {
+        "requêtes": 27,
+        "octets": 1451830,
+        "distant": 1,
+        "tiers": 0
+      },
+      "byKind": {
+        "html": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 2088,
+          "gzip": 0,
+          "distant": 0
+        },
+        "font": {
+          "requêtes": 3,
+          "échecs": 0,
+          "octets": 198795,
+          "gzip": 0,
+          "distant": 0
+        },
+        "js": {
+          "requêtes": 18,
+          "échecs": 1,
+          "octets": 990728,
+          "gzip": 297936,
+          "distant": 1
+        },
+        "css": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 249715,
+          "gzip": 35122,
+          "distant": 0
+        },
+        "autre": {
+          "requêtes": 1,
+          "échecs": 0,
+          "octets": 680,
+          "gzip": 0,
+          "distant": 0
+        },
+        "image": {
+          "requêtes": 2,
+          "échecs": 0,
+          "octets": 9824,
+          "gzip": 0,
+          "distant": 0
+        }
+      },
+      "js": {
+        "morceaux": 17,
+        "initiaux": 17,
+        "octetsBruts": 986874,
+        "gzip": 297936,
+        "icônes": 0,
+        "octetsIcônesBruts": 0
+      },
+      "chunks": [
+        {
+          "file": "index.esm-DRo0ZM8h.js",
+          "raw": 460963,
+          "gzip": 133624,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "react-DHQQvKuQ.js",
+          "raw": 189589,
+          "gzip": 58835,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index.esm-avlOvUzk.js",
+          "raw": 155605,
+          "gzip": 44738,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "firebase-Cua6VH5-.js",
+          "raw": 44102,
+          "gzip": 14680,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "RegistryApp-CHGozIKj.js",
+          "raw": 37201,
+          "gzip": 10702,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "demoCartularies-Dl9Sy6ps.js",
+          "raw": 30903,
+          "gzip": 9593,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "icons-CaennByB.js",
+          "raw": 27076,
+          "gzip": 8667,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "index-CBFIhEXE.js",
+          "raw": 19518,
+          "gzip": 7142,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "comparisonSelection-ToGQ0Qwa.js",
+          "raw": 5553,
+          "gzip": 2433,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "collections-uoQiniEe.js",
+          "raw": 3555,
+          "gzip": 1626,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "followUp-TgYMdKVm.js",
+          "raw": 3345,
+          "gzip": 1221,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryCatalog-cNvFQ2G6.js",
+          "raw": 2252,
+          "gzip": 1035,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "foundations-CGY6cebR.js",
+          "raw": 2212,
+          "gzip": 1135,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "projections-CcW_nv0s.js",
+          "raw": 2050,
+          "gzip": 906,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "registryReturn-CesYsGbK.js",
+          "raw": 1526,
+          "gzip": 798,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "rolldown-runtime-hePW80VL.js",
+          "raw": 716,
+          "gzip": 428,
+          "icône": false,
+          "initial": true
+        },
+        {
+          "file": "personalDataBoundary-kRAOoDWj.js",
+          "raw": 708,
+          "gzip": 373,
+          "icône": false,
+          "initial": true
+        }
+      ],
+      "remote": [
+        {
+          "url": "https://www.google.com/recaptcha/enterprise.js?render=explicit",
+          "status": null,
+          "bytes": 0,
+          "failed": true,
+          "error": "net::ERR_NAME_NOT_RESOLVED"
+        }
+      ],
+      "tiers": []
+    }
+  ],
+  "sequence": [
+    {
+      "step": "accueil",
+      "path": "/",
+      "ready": true,
+      "readyAfterMs": 511,
+      "requêtes": 19,
+      "servisParLeCache": 0,
+      "réseau": 19,
+      "octetsRéseau": 691402,
+      "jsRéseau": 8,
+      "jsRéseauOctets": 305703,
+      "jsRéseauFichiers": [
+        "index-CBFIhEXE.js",
+        "rolldown-runtime-hePW80VL.js",
+        "react-DHQQvKuQ.js",
+        "HomePage-CBTCy4yp.js",
+        "icons-CaennByB.js",
+        "demoCartularies-Dl9Sy6ps.js",
+        "registryReturn-CesYsGbK.js",
+        "registryCatalog-cNvFQ2G6.js"
+      ],
+      "aprèsPrêt": {
+        "requêtes": 0,
+        "octets": 0,
+        "fichiers": []
+      },
+      "distants": [],
+      "tiers": []
+    },
+    {
+      "step": "connexion",
+      "path": "/account/sign-in",
+      "ready": true,
+      "readyAfterMs": 517,
+      "requêtes": 32,
+      "servisParLeCache": 12,
+      "réseau": 19,
+      "octetsRéseau": 873440,
+      "jsRéseau": 15,
+      "jsRéseauOctets": 746239,
+      "jsRéseauFichiers": [
+        "AccountAccessPage-BOLs8Mpg.js",
+        "personalDataBoundary-kRAOoDWj.js",
+        "foundations-CGY6cebR.js",
+        "index.esm-avlOvUzk.js",
+        "index.esm-DRo0ZM8h.js",
+        "firebase-Cua6VH5-.js",
+        "publicRoutes-DS-O10kQ.js",
+        "RegistryApp-CHGozIKj.js",
+        "projections-CcW_nv0s.js",
+        "followUp-TgYMdKVm.js",
+        "comparisonSelection-ToGQ0Qwa.js",
+        "collections-uoQiniEe.js",
+        "RegistryItems-_aed4Wbk.js",
+        "RegistryFilterPanel-Dqq1yx7c.js",
+        "registryThumbnail-DPo4XDK7.js"
+      ],
+      "aprèsPrêt": {
+        "requêtes": 9,
+        "octets": 184390,
+        "fichiers": [
+          "RegistryApp-CHGozIKj.js @1831 ms",
+          "projections-CcW_nv0s.js @1832 ms",
+          "followUp-TgYMdKVm.js @1832 ms",
+          "comparisonSelection-ToGQ0Qwa.js @1832 ms",
+          "collections-uoQiniEe.js @1832 ms",
+          "registry-Fb27gfFh.css @1832 ms",
+          "RegistryItems-_aed4Wbk.js @1833 ms",
+          "RegistryFilterPanel-Dqq1yx7c.js @1833 ms",
+          "registryThumbnail-DPo4XDK7.js @1833 ms"
+        ]
+      },
+      "distants": [
+        "www.google.com refusé"
+      ],
+      "tiers": []
+    },
+    {
+      "step": "registre-items",
+      "path": "/registry/reg_cartularia_demo/items",
+      "ready": true,
+      "readyAfterMs": 516,
+      "requêtes": 26,
+      "servisParLeCache": 22,
+      "réseau": 3,
+      "octetsRéseau": 11627,
+      "jsRéseau": 0,
+      "jsRéseauOctets": 0,
+      "jsRéseauFichiers": [],
+      "aprèsPrêt": {
+        "requêtes": 0,
+        "octets": 0,
+        "fichiers": []
+      },
+      "distants": [
+        "www.google.com refusé"
+      ],
+      "tiers": []
+    }
+  ],
+  "check": {
+    "enabled": true,
+    "limits": {
+      "accueil": {
+        "requêtes": 22,
+        "js": 9,
+        "polices": 3
+      },
+      "connexion": {
+        "jsInitiaux": 13
+      },
+      "demo-cover": {
+        "js": 30
+      },
+      "registre": {
+        "js": 18
+      },
+      "registre-items": {
+        "jsRéseau": 0,
+        "réseau": 3
+      }
+    },
+    "appCheckHosts": [
+      "www.google.com",
+      "www.gstatic.com",
+      "recaptchaenterprise.googleapis.com"
+    ],
+    "violations": []
+  }
+}

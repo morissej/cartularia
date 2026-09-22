@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { RefObject } from 'react';
 import { ArrowLeft, ArrowRight, FileText, Plus, Trash2, Video, X } from 'lucide-react';
 import { aiFieldProps } from '../../../ai/fieldCatalog.ts';
@@ -78,6 +78,7 @@ export function MediaViewerModal({
   onChangeVisibility,
   onDelete,
   readOnly = false,
+  originalOnDemand = true,
 }: {
   asset: Asset;
   assetCount: number;
@@ -92,9 +93,22 @@ export function MediaViewerModal({
   onChangeVisibility?: (assetId: string, visibility: Asset['visibility']) => void;
   onDelete: (assetId: string) => void;
   readOnly?: boolean;
+  /**
+   * Original à la demande (contrat V3, K4) : la photographie s'affiche depuis sa variante de scène ;
+   * l'original privé n'est transféré qu'après « Afficher l'original ». `false` retire ce bouton
+   * (compte qui ne peut pas lire l'original : aucun faux espoir).
+   */
+  originalOnDemand?: boolean;
 }) {
   const tx = (french: string, english: string) => translated(language, french, english);
   const documentSource = useMediaSource(asset, asset.type === 'document');
+  // Le choix « original » est lié à l'identifiant du média : la navigation vers une autre photo repart de sa variante.
+  const [originalAssetId, setOriginalAssetId] = useState<string | null>(null);
+  const showOriginal = originalAssetId === asset.id;
+  const canRequestOriginal = originalOnDemand && asset.type === 'image' && Boolean(asset.binaryId) && !showOriginal;
+  // V5 relecture (H2) : en lecture, les catégories sont du texte (aucun bouton grisé — V-D1 « sans contrôle »).
+  const tagsReadOnly = readOnly || audience !== 'Secret';
+  const activeTagLabels = mediaTags.filter((tag) => asset.tags.includes(tag.id)).map((tag) => tag.label);
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div ref={dialogRef} className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-dialog-title" data-focus-layer="true" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
@@ -116,7 +130,7 @@ export function MediaViewerModal({
             </div>
           ) : asset.type === 'video' ? (
             <MediaVideo asset={asset} language={language} />
-          ) : <PrivateMediaImage asset={asset} alt={asset.name} sizes="(max-width: 720px) 100vw, 70vw" eager />}
+          ) : <PrivateMediaImage asset={asset} alt={asset.name} sizes="(max-width: 720px) 100vw, 70vw" eager role={showOriginal ? 'original' : 'stage'} />}
         </div>
         <div className="media-modal__caption">
           <div>
@@ -124,7 +138,7 @@ export function MediaViewerModal({
             <h2 id="media-dialog-title" {...aiFieldProps('media.assets[].name', asset.id)}>{asset.name}</h2>
             {position >= 0 && <span className="media-modal__position" aria-live="polite">{position + 1} / {assetCount}</span>}
           </div>
-          <fieldset className="media-tag-editor">
+          {!tagsReadOnly && <fieldset className="media-tag-editor">
             <legend>{tx('Catégories', 'Categories')}</legend>
             {mediaTags.map((tag) => (
               <button
@@ -133,12 +147,12 @@ export function MediaViewerModal({
                 {...aiFieldProps('media.assets[].tags', `${asset.id}:${tag.id}`)}
                 className={asset.tags.includes(tag.id) ? 'is-active' : ''}
                 onClick={() => onToggleTag(asset.id, tag.id)}
-                disabled={readOnly || audience !== 'Secret'}
                 aria-pressed={asset.tags.includes(tag.id)}
               >{tag.label}</button>
             ))}
-          </fieldset>
+          </fieldset>}
           <dl>
+            {tagsReadOnly && activeTagLabels.length > 0 && <div><dt>{tx('Catégories', 'Categories')}</dt><dd {...aiFieldProps('media.assets[].tags', asset.id)}>{activeTagLabels.join(' · ')}</dd></div>}
             <div><dt>{tx('Horodatage', 'Timestamp')}</dt><dd {...aiFieldProps('media.assets[].metadataTimestamp', asset.id)}>{asset.metadataTimestamp ? formatDateTime(asset.metadataTimestamp) : '—'}</dd></div>
             <div><dt>Source</dt><dd>{asset.timestampSource === 'file.lastModified' ? tx('Métadonnée du fichier', 'File metadata') : tx('Métadonnée du catalogue', 'Catalogue metadata')}</dd></div>
             <div><dt>{tx('Visibilité', 'Visibility')}</dt><dd>{asset.visibility}</dd></div>
@@ -147,6 +161,12 @@ export function MediaViewerModal({
             {asset.type === 'video' && <div><dt>Original</dt><dd>{asset.duration} · {asset.fileSize}</dd></div>}
           </dl>
           {!readOnly && audience === 'Secret' && onChangeVisibility && <label>{tx('Autorisation de publication du média', 'Media publication permission')}<select value={asset.visibility} onChange={(event) => onChangeVisibility(asset.id, event.target.value as Asset['visibility'])}><option value="Secret">{tx('Secret · rester privé', 'Secret · keep private')}</option><option value="Communauté">{tx('Cercle · accès restreint', 'Circle · restricted access')}</option><option value="Tous">{tx('Tous · autoriser une copie de présentation', 'All · allow a presentation copy')}</option></select><small>{tx('Cette autorisation ne publie rien seule. Confirmez ensuite la sélection dans Publication.', 'This permission alone publishes nothing. Confirm the selection in Publication next.')}</small></label>}
+          {canRequestOriginal && (
+            <button type="button" className="button button--quiet no-print media-modal__original" onClick={() => setOriginalAssetId(asset.id)}>
+              {tx('Afficher l’original', 'Show original')}{asset.fileSize ? ` (${asset.fileSize})` : ''}
+            </button>
+          )}
+          {showOriginal && <small className="vault-note" role="status">{tx('Original privé affiché.', 'Private original displayed.')}</small>}
           <MediaDownloadLink media={asset} language={language} />
           {asset.type === 'video' && <small className="vault-note"><Video size={14} /> {tx('Original haute définition conservé dans le coffre média.', 'High-definition original kept in the media vault.')}</small>}
           {!readOnly && <button type="button" className="button button--quiet no-print" onClick={() => onDelete(asset.id)}><Trash2 size={14} /> {tx('Supprimer ce fichier', 'Delete this file')}</button>}

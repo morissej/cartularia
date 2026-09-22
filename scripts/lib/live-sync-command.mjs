@@ -2,10 +2,12 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { CANONICALIZATION_VERSION, sha256Digest } from './canonical-json.mjs';
 import { verifyAuditChain, ZERO_AUDIT_HASH } from './audit-verifier.mjs';
 import { claimQueuedOperation } from './operation-rate-limit.mjs';
-import { privateBinaryIsVerified } from './private-upload-command.mjs';
+import { assertPrivateBinaryOriginal, privateBinaryIsVerified } from './private-upload-command.mjs';
 import { loadGenericSectionPatches } from './generic-sections-command.mjs';
 import { assertNewCollectionAssignments } from './collection-command.mjs';
 import { applyGenericMediaChanges } from './generic-media-command.mjs';
+import { assetPrivatePresentationFor, registryItemPresentationFields } from './registry-thumbnail.mjs';
+import { cartularyReviewRootPatch, parseCartularyReviewDecision, REVIEW_OPERATION_KIND, REVIEW_STATE_KEY } from './cartulary-review-policy.mjs';
 
 const SYNC_RATE_LIMIT_PER_HOUR = 120;
 const ONE_HOUR_MS = 60 * 60 * 1_000;
@@ -63,18 +65,26 @@ const specificationValue = (groups, id, label) => {
 
 const visibility = (value) => ({ Secret: 'secret', Communauté: 'community', Tous: 'public' }[value] || 'secret');
 
-const createAuditEvent = ({ rootData, requestId, actorId, occurredAt, afterDigest }) => {
+const LIVE_STATE_SYNCED_ACTION = 'cartulary.live_state.synced';
+/** Événement d'audit d'une revue confirmée (lot B) : même chaîne, même révision, ressource = le Cartulaire lui-même. */
+export const REVIEW_CONFIRMED_ACTION = 'cartulary.review.confirmed';
+
+const createAuditEvent = ({
+  rootData, requestId, actorId, occurredAt, afterDigest,
+  action = LIVE_STATE_SYNCED_ACTION,
+  resource = { type: 'liveState', id: 'current' },
+}) => {
   const previousEventHash = rootData.integrityHead || ZERO_AUDIT_HASH;
   const sequence = Number(rootData.integritySequence || 0) + 1;
-  const eventId = `evt_${sha256Digest(`cartulary.live_state.synced:${requestId}`).slice(7, 31)}`;
+  const eventId = `evt_${sha256Digest(`${action}:${requestId}`).slice(7, 31)}`;
   const eventWithoutHash = {
     eventId,
     cartularyId: rootData.id,
     sequence,
     occurredAt,
     actor: { uid: actorId, role: 'legal_owner' },
-    action: 'cartulary.live_state.synced',
-    resource: { type: 'liveState', id: 'current' },
+    action,
+    resource,
     beforeDigest: previousEventHash,
     afterDigest,
     previousEventHash,
@@ -142,14 +152,28 @@ const loadDraft = async (firestore, ownerUid, cartularyId) => {
   return { draftRef, states, binaries, digest };
 };
 
-const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organizationId }) => {
+const buildAssetPatch = async ({ storage, asset, existing, binary, digest, cartularyId, organizationId, ownerUid }) => {
+  const binaryId = typeof asset.binaryId === 'string' ? asset.binaryId : existing?.binaryId || null;
+  const sameOriginal = existing && (existing.binaryId || null) === binaryId;
   const trustedBinary = privateBinaryIsVerified(binary) ? binary : null;
+  // An existing imported reference can retain its original; adopting a new reference
+  // or any newly verified manifest requires the attested object to still exist.
+  if (trustedBinary || (binaryId && !sameOriginal)) {
+    await assertPrivateBinaryOriginal({ storage, manifest: binary, uid: ownerUid, cartularyId, binaryId });
+  }
+  const retained = sameOriginal ? existing : null;
   const storagePath = trustedBinary && typeof trustedBinary.storagePath === 'string'
     ? trustedBinary.storagePath
-    : existing?.storagePath || null;
+    : retained?.storagePath || null;
   const sha256 = trustedBinary && /^sha256:[a-f0-9]{64}$/.test(trustedBinary.sha256 || '')
     ? trustedBinary.sha256
-    : existing?.sha256 || null;
+    : retained?.sha256 || null;
+  // Miroir des variantes v3 (contrat K3) : manifeste vérifié du binaire, sinon miroir existant du même binaire.
+  const privatePresentation = assetPrivatePresentationFor({
+    binary: trustedBinary,
+    identity: { uid: ownerUid, cartularyId, binaryId },
+    existing: retained,
+  });
   return {
     id: asset.id,
     cartularyId,
@@ -158,10 +182,11 @@ const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organiz
     displayName: asText(asset.name, asset.id),
     originalFileName: typeof asset.originalFileName === 'string' ? asset.originalFileName : null,
     mimeDeclared: trustedBinary?.mimeType || asset.mimeType || existing?.mimeDeclared || null,
-    sizeBytes: Number.isInteger(trustedBinary?.size) ? trustedBinary.size : existing?.sizeBytes || null,
+    sizeBytes: Number.isInteger(trustedBinary?.size) ? trustedBinary.size : retained?.sizeBytes || null,
     sha256,
     storagePath,
-    binaryId: typeof asset.binaryId === 'string' ? asset.binaryId : existing?.binaryId || null,
+    binaryId,
+    privatePresentation,
     capturedAt: typeof asset.capturedAt === 'string' ? asset.capturedAt : null,
     timestampSource: typeof asset.timestampSource === 'string' ? asset.timestampSource : null,
     tags: Array.isArray(asset.tags) ? asset.tags.filter((tag) => typeof tag === 'string') : [],
@@ -179,6 +204,7 @@ const buildAssetPatch = ({ asset, existing, binary, digest, cartularyId, organiz
 
 export const processCartularySyncRequest = async ({
   firestore,
+  storage,
   requestDocumentId,
   occurredAt = new Date().toISOString(),
   rateLimitPerHour = SYNC_RATE_LIMIT_PER_HOUR,
@@ -227,8 +253,12 @@ export const processCartularySyncRequest = async ({
   const operationMarker = stateValue(draft.states, 'cartularia-generic-operation');
   const genericOperation = typeof operationMarker === 'string' ? operationMarker : operationMarker?.kind;
   const genericOperationToken = typeof operationMarker === 'object' && operationMarker ? operationMarker.token : operationMarker ? sha256Digest(operationMarker) : null;
-  if ((genericOperation != null && !['media', 'sections'].includes(genericOperation)) || (operationMarker && typeof operationMarker === 'object' && (Object.keys(operationMarker).some((key) => !['kind', 'token'].includes(key)) || !/^[A-Za-z0-9_-]{8,160}$/.test(genericOperationToken || '')))) throw new LiveSyncCommandError('invalid_generic_operation', 'La demande de modification générique est invalide.');
+  if ((genericOperation != null && !['media', 'sections', REVIEW_OPERATION_KIND].includes(genericOperation)) || (operationMarker && typeof operationMarker === 'object' && (Object.keys(operationMarker).some((key) => !['kind', 'token'].includes(key)) || !/^[A-Za-z0-9_-]{8,160}$/.test(genericOperationToken || '')))) throw new LiveSyncCommandError('invalid_generic_operation', 'La demande de modification générique est invalide.');
   const pendingGenericOperation = Boolean(genericOperationToken && genericOperationToken !== rootData.lastGenericOperationToken);
+  // Revue du propriétaire (lot B) : décision relue et appliquée seulement tant que son jeton n'est pas consommé ;
+  // une CartularyReviewError (invalid_review, revision_conflict, review_not_allowed) remonte avec son code.
+  const reviewDraft = pendingGenericOperation && genericOperation === REVIEW_OPERATION_KIND ? stateValue(draft.states, REVIEW_STATE_KEY) : null;
+  const reviewPatch = reviewDraft ? cartularyReviewRootPatch({ root: rootData, decision: parseCartularyReviewDecision(reviewDraft), occurredAt }) : null;
   const genericDraft = operationMarker ? pendingGenericOperation && genericOperation === 'sections' ? stateValue(draft.states, 'cartularia-generic-sections') : null : stateValue(draft.states, 'cartularia-generic-sections');
   const genericEditDigest = genericDraft ? sha256Digest(genericDraft) : null;
   const sectionPatches = genericEditDigest && genericEditDigest !== rootData.genericEditDigest
@@ -243,7 +273,7 @@ export const processCartularySyncRequest = async ({
   const genericContext = Boolean(pendingGenericOperation || sectionPatches.length || applyGenericMedia);
   const legacyMedia = stateValue(draft.states, 'cartularia-media-assets-v3');
   const legacyMediaDigest = Array.isArray(legacyMedia) ? sha256Digest(legacyMedia) : null;
-  const media = applyGenericMedia ? applyGenericMediaChanges({ draft: genericMediaDraft, root: { ...rootData, id: cartularyId },
+  const media = applyGenericMedia ? await applyGenericMediaChanges({ storage, draft: genericMediaDraft, root: { ...rootData, id: cartularyId },
     existingAssets: new Map(existingAssetsSnapshot.docs.map((document) => [document.id, document.data()])), binaries: draft.binaries }) : !genericContext && legacyMediaDigest !== rootData.legacyMediaDigest ? legacyMedia : null;
   const legacyCollectionId = stateValue(draft.states, 'cartularia-collection-id');
   const legacyCollectionIds = stateValue(draft.states, 'cartularia-publication-collection-ids');
@@ -307,14 +337,19 @@ export const processCartularySyncRequest = async ({
       updatedAt: FieldValue.serverTimestamp(),
     }];
   });
-  const assetPatches = mediaAssets.map((asset) => buildAssetPatch({
-    asset,
+  const assetPatches = await Promise.all(mediaAssets.map((asset) => buildAssetPatch({
+    storage, asset,
     existing: existingAssets.get(asset.id),
     binary: typeof asset.binaryId === 'string' ? draft.binaries.get(asset.binaryId) : null,
     digest: draft.digest,
     cartularyId,
     organizationId: rootData.organizationId,
-  }));
+    ownerUid,
+  })));
+  // Asset primaire tel qu'il sera écrit (ou tel qu'il existe quand les médias ne changent pas) : source de la vignette.
+  const primaryAsset = primaryAssetId
+    ? assetPatches.find((patch) => patch.id === primaryAssetId) ?? existingAssets.get(primaryAssetId) ?? null
+    : null;
 
   const registryRef = firestore.doc(`registries/${rootData.registryId}`);
   const registryItemRef = registryRef.collection('items').doc(cartularyId);
@@ -373,7 +408,7 @@ export const processCartularySyncRequest = async ({
       modelName,
       referenceCode,
       manufactureYear,
-      lifecycleStatus: currentRootData.lifecycleStatus,
+      lifecycleStatus: reviewPatch?.lifecycleStatus ?? currentRootData.lifecycleStatus,
       possessionStatus: currentRootData.possessionStatus,
       patrimonialStatus,
       userAlias,
@@ -384,15 +419,19 @@ export const processCartularySyncRequest = async ({
       netValuation,
       netAfterTaxValuation,
       valuationCurrency,
-      completenessLevel: currentRootData.completenessLevel,
+      completenessLevel: reviewPatch?.completenessLevel ?? currentRootData.completenessLevel,
       primaryAssetId,
       sourceRevision: nextRevision,
       projectionStatus: 'active',
     };
     const contentHash = sha256Digest(projection);
-    const auditEvent = createAuditEvent({ rootData: currentRootData, requestId, actorId: ownerUid, occurredAt, afterDigest: draft.digest });
+    const auditEvent = createAuditEvent({
+      rootData: currentRootData, requestId, actorId: ownerUid, occurredAt, afterDigest: draft.digest,
+      ...(reviewPatch ? { action: REVIEW_CONFIRMED_ACTION, resource: { type: 'cartulary', id: cartularyId } } : {}),
+    });
 
     transaction.update(rootRef, {
+      ...(reviewPatch ?? {}),
       displayTitle: projection.displayTitle,
       makerName,
       modelName,
@@ -455,8 +494,17 @@ export const processCartularySyncRequest = async ({
     for (const [reminderId, existing] of existingReminders) {
       if (Array.isArray(followUps) && existing.liveSyncManaged === true && !activeReminderIds.has(reminderId)) transaction.delete(rootRef.collection('reminders').doc(reminderId));
     }
+    // Vignette, nature et état de la couverture : frères de la projection, hors contentHash, jamais effacés par une
+    // réécriture (K3 étendu) ; thumbnailStatus lit le manifeste du binaire primaire (échec définitif → 'failed').
+    const presentationFields = registryItemPresentationFields({
+      primaryAssetId,
+      primaryAsset,
+      existingItem: registryItem.exists ? registryItem.data() : null,
+      primaryBinary: typeof primaryAsset?.binaryId === 'string' ? draft.binaries.get(primaryAsset.binaryId) ?? null : null,
+    });
     transaction.set(registryItemRef, {
       ...projection,
+      ...presentationFields,
       contentHash,
       generatedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
