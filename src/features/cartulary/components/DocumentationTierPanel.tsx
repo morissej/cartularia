@@ -12,11 +12,22 @@ const formatAssessmentDate = (value: string) => {
   return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeStyle: 'short' }).format(date) : value;
 };
 
-export function DocumentationTierPanel({ cartularyId }: { cartularyId: string }) {
-  const [assessment, setAssessment] = useState<DocumentationAssessmentProjection | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+export function DocumentationTierPanel({
+  cartularyId,
+  assessmentOverride,
+}: {
+  cartularyId: string;
+  assessmentOverride?: DocumentationAssessmentProjection;
+}) {
+  const [assessment, setAssessment] = useState<DocumentationAssessmentProjection | null>(assessmentOverride ?? null);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>(assessmentOverride ? 'ready' : 'loading');
 
   useEffect(() => {
+    if (assessmentOverride) {
+      setAssessment(assessmentOverride);
+      setState('ready');
+      return undefined;
+    }
     setState('loading');
     return observeDocumentationAssessment(cartularyId, (next) => {
       setAssessment(next);
@@ -25,7 +36,7 @@ export function DocumentationTierPanel({ cartularyId }: { cartularyId: string })
       setAssessment(null);
       setState('error');
     });
-  }, [cartularyId]);
+  }, [assessmentOverride, cartularyId]);
 
   return (
     <section className="documentation-tier" aria-labelledby="documentation-tier-title">

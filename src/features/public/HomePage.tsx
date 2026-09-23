@@ -14,6 +14,7 @@ import {
   Fingerprint,
   FolderLock,
   Globe2,
+  HardDriveDownload,
   KeyRound,
   Layers3,
   LifeBuoy,
@@ -45,6 +46,7 @@ const DELIVERABLE_ICONS = {
   'sceau-integrite': Fingerprint,
   cercle: CircleDot,
   'todo-list': ListChecks,
+  'logiciel-local': HardDriveDownload,
 } as const;
 
 const USE_CASES = [
@@ -52,7 +54,7 @@ const USE_CASES = [
     icon: BookOpen,
     tag: 'Connaissance',
     title: "Connaître chaque pièce que l'on possède",
-    text: 'La facture définitive, ou la proforma ? La date de la dernière révision ? Le numéro vérifié ? Le Cartulaire établit ce que vous avez, vraiment, et ce qui manque.',
+    text: "L'historique de la pièce, les caractéristiques techniques, ce qu'il faut savoir sur le modèle, ...",
     link: '/livrables/cartulaire',
     linkLabel: 'Voir le Cartulaire',
   },
@@ -73,14 +75,6 @@ const USE_CASES = [
     linkLabel: 'Voir le Mini Site',
   },
   {
-    icon: BarChart3,
-    tag: 'Vue globale',
-    title: 'Voir son patrimoine d’objets de collection',
-    text: 'Rassembler les objets dans le Registre et lire les données disponibles à l’échelle d’une Collection ou du patrimoine documenté.',
-    link: '/livrables/registre',
-    linkLabel: 'Voir le Registre',
-  },
-  {
     icon: ListChecks,
     tag: 'Suivi',
     title: 'Identifier et suivre les actions à mener',
@@ -89,12 +83,20 @@ const USE_CASES = [
     linkLabel: 'Voir la todo list',
   },
   {
+    icon: BarChart3,
+    tag: 'Vue globale',
+    title: 'Voir son patrimoine d’objets de collection',
+    text: 'Rassembler les objets dans le Registre et lire les données disponibles à l’échelle d’une Collection ou du patrimoine documenté.',
+    link: '/livrables/registre',
+    linkLabel: 'Voir le Registre',
+  },
+  {
     icon: Scale,
     tag: 'Décision',
     title: 'Garder, compléter ou vendre avec de vraies données',
     text: 'Comparer les faits, les sources, l’état et les valeurs disponibles pour éclairer une décision, sans recommandation automatique ni service de transaction.',
-    link: '/livrables/cartulaire',
-    linkLabel: 'Voir le Cartulaire',
+    link: '/livrables/collection',
+    linkLabel: 'Voir la Collection',
   },
 ] as const;
 
@@ -296,8 +298,8 @@ export function HomePage() {
         {/* SIX MOMENTS */}
         <section className="public-section" id="portes" aria-labelledby="doors-title">
           <div className="public-section__heading">
-            <p className="public-kicker">Six moments</p>
-            <h2 id="doors-title">Le jour où l'on vous demande — et tous les jours d'avant.</h2>
+            <p className="public-kicker">Connaître, Maîtriser, Décider</p>
+            <h2 id="doors-title">Collectionner est une passion. Maîtrisez en tous les aspects dans les moindres détails</h2>
             <p>Chaque usage s’appuie sur les mêmes dossiers et conserve les limites des données disponibles.</p>
           </div>
 
@@ -313,12 +315,12 @@ export function HomePage() {
           </div>
         </section>
 
-        {/* LES 8 LIVRABLES */}
+        {/* LES LIVRABLES */}
         <section className="public-section public-deliverables-section" id="livrables" aria-labelledby="deliverables-title">
           <div className="public-section__heading">
             <p className="public-kicker">Ce que vous obtenez</p>
-            <h2 id="deliverables-title">Huit livrables pour suivre vos collections</h2>
-            <p>Ouvrez chaque page pour voir son rôle, ses fonctions réellement disponibles, une capture et un exemple fictif.</p>
+            <h2 id="deliverables-title">Neuf livrables pour suivre vos collections</h2>
+            <p>Ouvrez chaque page pour voir son rôle, ses fonctions réellement disponibles et une capture.</p>
           </div>
 
           <div className="public-deliverables-grid">
@@ -342,12 +344,6 @@ export function HomePage() {
             );})}
           </div>
 
-          <div className="public-deliverables-cta">
-            <p>Le dossier reste secret par défaut. Une publication ou un partage demande une action et une sélection explicites.</p>
-            <a className="public-solid-button" href={DEMO_SUBMARINER_HREF}>
-              Explorer le Cartulaire fictif <ArrowRight aria-hidden="true" />
-            </a>
-          </div>
         </section>
 
         {/* MODE D'EMPLOI & METHODE */}

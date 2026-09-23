@@ -330,6 +330,7 @@ const buildDemoContent = (
       seconds: input.seconds,
       crown: input.crown,
       caseback: input.caseback,
+      'retail-price': `${cartulary.purchasePrice.toLocaleString('fr-FR')} € · valeur fictive de démonstration`,
     },
     checks: [
       { id: `${prefix}-reference`, title: `${cartulary.brand} ${cartulary.reference}`, note: `Référence, marquages et numéro fictif rapprochés de la fiche officielle ${cartulary.brand}.`, checked: true },

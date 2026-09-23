@@ -15,6 +15,7 @@ const TODO_STORAGE_KEY = 'cartularia-todos';
 const TODO_REMOTE_MIGRATION_KEY = 'cartularia-todos-remote-migrated-v1';
 const TODO_LEGACY_PENDING_STORAGE_KEY = 'cartularia-todos-pending-v1';
 const TODO_OPERATION_STORAGE_KEY = 'cartularia-todos-operations-v2';
+const EMPTY_PREVIEW_TODOS: CartularyFollowUpTodo[] = [];
 
 type FollowUpOperation = {
   operationId: string;
@@ -159,12 +160,14 @@ export const useCartularyFollowUp = ({
   cartularyId,
   language,
   readOnlyPreview = false,
+  previewTodos = EMPTY_PREVIEW_TODOS,
 }: {
   cartularyId: string;
   language: 'FR' | 'EN';
   readOnlyPreview?: boolean;
+  previewTodos?: CartularyFollowUpTodo[];
 }): CartularyFollowUpController => {
-  const [todos, setTodos] = useState<CartularyFollowUpTodo[]>(() => readOnlyPreview ? [] : readStoredTodos());
+  const [todos, setTodos] = useState<CartularyFollowUpTodo[]>(() => readOnlyPreview ? normalizeTodos(previewTodos) : readStoredTodos());
   const [remoteHydrationComplete, setRemoteHydrationComplete] = useState(false);
   const [syncError, setSyncError] = useState('');
   const todosRef = useRef(todos);
@@ -201,7 +204,7 @@ export const useCartularyFollowUp = ({
 
   useEffect(() => {
     if (readOnlyPreview) {
-      replaceTodos([]);
+      replaceTodos(normalizeTodos(previewTodos));
       setSyncError('');
       setRemoteHydrationComplete(false);
       return;
@@ -314,7 +317,7 @@ export const useCartularyFollowUp = ({
       window.removeEventListener('online', requestDrain);
       unsubscribe();
     };
-  }, [cartularyId, isFrench, persistOperations, readOnlyPreview, replaceTodos]);
+  }, [cartularyId, isFrench, persistOperations, previewTodos, readOnlyPreview, replaceTodos]);
 
   useEffect(() => {
     if (readOnlyPreview || !remoteHydrationComplete) return;

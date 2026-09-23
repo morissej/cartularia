@@ -27,6 +27,7 @@
  *   --assets-out <dossier>  captures produit (défaut : public/assets/public/captures)
  *   --version <AAAAMMJJ>    version consignée dans le manifeste (défaut : 20260917)
  *   --chrome <chemin>       exécutable Chrome (sinon CARTULARIA_CHROME, puis Chrome macOS)
+ *   --report-only           ne capture que l’aperçu réel du rapport imprimable
  */
 import { spawn } from 'node:child_process';
 import {
@@ -51,6 +52,7 @@ import {
 } from '../src/data/demoCartularies.ts';
 
 const argumentsList = process.argv.slice(2);
+const reportOnly = argumentsList.includes('--report-only');
 const option = (name, fallback) => {
   const index = argumentsList.indexOf(name);
   return index >= 0 && argumentsList[index + 1] ? argumentsList[index + 1] : fallback;
@@ -93,6 +95,7 @@ const PUBLIC_SCENES = [
   { name: 'livrable-sceau-integrite', path: '/livrables/sceau-integrite' },
   { name: 'livrable-cercle', path: '/livrables/cercle' },
   { name: 'livrable-todo-list', path: '/livrables/todo-list' },
+  { name: 'livrable-logiciel-local', path: '/livrables/logiciel-local' },
 ];
 
 const VIEWPORTS = [
@@ -697,6 +700,43 @@ async function main() {
     const { webSocketDebuggerUrl } = await versionResponse.json();
     browser = await Cdp.connect(webSocketDebuggerUrl);
 
+    if (reportOnly) {
+      const reportScene = {
+        name: 'rapport-pdf-demo',
+        path: `${DEMO_CARTULARY}#publication`,
+        fileName: 'rapport-pdf-demo.webp',
+        selector: '.publication-scope--report button',
+        expectedActivePage: 'Publication',
+      };
+      try {
+        const result = await captureProductSurface(browser, baseUrl, reportScene, async (page) => {
+          const prepared = await page.evaluate(`(async () => {
+            const button = document.querySelector('.publication-scope--report button');
+            if (!button) return false;
+            button.click();
+            for (let attempt = 0; attempt < 150; attempt += 1) {
+              if (document.querySelector('.report-print-view')) return true;
+              await new Promise((done) => setTimeout(done, 100));
+            }
+            return false;
+          })()`);
+          if (!prepared) throw new Error('Le rapport imprimable réel ne s’est pas préparé.');
+          await page.send('Emulation.setEmulatedMedia', { media: 'print' });
+          await page.evaluate('(async () => { if (document.fonts?.ready) await document.fonts.ready; window.scrollTo(0, 0); })()');
+        });
+        report.productAssets.push(result);
+        console.log(`CAPTURED ${reportScene.name} -> ${result.file}`);
+      } catch (error) {
+        const entry = errorEntry(error, {
+          file: relative(rootDirectory, join(assetsDirectory, reportScene.fileName)),
+          path: reportScene.path,
+          scene: reportScene.name,
+          viewport: PRODUCT_VIEWPORT,
+        });
+        report.productAssets.push(entry);
+        console.error(`FAILED ${reportScene.name}: ${entry.error}`);
+      }
+    } else {
     for (const viewport of VIEWPORTS) {
       for (const scene of PUBLIC_SCENES) {
         try {
@@ -795,6 +835,7 @@ async function main() {
       const message = `${result.status === 'captured' ? 'CAPTURED' : 'FAILED'} ${result.scene}`;
       if (result.status === 'captured') console.log(`${message} -> ${result.file}`);
       else console.error(`${message}: ${result.error}`);
+    }
     }
   } catch (error) {
     fatalError = error instanceof Error ? error.message : String(error);

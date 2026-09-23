@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, FolderLock, KeyRound, LoaderCircle, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 import { createCartulariaAccount, resumeRegistryAccountActivation, signInToCartularia } from '../../services/foundations';
@@ -27,6 +27,7 @@ export function AccountAccessPage() {
   const parameters = new URLSearchParams(window.location.search);
   const requestedSpace = parameters.get('space');
   const demoRequested = !creation && parameters.get('demo') === '1';
+  const automaticDemoRequested = demoRequested && parameters.get('open') === '1';
   const returnTo = safeAccountReturnPath(parameters.get('returnTo'));
   const [userName, setUserName] = useState('');
   const [password, setPassword] = useState('');
@@ -36,6 +37,7 @@ export function AccountAccessPage() {
   const [error, setError] = useState('');
   const [demoError, setDemoError] = useState('');
   const [activationPending, setActivationPending] = useState(parameters.get('resume') === '1');
+  const automaticDemoOpenStarted = useRef(false);
   const vaultHref = useMemo(() => personalVaultHref(creation ? 'create' : 'sign-in'), [creation]);
 
   useEffect(() => {
@@ -87,13 +89,13 @@ export function AccountAccessPage() {
     } finally { setSubmitting(false); }
   };
 
-  const openDemoRegistry = async () => {
+  const openDemoRegistry = useCallback(async () => {
     setSubmitting(true);
     setError('');
     setDemoError('');
     try {
       await signInToCartularia(DEMO_ACCOUNT.userName, DEMO_ACCOUNT.password);
-      window.location.assign(`/registry/${encodeURIComponent(DEMO_ACCOUNT.registryId)}/items`);
+      window.location.assign(returnTo.startsWith('/registry') ? returnTo : `/registry/${encodeURIComponent(DEMO_ACCOUNT.registryId)}/items`);
     } catch (nextError) {
       const code = String((nextError as { code?: string }).code || '');
       // Diagnostic code only: never log credentials, request bodies or tokens.
@@ -103,7 +105,13 @@ export function AccountAccessPage() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [returnTo]);
+
+  useEffect(() => {
+    if (!automaticDemoRequested || automaticDemoOpenStarted.current) return;
+    automaticDemoOpenStarted.current = true;
+    void openDemoRegistry();
+  }, [automaticDemoRequested, openDemoRegistry]);
 
   return (
     <div className="account-access-page">

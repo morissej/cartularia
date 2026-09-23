@@ -25,6 +25,19 @@ describe('Suivi de la démonstration anonyme', () => {
     for (const fn of [mocks.persist, mocks.create, mocks.update, mocks.remove]) expect(fn).not.toHaveBeenCalled();
   });
 
+  it('affiche les deux tâches demandées sans activer aucune persistance', () => {
+    const previewTodos = [
+      { id: 'service-2030', text: 'Révision en 2030', dueAt: '2030-01-01', category: 'maintenance' as const, status: 'planned' as const },
+      { id: 'final-invoice', text: 'Seule la facture pro forma est disponible dans les archives : récupérer la facture finale auprès de Rolex', dueAt: '', category: 'custom' as const, status: 'planned' as const },
+    ];
+    const { result } = renderHook(() => useCartularyFollowUp({ cartularyId: 'demo-object', language: 'FR', readOnlyPreview: true, previewTodos }));
+    render(<CartularyTodoBoard followUp={result.current} language="FR" readOnly demonstration />);
+    expect(screen.getByText('Révision en 2030')).toBeTruthy();
+    expect(screen.getByText(/récupérer la facture finale auprès de Rolex/)).toBeTruthy();
+    expect(mocks.observe).not.toHaveBeenCalled();
+    expect(mocks.persist).not.toHaveBeenCalled();
+  });
+
   it('n’affiche aucun état de synchronisation sur l’Accueil démo, seulement la mention de lecture seule', () => {
     const { result } = renderHook(() => useCartularyFollowUp({ cartularyId: 'demo-object', language: 'FR', readOnlyPreview: true }));
     // V5 point 1 (2/2) : la lecture suit le droit de gérer ; la démo ne fournit que le texte (prop demonstration).

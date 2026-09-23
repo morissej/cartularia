@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DocumentationTierPanel } from '../../src/features/cartulary/components/DocumentationTierPanel.tsx';
+import { DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT } from '../../src/data/demoDocumentationAssessment.ts';
+import { observeDocumentationAssessment } from '../../src/services/documentationTier.ts';
 
 const mocks = vi.hoisted(() => ({ value: null as any, error: null as Error | null }));
 
@@ -43,5 +45,14 @@ describe('palier documentaire du Cartulaire', () => {
     render(<DocumentationTierPanel cartularyId="cart_legacy" />);
     expect(await screen.findByText(/L’absence de donnée ne vaut jamais P0/)).toBeTruthy();
     expect(screen.queryByText('Dossier minimal viable')).toBeNull();
+  });
+
+  it('rend l’évaluation fictive locale sans ouvrir d’écoute Firestore', () => {
+    vi.mocked(observeDocumentationAssessment).mockClear();
+    render(<DocumentationTierPanel cartularyId="cart_demo_rolex_submariner_124060" assessmentOverride={DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT} />);
+    expect(screen.getByText('P2')).toBeTruthy();
+    expect(screen.getByText('Dossier tenu')).toBeTruthy();
+    expect(screen.getByText(/Émettre un Sceau/)).toBeTruthy();
+    expect(observeDocumentationAssessment).not.toHaveBeenCalled();
   });
 });

@@ -39,10 +39,19 @@ describe('Pages éditoriales publiques', () => {
     renderPath(`/livrables/${item.slug}`);
     expect(screen.getByRole('heading', { level: 1, name: item.title })).toBeTruthy();
     expect(screen.getByRole('img', { name: item.screenshotAlt }).getAttribute('src')).toBe(item.screenshot);
-    expect(screen.getByRole('heading', { level: 3, name: 'Fonctions effectives' })).toBeTruthy();
-    expect(screen.getByText(item.example)).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: item.availability === 'planned' ? 'Fonctions prévues' : 'Fonctions effectives' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Exemple fictif' })).toBeNull();
     expect(screen.getByRole('link', { name: /Retour aux livrables/i }).getAttribute('href')).toBe('/#livrables');
     expect(screen.getAllByRole('link', { name: 'Retour à l’accueil' }).some((link) => link.getAttribute('href') === '/')).toBe(true);
+  });
+
+  it('ouvre directement le Registre et la Collection de démonstration', () => {
+    const registry = DELIVERABLE_DETAILS.find((item) => item.slug === 'registre');
+    const collection = DELIVERABLE_DETAILS.find((item) => item.slug === 'collection');
+    expect(registry?.directHref).toContain('demo=1&open=1');
+    expect(registry?.directHref).toContain(encodeURIComponent('/registry/reg_cartularia_demo/items'));
+    expect(collection?.directHref).toContain(encodeURIComponent('/registry/reg_cartularia_demo/collections'));
+    expect(collection?.directLabel).toBe('Découvrir la Collection');
   });
 
   it('relie le Mini Site à un aperçu local et le Sceau directement au panneau Preuves', () => {

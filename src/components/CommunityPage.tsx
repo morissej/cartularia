@@ -9,6 +9,11 @@ import { formatGenericValue } from '../schema/fieldPresentation.ts';
 import { BrandLogo } from './BrandLogo.tsx';
 import { signedOutRegistryLinks } from '../features/registry/registryReturn.ts';
 import { schemaFieldLabel } from '../schema/schemaLabels.ts';
+import { DEMO_ACCOUNT } from '../data/demoCartularies.ts';
+import {
+  DEMO_SUBMARINER_COMMUNITY_PUBLICATION,
+  DEMO_SUBMARINER_COMMUNITY_PUBLICATION_ID,
+} from '../data/demoCommunityPublication.ts';
 
 type CommunityState = 'auth-loading' | 'signed-out' | 'loading' | 'ready' | 'denied' | 'error';
 
@@ -71,7 +76,11 @@ export const CommunityPage = () => {
     loadCommunityCatalog()
       .then((loaded) => {
         if (request !== generation) return;
-        setCatalog(loaded);
+        const withDemoSubmariner = user.displayName === DEMO_ACCOUNT.displayName
+          && !loaded.some(({ publication }) => publication.publicationId === DEMO_SUBMARINER_COMMUNITY_PUBLICATION_ID)
+          ? [DEMO_SUBMARINER_COMMUNITY_PUBLICATION, ...loaded]
+          : loaded;
+        setCatalog(withDemoSubmariner);
         setState('ready');
       })
       .catch((error: { code?: string }) => {
@@ -142,7 +151,7 @@ export const CommunityPage = () => {
           )}
           {visibleCatalog.map(({ publication, blocks }) => (
             <article className="community-publication-card" key={publication.publicationId}>
-              <span className="eyebrow">{assetTypeLabel(publication.assetType)} · projection approuvée</span>
+              <span className="eyebrow">{assetTypeLabel(publication.assetType)} · {publication.publicationId === DEMO_SUBMARINER_COMMUNITY_PUBLICATION_ID ? 'démonstration fictive locale' : 'projection approuvée'}</span>
               <h2>{publication.displayTitle}</h2>
               <p>{publication.makerName} · {publication.modelName}</p>
               {blocks.map((block) => (

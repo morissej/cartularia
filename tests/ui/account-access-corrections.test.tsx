@@ -20,6 +20,12 @@ describe('accès publics corrigés', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Aucun identifiant personnel');
     expect(screen.getByRole('link', { name: /sans connexion/i })).toBeTruthy();
   });
+  it('ouvre automatiquement la destination démo locale demandée par un livrable', async () => {
+    window.history.replaceState({}, '', '/account/sign-in?demo=1&open=1&returnTo=%2Fregistry%2Freg_cartularia_demo%2Fcollections');
+    vi.mocked(signInToCartularia).mockImplementation(() => new Promise(() => undefined));
+    render(<AccountAccessPage />);
+    await waitFor(() => expect(signInToCartularia).toHaveBeenCalledWith('demo', 'Cartularia-Demo-2026!'));
+  });
   it('ne refuse pas un mot de passe historique de moins de 12 caractères à la connexion', () => {
     render(<AccountAccessPage />);
     fireEvent.change(screen.getByLabelText('Nom utilisateur'), { target: { value: 'Ancien compte' } });

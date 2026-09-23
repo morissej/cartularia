@@ -2599,13 +2599,17 @@ textarea {
 .watch-website__main > .page-intro { margin-bottom: 0; }
 .watch-website__block { padding-block: var(--s7); border-bottom: 1px solid var(--rule); }
 .watch-website__block > section { width: 100%; }
-.watch-website__hero { display: grid; grid-template-columns: minmax(280px, 5fr) minmax(0, 7fr); min-height: 520px; border: 1px solid var(--rule); background: var(--sheet); }
+.watch-website__hero { display: grid; grid-template-columns: minmax(220px, 3.5fr) minmax(0, 8.5fr); min-height: 460px; border: 1px solid var(--rule); background: var(--sheet); }
 .watch-website__hero > img,
-.watch-website__hero > .presentation-picture > img { width: 100%; height: 100%; min-width: 0; min-height: 0; max-height: 620px; object-fit: contain; object-position: center; padding: var(--s5); background: var(--fill); filter: none; }
+.watch-website__hero > .presentation-picture > img { width: 100%; height: 100%; min-width: 0; min-height: 0; max-height: 460px; object-fit: contain; object-position: center; padding: var(--s4); background: var(--fill); filter: none; }
 .watch-website__hero h2 { overflow-wrap: anywhere; font-family: var(--font-display); font-weight: 500; }
 .watch-website__hero > div { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: var(--s7); }
 .watch-website__hero h2 { margin: var(--s3) 0 var(--s5); font-size: 52px; }
-.watch-website__hero p { max-width: 620px; }
+.watch-website__hero p { max-width: none; }
+.watch-website__block .section-title > div:not(.content-markers),
+.watch-website__block .history-text,
+.watch-website__block .watch-description-card p,
+.watch-website__block .current-condition-summary > p { max-width: none; }
 .watch-website__media-link { display: block; color: inherit; text-decoration: none; }
 .watch-website__media-link + .media-download-link { margin-top: var(--s3); }
 .watch-website__hero .media-download-link { margin-top: var(--s5); }
@@ -2969,7 +2973,7 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
   .media-library-layout { grid-template-columns: 1fr; }
   .media-upload-form { position: static; }
   .documentation-media__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .watch-website__hero { grid-template-columns: minmax(240px, 4fr) minmax(0, 6fr); }
+  .watch-website__hero { grid-template-columns: minmax(210px, 3fr) minmax(0, 7fr); }
   .watch-website__hero > div { padding: var(--s5); }
   .watch-website__hero h2 { font-size: 40px; }
   .watch-website__library { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -3907,7 +3911,7 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
 .documentation-tier__header h2 { font-size: clamp(24px, 3vw, 34px); }
 .documentation-tier__header p, .documentation-tier__note { color: var(--muted); }
 .documentation-tier__header > svg { width: 28px; height: 28px; color: var(--mark); stroke-width: 1.5; }
-.documentation-tier__method { padding: var(--s2) var(--s3); border-left: 3px solid var(--mark); background: var(--fill); color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+.documentation-tier__method { padding: var(--s2) var(--s3); border-left: 3px solid var(--mark); background: var(--fill); color: var(--ink); font-family: var(--font-mono); font-size: 10px; }
 .documentation-tier__state { display: flex; align-items: center; gap: var(--s2); padding: var(--s3); border: 1px dashed var(--rule); }
 .documentation-tier__state svg { width: 17px; }
 .documentation-tier__spinner { animation: documentation-tier-spin .9s linear infinite; }
@@ -3924,8 +3928,8 @@ select:focus { border-color: var(--mark); background: var(--sheet); }
 .documentation-tier__columns h3 svg { width: 17px; color: var(--mark); }
 .documentation-tier__columns ul { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
 .documentation-tier__columns li { display: flex; justify-content: space-between; gap: var(--s3); padding-top: var(--s2); border-top: 1px solid var(--rule); font-size: 12px; }
-.documentation-tier__columns small { color: var(--muted); text-align: right; }
-.documentation-tier__columns details { max-width: 62%; color: var(--muted); font-size: 10px; text-align: right; }
+.documentation-tier__columns small { color: var(--ink); text-align: right; }
+.documentation-tier__columns details { max-width: 62%; color: var(--ink); font-size: 10px; text-align: right; }
 .documentation-tier__columns summary { cursor: pointer; }
 .documentation-tier__evidence { margin-top: var(--s2) !important; text-align: left; }
 .documentation-tier__evidence li { display: grid; gap: 2px; overflow-wrap: anywhere; }

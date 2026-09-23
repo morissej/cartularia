@@ -34,20 +34,21 @@ describe('Accueil public Cartularia', () => {
     expect(screen.getByLabelText('Bénéfices et portée du service').querySelectorAll('li')).toHaveLength(6);
     expect(screen.getByText('Partage sélectif révocable')).toBeTruthy();
     expect(screen.getByText('Vous décidez exactement qui voit quoi')).toBeTruthy();
-    expect(screen.getByText(/Le pilote ne produit pas de diagnostic automatique/i)).toBeTruthy();
+    expect(screen.getByText('Le catalogue structure les données pour une analyse assistée: vous connaissez tout sur vos pièces.')).toBeTruthy();
     expect(screen.getByText(/sans certifier l’authenticité de l’objet/i)).toBeTruthy();
   });
 
   it('présente six usages homogènes avec la connaissance en premier', () => {
     render(<HomePage />);
-    const section = screen.getByRole('heading', { level: 2, name: "Le jour où l'on vous demande — et tous les jours d'avant." }).closest('section');
+    const section = screen.getByRole('heading', { level: 2, name: 'Collectionner est une passion. Maîtrisez en tous les aspects dans les moindres détails' }).closest('section');
+    expect(screen.getByText('Connaître, Maîtriser, Décider')).toBeTruthy();
     const cards = Array.from(section?.querySelectorAll<HTMLElement>('.public-door-card') ?? []);
     expect(cards.map((card) => card.querySelector('h3')?.textContent)).toEqual([
       "Connaître chaque pièce que l'on possède",
       'Préparer son dossier avant un sinistre',
       'Transmettre ou céder avec un dossier lisible',
-      'Voir son patrimoine d’objets de collection',
       'Identifier et suivre les actions à mener',
+      'Voir son patrimoine d’objets de collection',
       'Garder, compléter ou vendre avec de vraies données',
     ]);
   });
@@ -80,15 +81,16 @@ describe('Accueil public Cartularia', () => {
     description.remove();
   });
 
-  it('affiche huit livrables dans le bon ordre avec une vraie route de détail', () => {
+  it('affiche neuf livrables dans le bon ordre avec une vraie route de détail', () => {
     render(<HomePage />);
-    const section = screen.getByRole('heading', { level: 2, name: 'Huit livrables pour suivre vos collections' }).closest('section');
+    const section = screen.getByRole('heading', { level: 2, name: 'Neuf livrables pour suivre vos collections' }).closest('section');
     const links = Array.from(section?.querySelectorAll<HTMLAnchorElement>('.public-deliverable-card') ?? []);
     expect(links.map((link) => link.querySelector('h3')?.textContent)).toEqual([
       'Le Cartulaire', 'Le Registre', 'La Collection', 'Le Mini Site (extrait de Cartulaire ou Collection)',
-      'Le rapport PDF', "Le Sceau d'intégrité", 'Le Cercle', 'Une todo list pour gérer votre patrimoine',
+      'Le rapport PDF', "Le Sceau d'intégrité", 'Le Cercle', 'Une todo list pour gérer votre patrimoine', 'Le logiciel local',
     ]);
     expect(links.every((link) => link.getAttribute('href')?.startsWith('/livrables/'))).toBe(true);
+    expect(section?.querySelector('.public-deliverables-cta')).toBeNull();
   });
 
   it('conserve les limites éthiques et décrit honnêtement les catégories futures', () => {

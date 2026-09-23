@@ -259,10 +259,9 @@ function DeliverablePage() {
             <p className="public-kicker">À quoi sert ce livrable ?</p>
             <h2 id="deliverable-use-title">{item.utility}</h2>
           </div>
-          <h3>Fonctions effectives</h3>
+          <h3>{item.availability === 'planned' ? 'Fonctions prévues' : 'Fonctions effectives'}</h3>
           <ul>{item.features.map((feature) => <li key={feature}><Check aria-hidden="true" /> {feature}</li>)}</ul>
-          <h3>Exemple fictif</h3>
-          <p>{item.example}</p>
+          {item.availability === 'planned' && <p className="public-safety-note"><ShieldCheck aria-hidden="true" /><span><strong>Disponibilité :</strong> en préparation.</span></p>}
           {item.limit && <p className="public-safety-note"><ShieldCheck aria-hidden="true" /><span><strong>Limite :</strong> {item.limit}</span></p>}
         </div>
 

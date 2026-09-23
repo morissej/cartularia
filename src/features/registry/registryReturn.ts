@@ -18,6 +18,14 @@ export const DEMO_REGISTRY_RETURN_HREF = registryHref(DEMO_ACCOUNT.registryId, '
 /** Page compte avec la section démo surlignée ; seule entrée qui connecte le compte démo. */
 export const DEMO_REGISTRY_ENTRY_HREF = '/account/sign-in?demo=1';
 
+const demoDirectEntryHref = (returnTo: string) => `/account/sign-in?demo=1&open=1&returnTo=${encodeURIComponent(returnTo)}`;
+
+/** Connexion automatique du compte partagé, puis ouverture directe du Catalogue. */
+export const DEMO_REGISTRY_DIRECT_HREF = demoDirectEntryHref(DEMO_REGISTRY_RETURN_HREF);
+
+/** Connexion automatique du compte partagé, puis ouverture directe de sa Collection. */
+export const DEMO_COLLECTION_DIRECT_HREF = demoDirectEntryHref(registryHref(DEMO_ACCOUNT.registryId, 'collections'));
+
 /** Accueil public ; issue proposée à tout visiteur sans session. */
 export const PUBLIC_HOME_HREF = '/';
 

@@ -1,4 +1,5 @@
 import { DEMO_SUBMARINER_CARTULARY_ID, DEMO_SUBMARINER_PUBLIC_CODE, DEMO_WEBSITE_BLOCK_IDS } from '../../data/demoCartularies.ts';
+import { DEMO_COLLECTION_DIRECT_HREF, DEMO_REGISTRY_DIRECT_HREF } from '../registry/registryReturn.ts';
 
 export const DEMO_SUBMARINER_HREF = `/cartulary-demo?cartularyId=${encodeURIComponent(DEMO_SUBMARINER_CARTULARY_ID)}#cover`;
 const demoMiniSiteParameters = new URLSearchParams({
@@ -14,7 +15,7 @@ export const PROFESSIONAL_MEDIA_HELP_REASON = 'Aide professionnelle photo et vid
 export const HERO_BENEFITS = [
   {
     label: 'Tout au même endroit',
-    detail: 'Papiers, état, médias, valeurs et suivi de chaque pièce dans un seul dossier.',
+    detail: 'Papiers, état, base documentaire photos et vidéos, valeurs, ...',
   },
   {
     label: 'Chaque pièce connue',
@@ -30,7 +31,7 @@ export const HERO_BENEFITS = [
   },
   {
     label: 'Analyse assistée, revue humaine',
-    detail: 'Le catalogue structure les données pour une analyse assistée et une revue humaine. Le pilote ne produit pas de diagnostic automatique.',
+    detail: 'Le catalogue structure les données pour une analyse assistée: vous connaissez tout sur vos pièces.',
   },
   {
     label: 'Preuve d’intégrité datée',
@@ -135,6 +136,7 @@ export interface DeliverableDetail {
   screenshotCaption: string;
   directHref: string;
   directLabel: string;
+  availability?: 'available' | 'planned';
   limit?: string;
 }
 
@@ -168,7 +170,7 @@ export const DELIVERABLE_DETAILS: readonly DeliverableDetail[] = [
     screenshot: `${CAPTURE_ROOT}/registre-demo.webp`,
     screenshotAlt: 'Capture du Registre de démonstration présentant cinq montres fictives',
     screenshotCaption: 'Capture du Registre de démonstration en lecture seule, réalisée avec le compte fictif.',
-    directHref: '/account/sign-in?demo=1',
+    directHref: DEMO_REGISTRY_DIRECT_HREF,
     directLabel: 'Accéder au Registre démo',
   },
   {
@@ -183,8 +185,8 @@ export const DELIVERABLE_DETAILS: readonly DeliverableDetail[] = [
     screenshot: `${CAPTURE_ROOT}/collection-demo.webp`,
     screenshotAlt: 'Capture de la Collection de démonstration Les cinq icônes avec des objets fictifs',
     screenshotCaption: 'Capture de la vue Collection du Registre de démonstration, sans donnée réelle.',
-    directHref: '/account/sign-in?demo=1',
-    directLabel: 'Découvrir le Registre démo',
+    directHref: DEMO_COLLECTION_DIRECT_HREF,
+    directLabel: 'Découvrir la Collection',
     limit: 'La Collection reste privée tant qu’une publication explicite n’est pas confirmée. Une capture publique n’est pas substituée à cette décision.',
   },
   {
@@ -212,9 +214,9 @@ export const DELIVERABLE_DETAILS: readonly DeliverableDetail[] = [
     utility: 'Préparer un support lisible pour un assureur, un conseil ou un tiers, puis vérifier le fichier avant transmission.',
     features: ['Mise en page dédiée à l’impression', 'Synthèse des sections disponibles', 'Pièces et limites contextualisées', 'Enregistrement par la fonction PDF du navigateur'],
     example: 'La valorisation fictive de la Submariner est replacée avec sa date, ses sources simulées et les réserves qui empêchent de la prendre pour une expertise.',
-    screenshot: `${CAPTURE_ROOT}/cartulaire-publication.webp`,
-    screenshotAlt: 'Capture de la page Publication du Cartulaire fictif avec la commande de préparation du rapport PDF',
-    screenshotCaption: 'Écran réel de préparation du rapport ; la capture ne génère et ne télécharge aucun fichier.',
+    screenshot: `${CAPTURE_ROOT}/rapport-pdf-demo.webp`,
+    screenshotAlt: 'Capture du rapport PDF de démonstration avec sa couverture et son avertissement sur les données fictives',
+    screenshotCaption: 'Aperçu réel du rapport imprimable de démonstration ; aucun fichier n’est transmis.',
     directHref: `${DEMO_SUBMARINER_HREF.replace('#cover', '')}#publication`,
     directLabel: 'Voir les options de rapport',
     limit: 'Le PDF n’est ni une expertise, ni une garantie d’assurance, ni un titre de propriété.',
@@ -265,6 +267,23 @@ export const DELIVERABLE_DETAILS: readonly DeliverableDetail[] = [
     screenshotCaption: 'Capture de la liste réelle de suivi, avec données et échéances fictives.',
     directHref: DEMO_SUBMARINER_HREF,
     directLabel: 'Voir le suivi dans la démo',
+  },
+  {
+    slug: 'logiciel-local',
+    title: 'Le logiciel local',
+    shortTitle: 'Le logiciel local',
+    icon: 'shield',
+    summary: 'Télécharger le logiciel en local et ne rien mettre en ligne, pour une sécurité maximale.',
+    utility: 'Conserver le dossier et ses données sur un poste choisi, sans synchronisation en ligne.',
+    features: ['Installation sur un poste dédié', 'Stockage local des dossiers', 'Fonctionnement sans publication en ligne', 'Export maîtrisé par le propriétaire'],
+    example: 'Ce mode local est annoncé comme une catégorie future ; aucun installateur public n’est encore proposé.',
+    availability: 'planned',
+    screenshot: `${CAPTURE_ROOT}/cartulaire-accueil.webp`,
+    screenshotAlt: 'Interface Cartularia illustrant le futur mode local',
+    screenshotCaption: 'Illustration de l’interface. Le téléchargement local est en préparation et aucun installateur n’est encore proposé sur le site public.',
+    directHref: '/#contact',
+    directLabel: 'Être informé du mode local',
+    limit: 'Cette catégorie est en préparation : le pilote public actuel utilise encore des services en ligne.',
   },
 ] as const;
 

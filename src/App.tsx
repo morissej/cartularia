@@ -161,7 +161,9 @@ import { resolveRegistryReturn } from './features/registry/registryReturn.ts';
 import { parseRegistryRoute, registryHref } from './features/registry/registryRouting';
 import type { RegistryCollectionDocument } from './domain/collections';
 import { loadCartularyCollectionContext, saveRegistryCollection } from './services/collections';
-import { DEMO_ACCOUNT, DEMO_WEBSITE_BLOCK_IDS } from './data/demoCartularies';
+import { DEMO_ACCOUNT, DEMO_SUBMARINER_CARTULARY_ID, DEMO_WEBSITE_BLOCK_IDS } from './data/demoCartularies';
+import { DEMO_SUBMARINER_FOLLOW_UP_TODOS } from './data/demoCartularyDocuments';
+import { DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT } from './data/demoDocumentationAssessment';
 import { loadPublicPublicationSummaries } from './services/projections';
 import { PublicationReadOnlySummary } from './features/cartulary/components/PublicationReadOnlySummary';
 import { PublicationSelectionTable } from './features/cartulary/components/PublicationSelectionTable';
@@ -326,7 +328,7 @@ const DEFAULT_COMPARABLE_ANALYSIS: ComparableAnalysisEntry[] = isDemoCartulary &
 const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
   {
     id: 'basic', title: 'Données de base', items: [
-      ['ad-code', 'Code annonce', `Non applicable · dossier ${mockCartulary.publicCode}`],
+      ['ad-code', 'Code annonce', `Dossier ${mockCartulary.publicCode}`],
       ['brand', 'Marque', mockCartulary.watchInstance.reference.brand],
       ['collection', 'Collection', 'Collection à documenter'],
       ['model', 'Modèle', mockCartulary.watchInstance.reference.model],
@@ -340,6 +342,7 @@ const BASE_DEFAULT_SPECIFICATION_GROUPS: SpecificationGroupData[] = [
       ['gender', 'Sexe', 'Montre homme / Unisexe'],
       ['location', 'Emplacement', 'Accès restreint'],
       ['price', 'Prix', 'Voir 04 · Valorisation'],
+      ['retail-price', 'Prix neuf retail', 'À documenter'],
       ['availability', 'Disponibilité', 'Collection privée · non proposée à la vente'],
     ].map(([id, label, value]) => ({ id, label, value })),
   },
@@ -661,7 +664,12 @@ function App() {
   }, [isWatchWebsite, watch]);
   // V6 (V-D9) : bascule FR/EN masquée tant que la traduction est partielle ; la préférence stockée n'est plus relue.
   const language = DEFAULT_INTERFACE_LANGUAGE;
-  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary || isWatchWebsite });
+  const followUp = useCartularyFollowUp({
+    cartularyId: ACTIVE_CARTULARY_ID,
+    language,
+    readOnlyPreview: isDemoCartulary || isWatchWebsite,
+    previewTodos: isDemoCartulary && ACTIVE_CARTULARY_ID === DEMO_SUBMARINER_CARTULARY_ID ? DEMO_SUBMARINER_FOLLOW_UP_TODOS : undefined,
+  });
   // V5 point 1 (V-D1, P-D6) : une seule source de vérité pour l'édition des pages 00-04, la même que la page Publication (V2 (b), D5 (a)) :
   // faux en démonstration (hook désactivé), hors session, pendant la résolution des droits et pour tout lecteur sans « cartulary.edit ».
   const canEdit = authoritative.canManage;
@@ -2636,7 +2644,10 @@ function App() {
         <ConditionPage active={activePage === 'condition'}>
             <PageIntroduction number="03" title={tx("L’objet", 'The object')} />
 
-            <DocumentationTierPanel cartularyId={ACTIVE_CARTULARY_ID} />
+            <DocumentationTierPanel
+              cartularyId={ACTIVE_CARTULARY_ID}
+              assessmentOverride={isDemoCartulary && ACTIVE_CARTULARY_ID === DEMO_SUBMARINER_CARTULARY_ID ? DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT : undefined}
+            />
 
                 <section>
                   <SectionTitle eyebrow={tx('Provenance', 'Provenance')} title={tx("Histoire de l’objet", 'Object history')} publish={publishProps('cover-ownership-history', true)} />

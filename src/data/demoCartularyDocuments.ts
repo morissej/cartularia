@@ -1,6 +1,6 @@
 import type { RegistryAccessProjection } from '../domain/access.ts';
 import { CARTULARY_MODEL_VERSION, type CartularyEnvelope, type CartularySectionDocument, type ProvenancedValue } from '../domain/cartulary.ts';
-import type { CartularyReminderDocument, FollowUpCategory, FollowUpSourceStatus } from '../domain/followUp.ts';
+import type { CartularyFollowUpTodo, CartularyReminderDocument, FollowUpCategory, FollowUpSourceStatus } from '../domain/followUp.ts';
 import type { RegistryItemProjection, RegistryValuationItemProjection } from '../domain/projections.ts';
 import { presentationBundleThumbnailFor } from '../media/presentationDerivatives.ts';
 import { DEMO_ACCOUNT, buildDemoCartularyAssets, demoCartularyContentById, type DemoCartularyDefinition } from './demoCartularies.ts';
@@ -399,6 +399,25 @@ export const buildDemoReminderDocuments = (
   source: 'registry',
   createdBy: accountUid,
 }));
+
+/** Tâches affichées dans le Cartulaire anonyme, sans lecture ni écriture Firestore. */
+const DEMO_SUBMARINER_EXTRA_FOLLOW_UP_TODOS = [
+  { id: 'todo-demo-service-2030', text: 'Révision en 2030', dueAt: '2030-01-01', category: 'maintenance', status: 'planned' },
+  { id: 'todo-demo-final-invoice', text: 'Seule la facture pro forma est disponible dans les archives : récupérer la facture finale auprès de Rolex', dueAt: '', category: 'custom', status: 'planned' },
+] satisfies CartularyFollowUpTodo[];
+
+export const demoFollowUpTodosFor = (cartularyId: string): CartularyFollowUpTodo[] => [
+  ...(DEMO_REMINDER_SEEDS[cartularyId] || []).map((seed) => ({
+    id: `rem_demo_${cartularyId}_${seed.suffix}`,
+    text: seed.title,
+    dueAt: seed.dueAt,
+    category: seed.category,
+    status: seed.reminderStatus,
+  })),
+  ...(cartularyId === 'cart_demo_rolex_submariner_124060' ? DEMO_SUBMARINER_EXTRA_FOLLOW_UP_TODOS : []),
+];
+
+export const DEMO_SUBMARINER_FOLLOW_UP_TODOS = demoFollowUpTodosFor('cart_demo_rolex_submariner_124060');
 
 /**
  * Projection d'accès de démonstration (`registries/{reg}/accesses/{id}`), même forme que celle

@@ -33,12 +33,11 @@ test('décision (a), D3 A : le manifeste automobile est inchangé — seule watc
 
 test('décision (b), D5 : le mini-site public /watch-website n’ouvre pas l’écoute Firestore des rappels de l’objet actif ni ne lit le stockage local des suivis', () => {
   const app = read('src/App.tsx');
-  const hookCall = '\n  const followUp = useCartularyFollowUp({ cartularyId: ACTIVE_CARTULARY_ID, language, readOnlyPreview: isDemoCartulary || isWatchWebsite });\n';
-  assert.ok(app.includes(hookCall), 'App.tsx : readOnlyPreview vaut isDemoCartulary || isWatchWebsite (une seule ligne, App.tsx inchangé en taille)');
+  assert.match(app, /const followUp = useCartularyFollowUp\(\{[\s\S]*?readOnlyPreview: isDemoCartulary \|\| isWatchWebsite,[\s\S]*?\}\);/, 'App.tsx : readOnlyPreview vaut isDemoCartulary || isWatchWebsite');
   assert.ok(app.indexOf('const isWatchWebsite = window.location.pathname') < app.indexOf('const followUp = useCartularyFollowUp('), 'isWatchWebsite est défini avant le hook de suivi');
   // Le hook court-circuite l'écoute et les lectures locales sur readOnlyPreview (couvert par tests/ui/demo-follow-up-isolation.test.tsx).
   const hook = read('src/features/cartulary/state/useCartularyFollowUp.ts');
-  assert.ok(hook.includes('useState<CartularyFollowUpTodo[]>(() => readOnlyPreview ? [] : readStoredTodos())'), 'aucune lecture du stockage local en aperçu');
+  assert.ok(hook.includes('useState<CartularyFollowUpTodo[]>(() => readOnlyPreview ? normalizeTodos(previewTodos) : readStoredTodos())'), 'aucune lecture du stockage local en aperçu');
   assert.ok(hook.indexOf('if (readOnlyPreview) {') < hook.indexOf('observeCartularyFollowUpTodos(cartularyId'), 'la garde readOnlyPreview précède l’abonnement Firestore');
   // Le mini-site est rendu avant tout usage de followUp : aucun rappel n'y est affiché.
   const websiteReturn = app.indexOf('\n  if (isWatchWebsite) {\n');

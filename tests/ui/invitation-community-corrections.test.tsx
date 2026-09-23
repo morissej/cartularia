@@ -70,3 +70,12 @@ it('le Cercle nomme les champs et empêche un ancien chargement de réafficher d
   act(() => fixture.authCallback?.(null));
   await waitFor(() => expect(screen.queryByText('Voiture publiée')).toBeNull());
 });
+
+it('le compte de démonstration voit la Submariner fictive dans Le Cercle vide', async () => {
+  fixture.user = { uid: 'demo-reader', displayName: 'Compte de démonstration' };
+  fixture.catalog.mockResolvedValue([]);
+  render(<CommunityPage />);
+  expect(await screen.findByRole('heading', { name: 'Rolex Submariner 124060 · démonstration fictive' })).toBeTruthy();
+  expect(screen.getByText(/démonstration fictive locale/i)).toBeTruthy();
+  expect(screen.queryByText('Aucun Cartulaire publié pour ce filtre')).toBeNull();
+});
