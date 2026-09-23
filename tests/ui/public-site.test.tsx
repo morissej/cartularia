@@ -25,23 +25,59 @@ describe('Accueil public Cartularia', () => {
     expect(screen.getByRole('main').getAttribute('tabindex')).toBe('-1');
   });
 
-  it('présente les sept bénéfices demandés avec leurs limites', () => {
+  it('présente les six bénéfices demandés avec leurs limites et le partage sélectif dans la carte de preuve', () => {
     render(<HomePage />);
     for (const label of [
-      'Toutes les informations au même endroit', 'Secret et sécurisé par défaut', 'Analyse de vos objets par IA',
-      'Analyse de vos collections', 'Vision patrimoniale globale', 'Partage sélectif révocable', 'Preuve d’intégrité datée',
+      'Tout au même endroit', 'Chaque pièce connue', "Une vue d'ensemble pour décider",
+      'Secret et sécurisé par défaut', 'Analyse assistée, revue humaine', 'Preuve d’intégrité datée',
     ]) expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.getByLabelText('Bénéfices et portée du service').querySelectorAll('li')).toHaveLength(6);
+    expect(screen.getByText('Partage sélectif révocable')).toBeTruthy();
+    expect(screen.getByText('Vous décidez exactement qui voit quoi')).toBeTruthy();
     expect(screen.getByText(/Le pilote ne produit pas de diagnostic automatique/i)).toBeTruthy();
     expect(screen.getByText(/sans certifier l’authenticité de l’objet/i)).toBeTruthy();
   });
 
-  it('présente cinq usages homogènes', () => {
+  it('présente six usages homogènes avec la connaissance en premier', () => {
     render(<HomePage />);
-    expect(screen.getByText('Préparer son dossier avant un sinistre')).toBeTruthy();
-    expect(screen.getByText('Transmettre ou céder avec un dossier lisible')).toBeTruthy();
-    expect(screen.getByText('Voir son patrimoine d’objets de collection')).toBeTruthy();
-    expect(screen.getByText('Identifier et suivre les actions à mener')).toBeTruthy();
-    expect(screen.getByText('Documenter une décision d’achat ou de vente')).toBeTruthy();
+    const section = screen.getByRole('heading', { level: 2, name: "Le jour où l'on vous demande — et tous les jours d'avant." }).closest('section');
+    const cards = Array.from(section?.querySelectorAll<HTMLElement>('.public-door-card') ?? []);
+    expect(cards.map((card) => card.querySelector('h3')?.textContent)).toEqual([
+      "Connaître chaque pièce que l'on possède",
+      'Préparer son dossier avant un sinistre',
+      'Transmettre ou céder avec un dossier lisible',
+      'Voir son patrimoine d’objets de collection',
+      'Identifier et suivre les actions à mener',
+      'Garder, compléter ou vendre avec de vraies données',
+    ]);
+  });
+
+  it('applique le récit de marque à la méthode, la déontologie, la FAQ et l’appel final', () => {
+    render(<HomePage />);
+    expect(screen.getByText(/Cartularia s'adresse aux collectionneurs passionnés/i)).toBeTruthy();
+    const method = screen.getByRole('heading', { level: 2, name: 'Cinq gestes. Commencez par une seule pièce.' }).closest('section');
+    expect(method?.querySelectorAll('.public-steps-list > li')).toHaveLength(5);
+    for (const title of ['Rassembler', 'Voir ce qui manque', 'Dater et mettre à jour', "Décider avec la vue d'ensemble", 'Répondre le jour même']) {
+      expect(screen.getByRole('heading', { level: 3, name: title })).toBeTruthy();
+    }
+    expect(screen.getByText("Ceci n'est pas une expertise agréée. Nous n'achetons pas votre montre. Nous ne sommes payés par aucun acheteur. Nous tenons votre registre.")).toBeTruthy();
+    expect(screen.getByText("Ne délivre ni expertise agréée ni certificat d'authenticité.")).toBeTruthy();
+    expect(screen.getByText('Je connais mes pièces par cœur. À quoi sert un dossier ?')).toBeTruthy();
+    expect(document.querySelectorAll('.public-faq-list > details')).toHaveLength(6);
+    expect(screen.getByRole('heading', { level: 2, name: "Commencez par une pièce. Le jour où l'on vous demande, vous répondrez le jour même." })).toBeTruthy();
+    expect(document.title).toBe('Cartularia · Le dossier de propriété de vos objets de valeur');
+  });
+
+  it('applique la méta description de l’accueil et restaure sa valeur au démontage', () => {
+    const description = document.createElement('meta');
+    description.name = 'description';
+    description.content = 'Description précédente';
+    document.head.append(description);
+    const view = render(<HomePage />);
+    expect(description.content).toBe("Pour chaque pièce, ses papiers, son état daté, son historique, sa valeur à une date. Pour la collection, une vue d'ensemble. Privé par défaut, prêt le jour où l'on vous demande.");
+    view.unmount();
+    expect(description.content).toBe('Description précédente');
+    description.remove();
   });
 
   it('affiche huit livrables dans le bon ordre avec une vraie route de détail', () => {

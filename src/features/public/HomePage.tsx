@@ -49,6 +49,14 @@ const DELIVERABLE_ICONS = {
 
 const USE_CASES = [
   {
+    icon: BookOpen,
+    tag: 'Connaissance',
+    title: "Connaître chaque pièce que l'on possède",
+    text: 'La facture définitive, ou la proforma ? La date de la dernière révision ? Le numéro vérifié ? Le Cartulaire établit ce que vous avez, vraiment, et ce qui manque.',
+    link: '/livrables/cartulaire',
+    linkLabel: 'Voir le Cartulaire',
+  },
+  {
     icon: ShieldAlert,
     tag: 'Protection',
     title: 'Préparer son dossier avant un sinistre',
@@ -83,7 +91,7 @@ const USE_CASES = [
   {
     icon: Scale,
     tag: 'Décision',
-    title: 'Documenter une décision d’achat ou de vente',
+    title: 'Garder, compléter ou vendre avec de vraies données',
     text: 'Comparer les faits, les sources, l’état et les valeurs disponibles pour éclairer une décision, sans recommandation automatique ni service de transaction.',
     link: '/livrables/cartulaire',
     linkLabel: 'Voir le Cartulaire',
@@ -93,27 +101,33 @@ const USE_CASES = [
 const STEPS = [
   {
     num: '01',
-    title: 'Créer le dossier',
+    title: 'Rassembler',
     lead: 'Pour commencer',
-    text: 'Ouvrez un Cartulaire pour chaque pièce importante. Le dossier démarre en mode Secret, sans publication automatique.',
+    text: "Ouvrez un Cartulaire pour une pièce et réunissez ses papiers, photographies, factures et documents d'origine. Le dossier démarre en mode Secret, sans publication automatique.",
   },
   {
     num: '02',
-    title: 'Rassembler les preuves',
-    lead: 'À votre rythme',
-    text: 'Ajoutez photographies, numéros masqués, documents d’origine, factures d’achat et certificats d’entretien.',
+    title: 'Voir ce qui manque',
+    lead: 'Le premier gain',
+    text: 'La liste de ce qui manque est ce qui a de la valeur : la todo list la tient, pièce par pièce, avec les contrôles et échéances à venir.',
   },
   {
     num: '03',
-    title: 'Suivre & Dater',
+    title: 'Dater et mettre à jour',
     lead: 'Dans la durée',
-    text: 'Enregistrez les interventions, suivez l’évolution de la cote et ancrez l’historique avec une trace datée.',
+    text: "Enregistrez les interventions, l'état et la valeur à une date ; le Sceau d'intégrité permet de vérifier qu'une version documentée n'a pas changé.",
   },
   {
     num: '04',
-    title: 'Partager ou Transmettre',
+    title: "Décider avec la vue d'ensemble",
+    lead: "À l'échelle de la collection",
+    text: 'Le Registre rassemble la composition, les valeurs documentées et les échéances : garder, compléter, vendre — avec les données disponibles, sans recommandation automatique.',
+  },
+  {
+    num: '05',
+    title: 'Répondre le jour même',
     lead: 'Sous votre contrôle',
-    text: 'Générez un rapport pour votre assureur ou un lien sécurisé pour un acquéreur sans exposer votre identité.',
+    text: 'Un rapport pour votre assureur, un lien sécurisé pour un acquéreur, une sélection pour un notaire — sans exposer votre identité.',
   },
 ];
 
@@ -127,7 +141,7 @@ const ETHICAL_POINTS = {
   ],
   doesNot: [
     'N’achète ni ne vend aucune montre ou objet (pas de marketplace).',
-    'Ne délivre pas de faux certificat juridique d’authenticité à distance.',
+    "Ne délivre ni expertise agréée ni certificat d'authenticité.",
     'Ne prend aucune commission sur les transactions entre collectionneurs.',
     'Exclut les champs personnels de la projection publique ; vos pièces jointes restent à vérifier avant partage.',
     'Ne monétise ni ne revend aucune information confidentielle.',
@@ -135,6 +149,10 @@ const ETHICAL_POINTS = {
 };
 
 const FAQ_ITEMS = [
+  {
+    question: 'Je connais mes pièces par cœur. À quoi sert un dossier ?',
+    answer: "À vérifier ce que l'on croit savoir. En ouvrant leur registre, beaucoup de collectionneurs découvrent une facture qui était une proforma, une révision dont la date s'est perdue, un numéro jamais vérifié. Le dossier n'ajoute rien à votre mémoire : il établit ce que vous avez, à une date, et ce qui manque.",
+  },
   {
     question: 'Puis-je découvrir le service sans créer de compte ?',
     answer: 'Oui. Le Cartulaire de démonstration permet d’explorer six pages sans inscription. Le Registre démo présente cinq objets fictifs en lecture seule ; il ne permet pas de modifier ou publier vos données réelles.',
@@ -167,10 +185,10 @@ export function HomePage() {
     const previousTitle = document.title;
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     const previousDescription = description?.content;
-    document.title = 'Cartularia · Le dossier vivant de vos objets patrimoniaux';
+    document.title = 'Cartularia · Le dossier de propriété de vos objets de valeur';
     if (description) {
       description.content =
-        'Cartularia structure le dossier numérique de vos objets patrimoniaux. Privé par défaut, documenté pour vos interlocuteurs, clair pour la transmission.';
+        "Pour chaque pièce, ses papiers, son état daté, son historique, sa valeur à une date. Pour la collection, une vue d'ensemble. Privé par défaut, prêt le jour où l'on vous demande.";
     }
     return () => {
       document.title = previousTitle;
@@ -261,7 +279,7 @@ export function HomePage() {
             <div className="public-proof-card">
               <ShieldCheck aria-hidden="true" />
               <span>
-                <small>Contrôle d’accès granulaire</small>
+                <small>Partage sélectif révocable</small>
                 <strong>Vous décidez exactement qui voit quoi</strong>
               </span>
             </div>
@@ -271,15 +289,15 @@ export function HomePage() {
         {/* INTRO BAND */}
         <section className="public-intro-band" aria-label="Positionnement fondateur">
           <p>
-            Pour les propriétaires et collectionneurs qui veulent documenter avant l'urgence, avoir les données et analyses pour prendre les bonnes décisions et avoir une vue patrimoniale globale
+            Cartularia s'adresse aux collectionneurs passionnés qui veulent comprendre et maîtriser leur collection pour en profiter pleinement et sereinement : connaître chaque pièce, tenir l'ensemble prêt avant l'urgence, décider avec de vraies données.
           </p>
         </section>
 
-        {/* CINQ USAGES */}
+        {/* SIX MOMENTS */}
         <section className="public-section" id="portes" aria-labelledby="doors-title">
           <div className="public-section__heading">
-            <p className="public-kicker">Cinq usages concrets</p>
-            <h2 id="doors-title">Documenter, suivre et décider avec des éléments organisés.</h2>
+            <p className="public-kicker">Six moments</p>
+            <h2 id="doors-title">Le jour où l'on vous demande — et tous les jours d'avant.</h2>
             <p>Chaque usage s’appuie sur les mêmes dossiers et conserve les limites des données disponibles.</p>
           </div>
 
@@ -336,8 +354,8 @@ export function HomePage() {
         <section className="public-section public-how" id="methode" aria-labelledby="how-title">
           <div className="public-section__heading">
             <p className="public-kicker">Méthode pas à pas</p>
-            <h2 id="how-title">Commencer simplement. Enrichir avec le temps.</h2>
-            <p>Pas besoin de tout remplir le premier jour : commencez avec les éléments dont vous disposez.</p>
+            <h2 id="how-title">Cinq gestes. Commencez par une seule pièce.</h2>
+            <p>La première chose à faire n'est pas de tout renseigner : choisissez la pièce qui compte le plus et rassemblez ce que vous avez sur elle. Le registre vous dira ce qui manque.</p>
           </div>
 
           <ol className="public-steps-list">
@@ -362,6 +380,7 @@ export function HomePage() {
             <p>
               Nous défendons exclusivement l’intérêt du propriétaire. Cela implique des engagements forts et des limites explicites.
             </p>
+            <p className="public-safety-note"><ShieldCheck aria-hidden="true" /><span>Ceci n'est pas une expertise agréée. Nous n'achetons pas votre montre. Nous ne sommes payés par aucun acheteur. Nous tenons votre registre.</span></p>
           </div>
 
           <div className="public-ethics-grid">
@@ -547,8 +566,8 @@ export function HomePage() {
 
         {/* FINAL CALL TO ACTION */}
         <section className="public-final-cta">
-          <p className="public-kicker">Votre patrimoine, mieux protégé</p>
-          <h2>Commencez par un objet. Construisez une continuité dans le temps.</h2>
+          <p className="public-kicker">Connaître, tenir, décider</p>
+          <h2>Commencez par une pièce. Le jour où l'on vous demande, vous répondrez le jour même.</h2>
           <div className="public-final-cta__actions">
             <a className="public-solid-button public-solid-button--large" href={DEMO_SUBMARINER_HREF}>
               Explorer la démo en direct <ArrowRight aria-hidden="true" />

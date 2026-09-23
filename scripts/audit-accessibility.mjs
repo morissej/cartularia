@@ -34,8 +34,8 @@ const DEMO_TITLE = 'Cartulaire Rolex Submariner · Cartularia';
 // `openAbsentOn` : seule fenêtre où le déclencheur peut manquer (menu mobile de l'accueil) ; ailleurs, un déclencheur absent est une assertion en échec.
 const SERVICE_TITLES = { accessibilite: 'Accessibilité', conditions: 'Conditions d’utilisation du pilote', service: 'Disponibilité et limites' };
 const scenes = [
-  { name: 'accueil', path: '/', title: 'Cartularia · Le dossier vivant de vos objets patrimoniaux' },
-  { name: 'accueil-menu', path: '/', title: 'Cartularia · Le dossier vivant de vos objets patrimoniaux', open: '.public-menu-trigger', openAbsentOn: 'desktop-1440' },
+  { name: 'accueil', path: '/', title: 'Cartularia · Le dossier de propriété de vos objets de valeur' },
+  { name: 'accueil-menu', path: '/', title: 'Cartularia · Le dossier de propriété de vos objets de valeur', open: '.public-menu-trigger', openAbsentOn: 'desktop-1440' },
   { name: 'objets', path: '/objets', title: 'Les objets documentés dans Cartularia · Cartularia' },
   { name: 'aide-documentaire', path: '/aide-documentaire', title: 'Besoin d’aide pour créer la base documentaire de vos objets : photos et vidéos ? · Cartularia' },
   { name: 'conseils-photo-video', path: '/conseils-photo-video', title: 'Prendre vos photos et vidéos vous-même · Cartularia' },

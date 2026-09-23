@@ -13,28 +13,24 @@ export const PROFESSIONAL_MEDIA_HELP_REASON = 'Aide professionnelle photo et vid
 
 export const HERO_BENEFITS = [
   {
-    label: 'Toutes les informations au même endroit',
-    detail: 'Description, état, médias, documents, valeurs et suivi sont réunis dans un même dossier.',
+    label: 'Tout au même endroit',
+    detail: 'Papiers, état, médias, valeurs et suivi de chaque pièce dans un seul dossier.',
+  },
+  {
+    label: 'Chaque pièce connue',
+    detail: "État daté, historique d'entretien, concordance des numéros, référence : ce que l'on possède, vraiment.",
+  },
+  {
+    label: "Une vue d'ensemble pour décider",
+    detail: 'Le Registre rassemble et compare les données disponibles ; la portée dépend de la qualité des dossiers renseignés.',
   },
   {
     label: 'Secret et sécurisé par défaut',
     detail: 'Un nouveau Cartulaire reste secret tant que son propriétaire ne choisit pas de publier des blocs précis.',
   },
   {
-    label: 'Analyse de vos objets par IA',
+    label: 'Analyse assistée, revue humaine',
     detail: 'Le catalogue structure les données pour une analyse assistée et une revue humaine. Le pilote ne produit pas de diagnostic automatique.',
-  },
-  {
-    label: 'Analyse de vos collections',
-    detail: 'Le Registre rassemble, filtre et compare les données disponibles ; la portée dépend de la qualité des dossiers renseignés.',
-  },
-  {
-    label: 'Vision patrimoniale globale',
-    detail: 'Les agrégats du Registre donnent une vue d’ensemble des objets et des valorisations documentées.',
-  },
-  {
-    label: 'Partage sélectif révocable',
-    detail: 'Le propriétaire choisit les blocs publiés et peut retirer les nouveaux accès, sans effacer les copies déjà reçues.',
   },
   {
     label: 'Preuve d’intégrité datée',
