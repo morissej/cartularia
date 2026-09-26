@@ -26,7 +26,8 @@ import {
 import { loadRegistryItems, observeRegistryItems } from '../../services/projections.ts';
 import { buildRegistryAggregates } from './registryAggregates.ts';
 import { ROLE_LABELS } from './registryAdministration.ts';
-import { buildRegistryFollowUpSummary } from './registryFollowUp.ts';
+import { buildRegistryFollowUpSummary, filterAndSortRegistryFollowUps, DEFAULT_REGISTRY_FOLLOW_UP_FILTERS, followUpDate } from './registryFollowUp.ts';
+import { buildCartularyHref } from './registryCatalog.ts';
 import { useRegistryCollections } from './useRegistryCollections.ts';
 import { RegistryValuationSummary } from './RegistryValuationSummary.tsx';
 import { RegistryDocumentationSummary } from './RegistryDocumentationSummary.tsx';
@@ -120,6 +121,7 @@ export function RegistryOverview({ registry, organization, membership }: {
 
   const summary = useMemo(() => buildRegistryAggregates(items), [items]);
   const followUpSummary = useMemo(() => buildRegistryFollowUpSummary(followUps), [followUps]);
+  const pendingFollowUps = useMemo(() => filterAndSortRegistryFollowUps(followUps.filter((item) => !['completed', 'dismissed'].includes(item.reminderStatus)), DEFAULT_REGISTRY_FOLLOW_UP_FILTERS), [followUps]);
   const visibleTotal = loadState === 'ready' ? summary.total : registry.itemCount;
   const actionableAttentionCount = summary.attention.suspended
     + summary.attention.sensitivePossession
@@ -269,12 +271,18 @@ export function RegistryOverview({ registry, organization, membership }: {
 
       {loadState === 'ready' && canReadCartularies && (
         <section className="registry-todo-board"><header><div><h2>À faire</h2><p>{followUpState === 'ready'
-          ? `${followUpSummary.overdue + followUpSummary.dueSoon} échéance(s) à traiter en priorité.`
+          ? `${pendingFollowUps.length} tâche(s) à faire, dont ${followUpSummary.overdue + followUpSummary.dueSoon} à traiter en priorité.`
           : followUpState === 'partial'
-            ? `${followUpSummary.overdue + followUpSummary.dueSoon} échéance(s) connue(s) ; liste partielle.`
+            ? `${pendingFollowUps.length} tâche(s) connue(s) ; liste partielle.`
             : followUpState === 'loading'
               ? 'Chargement des échéances autorisées…'
-              : 'Les échéances ne sont pas confirmées actuellement.'}</p></div><a href={registrySectionHref(registry.id, 'follow-up')}>Gérer toutes les tâches <ArrowRight aria-hidden="true" /></a></header></section>
+              : 'Les échéances ne sont pas confirmées actuellement.'}</p></div><a href={registrySectionHref(registry.id, 'follow-up')}>Gérer toutes les tâches <ArrowRight aria-hidden="true" /></a></header>
+          {pendingFollowUps.length > 0 && <ul className="registry-todo-board__list">{pendingFollowUps.slice(0, 6).map((item) => {
+            const date = followUpDate(item);
+            return <li key={`${item.cartularyId}:${item.id}`}><div className="registry-todo-board__task"><strong>{item.title}</strong><span>{item.displayTitle}</span></div><time>{Number.isNaN(date.getTime()) ? 'Sans échéance' : new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeZone: 'UTC' }).format(date)}</time><a href={buildCartularyHref(item.cartularyId, window.location.pathname, item.assetType)} aria-label={`Ouvrir le Cartulaire ${item.displayTitle}`}><ArrowRight aria-hidden="true" /></a></li>;
+          })}</ul>}
+          {followUpState === 'ready' && pendingFollowUps.length === 0 && <p>Aucune tâche à faire.</p>}
+        </section>
       )}
 
       <section className="registry-dashboard-account">

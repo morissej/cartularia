@@ -40,7 +40,7 @@ describe('Accueil public Cartularia', () => {
 
   it('présente six usages homogènes avec la connaissance en premier', () => {
     render(<HomePage />);
-    const section = screen.getByRole('heading', { level: 2, name: 'Collectionner est une passion. Maîtrisez en tous les aspects dans les moindres détails' }).closest('section');
+    const section = screen.getByRole('heading', { level: 2, name: 'Collectionner est une passion. Maîtrisez-en tous les aspects dans les moindres détails' }).closest('section');
     expect(screen.getByText('Connaître, Maîtriser, Décider')).toBeTruthy();
     const cards = Array.from(section?.querySelectorAll<HTMLElement>('.public-door-card') ?? []);
     expect(cards.map((card) => card.querySelector('h3')?.textContent)).toEqual([
@@ -49,16 +49,16 @@ describe('Accueil public Cartularia', () => {
       'Transmettre ou céder avec un dossier lisible',
       'Identifier et suivre les actions à mener',
       'Voir son patrimoine d’objets de collection',
-      'Garder, compléter ou vendre avec de vraies données',
+      "Faites évoluer votre collection avec des vraies données d'ensemble",
     ]);
   });
 
   it('applique le récit de marque à la méthode, la déontologie, la FAQ et l’appel final', () => {
     render(<HomePage />);
-    expect(screen.getByText(/Cartularia s'adresse aux collectionneurs passionnés/i)).toBeTruthy();
-    const method = screen.getByRole('heading', { level: 2, name: 'Cinq gestes. Commencez par une seule pièce.' }).closest('section');
-    expect(method?.querySelectorAll('.public-steps-list > li')).toHaveLength(5);
-    for (const title of ['Rassembler', 'Voir ce qui manque', 'Dater et mettre à jour', "Décider avec la vue d'ensemble", 'Répondre le jour même']) {
+    expect(document.querySelector('.public-intro-band')?.textContent).toContain("Cartularia s'adresse aux collectionneurs passionnés");
+    const method = screen.getByRole('heading', { level: 2, name: 'Six gestes. Commencez par une seule pièce.' }).closest('section');
+    expect(method?.querySelectorAll('.public-steps-list > li')).toHaveLength(6);
+    for (const title of ['Rassembler', 'Voir ce qui manque', 'Dater et mettre à jour', 'Compléter pour mieux valoriser', "Décider avec la vue d'ensemble", 'Répondre le jour même']) {
       expect(screen.getByRole('heading', { level: 3, name: title })).toBeTruthy();
     }
     expect(screen.getByText("Ceci n'est pas une expertise agréée. Nous n'achetons pas votre montre. Nous ne sommes payés par aucun acheteur. Nous tenons votre registre.")).toBeTruthy();
@@ -81,13 +81,13 @@ describe('Accueil public Cartularia', () => {
     description.remove();
   });
 
-  it('affiche neuf livrables dans le bon ordre avec une vraie route de détail', () => {
+  it('affiche huit livrables dans le bon ordre avec une vraie route de détail', () => {
     render(<HomePage />);
-    const section = screen.getByRole('heading', { level: 2, name: 'Neuf livrables pour suivre vos collections' }).closest('section');
+    const section = screen.getByRole('heading', { level: 2, name: 'Huit livrables pour suivre vos collections' }).closest('section');
     const links = Array.from(section?.querySelectorAll<HTMLAnchorElement>('.public-deliverable-card') ?? []);
     expect(links.map((link) => link.querySelector('h3')?.textContent)).toEqual([
       'Le Cartulaire', 'Le Registre', 'La Collection', 'Le Mini Site (extrait de Cartulaire ou Collection)',
-      'Le rapport PDF', "Le Sceau d'intégrité", 'Le Cercle', 'Une todo list pour gérer votre patrimoine', 'Le logiciel local',
+      'Le rapport PDF', "Le Sceau d'intégrité", 'Le Cercle', 'Une todo list pour gérer votre patrimoine',
     ]);
     expect(links.every((link) => link.getAttribute('href')?.startsWith('/livrables/'))).toBe(true);
     expect(section?.querySelector('.public-deliverables-cta')).toBeNull();

@@ -138,11 +138,11 @@
 .public-text-link { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-size); font-size: 13px; font-weight: 700; text-decoration: none; }
 .public-text-link svg { width: 16px; }
 .public-text-link:hover { color: var(--mark); }
-.public-proof-list { display: grid; gap: 10px; margin-top: 28px; list-style: none; color: var(--muted); font-size: 12px; }
+.public-proof-list { display: grid; gap: 16px; margin-top: 28px; list-style: none; color: var(--muted); font-size: 16px; }
 .public-proof-list li { display: grid; min-width: 0; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 8px; }
 .public-proof-list li > span { display: grid; gap: 2px; }
-.public-proof-list strong { color: var(--ink); font-size: 12px; }
-.public-proof-list small { max-width: var(--measure-prose, 70ch); font-size: 11px; line-height: 1.45; }
+.public-proof-list strong { color: var(--ink); font-size: 17px; }
+.public-proof-list small { max-width: var(--measure-prose, 70ch); font-size: 16px; line-height: 1.6; }
 .public-proof-list svg { width: 15px; color: var(--positive); margin-top: 1px; }
 
 /* HERO PRODUCT WINDOW & TABS */
@@ -261,7 +261,7 @@
 
 /* SECTION 4 LIVRABLES */
 .public-deliverables-section { background: var(--sheet); border-block: 1px solid var(--rule); }
-.public-deliverables-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.public-deliverables-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .public-deliverable-card {
   display: flex;
   flex-direction: column;
@@ -290,7 +290,7 @@
 
 /* METHODE / STEPS */
 .public-how { background: var(--public-cream); }
-.public-steps-list { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ink); list-style: none; padding: 0; margin: 0; }
+.public-steps-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--ink); list-style: none; padding: 0; margin: 0; }
 .public-steps-list li { min-height: 250px; padding: 28px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; }
 .public-steps-list li:last-child { border-right: 0; }
 .public-step-number { color: var(--mark); font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
@@ -320,7 +320,7 @@
 .public-section__heading--light h2 { color: var(--sheet); }
 .public-section__heading--light > p:last-child { color: #aaa79f; }
 .public-spaces .public-kicker { color: #D9705C; }
-.public-space-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.public-space-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .public-space-grid article { position: relative; min-height: 360px; padding: clamp(32px, 4vw, 52px); background: #21231e; border: 1px solid #3c3b36; display: flex; flex-direction: column; }
 .public-space-grid article > svg { width: 36px; height: 36px; color: var(--mark); stroke-width: 1.4; }
 .public-space-grid__number { position: absolute; top: 32px; right: 36px; color: #aaa79f; font-family: var(--font-mono); font-size: 11px; }

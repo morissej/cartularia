@@ -16,6 +16,7 @@
       ".env",
       ".env.*",
       "node_modules",
+      "artifacts",
       "dist",
       "public",
       "src",

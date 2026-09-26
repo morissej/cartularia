@@ -1992,13 +1992,18 @@
 
 .registry-gallery-results { display: flex; min-height: 64px; align-items: center; color: var(--muted); font-size: 12px; }
 .registry-gallery-results strong { margin-right: 4px; color: var(--ink); font-size: 16px; }
+.registry-collection-card__valuation { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 24px; margin-top: var(--s3); padding: var(--s3); border: 1px solid var(--rule); background: var(--paper); }
+.registry-collection-card__valuation > span { font-family: var(--font-mono); text-transform: uppercase; font-size: 11px; }
+.registry-collection-card__valuation strong { font-size: 24px; }
+.registry-collection-card__valuation small { color: var(--muted); }
+.registry-collection-card__valuation a { font-size: 12px; }
 
 .registry-gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s4); }
 .registry-gallery-card { min-width: 0; border: 1px solid var(--rule); background: var(--sheet); }
-.registry-gallery-card__visual { position: relative; display: block; width: 100%; padding: 0; overflow: hidden; border: 0; border-bottom: 1px solid var(--rule); background: var(--fill); cursor: zoom-in; }
+.registry-gallery-card__visual { position: relative; display: block; width: 100%; aspect-ratio: 4 / 5; padding: 0; overflow: hidden; border: 0; border-bottom: 1px solid var(--rule); background: var(--fill); cursor: zoom-in; }
 .registry-gallery-card__visual::after { position: absolute; inset: 0; content: ''; background: linear-gradient(180deg, transparent 58%, rgb(0 0 0 / 45%)); pointer-events: none; }
-/* Vignette 240 px (item.thumbnail) affichée à son propre rapport : jamais recadrée, jamais l'original. */
-.registry-gallery-card__visual img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; transition: transform .4s ease; }
+/* Cadre commun à toutes les vignettes ; l’original reste accessible dans la visionneuse. */
+.registry-gallery-card__visual img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; transition: transform .4s ease; }
 .registry-gallery-card__visual:hover img { transform: scale(1.025); }
 .registry-gallery-card__pending { display: grid; width: 100%; aspect-ratio: 4 / 5; place-content: center; justify-items: center; gap: var(--s2); color: var(--muted); font-family: var(--font-mono); font-size: 8px; letter-spacing: .05em; text-transform: uppercase; }
 .registry-gallery-card__pending svg { width: 24px; height: 24px; color: var(--mark); }

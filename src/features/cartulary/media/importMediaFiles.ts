@@ -5,6 +5,7 @@ import { digestFile } from '../../../utils/fileDigest.ts';
 import { formatFileSize } from '../../../utils/formatting.ts';
 import { newId } from '../../../utils/identifiers.ts';
 import type { ConditionAttachment } from '../state/cartularyStateTypes.ts';
+import { createLocalVideoPoster } from '../../../media/videoPoster.ts';
 
 export type MediaSlotKind = 'main-video' | 'spin-3d';
 export const MEDIA_SLOT_TAGS: Record<MediaSlotKind, MediaTag> = { 'main-video': 'main-video', 'spin-3d': 'spin-3d' };
@@ -79,7 +80,7 @@ const prepareImport = async <T>({
   allowedKinds?: readonly TrustedFileKind[];
   binaryKind: LocalBinaryKind;
   binaryPrefix: string;
-  buildItem: (file: PreparedFile) => T;
+  buildItem: (file: PreparedFile) => T | Promise<T>;
 }): Promise<PreparedImport<T>> => {
   const selectedFiles = [...files];
   const urls = new Set<string>();
@@ -105,7 +106,7 @@ const prepareImport = async <T>({
       const url = URL.createObjectURL(file);
       urls.add(url);
       return {
-        item: buildItem({ file, inspection, binaryId, hash, url }),
+        item: await buildItem({ file, inspection, binaryId, hash, url }),
         binary: {
           binaryId,
           kind: binaryKind,
@@ -140,14 +141,16 @@ export const prepareImportedAssets = ({ files, tags, referenceReport = false }: 
     expectedKind: referenceReport ? 'document' : undefined,
     binaryKind: 'media',
     binaryPrefix: referenceReport ? 'reference-report-binary' : 'media-binary',
-    buildItem: ({ file, inspection, binaryId, hash, url }): Asset => {
+    buildItem: async ({ file, inspection, binaryId, hash, url }): Promise<Asset> => {
       const type = assetTypeFromMimeType(inspection.canonicalMimeType);
       const metadataTimestamp = new Date(file.lastModified || Date.now()).toISOString();
+      const posterUrl = type === 'video' ? await createLocalVideoPoster(url) : undefined;
       return {
         id: newId(referenceReport ? 'reference-report' : 'asset'),
         name: file.name.replace(/\.[^/.]+$/, ''),
         originalFileName: file.name,
         url,
+        ...(posterUrl ? { posterUrl } : {}),
         type,
         ratio: type === 'video' ? '16:9' : '4:5',
         hash,

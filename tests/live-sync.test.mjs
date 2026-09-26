@@ -14,7 +14,7 @@ import { presentationVariantPath } from '../scripts/lib/presentation-variants.mj
 import { registryItemAuditText } from '../scripts/lib/registry-thumbnail.mjs';
 import { createPrivateOriginalStorage, verifiedPrivateBinary } from './helpers/private-original-fixture.mjs';
 
-const projectId = 'cartularia-live-sync-test';
+const projectId = process.env.CARTULARIA_SYNC_TEST_PROJECT || 'cartularia-live-sync-test';
 const [host = '127.0.0.1', portValue = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':');
 const port = Number(portValue);
 let adminApp;
@@ -404,4 +404,42 @@ test('le quota serveur bloque une succession de requêtes distinctes', async () 
     (error) => error?.code === 'rate_limited',
   );
   assert.equal((await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).get()).data().status, 'pending');
+});
+
+test('Jam : un lot opérateur vérifié conserve les imports en attente et les médias hors lot', async () => {
+  await writeDraftAndRequest('jams-scoped-media-1');
+  const rootRef = firestore.doc(`cartularies/${IWC_CARTULARY_ID}`);
+  const beforeRoot = (await rootRef.get()).data();
+  const keptRef = rootRef.collection('assets').doc('asset-kept');
+  const kept = { id: 'asset-kept', mediaKind: 'document', displayName: 'Conserver', visibility: 'secret', liveSyncManaged: true, projectionStatus: 'active', tags: [] };
+  await keptRef.set(kept);
+  const mediaRef = firestore.doc(`privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}/state/cartularia-media-assets-v3`);
+  const media = JSON.parse((await mediaRef.get()).data().value);
+  media.push({ id: 'asset-pending-spin', name: 'Image locale en attente', type: 'image', binaryId: 'binary-not-uploaded', tags: ['spin-3d'], visibility: 'Secret' });
+  await mediaRef.update({ value: JSON.stringify(media), revision: 2 });
+  const beforeMedia = (await mediaRef.get()).data();
+  const result = await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID,
+    mediaAssetIds: ['asset-live-photo'], mediaExpectedRootRevision: beforeRoot.revision, occurredAt: '2026-08-16T08:12:00.000Z' });
+  assert.equal(result.status, 'processed');
+  assert.deepEqual((await keptRef.get()).data(), kept);
+  assert.deepEqual((await mediaRef.get()).data(), beforeMedia);
+  assert.equal((await rootRef.collection('assets').doc('asset-pending-spin').get()).exists, false);
+  assert.equal((await rootRef.collection('assets').doc('asset-live-photo').get()).data().processingState, 'ready');
+  const root = (await rootRef.get()).data();
+  assert.equal(root.legacyMediaDigest, beforeRoot.legacyMediaDigest);
+  const events = await rootRef.collection('auditEvents').orderBy('sequence').get();
+  assert.equal(verifyAuditChain({ events: events.docs.map(d => d.data()), integrityHead: root.integrityHead, integritySequence: root.integritySequence }).valid, true);
+  assert.equal(events.docs.at(-1).data().resource.type, 'liveStateMediaSubset');
+});
+
+test('Jam : le lot limité refuse un fichier non vérifié et une révision périmée', async () => {
+  await writeDraftAndRequest('jams-scoped-media-2');
+  const rootRef = firestore.doc(`cartularies/${IWC_CARTULARY_ID}`);
+  const root = (await rootRef.get()).data();
+  const args = { storage, firestore, requestDocumentId: IWC_CARTULARY_ID, mediaAssetIds: ['asset-live-photo'], mediaExpectedRootRevision: root.revision };
+  await assert.rejects(processCartularySyncRequest({ ...args, mediaExpectedRootRevision: root.revision + 1 }), { code: 'revision_conflict' });
+  await firestore.doc(`cartularySyncRequests/${IWC_CARTULARY_ID}`).update({ status: 'pending' });
+  await firestore.doc(`privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}/binaries/media-binary-live-0001`).update({ verificationStatus: 'rejected' });
+  await assert.rejects(processCartularySyncRequest(args), { code: 'unverified_binary' });
+  assert.deepEqual((await rootRef.get()).data(), root);
 });

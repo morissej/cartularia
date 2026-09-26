@@ -62,7 +62,7 @@ const USE_CASES = [
     icon: ShieldAlert,
     tag: 'Protection',
     title: 'Préparer son dossier avant un sinistre',
-    text: 'Réunir photographies, factures, état et valeurs documentées avant qu’un vol ou un dommage ne rende la collecte plus difficile.',
+    text: 'Réunir photographies, vidéos, factures, état et valeurs documentées avant qu’un vol ou un dommage ne rende la collecte plus difficile.',
     link: '/livrables/rapport-pdf',
     linkLabel: 'Voir le rapport PDF',
   },
@@ -78,7 +78,7 @@ const USE_CASES = [
     icon: ListChecks,
     tag: 'Suivi',
     title: 'Identifier et suivre les actions à mener',
-    text: 'Planifier les documents manquants, contrôles, entretiens et prochaines échéances rattachés à chaque objet.',
+    text: 'Planifier la recherche de documents manquants, les contrôles, les entretiens et les prochaines échéances rattachés à chaque objet.',
     link: '/livrables/todo-list',
     linkLabel: 'Voir la todo list',
   },
@@ -93,7 +93,7 @@ const USE_CASES = [
   {
     icon: Scale,
     tag: 'Décision',
-    title: 'Garder, compléter ou vendre avec de vraies données',
+    title: "Faites évoluer votre collection avec des vraies données d'ensemble",
     text: 'Comparer les faits, les sources, l’état et les valeurs disponibles pour éclairer une décision, sans recommandation automatique ni service de transaction.',
     link: '/livrables/collection',
     linkLabel: 'Voir la Collection',
@@ -121,12 +121,18 @@ const STEPS = [
   },
   {
     num: '04',
+    title: 'Compléter pour mieux valoriser',
+    lead: 'Au fil de vos avancées',
+    text: 'Utilisez la todo list pour rechercher les documents manquants, enrichir chaque dossier et suivre vos progrès. Complétez votre documentation au fur et à mesure pour mieux valoriser chaque pièce et votre collection.',
+  },
+  {
+    num: '05',
     title: "Décider avec la vue d'ensemble",
     lead: "À l'échelle de la collection",
     text: 'Le Registre rassemble la composition, les valeurs documentées et les échéances : garder, compléter, vendre — avec les données disponibles, sans recommandation automatique.',
   },
   {
-    num: '05',
+    num: '06',
     title: 'Répondre le jour même',
     lead: 'Sous votre contrôle',
     text: 'Un rapport pour votre assureur, un lien sécurisé pour un acquéreur, une sélection pour un notaire — sans exposer votre identité.',
@@ -291,7 +297,7 @@ export function HomePage() {
         {/* INTRO BAND */}
         <section className="public-intro-band" aria-label="Positionnement fondateur">
           <p>
-            Cartularia s'adresse aux collectionneurs passionnés qui veulent comprendre et maîtriser leur collection pour en profiter pleinement et sereinement : connaître chaque pièce, tenir l'ensemble prêt avant l'urgence, décider avec de vraies données.
+            Cartularia s'adresse aux <strong>collectionneurs passionnés</strong> qui veulent comprendre et maîtriser leur collection pour en profiter pleinement et sereinement : <strong>connaître</strong> chaque pièce, tenir l'ensemble prêt avant l'urgence, <strong>décider</strong> avec de vraies données.
           </p>
         </section>
 
@@ -299,8 +305,7 @@ export function HomePage() {
         <section className="public-section" id="portes" aria-labelledby="doors-title">
           <div className="public-section__heading">
             <p className="public-kicker">Connaître, Maîtriser, Décider</p>
-            <h2 id="doors-title">Collectionner est une passion. Maîtrisez en tous les aspects dans les moindres détails</h2>
-            <p>Chaque usage s’appuie sur les mêmes dossiers et conserve les limites des données disponibles.</p>
+            <h2 id="doors-title">Collectionner est une passion. Maîtrisez-en tous les aspects dans les moindres détails</h2>
           </div>
 
           <div className="public-doors-grid">
@@ -319,12 +324,12 @@ export function HomePage() {
         <section className="public-section public-deliverables-section" id="livrables" aria-labelledby="deliverables-title">
           <div className="public-section__heading">
             <p className="public-kicker">Ce que vous obtenez</p>
-            <h2 id="deliverables-title">Neuf livrables pour suivre vos collections</h2>
+            <h2 id="deliverables-title">Huit livrables pour suivre vos collections</h2>
             <p>Ouvrez chaque page pour voir son rôle, ses fonctions réellement disponibles et une capture.</p>
           </div>
 
           <div className="public-deliverables-grid">
-            {DELIVERABLE_DETAILS.map((item, index) => {
+            {DELIVERABLE_DETAILS.filter((item) => item.slug !== 'logiciel-local').map((item, index) => {
               const Icon = DELIVERABLE_ICONS[item.slug as keyof typeof DELIVERABLE_ICONS];
               return (
               <a key={item.slug} className="public-deliverable-card" href={`/livrables/${item.slug}`}>
@@ -350,7 +355,7 @@ export function HomePage() {
         <section className="public-section public-how" id="methode" aria-labelledby="how-title">
           <div className="public-section__heading">
             <p className="public-kicker">Méthode pas à pas</p>
-            <h2 id="how-title">Cinq gestes. Commencez par une seule pièce.</h2>
+            <h2 id="how-title">Six gestes. Commencez par une seule pièce.</h2>
             <p>La première chose à faire n'est pas de tout renseigner : choisissez la pièce qui compte le plus et rassemblez ce que vous avez sur elle. Le registre vous dira ce qui manque.</p>
           </div>
 
@@ -436,6 +441,17 @@ export function HomePage() {
                 <p>Conservez vos noms réels, adresses de stockage et intentions de transmission dans un coffre chiffré séparé. Les pièces jointes et contrats n’y sont pas stockés dans cette version.</p>
               <a href="/account/sign-in?space=vault">
                 Accéder au Coffre <ArrowRight aria-hidden="true" />
+              </a>
+            </article>
+
+            <article>
+              <HardDriveDownload aria-hidden="true" />
+              <span className="public-space-grid__number">03</span>
+              <h3>Le logiciel local</h3>
+              <p className="public-space-lead">Vos dossiers sur votre ordinateur</p>
+              <p>Une option en préparation pour conserver et consulter vos dossiers sur votre poste, sans connexion au web. Aucun installateur n’est encore disponible ; le pilote actuel utilise des services en ligne.</p>
+              <a href="/livrables/logiciel-local">
+                Découvrir l’option locale <ArrowRight aria-hidden="true" />
               </a>
             </article>
           </div>

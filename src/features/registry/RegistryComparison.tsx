@@ -27,6 +27,7 @@ import { buildCartularyHref, isRegistryReturnPath } from './registryCatalog.ts';
 import { assetTypeLabel } from './registryPresentation.ts';
 import { useRegistryCollections } from './useRegistryCollections.ts';
 import { announceComparisonSelection } from './comparisonSelection.ts';
+import { useLatestValuationSnapshot } from './useLatestValuationSnapshot.ts';
 
 type ComparisonLoadState = 'loading' | 'ready' | 'error';
 
@@ -38,7 +39,8 @@ const AssetIcon = ({ assetType }: { assetType: string }) => {
 
 const requestedIds = () => sanitizeComparisonIds(new URLSearchParams(window.location.search).get('items'));
 
-export function RegistryComparison({ registry }: { registry: RegistryDocument }) {
+export function RegistryComparison({ registry, canReadValuation = false }: { registry: RegistryDocument; canReadValuation?: boolean }) {
+  const valuation = useLatestValuationSnapshot(registry.id, canReadValuation);
   const { collectionName } = useRegistryCollections(registry.id);
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>(requestedIds);
@@ -170,6 +172,10 @@ export function RegistryComparison({ registry }: { registry: RegistryDocument })
               </tr>
             </thead>
             <tbody>
+              {canReadValuation && <tr><th scope="row">Valeur de marché · Secret{valuation.snapshot && <small>Arrêté du {valuation.snapshot.asOfDate}</small>}</th>{selectedItems.map((item) => {
+                const line = valuation.snapshot?.lines.find((candidate) => candidate.cartularyId === item.cartularyId);
+                return <td key={`value:${item.cartularyId}`}>{line ? <><strong>{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(line.marketValue)}</strong><p>{line.observedAt} · {line.sourceLabel}</p></> : valuation.state === 'loading' ? 'Chargement…' : valuation.state === 'error' ? 'Valeur indisponible' : valuation.snapshot ? 'Absente de cet arrêté' : 'Aucun arrêté disponible'}</td>;
+              })}</tr>}
               {rows.map((row) => <tr className={row.allEqual ? 'is-equal' : 'is-different'} key={row.id}><th scope="row">{row.label}{!row.allEqual && <small>Différence</small>}</th>{row.values.map((value, index) => <td key={`${row.id}:${selectedItems[index].cartularyId}`}>{value}</td>)}</tr>)}
             </tbody>
           </table>

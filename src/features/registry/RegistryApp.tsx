@@ -471,6 +471,7 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
                   registry={registry}
                   canManage={choice.membership.permissions.includes('cartulary.edit')}
                   canPublish={choice.membership.permissions.includes('publication.manage')}
+                  canReadValuation={choice.membership.permissions.includes('valuation.read')}
                 />
               )}
               {effectiveSection === 'new' && choice.membership.permissions.includes('cartulary.edit') && (
@@ -485,7 +486,7 @@ function RegistryShell({ choice, choices, section, user, navigateRegistry, onReg
                   canReadCartularies={choice.membership.permissions.includes('cartulary.read')}
                 />
               )}
-              {effectiveSection === 'compare' && <RegistryComparison registry={registry} />}
+              {effectiveSection === 'compare' && <RegistryComparison registry={registry} canReadValuation={choice.membership.permissions.includes('valuation.read')} />}
               {effectiveSection === 'follow-up' && (
                 <RegistryFollowUp
                   registry={registry}

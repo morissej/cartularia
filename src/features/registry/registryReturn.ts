@@ -1,6 +1,6 @@
 import { DEMO_ACCOUNT } from '../../data/demoCartularies.ts';
 import { isRegistryReturnPath } from './registryCatalog.ts';
-import { registryHref } from './registryRouting.ts';
+import { parseRegistryRoute, registryHref } from './registryRouting.ts';
 
 /**
  * Règle unique du retour d'un Cartulaire vers le Registre (V2, constats V-A4 / V-A5).
@@ -43,10 +43,13 @@ export const resolveRegistryReturn = (
 ): RegistryReturn => {
   const candidate = requestedReturnTo ?? null;
   if (isRegistryReturnPath(candidate)) {
+    if (options.demo && parseRegistryRoute(candidate.split('?')[0]).registryId === DEMO_ACCOUNT.registryId) {
+      return { href: demoDirectEntryHref(candidate), label: DEMO_REGISTRY_RETURN_LABEL };
+    }
     return { href: candidate, label: REGISTRY_RETURN_LABEL };
   }
   if (options.demo) {
-    return { href: DEMO_REGISTRY_RETURN_HREF, label: DEMO_REGISTRY_RETURN_LABEL };
+    return { href: DEMO_REGISTRY_DIRECT_HREF, label: DEMO_REGISTRY_RETURN_LABEL };
   }
   return { href: '/registry', label: REGISTRY_RETURN_LABEL };
 };

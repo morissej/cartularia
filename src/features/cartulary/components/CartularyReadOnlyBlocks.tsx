@@ -122,14 +122,15 @@ export function MarketDepthReadOnly({ marketDepth, currency, language }: { marke
         <time dateTime={marketDepth.analysisDate || undefined} {...aiFieldProps('value.market.analysisDate')}>{marketDepth.analysisDate ? tx(`Analyse du ${formatDate(marketDepth.analysisDate)}`, `Analysis dated ${formatDate(marketDepth.analysisDate)}`) : tx('Date non renseignée', 'Date not provided')}</time>
       </div>
       <div className="metric-grid">
-        <div><strong {...aiFieldProps('value.market.activeListings')}>{marketDepth.activeListings}</strong><span>{tx('Annonces actives', 'Active listings')}</span></div>
-        <div><strong {...aiFieldProps('value.market.transactions12m')}>{marketDepth.transactions12m}</strong><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div>
-        <div><strong {...aiFieldProps('value.market.medianDaysOnMarket')}>{marketDepth.medianDaysOnMarket} {tx('j', 'd')}</strong><span>{tx('Délai médian estimé', 'Estimated median time')}</span></div>
+        <div><strong {...aiFieldProps('value.market.activeListings')}>{marketDepth.activeListings ?? tx('Non renseigné', 'Not provided')}</strong><span>{tx('Annonces actives', 'Active listings')}</span></div>
+        <div><strong {...aiFieldProps('value.market.transactions12m')}>{marketDepth.transactions12m ?? tx('Non renseigné', 'Not provided')}</strong><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div>
+        <div><strong {...aiFieldProps('value.market.medianDaysOnMarket')}>{marketDepth.medianDaysOnMarket == null ? tx('Non renseigné', 'Not provided') : `${marketDepth.medianDaysOnMarket} ${tx('j', 'd')}`}</strong><span>{tx('Délai médian estimé', 'Estimated median time')}</span></div>
       </div>
+      {marketDepth.sourceLabel && <p className="market-source">{marketDepth.sourceLabel}</p>}
       <div className="valuation-range">
-        <span>{tx('Fourchette actuelle', 'Current range')}</span>
+        <span>{tx('Fourchette documentée', 'Documented range')}</span>
         <strong><span {...aiFieldProps('value.market.lowValue')}>{formatMoney(marketDepth.lowValue, currency)}</span> — <span {...aiFieldProps('value.market.highValue')}>{formatMoney(marketDepth.highValue, currency)}</span></strong>
-        <small>{tx('VALEUR MÉDIANE', 'MEDIAN VALUE')} <span {...aiFieldProps('value.market.midValue')}>{formatMoney(marketDepth.midValue, currency)}</span></small>
+        <small>{tx('VALEUR CENTRALE', 'CENTRAL VALUE')} <span {...aiFieldProps('value.market.midValue')}>{formatMoney(marketDepth.midValue, currency)}</span></small>
       </div>
     </>
   );

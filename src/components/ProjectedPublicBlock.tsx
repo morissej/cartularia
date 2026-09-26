@@ -65,7 +65,7 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
   const isInteractive = ['media-motion', 'media-spin', 'media-slideshow', 'media-library'].includes(block.blockId);
 
   return (
-    <section className={`projected-public-block${isInteractive ? ' projected-public-block--interactive' : ''}`} data-public-block={block.blockId}>
+    <section className={`projected-public-block${isInteractive ? ' projected-public-block--interactive' : heroAsset ? ' projected-public-block--with-media' : ''}`} data-public-block={block.blockId}>
       {!isInteractive && heroAsset && (
         <figure className="projected-public-block__media">
           <PrivateMediaImage asset={heroAsset} alt={heading} language={language} sizes="(max-width: 720px) 100vw, 50vw" loading="lazy" decoding="async" role="stage" />
@@ -75,6 +75,10 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
       <div className="projected-public-block__content">
         <span className="eyebrow">{eyebrow}</span>
         <h2>{heading}</h2>
+        {preview && Boolean(block.previewWarnings?.excludedMediaCount) && <p role="status" className="media-load-prompt">{language === 'FR'
+          ? `${block.previewWarnings!.excludedMediaCount} média(s) affecté(s) à cette rubrique sont exclus de l’aperçu car ils ne sont pas archivés et visibles par Tous. Vérifiez leur visibilité dans la bibliothèque média.`
+          : `${block.previewWarnings!.excludedMediaCount} assigned media item(s) are excluded because they are not archived and visible to Everyone. Check their visibility in the media library.`}</p>}
+        {preview && Boolean(block.previewWarnings?.excludedTextCount) && <p role="status">{language === 'FR' ? 'Certains textes de cette rubrique contiennent des données privées et ne sont pas inclus.' : 'Some text in this section contains private data and is excluded.'}</p>}
         {block.blockId === 'media-motion' && assets.filter((asset) => asset.type === 'video' && !privateInPreview(asset)).map((asset) => <div key={asset.id}><MediaVideo asset={asset} language={language} />{downloadLink(asset)}</div>)}
         {block.blockId === 'media-spin' && assets.some((asset) => asset.type === 'image') && <SpinSequence images={assets.filter((asset) => asset.type === 'image')} language={language} />}
         {block.blockId === 'media-slideshow' && <MediaCarousel assets={assets} language={language} downloads={!preview} onOpen={(asset) => { if (!privateInPreview(asset)) setSelectedId(asset.id); }} />}
@@ -97,8 +101,8 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
             ))}
           </dl>
         )}
-        {groups.map((group, groupIndex) => (
-          <article className="projected-public-block__group" key={groupIndex}>
+        {groups.length > 0 && <div className="specification-groups projected-public-block__groups">{groups.map((group, groupIndex) => (
+          <article className="specification-group" key={groupIndex}>
             <h3>{String(group.title ?? '')}</h3>
             <dl>
               {recordList(group.items).map((item, itemIndex) => (
@@ -109,7 +113,7 @@ export const ProjectedPublicBlock = ({ block, language = 'FR', preview = false }
               ))}
             </dl>
           </article>
-        ))}
+        ))}</div>}
       </div>
       {selected && <MediaViewerModal asset={selected} assetCount={downloadableAssets.length} position={selectedIndex} audience="Tous" language={language} mediaTags={[]} dialogRef={dialogRef} onClose={() => setSelectedId(null)} onMove={(direction) => setSelectedId(downloadableAssets[(selectedIndex + direction + downloadableAssets.length) % downloadableAssets.length].id)} onToggleTag={() => undefined} onDelete={() => undefined} readOnly originalOnDemand={!preview} />}
     </section>

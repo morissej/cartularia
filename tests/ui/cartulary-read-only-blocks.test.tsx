@@ -70,7 +70,7 @@ const cases: Array<{ name: string; element: ReactElement; values: string[]; anch
   {
     name: 'MarketDepthReadOnly',
     element: <MarketDepthReadOnly language="FR" currency="EUR" marketDepth={{ analysisDate: '2026-08-01', activeListings: 7, transactions12m: 3, medianDaysOnMarket: 41, lowValue: 11000, midValue: 12500, highValue: 14000 }} />,
-    values: ['Analyse du 01/08/2026', '7', 'Annonces actives', '3', 'Transactions identifiées', '41 j', 'Délai médian estimé', 'Fourchette actuelle', '11 000 €', '14 000 €', 'VALEUR MÉDIANE', '12 500 €'],
+    values: ['Analyse du 01/08/2026', '7', 'Annonces actives', '3', 'Transactions identifiées', '41 j', 'Délai médian estimé', 'Fourchette documentée', '11 000 €', '14 000 €', 'VALEUR CENTRALE', '12 500 €'],
     anchors: ['value.market.analysisDate', 'value.market.activeListings', 'value.market.transactions12m', 'value.market.medianDaysOnMarket', 'value.market.lowValue', 'value.market.highValue', 'value.market.midValue'],
   },
   {
@@ -172,10 +172,10 @@ describe('blocs de lecture du Cartulaire', () => {
       <ExitAssumptionsReadOnly exit={{ saleDate: '', salePrice: 1, disposalCostPct: 0 }} language="EN" />
     </>);
     const text = normalize(container.textContent);
-    for (const english of ['Asset type', 'Status', 'From 1985 to —', 'First owner', 'Category', 'Condition', 'Description not provided.', 'Not specified', 'Market depth', 'Date not provided', 'Active listings', 'Transactions identified · 12 months', '5 d', 'Estimated median time', 'Current range', 'MEDIAN VALUE', 'Gross valuation', 'Current value', 'Estimated selling costs', 'Net valuation after selling costs', 'Estimated taxes', 'Net valuation after taxes', 'Retained value explanation', 'No explanation provided.', 'Analysis angle', 'Finding', 'Interpretation', 'Purchase · Date not provided', 'Untitled expense', 'Sale date', 'Not provided', 'Sale price', 'Disposal cost']) {
+    for (const english of ['Asset type', 'Status', 'From 1985 to —', 'First owner', 'Category', 'Condition', 'Description not provided.', 'Not specified', 'Market depth', 'Date not provided', 'Active listings', 'Transactions identified · 12 months', '5 d', 'Estimated median time', 'Documented range', 'CENTRAL VALUE', 'Gross valuation', 'Current value', 'Estimated selling costs', 'Net valuation after selling costs', 'Estimated taxes', 'Net valuation after taxes', 'Retained value explanation', 'No explanation provided.', 'Analysis angle', 'Finding', 'Interpretation', 'Purchase · Date not provided', 'Untitled expense', 'Sale date', 'Not provided', 'Sale price', 'Disposal cost']) {
       expect(text, `« ${english} » absent`).toContain(english);
     }
-    for (const french of ['Type de bien', 'Premier propriétaire', 'Catégorie', 'État', 'Non renseigné', 'Profondeur de marché', 'Annonces actives', 'Fourchette actuelle', 'Valorisation brute', 'Angle d’analyse', 'Achat ·', 'Date de vente', 'Coût de cession']) {
+    for (const french of ['Type de bien', 'Premier propriétaire', 'Catégorie', 'État', 'Non renseigné', 'Profondeur de marché', 'Annonces actives', 'Fourchette documentée', 'Valorisation brute', 'Angle d’analyse', 'Achat ·', 'Date de vente', 'Coût de cession']) {
       expect(text, `« ${french} » présent en anglais`).not.toContain(french);
     }
   });

@@ -5,6 +5,7 @@ import { initializeApp, deleteApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { assertNewCollectionAssignments, deleteEmptyRegistryCollection, saveRegistryCollectionCommand } from '../scripts/lib/collection-command.mjs';
 import { registryCollectionVersion } from '../scripts/lib/collection-policy.mjs';
+import { verifyAuditChain } from '../scripts/lib/audit-verifier.mjs';
 import { acceptRegistryInvitation, issueRegistryInvitation, revokeRegistryInvitation } from '../scripts/lib/invitation-command.mjs';
 
 if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:38480') throw new Error('Test exclusivement réservé à Firestore Emulator 38480.');
@@ -262,4 +263,57 @@ test('N-R05 : invitation d’une Collection vide/secondaire, acceptation bornée
     await env.collection.update({ status: 'archived' });
     await assert.rejects(issueRegistryInvitation(parameters), { code: 'scope_not_found' });
   } finally { if (previousEmulator === undefined) delete process.env.FUNCTIONS_EMULATOR; else process.env.FUNCTIONS_EMULATOR = previousEmulator; }
+});
+
+test('Jam 28 : retirer une Collection conserve les objets, leurs fichiers et leurs autres Collections', async () => {
+  const { input, collection, publication, organizationId } = await fixture('detach');
+  const id = `${input.registryId}-preserved`;
+  const root = owned(`cartularies/${id}`);
+  const media = owned(`${root.path}/assets/photo`);
+  const item = owned(`registries/${input.registryId}/items/${id}`);
+  const valuation = owned(`registries/${input.registryId}/valuationItems/${id}`);
+  const shared = { organizationId, registryId: input.registryId, collectionId: input.collectionId, collectionIds: [input.collectionId, 'col_other'], revision: 3, legacyCollectionDigest: 'unchanged-draft' };
+  await Promise.all([
+    root.set({ ...shared, displayTitle: 'Objet conservé' }),
+    item.set({ ...shared, cartularyId: id, sourceRevision: 3, projectionStatus: 'active' }),
+    valuation.set({ ...shared, cartularyId: id, marketValue: { amount: 500, currency: 'EUR' }, sourceRevision: 3 }),
+    media.set({ name: 'Fichier privé', storagePath: 'private/original' }),
+  ]);
+  await deleteEmptyRegistryCollection({ ...input, detachObjects: true });
+  assert.equal((await collection.get()).exists, false);
+  assert.equal((await publication.get()).exists, false);
+  const saved = (await root.get()).data();
+  assert.equal(saved.displayTitle, 'Objet conservé');
+  assert.deepEqual(saved.collectionIds, ['col_other']);
+  assert.equal(saved.collectionId, 'col_other');
+  assert.equal(saved.revision, 4);
+  assert.equal(saved.legacyCollectionDigest, 'unchanged-draft');
+  assert.equal((await media.get()).data().name, 'Fichier privé');
+  assert.deepEqual((await item.get()).data().collectionIds, ['col_other']);
+  assert.equal((await valuation.get()).data().marketValue.amount, 500);
+  const audit = await root.collection('auditEvents').get();
+  assert.equal(audit.size, 1);
+  assert.equal(audit.docs[0].data().action, 'cartulary.collection.detached');
+  assert.equal(audit.docs[0].data().hash, saved.integrityHead);
+  assert.equal(verifyAuditChain({ events: audit.docs.map((event) => event.data()), integrityHead: saved.integrityHead, integritySequence: saved.integritySequence }).valid, true);
+  for (const event of audit.docs) paths.add(event.ref.path);
+  await assert.rejects(db.runTransaction((transaction) => assertNewCollectionAssignments({ transaction, firestore: db, registryId: input.registryId, organizationId, previous: saved, next: shared })), { code: 'failed-precondition' });
+});
+
+test('Jam 28 : un objet sans autre Collection reste dans le Registre ; une projection étrangère bloque tout', async () => {
+  const { input, organizationId, collection } = await fixture('unfiled');
+  const id = `${input.registryId}-single`;
+  const root = owned(`cartularies/${id}`), item = owned(`registries/${input.registryId}/items/${id}`);
+  const data = { organizationId, registryId: input.registryId, collectionId: input.collectionId, collectionIds: [input.collectionId] };
+  await root.set(data);
+  await item.set({ ...data, organizationId: 'foreign' });
+  await assert.rejects(deleteEmptyRegistryCollection({ ...input, detachObjects: true }), { code: 'failed-precondition' });
+  assert.equal((await collection.get()).exists, true);
+  assert.equal((await root.get()).data().collectionId, input.collectionId);
+  await item.set(data);
+  await deleteEmptyRegistryCollection({ ...input, detachObjects: true });
+  assert.equal((await root.get()).data().collectionId, '');
+  assert.deepEqual((await root.get()).data().collectionIds, []);
+  assert.equal((await root.get()).data().registryId, input.registryId);
+  for (const event of (await root.collection('auditEvents').get()).docs) paths.add(event.ref.path);
 });

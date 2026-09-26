@@ -9,6 +9,7 @@ import { isDuplicateSpecificationLabel } from '../../../domain/specificationGrou
 import type { Asset, ComparableTransaction } from '../../../types/index.ts';
 import type { InterfaceLanguage } from '../../../utils/interfaceState.ts';
 import { formatDate, formatMoney } from '../../../utils/formatting.ts';
+import { useVideoPoster } from '../../../hooks/useVideoPoster.ts';
 
 // V5 point 1 : le crayon n'existe que si l'édition est possible (`edit` absent sinon) ; jamais rendu grisé.
 export interface MarkerState {
@@ -181,12 +182,12 @@ export function SpecificationAddForm({
 }
 
 export function VideoPoster({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset) => void }) {
-  const hasPoster = Boolean(asset.posterUrl || asset.thumbnailUrl);
+  const poster = useVideoPoster(asset);
   return (
     <button type="button" className="video-poster" onClick={() => onOpen(asset)} aria-label={`Lire la vidéo : ${asset.name}`}>
-      {hasPoster
-        ? <PrivateMediaImage asset={asset} alt="" sizes="(max-width: 720px) 100vw, 1200px" />
-        : <span className="video-poster__placeholder"><Video size={38} /><small>{asset.name}</small></span>}
+      {poster
+        ? <PrivateMediaImage asset={asset} sourceOverride={poster} alt="" sizes="(max-width: 720px) 100vw, 1200px" />
+        : <span className="video-poster__placeholder"><Video size={38} /><small>Aucune vignette disponible</small><small>Ouvrir la vidéo pour la consulter</small></span>}
       <span className="video-poster__play" aria-hidden="true"><Play size={24} fill="currentColor" /></span>
     </button>
   );

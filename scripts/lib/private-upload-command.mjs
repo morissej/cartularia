@@ -21,8 +21,9 @@ import {
   sha256Of,
 } from './presentation-variants.mjs';
 import { normalizeRegistryThumbnail, registryThumbnailStatusFor } from './registry-thumbnail.mjs';
+import { assertPassiveDocument } from './passive-document-inspection.mjs';
 
-export const PRIVATE_UPLOAD_VERIFICATION_VERSION = 'private-upload@1.2.0';
+export const PRIVATE_UPLOAD_VERIFICATION_VERSION = 'private-upload@1.3.0';
 // Prédicat unique « binaire vérifié » (tour 4 point 1) : défini dans presentation-variants.mjs, partagé avec les miroirs.
 export { PRIVATE_UPLOAD_VERIFICATION_CUTOFF_MS, privateBinaryIsVerified };
 export { PRIVATE_BINARY_IDENTITY_VERSION };
@@ -72,6 +73,8 @@ const policies = {
   mp4: { kind: 'video', mimeType: 'video/mp4', extensions: ['mp4', 'm4v'], mimeTypes: ['video/mp4', 'video/x-m4v'], maximumBytes: 500 * MIB },
   quicktime: { kind: 'video', mimeType: 'video/quicktime', extensions: ['mov'], mimeTypes: ['video/quicktime'], maximumBytes: 500 * MIB },
   pdf: { kind: 'document', mimeType: 'application/pdf', extensions: ['pdf'], mimeTypes: ['application/pdf'], maximumBytes: 50 * MIB },
+  docx: { kind: 'document', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extensions: ['docx'], mimeTypes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'], maximumBytes: 50 * MIB },
+  markdown: { kind: 'document', mimeType: 'text/markdown', extensions: ['md', 'markdown'], mimeTypes: ['text/markdown', 'text/plain'], maximumBytes: 10 * MIB },
 };
 
 const canonicalMimeType = (value) => {
@@ -198,10 +201,11 @@ export const inspectTrustedUpload = async ({
   } finally {
     await fileHandle.close();
   }
-  const format = detectTrustedFileFormat(header);
+  const extension = extensionOf(fileName);
+  const format = detectTrustedFileFormat(header)
+    || (extension === 'docx' && header.readUInt32LE(0) === 0x04034b50 ? 'docx' : ['md', 'markdown'].includes(extension) ? 'markdown' : null);
   if (!format) throw new PrivateUploadVerificationError('unsupported_signature', 'La signature binaire du fichier est inconnue.');
   const policy = policies[format];
-  const extension = extensionOf(fileName);
   if (!policy.extensions.includes(extension)) {
     throw new PrivateUploadVerificationError('extension_mismatch', 'L’extension ne correspond pas à la signature binaire.');
   }
@@ -247,11 +251,15 @@ export const inspectTrustedUpload = async ({
     thumbnail = set.thumbnail;
     captureDate = await extractSafeCaptureDate(path);
   } else if (policy.kind === 'document') {
-    await assertSafePdf(path);
+    if (format === 'pdf') await assertSafePdf(path);
+    else {
+      try { assertPassiveDocument(await readFile(path), format); }
+      catch (error) { throw new PrivateUploadVerificationError(error.code || 'invalid_document', error.message); }
+    }
   } else if (policy.kind === 'video') {
     await assertIsoMediaStructure(path, fileStat.size);
   }
-  if (policy.kind === 'document' || policy.kind === 'video') {
+  if (format === 'pdf' || policy.kind === 'video') {
     const workingDirectory = await mkdtemp(join(tmpdir(), 'cartularia-presentation-'));
     try {
       derivative = await (policy.kind === 'document' ? createPdfPresentation : createVideoPresentation)({ path, workingDirectory });

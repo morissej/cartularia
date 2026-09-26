@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { CANONICALIZATION_VERSION, sha256Digest } from './canonical-json.mjs';
+import { ZERO_AUDIT_HASH } from './audit-verifier.mjs';
 import { normalizeCollectionWebsiteSlug, registryCollectionVersion } from './collection-policy.mjs';
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,160}$/;
@@ -93,7 +95,7 @@ export async function assertNewCollectionAssignments({ transaction, firestore, r
   }
 }
 
-export async function deleteEmptyRegistryCollection({ firestore, uid, registryId, collectionId, expectedVersion, confirmed }) {
+export async function deleteEmptyRegistryCollection({ firestore, uid, registryId, collectionId, expectedVersion, confirmed, detachObjects = false }) {
   if (!uid) fail('unauthenticated', 'Connexion requise.');
   if (confirmed !== true || !SAFE_ID.test(registryId || '') || !SAFE_ID.test(collectionId || '')
     || typeof expectedVersion !== 'string' || !expectedVersion || expectedVersion.length > 160) fail('invalid-argument', 'Confirmez la dernière version de la Collection à retirer.');
@@ -125,15 +127,52 @@ export async function deleteEmptyRegistryCollection({ firestore, uid, registryId
     const roots = firestore.collection('cartularies').where('registryId', '==', registryId);
     const items = registryRef.collection('items');
     const matches = await Promise.all([
-      transaction.get(roots.where('collectionId', '==', collectionId).limit(1)),
-      transaction.get(roots.where('collectionIds', 'array-contains', collectionId).limit(1)),
-      transaction.get(items.where('collectionId', '==', collectionId).limit(1)),
-      transaction.get(items.where('collectionIds', 'array-contains', collectionId).limit(1)),
+      transaction.get(roots.where('collectionId', '==', collectionId).limit(detachObjects ? 41 : 1)),
+      transaction.get(roots.where('collectionIds', 'array-contains', collectionId).limit(detachObjects ? 41 : 1)),
+      transaction.get(items.where('collectionId', '==', collectionId).limit(detachObjects ? 41 : 1)),
+      transaction.get(items.where('collectionIds', 'array-contains', collectionId).limit(detachObjects ? 41 : 1)),
     ]);
-    if (matches.some((snapshot) => !snapshot.empty)) fail('failed-precondition', 'Cette Collection contient encore un objet. Déplacez les objets avant de la retirer.');
+    if (!detachObjects && matches.some((snapshot) => !snapshot.empty)) fail('failed-precondition', 'Cette Collection contient encore un objet. Déplacez les objets avant de la retirer.');
+    const objectIds = [...new Set(matches.flatMap((snapshot) => snapshot.docs.map((document) => document.id)))];
+    if (objectIds.length > 40) fail('failed-precondition', 'Cette Collection contient plus de 40 objets. Réaffectez-les par lots avant de retirer la Collection. Aucun changement n’a été effectué.');
+    const objects = await Promise.all(objectIds.map(async (id) => {
+      const rootRef = firestore.doc(`cartularies/${id}`);
+      const [root, ...projections] = await Promise.all([
+        transaction.get(rootRef),
+        ...['items', 'valuationItems', 'documentationItems'].map((name) => transaction.get(registryRef.collection(name).doc(id))),
+        transaction.get(rootRef.collection('documentationAssessments').doc('current')),
+      ]);
+      if (!root.exists || root.data().registryId !== registryId || root.data().organizationId !== organizationId
+        || projections.some((projection) => projection.exists && (projection.data().registryId !== registryId || projection.data().organizationId !== organizationId))) fail('failed-precondition', 'Un objet ou sa projection nécessite une vérification avant le retrait de la Collection. Aucun objet n’a été supprimé.');
+      const remaining = ids(root.data()).filter((value) => value !== collectionId);
+      return { root, projections, bindings: { collectionId: root.data().collectionId === collectionId ? remaining[0] || '' : root.data().collectionId || '', collectionIds: remaining } };
+    }));
     const publicItems = await transaction.get(publicationRef.collection('items').limit(201));
     if (publicItems.size > 200) fail('failed-precondition', 'Cette publication dépasse la limite de nettoyage sécurisé. Une vérification est nécessaire avant de la retirer.');
     if (publicItems.docs.some((item) => item.data().collectionId !== collectionId)) fail('permission-denied', 'Un élément public est hors de cette Collection.');
+    // Detach only the grouping. Preserve assets, sections, private drafts, and frozen statements.
+    // Keeping legacyCollectionDigest prevents an unchanged old draft restoring the deleted link;
+    // a changed draft must pass assertNewCollectionAssignments before it can assign anything.
+    for (const { root, projections, bindings } of objects) {
+      const data = root.data();
+      const revision = Number(data.revision || 0) + 1;
+      const occurredAt = new Date().toISOString();
+      const previousEventHash = data.integrityHead || ZERO_AUDIT_HASH;
+      const event = { eventId: `evt_collection_${randomUUID()}`, cartularyId: root.id,
+        sequence: Number(data.integritySequence || 0) + 1, occurredAt,
+        actor: { uid, role: rights.roles?.[0] || 'registry_editor' }, action: 'cartulary.collection.detached',
+        resource: { type: 'collection', id: collectionId }, beforeDigest: previousEventHash,
+        afterDigest: sha256Digest(bindings), previousEventHash, canonicalizationVersion: CANONICALIZATION_VERSION,
+        requestId: `remove-${collectionId}-${expectedVersion}` };
+      const hash = sha256Digest({ previousEventHash, event });
+      transaction.update(root.ref, { ...bindings, revision, integrityHead: hash, integritySequence: event.sequence, updatedAt: FieldValue.serverTimestamp() });
+      transaction.create(root.ref.collection('auditEvents').doc(event.eventId), { ...event, hash, occurredAt: Timestamp.fromDate(new Date(occurredAt)), occurredAtIso: occurredAt });
+      for (const projection of projections.filter((document) => document.exists)) {
+        const { contentHash: _hash, updatedAt: _updatedAt, ...previous } = projection.data();
+        const next = { ...previous, ...bindings, sourceRevision: revision };
+        transaction.update(projection.ref, { ...bindings, sourceRevision: revision, contentHash: sha256Digest(next), updatedAt: FieldValue.serverTimestamp() });
+      }
+    }
     // Read and remove the bounded child set atomically, including when a prior
     // removal left no parent. Recreating the same ID must not revive old items.
     // Private object roots and any other subcollections are never deleted here.

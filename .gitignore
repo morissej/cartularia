@@ -16,6 +16,9 @@ dist-ssr
 *.cartularia-backup.json
 cartularia-production-readiness*.json
 
+# Private Jam evidence and operator backups
+artifacts/jams-2026-09-26/
+
 # Local environment and credentials
 .env
 .env.*

@@ -29,7 +29,7 @@ export interface WebsiteDraftContent {
  */
 export interface LocalPreviewMediaSource { binaryId: string; cartularyId?: string; privatePresentation?: PrivatePresentation }
 export type PreviewDerivativeProjection = PublicDerivativeProjection & { localPreview?: LocalPreviewMediaSource };
-export type PreviewBlockProjection = Omit<PublicBlockProjection, 'assets'> & { assets: PreviewDerivativeProjection[] };
+export type PreviewBlockProjection = Omit<PublicBlockProjection, 'assets'> & { assets: PreviewDerivativeProjection[]; previewWarnings?: { excludedMediaCount: number; excludedTextCount: number } };
 const safePreviewUrl = (asset: Asset) => asset.visibility === 'Tous' && !asset.binaryId && asset.url.startsWith('/assets/') ? asset.url : null;
 
 export function buildWebsiteDraft(content: WebsiteDraftContent, selection: readonly string[]) {
@@ -42,11 +42,12 @@ export function buildWebsiteDraft(content: WebsiteDraftContent, selection: reado
       return true;
     };
     const paragraphs = (values: unknown[]) => values.filter(safeText);
-    const assets = content.assets.filter((asset) => asset.status === 'Archived' && asset.visibility === 'Tous' && (
+    const assignedAssets = content.assets.filter((asset) => (
       id === 'media-library' ? true : id === 'media-hero' || id === 'cover-watch' ? asset.tags.includes('main-photo')
       : id === 'media-motion' ? asset.tags.includes('main-video') : id === 'media-spin' ? asset.tags.includes('spin-3d') && asset.type === 'image'
       : id === 'media-slideshow' ? asset.tags.includes('slideshow') : false
     ));
+    const assets = assignedAssets.filter((asset) => asset.status === 'Archived' && asset.visibility === 'Tous');
     const payload: Record<string, unknown> = { heading: title };
     if (id === 'cover-watch' || id === 'media-hero') {
       payload.heading = paragraphs([content.brand, content.model]).join(' · ') || title;
@@ -63,7 +64,7 @@ export function buildWebsiteDraft(content: WebsiteDraftContent, selection: reado
     else if (id === 'condition-summary') payload.paragraphs = paragraphs(content.conditionSummary || []);
     else if (id === 'condition-reference-report' || id === 'condition-prior-reviews') payload.paragraphs = paragraphs((id === 'condition-reference-report' ? (content.reports || []).slice(0, 1) : (content.reports || []).slice(1)).flatMap((item) => [item.title, item.date, item.note]));
     payload.mediaLabels = assets.map((asset, index) => safeText(asset.name) ? asset.name : `Média ${index + 1}`);
-    return { id, title, payload, assets, excludedTextCount };
+    return { id, title, payload, assets, excludedTextCount, excludedMediaCount: assignedAssets.length - assets.length };
   });
 }
 
@@ -85,6 +86,7 @@ export const websiteDraftVideosWithoutPublicCopy = (blocks: ReturnType<typeof bu
 
 export function websiteDraftPreview(blocks: ReturnType<typeof buildWebsiteDraft>): PreviewBlockProjection[] {
   return blocks.map((block) => ({ blockId: block.id, title: block.title, payload: block.payload, sourceRevision: 0,
+    previewWarnings: { excludedMediaCount: block.excludedMediaCount, excludedTextCount: block.excludedTextCount },
     publicationStatus: 'published', contentHash: '', assets: block.assets.map((asset) => ({
       assetId: asset.id, derivativeId: `preview-${asset.id}`, mediaKind: asset.type, mimeType: asset.mimeType || '',
       storagePath: '', contentHash: '', downloadUrl: safePreviewUrl(asset),

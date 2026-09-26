@@ -95,6 +95,13 @@ test('les anciennes valeurs groupées de publication restent disponibles pour la
   assert.deepEqual(normalized.value, ['condition-reports', 'value-comparables']);
 });
 
+test('les métriques de marché inconnues restent nulles et gardent leur source documentaire', () => {
+  const value = { analysisDate: '2026-07-18', activeListings: 56, transactions12m: null, medianDaysOnMarket: null, lowValue: 19000, midValue: 20750, highValue: 22500, sourceLabel: 'Note v2 datée ; relevé des annonces non daté' };
+  const result = normalizeCartularyStoredValue('cartularia-market-depth', value, {});
+  assert.equal(result.repaired, false);
+  assert.deepEqual(result.value, value);
+});
+
 test('les données financières non finies reviennent à des valeurs sûres', () => {
   const fallback = {
     analysisDate: '2026-08-17',

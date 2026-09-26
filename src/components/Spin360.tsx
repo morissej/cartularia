@@ -51,6 +51,7 @@ export const Spin360: React.FC<Spin360Props> = ({
   const [loadedImages, setLoadedImages] = useState<Record<number, boolean>>({});
   const [isPreloading, setIsPreloading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragIndexStart, setDragIndexStart] = useState<number>(0);
   const [attempt, setAttempt] = useState(0);
@@ -241,8 +242,9 @@ export const Spin360: React.FC<Spin360Props> = ({
         onTouchEnd={handleTouchEnd}
         style={{
           width: '100%',
-          maxWidth: '450px',
-          aspectRatio: '4/5',
+          maxWidth: '1100px',
+          height: 'min(68dvh, 760px)',
+          minHeight: '260px',
           position: 'relative',
           cursor: dragStart !== null ? 'grabbing' : 'grab',
           display: 'flex',
@@ -264,6 +266,7 @@ export const Spin360: React.FC<Spin360Props> = ({
             width: '100%',
             height: '100%',
             objectFit: 'contain',
+            transform: `scale(${zoom})`,
             userSelect: 'none',
             // Saturation 0.72 / Contraste 1.04 requis par le design system (C07)
             filter: 'none',
@@ -361,6 +364,10 @@ export const Spin360: React.FC<Spin360Props> = ({
 
         {/* Boutons d'action (C05: min 44px sur mobile, design simple contour) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)' }}>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+            <span>Zoom · {Math.round(zoom * 100)} %</span>
+            <input aria-label={language === 'FR' ? 'Zoom de la vue 3D' : '3D view zoom'} type="range" min="1" max="2" step="0.25" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} style={{ width: '100px' }} />
+          </label>
           {/* Bouton Gauche */}
           <button
             type="button"

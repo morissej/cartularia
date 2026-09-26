@@ -116,7 +116,9 @@ test('la page Publication sélectionne les contenus autorisés sans confirmation
 test('l’aperçu local conserve le Cartulaire choisi sans changer une autre surface', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.match(app, /localPublicationPreviewAllowed/);
-  assert.match(app, /blocks: approvedWebsiteBlocks\.join\(','\)/);
+  const previewParameters = app.slice(app.indexOf('const localPublicationPreviewParameters'), app.indexOf('const localPublicationPreviewUrl'));
+  assert.doesNotMatch(previewParameters, /blocks:/, 'les nouveaux liens relisent la sélection actuelle');
+  assert.match(previewParameters, /cartularyId: mockCartulary\.id/);
   assert.match(app, /href=\{localPublicationPreviewUrl\}/);
   assert.match(app, /localPublicationPreviewAllowed\s*\? requestedPublishedBlocks \?\? approvedWebsiteBlocks/);
   assert.equal(cartularyIdFromLocation({ pathname: '/watch-website', search: '?preview=local&cartularyId=cart_fixture_object' }), 'cart_fixture_object');
@@ -753,6 +755,8 @@ test('V5 point 1 (2/2) : barre À faire, tableau À faire, Preuves et visionneus
   // et des données de repli — jamais une structure ni un droit. Formes admises, comptées une à une.
   const shell = app.slice(app.indexOf('<div className="app-shell"'), app.indexOf('<AuditPanel'));
   const admitted = [
+    /isDemo=\{isDemoCartulary\}/g,
+    /assessmentOverride=\{isDemoCartulary && ACTIVE_CARTULARY_ID === DEMO_SUBMARINER_CARTULARY_ID \? DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT : undefined\}/g,
     /demonstration=\{isDemoCartulary\}/g,
     /<PublicWebsitePublicationPanel[^\n]*readOnly=\{isDemoCartulary\}/g,
     /collectionName=\{isDemoCartulary \? DEMO_ACCOUNT\.collectionName : authoritative\.collectionName\}/g,

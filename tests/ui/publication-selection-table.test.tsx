@@ -29,14 +29,14 @@ const renderTable = (props: Partial<Parameters<typeof PublicationSelectionTable>
 const columnHeaders = (table: HTMLElement) => {
   const head = table.querySelector('thead');
   if (!head) throw new Error('thead introuvable');
-  return within(head as HTMLElement).getAllByRole('columnheader').map((cell) => cell.textContent);
+  return within(head as HTMLElement).getAllByRole('columnheader').map((cell) => cell.querySelector('span[id]')?.textContent ?? cell.textContent);
 };
 const rowOf = (table: HTMLElement, title: string) => {
   const row = within(table).getByRole('rowheader', { name: title }).closest('tr');
   if (!row) throw new Error(`ligne ${title} introuvable`);
   return row;
 };
-const checkboxes = () => screen.getAllByRole('checkbox') as HTMLInputElement[];
+const checkboxes = () => Array.from(document.querySelectorAll('tbody input[type=checkbox]')) as HTMLInputElement[];
 
 describe('table de sélection « Contenus par destination »', () => {
   it('rend une seule table, 23 lignes, 5 groupes, 57 cases et aucun details', () => {
@@ -175,7 +175,7 @@ describe('table de sélection « Contenus par destination »', () => {
     const editorTable = within(editor.container).getByRole('table');
     const readerTable = within(reader.container).getByRole('table');
     expect(columnHeaders(editorTable)).toEqual(columnHeaders(readerTable));
-    const rowTitles = (table: HTMLElement) => within(table).getAllByRole('rowheader').map((cell) => cell.textContent);
+    const rowTitles = (table: HTMLElement) => within(table).getAllByRole('rowheader').map((cell) => cell.querySelector('span[id]')?.textContent ?? cell.textContent);
     expect(rowTitles(editorTable)).toEqual(rowTitles(readerTable));
     expect(rowTitles(editorTable)).toHaveLength(23);
     expect(editorTable.querySelectorAll('.publication-summary__group th').length).toBe(readerTable.querySelectorAll('.publication-summary__group th').length);
@@ -218,4 +218,17 @@ describe('table de sélection « Contenus par destination »', () => {
     expect(screen.getByText('Publication in The Circle is not available: no server command is connected; the selection serves the local preview.')).toBeTruthy();
     expect(container.textContent).not.toMatch(/Contenus par destination|Tout sélectionner|Non proposé|Sélection\b/);
   });
+});
+
+it('Jam 22 : les cases en tête sélectionnent seulement la colonne autorisée et signalent une sélection partielle', async () => {
+  const { onReplace } = renderTable({ selections: partial });
+  const all = screen.getByRole('checkbox', { name: 'Sélectionner tous les contenus — Mini-site' }) as HTMLInputElement;
+  expect(all.indeterminate).toBe(true);
+  await userEvent.click(all);
+  expect(onReplace).toHaveBeenCalledOnce();
+  expect(onReplace.mock.calls[0][0]).toBe('website');
+  const next = onReplace.mock.calls[0][1]([]);
+  expect(next).toEqual(publicationBlockIdsFor('website'));
+  expect(next).not.toContain('cover-owner');
+  expect(next).not.toContain('value-cost-basis');
 });

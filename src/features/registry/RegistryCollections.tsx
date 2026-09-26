@@ -10,6 +10,7 @@ import {
 } from '../../domain/collections.ts';
 import type { RegistryDocument } from '../../domain/foundations.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
+import { useLatestValuationSnapshot } from './useLatestValuationSnapshot.ts';
 import { deleteRegistryCollection, normalizeCollectionSlug, saveRegistryCollection } from '../../services/collections.ts';
 import { observeRegistryItems } from '../../services/projections.ts';
 import { labelFromIdentifier } from './registryPresentation.ts';
@@ -27,11 +28,12 @@ const emptyInput = (): RegistryCollectionInput => ({
   publishedCartularyIds: [],
 });
 
-export function RegistryCollections({ registry, canManage, canPublish = false }: { registry: RegistryDocument; canManage: boolean; canPublish?: boolean }) {
+export function RegistryCollections({ registry, canManage, canPublish = false, canReadValuation = false }: { registry: RegistryDocument; canManage: boolean; canPublish?: boolean; canReadValuation?: boolean }) {
   const { collections, state: collectionsState, retry: retryCollections } = useRegistryCollections(registry.id);
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [itemsState, setItemsState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
+  const valuation = useLatestValuationSnapshot(registry.id, canReadValuation, attempt);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingVersion, setEditingVersion] = useState<string | null>(null);
   const [creationId, setCreationId] = useState<string | undefined>();
@@ -171,7 +173,7 @@ export function RegistryCollections({ registry, canManage, canPublish = false }:
   };
 
   const remove = async (document: RegistryCollectionDocument, itemCount: number) => {
-    if (!canManage || busy || !inventoryReady || itemCount > 0 || !confirmDiscard() || !window.confirm('Supprimer cette collection vide et retirer son éventuel mini-site public ?')) return;
+    if (!canManage || busy || !inventoryReady || !confirmDiscard() || !window.confirm(`Supprimer la Collection « ${document.name} » et retirer son éventuel mini-site public ? Les ${itemCount} Cartulaire(s) et leurs fichiers seront conservés dans le Registre, ainsi que leurs autres Collections.`)) return;
     setRemovingId(document.id);
     try {
       await deleteRegistryCollection(registry.id, document.id, registryCollectionVersion(document));
@@ -306,6 +308,10 @@ export function RegistryCollections({ registry, canManage, canPublish = false }:
         {rows.map(({ id, document, items: collectionItems }) => {
           const websitePublished = document ? collectionWebsiteIsPublished(document) : false;
           const publishedCount = websitePublished ? document?.publishedCartularyIds?.length || 0 : 0;
+          const snapshot = valuation.registryId === registry.id && valuation.state === 'ready' ? valuation.snapshot : null;
+          const collectionIds = new Set(collectionItems.map((item) => item.cartularyId));
+          const valuedLines = snapshot?.lines.filter((line) => collectionIds.has(line.cartularyId)) ?? [];
+          const total = valuedLines.reduce((sum, line) => sum + line.marketValue, 0);
           return (
             <article key={id}>
               <header><Layers3 aria-hidden="true" /><div><span>{document?.status === 'archived' ? 'Archivée' : websitePublished ? 'Mini-site publié' : document?.status === 'published' ? 'Publication à confirmer' : 'Collection active'}</span><h2>{document?.name || labelFromIdentifier(id)}</h2></div><strong>{collectionItems.length}</strong></header>
@@ -315,6 +321,12 @@ export function RegistryCollections({ registry, canManage, canPublish = false }:
                 <div><dt>Mini-site</dt><dd>{websitePublished ? 'Publié sur le Web' : 'Non publié'}</dd></div>
                 <div><dt>Contenu public</dt><dd>{websitePublished ? `${publishedCount} objet${publishedCount > 1 ? 's' : ''} sélectionné${publishedCount > 1 ? 's' : ''}` : 'Aucun objet exposé'}</dd></div>
               </dl>
+              {canReadValuation && <div className="registry-collection-card__valuation" aria-label={`Valeur de la collection ${document?.name || labelFromIdentifier(id)}`}>
+                <span>Valeur de la collection · Secret</span>
+                {snapshot ? <><strong>{valuedLines.length || collectionItems.length === 0 ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(total) : 'Non renseignée'}</strong><small>Arrêté du {snapshot.asOfDate} · {valuedLines.length}/{collectionItems.length} objet(s) couverts{valuedLines.length < collectionItems.length ? ' · total partiel' : ''}</small></>
+                  : <p>{valuation.registryId !== registry.id || valuation.state === 'loading' ? 'Chargement de la valeur…' : valuation.state === 'error' ? 'Valeur indisponible.' : 'Aucun arrêté de valeur disponible.'}</p>}
+                <a href={`/registry/${encodeURIComponent(registry.id)}`}>Consulter les arrêtés de valeur</a>
+              </div>}
               {websitePublished && <div className="registry-collection-card__url"><Globe2 aria-hidden="true" /><span>{`${window.location.origin}${collectionWebsitePath(registry.id, id)}`}</span></div>}
               <footer>
                 <a href={`/registry/${encodeURIComponent(registry.id)}/items?collection=${encodeURIComponent(id)}`}>Voir les objets <ExternalLink aria-hidden="true" /></a>
@@ -322,7 +334,7 @@ export function RegistryCollections({ registry, canManage, canPublish = false }:
                 {websitePublished && <a href={collectionWebsitePath(registry.id, id)} target="_blank" rel="noreferrer"><Globe2 aria-hidden="true" />Accéder au mini-site</a>}
                 {canManage && document && <button type="button" disabled={!inventoryReady || busy} onClick={() => startEdit(document, id)}><Pencil aria-hidden="true" />Modifier</button>}
                 {!document && <span>Collection indisponible : réaffectez ses objets à une Collection existante.</span>}
-                {canManage && document && <button type="button" onClick={() => void remove(document, collectionItems.length)} disabled={!inventoryReady || busy || collectionItems.length > 0 || (websitePublished && !canPublish)} title={websitePublished && !canPublish ? 'Le droit de publication est requis pour retirer ce mini-site.' : collectionItems.length > 0 ? 'Réaffectez les objets avant de supprimer la collection.' : undefined}><Trash2 aria-hidden="true" />Supprimer</button>}
+                {canManage && document && <button type="button" onClick={() => void remove(document, collectionItems.length)} disabled={!inventoryReady || busy || (websitePublished && !canPublish)} title={websitePublished && !canPublish ? 'Le droit de publication est requis pour retirer ce mini-site.' : 'Supprimer la Collection en conservant ses Cartulaires.'}><Trash2 aria-hidden="true" />Supprimer</button>}
               </footer>
             </article>
           );

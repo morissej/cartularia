@@ -79,7 +79,7 @@ export const deleteRegistryCollection = async (registryId: string, collectionId:
     if (!existing.exists()) return;
     version = registryCollectionVersion(existing.data());
   }
-  await httpsCallable(functions, 'deleteRegistryCollection')({ registryId, collectionId, expectedVersion: version, confirmed: true });
+  await httpsCallable(functions, 'deleteRegistryCollection')({ registryId, collectionId, expectedVersion: version, confirmed: true, detachObjects: true });
 };
 
 export const loadCollectionWebsitePublication = async (publicationId: string): Promise<{

@@ -639,7 +639,8 @@ function App() {
   const registryReturnHref = registryReturn.href;
   // En démo sans returnTo, requestedRegistryId vaut le Registre démo : le contexte de Collection n'est
   // pas chargé en démo (effet gardé plus bas) et la page Publication passe en rendu lecture.
-  const requestedRegistryId = parseRegistryRoute(registryReturnHref).registryId;
+  const registryReturnPath = new URL(registryReturnHref, window.location.origin).searchParams.get('returnTo') ?? registryReturnHref;
+  const requestedRegistryId = parseRegistryRoute(registryReturnPath.split('?')[0]).registryId;
   const requestedPublicCode = publicCodeFromUrl();
   const localPublicationPreviewAllowed = isWatchWebsite
     && routeParameters.get('preview') === 'local';
@@ -1226,7 +1227,6 @@ function App() {
     publicCode: cartularyPublicCode,
     preview: 'local',
     cartularyId: mockCartulary.id,
-    blocks: approvedWebsiteBlocks.join(','),
   });
   const localPublicationPreviewUrl = `${window.location.origin}/watch-website?${localPublicationPreviewParameters.toString()}`;
   const collectionWebsiteParameters = new URLSearchParams({
@@ -2079,7 +2079,7 @@ function App() {
             <SectionTitle eyebrow={tx('Évaluation de marché', 'Market valuation')} title={tx('Données de marché', 'Market data')} />
             <div className="market-grid">
               <article className="market-chart-card"><span className="eyebrow">{tx('Évolution du marché', 'Market trend')}</span><div className="market-bars" role="group" tabIndex={0} aria-label={tx('Évolution des évaluations médianes', 'Median valuation trend')}>{marketValues.map((valuation) => <div key={valuation.id}><span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} /><strong>{formatMoney(valuation.midValue, valuation.currency)}</strong><time>{formatDate(valuation.date)}</time></div>)}</div><small>{isDemoCartulary ? tx('Source : historique fictif de démonstration · aucune transaction réelle', 'Source: fictional demonstration history · no real transaction') : tx('Source : évaluations datées du dossier', 'Source: dated valuations from the record')}</small></article>
-              <article className="market-depth-card"><div className="market-depth-card__heading"><span className="eyebrow">{tx('Profondeur de marché', 'Market depth')}</span><time dateTime={marketDepth.analysisDate}>{marketDepth.analysisDate ? tx(`Analyse du ${formatDate(marketDepth.analysisDate)}`, `Analysis dated ${formatDate(marketDepth.analysisDate)}`) : tx('Date non renseignée', 'Date not provided')}</time></div><div className="metric-grid"><div><strong>{marketDepth.activeListings}</strong><span>{tx('Annonces actives', 'Active listings')}</span></div><div><strong>{marketDepth.transactions12m}</strong><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div><div><strong>{marketDepth.medianDaysOnMarket} {tx('j', 'd')}</strong><span>{tx('Délai médian estimé', 'Estimated median time')}</span></div></div><div className="valuation-range"><span>{tx('Fourchette actuelle', 'Current range')}</span><strong>{formatMoney(marketDepth.lowValue)} — {formatMoney(marketDepth.highValue)}</strong><small>{tx('VALEUR MÉDIANE', 'MEDIAN VALUE')} {formatMoney(marketDepth.midValue)}</small></div></article>
+              <article className="market-depth-card"><MarketDepthReadOnly marketDepth={marketDepth} currency={watch.currency} language={language} /></article>
               <article className="retained-value-card retained-value-card--published">
                 <div><span className="eyebrow">{tx('Décision du propriétaire', 'Owner decision')}</span><h3>{tx('Valeur retenue', 'Retained value')}</h3></div>
                 <strong>{formatMoney(retainedValuation.amount, watch.currency)}</strong>
@@ -2204,6 +2204,7 @@ function App() {
           <div className="container">
             <BrandLogo className="watch-website__wordmark" href="/" />
             <div><span className="eyebrow">{publicProjection ? tx('Mini-site publié', 'Published mini-site') : tx('Aperçu local du mini-site', 'Local mini-site preview')} · {websiteCode}</span><strong>{websiteBrand} · {websiteModel}</strong></div>
+            {localPublicationPreviewAllowed && <a className="button button--quiet watch-website__return" href={`/cartulary-view?cartularyId=${encodeURIComponent(ACTIVE_CARTULARY_ID)}#publication`}><ArrowLeft size={15} />{tx('Retour au Cartulaire', 'Back to Cartulary')}</a>}
           </div>
         </header>
         {publishedWebsitePages.length > 0 && (
@@ -2645,6 +2646,7 @@ function App() {
             <PageIntroduction number="03" title={tx("L’objet", 'The object')} />
 
             <DocumentationTierPanel
+              isDemo={isDemoCartulary}
               cartularyId={ACTIVE_CARTULARY_ID}
               assessmentOverride={isDemoCartulary && ACTIVE_CARTULARY_ID === DEMO_SUBMARINER_CARTULARY_ID ? DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT : undefined}
             />
@@ -2915,6 +2917,7 @@ function App() {
                           <span style={{ height: `${Math.max(18, (valuation.midValue / maxMarketValue) * 100)}%` }} />
                           <strong {...aiFieldProps('value.market.valuations[].midValue', valuation.id)} data-ai-currency={valuation.currency}>{formatMoney(valuation.midValue, valuation.currency)}</strong>
                           <time {...aiFieldProps('value.market.valuations[].date', valuation.id)}>{formatDate(valuation.date)}</time>
+                          <small>{valuation.source}</small>
                         </div>
                       ))}
                     </div>
@@ -2928,15 +2931,15 @@ function App() {
                     <label>{tx('Date de l’analyse', 'Analysis date')}<input {...aiFieldProps('value.market.analysisDate')} type="date" value={marketDepth.analysisDate} onChange={(event) => setMarketDepth((current) => ({ ...current, analysisDate: event.target.value }))} /></label>
                   </div>
                   <div className="metric-grid">
-                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.activeListings')} type="number" min="0" value={marketDepth.activeListings} onChange={(event) => setMarketDepth((current) => ({ ...current, activeListings: Math.max(0, Number(event.target.value)) }))} aria-label={tx('Annonces actives', 'Active listings')} /><span>{tx('Annonces actives', 'Active listings')}</span></div>
-                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.transactions12m')} type="number" min="0" value={marketDepth.transactions12m} onChange={(event) => setMarketDepth((current) => ({ ...current, transactions12m: Number(event.target.value) }))} aria-label={tx('Transactions identifiées sur les douze derniers mois', 'Transactions identified over the last twelve months')} /><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div>
-                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.medianDaysOnMarket')} type="number" min="0" value={marketDepth.medianDaysOnMarket} onChange={(event) => setMarketDepth((current) => ({ ...current, medianDaysOnMarket: Math.max(0, Number(event.target.value)) }))} aria-label={tx('Délai médian estimé en jours', 'Estimated median time in days')} /><span>{tx('Délai médian estimé · jours', 'Estimated median time · days')}</span></div>
+                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.activeListings')} type="number" min="0" value={marketDepth.activeListings ?? ''} onChange={(event) => setMarketDepth((current) => ({ ...current, activeListings: event.target.value === '' ? null : Math.max(0, Number(event.target.value)) }))} aria-label={tx('Annonces actives', 'Active listings')} /><span>{tx('Annonces actives', 'Active listings')}</span></div>
+                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.transactions12m')} type="number" min="0" value={marketDepth.transactions12m ?? ''} onChange={(event) => setMarketDepth((current) => ({ ...current, transactions12m: event.target.value === '' ? null : Math.max(0, Number(event.target.value)) }))} aria-label={tx('Transactions identifiées sur les douze derniers mois', 'Transactions identified over the last twelve months')} /><span>{tx('Transactions identifiées · 12 mois', 'Transactions identified · 12 months')}</span></div>
+                    <div className="metric-grid__editable"><input {...aiFieldProps('value.market.medianDaysOnMarket')} type="number" min="0" value={marketDepth.medianDaysOnMarket ?? ''} onChange={(event) => setMarketDepth((current) => ({ ...current, medianDaysOnMarket: event.target.value === '' ? null : Math.max(0, Number(event.target.value)) }))} aria-label={tx('Délai médian estimé en jours', 'Estimated median time in days')} /><span>{tx('Délai médian estimé · jours', 'Estimated median time · days')}</span></div>
                   </div>
                   <div className="valuation-range valuation-range--editable">
-                    <span>{tx('Fourchette actuelle', 'Current range')}</span>
+                    <span>{tx('Fourchette documentée', 'Documented range')}</span>
                     <div>
                       <label>{tx('Valeur basse', 'Low value')}<input {...aiFieldProps('value.market.lowValue')} type="number" min="0" step="100" value={marketDepth.lowValue} onChange={(event) => setMarketDepth((current) => ({ ...current, lowValue: Math.max(0, Number(event.target.value)) }))} /></label>
-                      <label>{tx('Valeur médiane', 'Median value')}<input {...aiFieldProps('value.market.midValue')} type="number" min="0" step="100" value={marketDepth.midValue} onChange={(event) => setMarketDepth((current) => ({ ...current, midValue: Math.max(0, Number(event.target.value)) }))} /></label>
+                      <label>{tx('Valeur centrale', 'Central value')}<input {...aiFieldProps('value.market.midValue')} type="number" min="0" step="100" value={marketDepth.midValue} onChange={(event) => setMarketDepth((current) => ({ ...current, midValue: Math.max(0, Number(event.target.value)) }))} /></label>
                       <label>{tx('Valeur haute', 'High value')}<input {...aiFieldProps('value.market.highValue')} type="number" min="0" step="100" value={marketDepth.highValue} onChange={(event) => setMarketDepth((current) => ({ ...current, highValue: Math.max(0, Number(event.target.value)) }))} /></label>
                     </div>
                   </div>

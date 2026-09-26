@@ -248,7 +248,7 @@ export function RegistryGallery({ registry, canReadCartularies }: {
               <article className="registry-gallery-card" key={entry.item.cartularyId} data-thumbnail-state={thumbnailState}>
                 <button type="button" className="registry-gallery-card__visual" onClick={() => openLightbox(entry)} aria-label={`Ouvrir les photos de ${entry.item.displayTitle}`}>
                   {thumbnailSrc && thumbnail
-                    ? <img src={thumbnailSrc} alt={`Vue principale — ${entry.item.displayTitle}`} width={thumbnail.width} height={thumbnail.height} loading="lazy" decoding="async" style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }} />
+                    ? <img src={thumbnailSrc} alt={`Vue principale — ${entry.item.displayTitle}`} width={thumbnail.width} height={thumbnail.height} loading="lazy" decoding="async" />
                     : thumbnailState !== 'ready' && <span className="registry-gallery-card__pending"><Images aria-hidden="true" /><span>{REGISTRY_THUMBNAIL_STATE_LABELS[thumbnailState]}</span></span>}
                   <span className="registry-gallery-card__zoom"><ZoomIn aria-hidden="true" />Ouvrir</span>
                 </button>

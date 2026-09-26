@@ -120,3 +120,13 @@ describe('exhaustivité des alertes du tableau de bord', () => {
     expect(screen.getByText('Aucune alerte opérationnelle en cours.')).toBeTruthy();
   });
 });
+
+it('Jam 31 : affiche aussi les tâches non urgentes et n’inclut pas les tâches terminées', async () => {
+  mocks.followUpState = 'ready';
+  mocks.followUps = [{ id: 'future', cartularyId: 'cart-a', displayTitle: 'Montre A', title: 'Contrôle IWC planifié', dueAt: '2099-03-08', reminderStatus: 'planned', category: 'maintenance', assetType: 'watch' },
+    { id: 'done', cartularyId: 'cart-a', displayTitle: 'Montre A', title: 'Tâche déjà terminée', dueAt: '2026-01-01', reminderStatus: 'completed', category: 'custom', assetType: 'watch' }];
+  renderOverview();
+  expect(await screen.findByText('Contrôle IWC planifié')).toBeTruthy();
+  expect(screen.getByText('1 tâche(s) à faire, dont 0 à traiter en priorité.')).toBeTruthy();
+  expect(screen.queryByText('Tâche déjà terminée')).toBeNull();
+});

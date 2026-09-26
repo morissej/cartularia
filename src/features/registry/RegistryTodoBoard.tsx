@@ -49,7 +49,8 @@ export function RegistryTodoBoard({
     () => items.filter((item) => item.projectionStatus === 'active'),
     [items],
   );
-  const sortedTodos = useMemo(() => [...todos].sort((left, right) => {
+  const [cartularyId, setCartularyId] = useState('');
+  const sortedTodos = useMemo(() => todos.filter((todo) => !cartularyId || todo.cartularyId === cartularyId).sort((left, right) => {
     const leftDone = ['completed', 'dismissed'].includes(left.reminderStatus);
     const rightDone = ['completed', 'dismissed'].includes(right.reminderStatus);
     const leftDate = followUpDate(left).getTime();
@@ -58,8 +59,7 @@ export function RegistryTodoBoard({
       || (Number.isNaN(leftDate) ? Number.POSITIVE_INFINITY : leftDate)
         - (Number.isNaN(rightDate) ? Number.POSITIVE_INFINITY : rightDate)
       || left.title.localeCompare(right.title, 'fr', { sensitivity: 'base' });
-  }), [todos]);
-  const [cartularyId, setCartularyId] = useState('');
+  }), [todos, cartularyId]);
   const [title, setTitle] = useState('');
   const [dueAt, setDueAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState<FollowUpCategory>('custom');
@@ -68,8 +68,8 @@ export function RegistryTodoBoard({
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (!activeItems.some((item) => item.cartularyId === cartularyId)) {
-      setCartularyId(activeItems[0]?.cartularyId || '');
+    if (cartularyId && !activeItems.some((item) => item.cartularyId === cartularyId)) {
+      setCartularyId('');
     }
   }, [activeItems, cartularyId]);
 
@@ -134,7 +134,7 @@ export function RegistryTodoBoard({
         <div>
           <span className="registry-step">Suivi coordonné</span>
           <h2 id="registry-todo-board-title">À faire</h2>
-          <p>{sortedTodos.length} tâche{sortedTodos.length === 1 ? '' : 's'} réunie{sortedTodos.length === 1 ? '' : 's'} dans ce Registre.</p>
+          <p aria-live="polite">{sortedTodos.length} tâche{sortedTodos.length === 1 ? '' : 's'} {cartularyId ? 'pour le Cartulaire sélectionné' : 'dans ce Registre'}.</p>
         </div>
         <ListTodo aria-hidden="true" />
       </header>
@@ -144,6 +144,7 @@ export function RegistryTodoBoard({
           <label>
             <span>Cartulaire</span>
             <select value={cartularyId} onChange={(event) => setCartularyId(event.target.value)} required>
+              <option value="">Tous les Cartulaires</option>
               {activeItems.map((item) => <option value={item.cartularyId} key={item.cartularyId}>{item.displayTitle}</option>)}
             </select>
           </label>
@@ -161,7 +162,7 @@ export function RegistryTodoBoard({
               {Object.entries(CATEGORY_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
             </select>
           </label>
-          <button type="submit" disabled={busyKey === 'create' || !title.trim()}><Plus aria-hidden="true" /> Ajouter</button>
+          <button type="submit" disabled={busyKey === 'create' || !title.trim() || !cartularyId}><Plus aria-hidden="true" /> Ajouter</button>
         </form>
       )}
 

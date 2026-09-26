@@ -57,11 +57,13 @@ describe('contrat unique de projection publique', () => {
     }, ['condition-description']);
     expect(draft[0].payload.paragraphs).toEqual(['Cadran original bleu, sans restauration.']);
     expect(draft[0].excludedTextCount).toBe(2);
+    expect(websiteDraftPreview(draft)[0].previewWarnings?.excludedTextCount).toBe(2);
+    expect(JSON.stringify(websiteDraftRequest(draft))).not.toContain('previewWarnings');
+    expect(JSON.stringify(websiteDraftRequest(draft))).not.toContain('excludedTextCount');
     for (const projection of [websiteDraftRequest(draft), websiteDraftPreview(draft)]) {
       const serialized = JSON.stringify(projection);
       expect(serialized).not.toContain('personne privée');
       expect(serialized).not.toContain('secret.example');
-      expect(serialized).not.toContain('excludedTextCount');
     }
   });
 });

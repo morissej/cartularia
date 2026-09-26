@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assetTypeFromMimeType, prepareConditionAttachments, prepareImportedAssets } from '../../src/features/cartulary/media/importMediaFiles.ts';
 import { digestFile } from '../../src/utils/fileDigest.ts';
 import { newId } from '../../src/utils/identifiers.ts';
+import { createLocalVideoPoster } from '../../src/media/videoPoster.ts';
+vi.mock('../../src/media/videoPoster.ts', () => ({ createLocalVideoPoster: vi.fn(async () => 'data:image/jpeg;base64,local-poster') }));
 
 // Actual signatures, passed through the canonical validator (never mocked).
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4j8AAAAASUVORK5CYII=', 'base64');
@@ -48,6 +50,8 @@ describe('préparation sans persistence', () => {
       capturedAt: '2026-09-01', fileSize: '1 ko', url: 'blob:objet-mouvement.mp4',
     });
     expect(asset.hash).toBe(sha256Of(MP4));
+    expect(createLocalVideoPoster).toHaveBeenCalledWith('blob:objet-mouvement.mp4');
+    expect(asset.posterUrl).toBe('data:image/jpeg;base64,local-poster');
     expect(asset.hash).toMatch(HEX_64);
     expect(asset.id).toMatch(/^asset-/);
     expect(asset.binaryId).toMatch(/^media-binary-/);

@@ -49,8 +49,8 @@ describe('préchargement média PF1', () => {
     expect(posterlessThumbnail.querySelector('.media-carousel__thumb-placeholder')).toBeTruthy();
 
     fireEvent.click(posterThumbnail);
-    expect(document.querySelectorAll('video')).toHaveLength(1);
-    expect(document.querySelector('video')?.getAttribute('preload')).toBe('metadata');
+    expect(document.querySelectorAll('video')).toHaveLength(0);
+    expect(document.querySelector('.media-load-prompt--poster img')?.getAttribute('src')).toBe('/poster.webp');
     const download = screen.getByRole('link', { name: 'Télécharger le média : video-poster' });
     expect(download.getAttribute('href')).toBe('/video-poster.mov');
     expect(download.getAttribute('download')).toBe('video-poster.mov');

@@ -210,7 +210,16 @@ export const processCartularySyncRequest = async ({
   requestDocumentId,
   occurredAt = new Date().toISOString(),
   rateLimitPerHour = SYNC_RATE_LIMIT_PER_HOUR,
+  // Operator-only subset, supplied by a trusted CLI, never read from a client request.
+  // Keeps unfinished imports in the draft while adopting only the verified files selected here.
+  mediaAssetIds = null,
+  mediaExpectedRootRevision = null,
 }) => {
+  if (mediaAssetIds !== null && (!Array.isArray(mediaAssetIds) || !mediaAssetIds.length || mediaAssetIds.length > 100
+    || new Set(mediaAssetIds).size !== mediaAssetIds.length || mediaAssetIds.some((id) => !/^[A-Za-z0-9_-]{3,160}$/.test(id))
+    || !Number.isSafeInteger(mediaExpectedRootRevision) || mediaExpectedRootRevision < 1)) {
+    throw new LiveSyncCommandError('invalid_media_scope', 'Le périmètre de synchronisation des médias est invalide.');
+  }
   const requestRef = firestore.doc(`cartularySyncRequests/${requestDocumentId}`);
   const initialRequest = await requestRef.get();
   if (!initialRequest.exists || initialRequest.data().status !== 'pending') {
@@ -244,6 +253,7 @@ export const processCartularySyncRequest = async ({
   ]);
   if (!root.exists) throw new LiveSyncCommandError('cartulary_not_found', `Cartulaire ${cartularyId} introuvable.`);
   const rootData = root.data();
+  if (mediaAssetIds && rootData.revision !== mediaExpectedRootRevision) throw new LiveSyncCommandError('revision_conflict', 'Le Cartulaire a changé depuis la préparation du lot média.');
   const [previousProjection, sealSnapshot] = await Promise.all([
     firestore.doc(`registries/${rootData.registryId}/items/${cartularyId}`).get(),
     typeof rootData.publicCode === 'string' && rootData.publicCode ? firestore.doc(`seals/${rootData.publicCode}`).get() : Promise.resolve(null),
@@ -281,6 +291,9 @@ export const processCartularySyncRequest = async ({
   const legacyMediaDigest = Array.isArray(legacyMedia) ? sha256Digest(legacyMedia) : null;
   const media = applyGenericMedia ? await applyGenericMediaChanges({ storage, draft: genericMediaDraft, root: { ...rootData, id: cartularyId },
     existingAssets: new Map(existingAssetsSnapshot.docs.map((document) => [document.id, document.data()])), binaries: draft.binaries }) : !genericContext && legacyMediaDigest !== rootData.legacyMediaDigest ? legacyMedia : null;
+  if (mediaAssetIds && (genericContext || !Array.isArray(media) || mediaAssetIds.some((id) => media.filter((asset) => asset?.id === id).length !== 1))) {
+    throw new LiveSyncCommandError('invalid_media_scope', 'Le lot média entre en conflit avec une saisie en cours ou contient un média absent.');
+  }
   const legacyCollectionId = stateValue(draft.states, 'cartularia-collection-id');
   const legacyCollectionIds = stateValue(draft.states, 'cartularia-publication-collection-ids');
   const legacyCollectionDigest = sha256Digest({ primary: legacyCollectionId, secondary: legacyCollectionIds });
@@ -321,9 +334,12 @@ export const processCartularySyncRequest = async ({
   const modelName = asText(genericValues.get('cover.car.model') ?? genericValues.get('cover.watch.model'), asText(specificationValue(legacySpecifications, 'model', 'Modèle'), rootData.modelName));
   const referenceCode = asText(genericValues.get('cover.car.version') ?? genericValues.get('cover.watch.reference'), asText(specificationValue(legacySpecifications, 'reference', 'Numéro de référence'), rootData.referenceCode));
   const manufactureYear = genericValues.get('cover.car.year') ?? asYear(specificationValue(legacySpecifications, 'year', 'Année de fabrication'), rootData.manufactureYear);
-  const mediaAssets = Array.isArray(media) ? media.filter((asset) => asset && typeof asset.id === 'string') : [];
+  const mediaAssets = Array.isArray(media) ? media.filter((asset) => asset && typeof asset.id === 'string' && (!mediaAssetIds || mediaAssetIds.includes(asset.id))) : [];
+  if (mediaAssetIds && mediaAssets.some((asset) => !privateBinaryIsVerified(draft.binaries.get(asset.binaryId)))) {
+    throw new LiveSyncCommandError('unverified_binary', 'Chaque fichier du lot limité doit être vérifié.');
+  }
   const primaryAssetId = mediaAssets.find((asset) => Array.isArray(asset.tags) && asset.tags.includes('main-photo'))?.id
-    || (Array.isArray(media) ? null : rootData.primaryAssetId)
+    || (Array.isArray(media) && !mediaAssetIds ? null : rootData.primaryAssetId)
     || null;
   const existingAssets = new Map(existingAssetsSnapshot.docs.map((document) => [document.id, document.data()]));
   const existingReminders = new Map(existingRemindersSnapshot.docs.map((document) => [document.id, document.data()]));
@@ -368,7 +384,7 @@ export const processCartularySyncRequest = async ({
   const effectiveSections = new Map(existingSectionsSnapshot.docs.map((document) => [document.id, { id: document.id, ...document.data() }]));
   for (const patch of sectionPatches) effectiveSections.set(patch.id, patch);
   const effectiveAssets = Array.isArray(media)
-    ? assetPatches
+    ? mediaAssetIds ? [...new Map([...existingAssets, ...assetPatches.map((patch) => [patch.id, patch])])].map(([id, asset]) => ({ id, ...asset })) : assetPatches
     : existingAssetsSnapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
   const documentationFacts = rootData.assetType === 'watch' ? deriveWatchDocumentationFacts({
     cartularyId,
@@ -478,7 +494,9 @@ export const processCartularySyncRequest = async ({
       projectionStatus: 'active',
     };
     const auditEvent = createAuditEvent({
-      rootData: currentRootData, requestId, actorId: ownerUid, occurredAt, afterDigest: draft.digest,
+      rootData: currentRootData, requestId, actorId: ownerUid, occurredAt,
+      afterDigest: mediaAssetIds ? sha256Digest({ draftDigest: draft.digest, mediaAssetIds }) : draft.digest,
+      ...(mediaAssetIds ? { resource: { type: 'liveStateMediaSubset', id: requestId } } : {}),
       ...(reviewPatch ? { action: REVIEW_CONFIRMED_ACTION, resource: { type: 'cartulary', id: cartularyId } } : {}),
     });
 
@@ -500,7 +518,7 @@ export const processCartularySyncRequest = async ({
       ...(genericEditDigest ? { genericEditDigest } : {}),
       ...(genericMediaDigest ? { genericMediaDigest } : {}),
       ...(pendingGenericOperation ? { lastGenericOperationToken: genericOperationToken } : {}),
-      ...(legacyMediaDigest ? { legacyMediaDigest } : {}),
+      ...(legacyMediaDigest && !mediaAssetIds ? { legacyMediaDigest } : {}),
       legacyCollectionDigest,
       revision: nextRevision,
       liveStateDigest: draft.digest,
@@ -533,7 +551,7 @@ export const processCartularySyncRequest = async ({
     for (const patch of assetPatches) transaction.set(rootRef.collection('assets').doc(patch.id), patch, { merge: true });
     const activeAssetIds = new Set(assetPatches.map((asset) => asset.id));
     for (const [assetId, existing] of existingAssets) {
-      if (Array.isArray(media) && (existing.liveSyncManaged === true || (applyGenericMedia && genericMediaDraft.removeIds.includes(assetId))) && !activeAssetIds.has(assetId)) {
+      if (!mediaAssetIds && Array.isArray(media) && (existing.liveSyncManaged === true || (applyGenericMedia && genericMediaDraft.removeIds.includes(assetId))) && !activeAssetIds.has(assetId)) {
         transaction.set(rootRef.collection('assets').doc(assetId), {
           projectionStatus: 'withdrawn',
           liveStateDigest: draft.digest,
@@ -585,6 +603,7 @@ export const processCartularySyncRequest = async ({
       sourceRevision: nextRevision,
       contentHash,
       auditEventId: auditEvent.eventId,
+      ...(mediaAssetIds ? { scopedMediaAssetIds: mediaAssetIds } : {}),
       processedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

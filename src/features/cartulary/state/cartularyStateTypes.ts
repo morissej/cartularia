@@ -71,10 +71,11 @@ export interface OwnerDocument {
 }
 
 export interface MarketDepthState {
+  sourceLabel?: string;
   analysisDate: string;
-  activeListings: number;
-  transactions12m: number;
-  medianDaysOnMarket: number;
+  activeListings: number | null;
+  transactions12m: number | null;
+  medianDaysOnMarket: number | null;
   lowValue: number;
   midValue: number;
   highValue: number;

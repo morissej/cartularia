@@ -100,7 +100,7 @@ export const deleteRegistryCollection = onCall(invitationCallableOptions, async 
     return await deleteEmptyRegistryCollection({ firestore, uid: request.auth.uid,
       registryId: request.data?.registryId, collectionId: request.data?.collectionId,
       expectedVersion: request.data?.expectedVersion,
-      confirmed: request.data?.confirmed });
+      confirmed: request.data?.confirmed, detachObjects: request.data?.detachObjects === true });
   } catch (error) { throw callableError(error); }
 });
 
@@ -369,7 +369,8 @@ export const verifyPrivateDraftUpload = onObjectFinalized({
   // Variantes v3 + copie principale décodées par sharp dans la même instance (mesure locale 24 MP : pic 326 Mo) :
   // un original à la fois par instance, jamais de multiplication du pic par la concurrence par défaut.
   concurrency: 1,
-  retry: true,
+  // Preserve the deployed policy. Enabling billed automatic retries requires separate approval.
+  retry: false,
 }, async (event) => {
   const result = await processPrivateDraftUpload({ firestore, storage, object: event.data });
   // A duplicate event must remain retryable while another worker holds the lease: it may crash.

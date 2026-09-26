@@ -64,9 +64,27 @@ export function PublicationSelectionTable({
           <thead>
             <tr>
               <th scope="col">{tx('Contenu', 'Content')}</th>
-              {DESTINATIONS.map((destination) => (
-                <th scope="col" key={destination} id={`${idPrefix}-col-${destination}`}>{destinationLabelFor(destination, language)}</th>
-              ))}
+              {DESTINATIONS.map((destination) => {
+                const label = destinationLabelFor(destination, language);
+                const count = selectedCount(destination, selections[destination] ?? []);
+                const complete = count === allowedCount(destination);
+                return (
+                  <th scope="col" key={destination}>
+                    <span id={`${idPrefix}-col-${destination}`}>{label}</span>
+                    <label className="publication-summary__select-all">
+                      <input
+                        type="checkbox"
+                        checked={complete}
+                        ref={(input) => { if (input) input.indeterminate = count > 0 && !complete; }}
+                        disabled={!canEdit}
+                        aria-label={tx(`Sélectionner tous les contenus — ${label}`, `Select all content — ${label}`)}
+                        onChange={() => onReplace(destination, () => complete ? [] : publicationBlockIdsFor(destination))}
+                      />
+                      {tx('Tout sélectionner', 'Select all')}
+                    </label>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>

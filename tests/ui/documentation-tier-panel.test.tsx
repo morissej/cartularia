@@ -31,9 +31,10 @@ describe('palier documentaire du Cartulaire', () => {
     const region = await screen.findByRole('region', { name: 'Palier de complétude documentaire' });
     expect(region.textContent).toContain('P2');
     expect(region.textContent).toContain('Dossier tenu');
-    expect(region.textContent).toContain('documentation-tier-watch@1.0.0');
-    expect(region.textContent).toContain('révision source 7');
-    expect(region.textContent).toContain('Constat d’état daté issu de DEV-03');
+    expect(region.textContent).not.toContain('documentation-tier-watch@1.0.0');
+    expect(region.textContent).not.toContain('révision source 7');
+    expect(region.textContent).toContain('Constat d’état daté');
+    expect(region.textContent).not.toContain('DEV-03');
     expect(region.textContent).toContain('Émettre un Sceau');
     expect(region.textContent).toContain('gain non mesuré');
     const proofSummary = within(region).getByText('1 référence(s)');
@@ -43,16 +44,18 @@ describe('palier documentaire du Cartulaire', () => {
   it('traite l’absence d’ancien document comme non évaluée, jamais comme P0', async () => {
     mocks.value = null;
     render(<DocumentationTierPanel cartularyId="cart_legacy" />);
-    expect(await screen.findByText(/L’absence de donnée ne vaut jamais P0/)).toBeTruthy();
+    expect(await screen.findByText(/n’a pas encore été évalué/)).toBeTruthy();
     expect(screen.queryByText('Dossier minimal viable')).toBeNull();
   });
 
   it('rend l’évaluation fictive locale sans ouvrir d’écoute Firestore', () => {
     vi.mocked(observeDocumentationAssessment).mockClear();
-    render(<DocumentationTierPanel cartularyId="cart_demo_rolex_submariner_124060" assessmentOverride={DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT} />);
+    render(<DocumentationTierPanel cartularyId="cart_demo_rolex_submariner_124060" isDemo assessmentOverride={DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT} />);
     expect(screen.getByText('P2')).toBeTruthy();
     expect(screen.getByText('Dossier tenu')).toBeTruthy();
     expect(screen.getByText(/Émettre un Sceau/)).toBeTruthy();
     expect(observeDocumentationAssessment).not.toHaveBeenCalled();
+    expect(screen.getByText('Exemple de démonstration')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/DEV-0[34]|cartularies\//);
   });
 });
