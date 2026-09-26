@@ -60,6 +60,8 @@ export interface RegistryValuationItemProjection {
   collectionIds: string[];
   assetType: string;
   displayTitle: string;
+  /** Valeur brute courante, distincte des exigences documentaires d'un arrêté. */
+  currentValue?: { amount: number | null; currency: string | null };
   marketValue: {
     amount: number | null;
     currency: string | null;

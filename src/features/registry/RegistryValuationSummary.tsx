@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarDays, Landmark, LoaderCircle, Plus, ShieldCheck } from 'lucide-react';
 import type { MembershipDocument, RegistryDocument } from '../../domain/foundations.ts';
-import type { RegistryValuationLevel, RegistryValuationSnapshot } from '../../domain/projections.ts';
+import type { RegistryItemProjection, RegistryValuationLevel, RegistryValuationSnapshot } from '../../domain/projections.ts';
 import { observeRegistryValuationSnapshots, requestRegistryValuationSnapshot } from '../../services/registryValuation.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
+import { RegistryCurrentValuationSummary } from './RegistryCurrentValuationSummary.tsx';
 
 const LEVEL_LABELS: Record<RegistryValuationLevel, string> = {
   owner_declared: 'Déclarée par le propriétaire',
@@ -29,9 +30,11 @@ const formatMoney = (value: number) => euro.format(value);
 const formatDate = (value: string) => new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00.000Z`));
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function RegistryValuationSummary({ registry, membership }: {
+export function RegistryValuationSummary({ registry, membership, items, inventoryState }: {
   registry: RegistryDocument;
   membership: MembershipDocument;
+  items: RegistryItemProjection[];
+  inventoryState: 'loading' | 'ready' | 'error';
 }) {
   const [snapshots, setSnapshots] = useState<RegistryValuationSnapshot[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -39,6 +42,7 @@ export function RegistryValuationSummary({ registry, membership }: {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [loadedRegistryId, setLoadedRegistryId] = useState('');
   const canRead = membership.permissions.includes('valuation.read');
   const canCreate = canRead
     && membership.permissions.includes('cartulary.edit')
@@ -47,20 +51,25 @@ export function RegistryValuationSummary({ registry, membership }: {
 
   useEffect(() => {
     if (!canRead) return () => undefined;
+    let active = true;
     setState('loading');
-    return observeRegistryValuationSnapshots(registry.id, (next) => {
+    const unsubscribe = observeRegistryValuationSnapshots(registry.id, (next) => {
+      if (!active) return;
       setSnapshots(next);
+      setLoadedRegistryId(registry.id);
       setSelectedId((current) => current && next.some((snapshot) => snapshot.snapshotId === current) ? current : next[0]?.snapshotId || '');
       setState('ready');
     }, () => {
+      if (!active) return;
       setSnapshots([]);
       setState('error');
     });
+    return () => { active = false; unsubscribe(); };
   }, [canRead, registry.id]);
 
   const selected = useMemo(
-    () => snapshots.find((snapshot) => snapshot.snapshotId === selectedId) || snapshots[0] || null,
-    [selectedId, snapshots],
+    () => loadedRegistryId === registry.id && state === 'ready' ? snapshots.find((snapshot) => snapshot.snapshotId === selectedId) || snapshots[0] || null : null,
+    [selectedId, snapshots, loadedRegistryId, registry.id, state],
   );
 
   if (!canRead) return null;
@@ -80,6 +89,10 @@ export function RegistryValuationSummary({ registry, membership }: {
   };
 
   return (
+    <>
+    <RegistryCurrentValuationSummary registry={registry} items={items} inventoryState={inventoryState} allowed={canRead} />
+    <details className="registry-valuation-history">
+      <summary>Arrêtés de valeur historiques</summary>
     <section className="registry-valuation" aria-labelledby="registry-valuation-title">
       <header className="registry-valuation__header">
         <div><span className="registry-step">DEV‑08</span><h2 id="registry-valuation-title">Arrêté de valeur</h2><p>Photographie Secret figée en EUR, sans conversion automatique.</p></div>
@@ -98,7 +111,8 @@ export function RegistryValuationSummary({ registry, membership }: {
       {notice && <p className="registry-valuation__notice" role="status">{notice}</p>}
       {state === 'loading' && <div className="registry-dashboard-loading" role="status"><LoaderCircle className="registry-spinner" aria-hidden="true" /><span>Chargement des arrêtés autorisés…</span></div>}
       {state === 'error' && <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><div><h3>Arrêtés indisponibles</h3><p>Les valeurs Secret n’ont pas pu être lues avec les droits actuels.</p></div></div>}
-      {state === 'ready' && !selected && <div className="registry-valuation__empty"><CalendarDays aria-hidden="true" /><div><h3>Aucun arrêté figé</h3><p>Les valeurs courantes ne sont jamais additionnées tant qu’un propriétaire n’a pas créé un arrêté daté.</p></div></div>}
+      <p className="registry-dashboard-note">Les arrêtés conservent une photographie datée et appliquent des exigences documentaires supplémentaires. Leur total peut différer de la valeur patrimoniale courante.</p>
+      {state === 'ready' && !selected && <div className="registry-valuation__empty"><CalendarDays aria-hidden="true" /><div><h3>Aucun arrêté figé</h3><p>Créez un arrêté daté pour conserver une photographie des valeurs documentées.</p></div></div>}
 
       {selected && (
         <>
@@ -141,5 +155,7 @@ export function RegistryValuationSummary({ registry, membership }: {
         </>
       )}
     </section>
+    </details>
+    </>
   );
 }

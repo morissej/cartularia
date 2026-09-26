@@ -334,6 +334,10 @@ export const projectRegistryItem = async ({
     const valuationProjection = buildRegistryValuationProjection({
       root: rootData,
       retainedValue: {},
+      currentValue: {
+        amount: rootData.grossValuation !== undefined ? rootData.grossValuation : item.data()?.grossValuation ?? null,
+        currency: rootData.valuationCurrency || item.data()?.valuationCurrency || null,
+      },
       insuranceCoverages: [],
       sourceRevision: nextRevision,
     });

@@ -1,7 +1,17 @@
 import { httpsCallable } from 'firebase/functions';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db, functions } from '../firebase.ts';
-import type { RegistryValuationSnapshot } from '../domain/projections.ts';
+import type { RegistryValuationItemProjection, RegistryValuationSnapshot } from '../domain/projections.ts';
+
+export const observeRegistryValuationItems = (
+  registryId: string,
+  onItems: (items: RegistryValuationItemProjection[]) => void,
+  onError: (error: Error) => void,
+) => onSnapshot(
+  collection(db, 'registries', registryId, 'valuationItems'),
+  (snapshot) => onItems(snapshot.docs.map((document) => document.data() as RegistryValuationItemProjection)),
+  (error) => onError(error),
+);
 
 export const observeRegistryValuationSnapshots = (
   registryId: string,

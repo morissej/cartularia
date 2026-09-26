@@ -196,6 +196,7 @@ test('la commande raccorde brouillon, Cartulaire, média, Registre et chaîne d�
     assert.equal(item.data()[financialField], undefined, `${financialField} absent de la projection catalogue`);
   }
   assert.equal(valuation.data().eligibility, 'eligible');
+  assert.deepEqual(valuation.data().currentValue, { amount: 20_000, currency: 'EUR' });
   assert.deepEqual(valuation.data().marketValue, {
     amount: 20_000,
     confidence: 'medium',
@@ -267,6 +268,21 @@ const writeReviewAndRequest = async ({ level, token, requestId, baseRevision, re
     requestDocumentId: IWC_CARTULARY_ID, requestId, ownerUid: 'wave1-owner', cartularyId: IWC_CARTULARY_ID, reason: 'private_draft_synchronized', status: 'pending',
   });
 };
+
+for (const currency of [null, 'CHF']) {
+  test(`la valeur courante synchronisée conserve le montant sans métadonnées et sa devise (${currency || 'devise du dossier'})`, async () => {
+    await writeDraftAndRequest('sync_test_value_000000000000001');
+    await firestore.doc(`privateDrafts/wave1-owner/cartularies/${IWC_CARTULARY_ID}/state/cartularia-retained-valuation`).update({
+      value: JSON.stringify({ amount: 2500, ...(currency ? { currency } : {}) }), revision: 2,
+    });
+    await processCartularySyncRequest({ storage, firestore, requestDocumentId: IWC_CARTULARY_ID, occurredAt: '2026-08-16T08:02:00.000Z' });
+    const value = (await firestore.doc(`registries/reg_collection_privee/valuationItems/${IWC_CARTULARY_ID}`).get()).data();
+    assert.deepEqual(value.currentValue, { amount: 2500, currency: currency || 'EUR' });
+    assert.equal(value.eligibility, 'excluded');
+    assert.equal(value.marketValue.level, null);
+    assert.equal(value.marketValue.currency, currency);
+  });
+}
 
 test('revue du propriétaire : statut, palier et date serveur, projection et contentHash, événement dédié, rejeu no_change, conflit de révision, cycle inactif', async () => {
   await writeDraftAndRequest('sync_test_review_000000000000001');

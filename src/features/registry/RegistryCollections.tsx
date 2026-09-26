@@ -10,7 +10,8 @@ import {
 } from '../../domain/collections.ts';
 import type { RegistryDocument } from '../../domain/foundations.ts';
 import { registryItemCollectionIds, type RegistryItemProjection } from '../../domain/projections.ts';
-import { useLatestValuationSnapshot } from './useLatestValuationSnapshot.ts';
+import { useCurrentRegistryValuation } from './useCurrentRegistryValuation.ts';
+import { CURRENT_VALUATION_ISSUE_LABELS, summarizeCurrentValuation } from '../../domain/currentRegistryValuation.ts';
 import { deleteRegistryCollection, normalizeCollectionSlug, saveRegistryCollection } from '../../services/collections.ts';
 import { observeRegistryItems } from '../../services/projections.ts';
 import { labelFromIdentifier } from './registryPresentation.ts';
@@ -33,7 +34,7 @@ export function RegistryCollections({ registry, canManage, canPublish = false, c
   const [items, setItems] = useState<RegistryItemProjection[]>([]);
   const [itemsState, setItemsState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
-  const valuation = useLatestValuationSnapshot(registry.id, canReadValuation, attempt);
+  const valuation = useCurrentRegistryValuation(registry.id, registry.referenceCurrency, items, itemsState, canReadValuation, attempt);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingVersion, setEditingVersion] = useState<string | null>(null);
   const [creationId, setCreationId] = useState<string | undefined>();
@@ -308,10 +309,7 @@ export function RegistryCollections({ registry, canManage, canPublish = false, c
         {rows.map(({ id, document, items: collectionItems }) => {
           const websitePublished = document ? collectionWebsiteIsPublished(document) : false;
           const publishedCount = websitePublished ? document?.publishedCartularyIds?.length || 0 : 0;
-          const snapshot = valuation.registryId === registry.id && valuation.state === 'ready' ? valuation.snapshot : null;
-          const collectionIds = new Set(collectionItems.map((item) => item.cartularyId));
-          const valuedLines = snapshot?.lines.filter((line) => collectionIds.has(line.cartularyId)) ?? [];
-          const total = valuedLines.reduce((sum, line) => sum + line.marketValue, 0);
+          const current = valuation.summary ? summarizeCurrentValuation(valuation.summary.lines.filter((line) => line.collectionIds.includes(id))) : null;
           return (
             <article key={id}>
               <header><Layers3 aria-hidden="true" /><div><span>{document?.status === 'archived' ? 'Archivée' : websitePublished ? 'Mini-site publié' : document?.status === 'published' ? 'Publication à confirmer' : 'Collection active'}</span><h2>{document?.name || labelFromIdentifier(id)}</h2></div><strong>{collectionItems.length}</strong></header>
@@ -322,10 +320,12 @@ export function RegistryCollections({ registry, canManage, canPublish = false, c
                 <div><dt>Contenu public</dt><dd>{websitePublished ? `${publishedCount} objet${publishedCount > 1 ? 's' : ''} sélectionné${publishedCount > 1 ? 's' : ''}` : 'Aucun objet exposé'}</dd></div>
               </dl>
               {canReadValuation && <div className="registry-collection-card__valuation" aria-label={`Valeur de la collection ${document?.name || labelFromIdentifier(id)}`}>
-                <span>Valeur de la collection · Secret</span>
-                {snapshot ? <><strong>{valuedLines.length || collectionItems.length === 0 ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(total) : 'Non renseignée'}</strong><small>Arrêté du {snapshot.asOfDate} · {valuedLines.length}/{collectionItems.length} objet(s) couverts{valuedLines.length < collectionItems.length ? ' · total partiel' : ''}</small></>
-                  : <p>{valuation.registryId !== registry.id || valuation.state === 'loading' ? 'Chargement de la valeur…' : valuation.state === 'error' ? 'Valeur indisponible.' : 'Aucun arrêté de valeur disponible.'}</p>}
-                <a href={`/registry/${encodeURIComponent(registry.id)}`}>Consulter les arrêtés de valeur</a>
+                <span>Valeur patrimoniale courante · Secret</span>
+                {current ? <><strong>{current.total !== null ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: registry.referenceCurrency, maximumFractionDigits: 0 }).format(current.total) : 'Non renseignée'}</strong><small>Valeurs brutes retenues · {current.includedCount}/{current.itemCount} objet(s) couverts{current.missingCount ? ' · total partiel' : ''}</small>
+                  {current.documentationIncompleteCount > 0 && <small>{current.documentationIncompleteCount} objet(s) inclus · documentation de valeur à compléter</small>}
+                  {current.missingCount > 0 && <ul>{current.lines.filter((line) => line.issue).map((line) => <li key={line.cartularyId}>{line.displayTitle} : {CURRENT_VALUATION_ISSUE_LABELS[line.issue!]}</li>)}</ul>}
+                </> : <p>{valuation.state === 'loading' ? 'Chargement de la valeur…' : 'Valeur indisponible.'}</p>}
+                <a href={`/registry/${encodeURIComponent(registry.id)}`}>Consulter le détail des valeurs</a>
               </div>}
               {websitePublished && <div className="registry-collection-card__url"><Globe2 aria-hidden="true" /><span>{`${window.location.origin}${collectionWebsitePath(registry.id, id)}`}</span></div>}
               <footer>

@@ -84,7 +84,7 @@ const marketValueExclusionReasons = (marketValue) => {
   return reasons;
 };
 
-export const buildRegistryValuationProjection = ({ root, retainedValue, insuranceCoverages, sourceRevision }) => {
+export const buildRegistryValuationProjection = ({ root, retainedValue, insuranceCoverages, sourceRevision, currentValue }) => {
   const level = REGISTRY_VALUATION_LEVELS.includes(retainedValue?.level) ? retainedValue.level : null;
   const confidence = REGISTRY_VALUATION_CONFIDENCE.includes(retainedValue?.confidence) ? retainedValue.confidence : null;
   const marketValue = {
@@ -97,6 +97,11 @@ export const buildRegistryValuationProjection = ({ root, retainedValue, insuranc
   };
   const insurance = normalizeInsuranceContracts(insuranceCoverages);
   const exclusionReasons = marketValueExclusionReasons(marketValue);
+  // Le montant courant n'exige pas les métadonnées nécessaires à un arrêté documenté.
+  const current = currentValue ?? {
+    amount: retainedValue?.amount ?? root.grossValuation,
+    currency: retainedValue?.currency || root.valuationCurrency,
+  };
   const base = {
     schemaVersion: 'registry-valuation@1.0.0',
     cartularyId: root.id,
@@ -106,6 +111,10 @@ export const buildRegistryValuationProjection = ({ root, retainedValue, insuranc
     collectionIds: [...new Set([...(Array.isArray(root.collectionIds) ? root.collectionIds : []), root.collectionId].filter(Boolean))],
     assetType: root.assetType,
     displayTitle: root.displayTitle,
+    currentValue: {
+      amount: typeof current.amount === 'number' && Number.isFinite(current.amount) && current.amount >= 0 ? current.amount : null,
+      currency: currencyOrNull(current.currency),
+    },
     marketValue,
     insuranceContracts: insurance.contracts,
     insuranceWarnings: insurance.warnings,

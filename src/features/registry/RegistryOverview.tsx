@@ -173,7 +173,7 @@ export function RegistryOverview({ registry, organization, membership }: {
         </article>
       </section>
 
-      <RegistryValuationSummary registry={registry} membership={membership} />
+      <RegistryValuationSummary registry={registry} membership={membership} items={items} inventoryState={loadState} />
       <RegistryDocumentationSummary registry={registry} membership={membership} />
 
       {loadState === 'loading' && (

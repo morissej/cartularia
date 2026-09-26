@@ -328,7 +328,7 @@ export const processCartularySyncRequest = async ({
   const taxAmount = asNonNegativeNumber(retainedValuation.taxAmount, 0) || 0;
   const netValuation = editedValue ? null : !retainedValuationState ? (moneyBaseline.netValuation ?? null) : grossValuation === null ? null : Math.max(0, grossValuation - saleCostAmount);
   const netAfterTaxValuation = editedValue ? null : !retainedValuationState ? (moneyBaseline.netAfterTaxValuation ?? null) : netValuation === null ? null : Math.max(0, netValuation - taxAmount);
-  const valuationCurrency = asText(editedValue?.currency, asText(creationProfile.currency, rootData.valuationCurrency || rootData.currency || 'EUR'));
+  const valuationCurrency = asText(editedValue?.currency, asText(retainedValuation.currency, asText(creationProfile.currency, rootData.valuationCurrency || rootData.currency || 'EUR')));
   const legacySpecifications = rootData.assetType === 'watch' ? specifications : null;
   const makerName = asText(genericValues.get('cover.car.maker') ?? genericValues.get('cover.watch.brand'), asText(specificationValue(legacySpecifications, 'brand', 'Marque'), rootData.makerName));
   const modelName = asText(genericValues.get('cover.car.model') ?? genericValues.get('cover.watch.model'), asText(specificationValue(legacySpecifications, 'model', 'Modèle'), rootData.modelName));
@@ -475,6 +475,7 @@ export const processCartularySyncRequest = async ({
         amount: grossValuation,
         currency: retainedValuation.currency || editedValue?.currency || null,
       } : {},
+      currentValue: { amount: grossValuation, currency: valuationCurrency },
       insuranceCoverages,
       sourceRevision: nextRevision,
     });

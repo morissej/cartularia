@@ -182,6 +182,7 @@ test('la demande privée crée un Cartulaire secret, une projection minimale pui
   assert.equal(rootAfterCreate.data().purchasePrice, 21_900);
   assert.equal(projectionAfterCreate.data().purchasePrice, undefined);
   assert.equal(valuationAfterCreate.data().eligibility, 'excluded');
+  assert.deepEqual(valuationAfterCreate.data().currentValue, { amount: 21_900, currency: 'EUR' });
   assert.deepEqual(valuationAfterCreate.data().exclusionReasons, [
     'missing_amount', 'missing_currency', 'missing_level', 'missing_date', 'missing_source', 'missing_confidence',
   ]);
@@ -276,6 +277,7 @@ test('création automobile puis édition autoritaire : schéma, confidentialité
     assert.equal(itemAfterEdit[financialField], undefined, `${financialField} absent de la projection catalogue`);
   }
   assert.equal(valuationAfterEdit.marketValue.amount, 30000);
+  assert.deepEqual(valuationAfterEdit.currentValue, { amount: 30000, currency: 'EUR' });
   assert.equal(valuationAfterEdit.marketValue.currency, 'EUR');
   assert.equal(valuationAfterEdit.eligibility, 'excluded');
   assert.deepEqual(valuationAfterEdit.exclusionReasons, ['missing_level', 'missing_date', 'missing_source', 'missing_confidence']);
