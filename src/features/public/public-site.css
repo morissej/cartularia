@@ -261,7 +261,7 @@
 
 /* SECTION 4 LIVRABLES */
 .public-deliverables-section { background: var(--sheet); border-block: 1px solid var(--rule); }
-.public-deliverables-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.public-deliverables-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
 .public-deliverable-card {
   display: flex;
   flex-direction: column;

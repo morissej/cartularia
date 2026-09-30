@@ -2340,12 +2340,12 @@ function App() {
             </section>
 
             <CartularyReviewStatus state={review.state} language={language} canManage={authoritative.canManage} busy={review.busy} notice={review.notice} error={review.error} onConfirm={review.confirm} onClearMessages={review.clearMessages} />
-            <CartularyTodoBoard followUp={followUp} language={language} readOnly={!canEdit} demonstration={isDemoCartulary} />
 
             <span hidden {...aiFieldProps('cover.privacy.userAlias')}>{userAlias}</span>
             <span hidden {...aiFieldProps('cover.privacy.objectCode')}>{objectCode}</span>
 
             <GenericSchemaPageSections page="cover" {...genericPageProps} />
+            <CartularyTodoBoard followUp={followUp} language={language} readOnly={!canEdit} demonstration={isDemoCartulary} />
         </CoverPage>
 
         <MediaPage active={activePage === 'media'}>
