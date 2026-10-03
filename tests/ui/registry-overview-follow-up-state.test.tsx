@@ -93,7 +93,7 @@ describe('exhaustivité des alertes du tableau de bord', () => {
 
     expect(screen.getByText('Échéances en retard')).toBeTruthy();
     expect(screen.getByText('Alertes partielles')).toBeTruthy();
-    expect(screen.queryByText('Aucune alerte opérationnelle en cours.')).toBeNull();
+    expect(screen.queryByText('Aucune situation urgente ni échéance proche.')).toBeNull();
   });
 
   it('ne transforme jamais une erreur totale en absence d’alerte', async () => {
@@ -106,7 +106,7 @@ describe('exhaustivité des alertes du tableau de bord', () => {
 
     expect(screen.getByText('Alertes non confirmées')).toBeTruthy();
     expect(screen.getByText(/Une liste vide ne signifie pas/)).toBeTruthy();
-    expect(screen.queryByText('Aucune alerte opérationnelle en cours.')).toBeNull();
+    expect(screen.queryByText('Aucune situation urgente ni échéance proche.')).toBeNull();
   });
 
   it('annonce l’absence d’alerte seulement après une lecture complète', async () => {
@@ -117,7 +117,7 @@ describe('exhaustivité des alertes du tableau de bord', () => {
       loadingCartularies: 0, failedCartularies: 0,
     }));
 
-    expect(screen.getByText('Aucune alerte opérationnelle en cours.')).toBeTruthy();
+    expect(screen.getByText('Aucune situation urgente ni échéance proche.')).toBeTruthy();
   });
 });
 

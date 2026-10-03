@@ -1,20 +1,14 @@
 import { AlertTriangle, Landmark, LoaderCircle, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
 import type { RegistryDocument } from '../../domain/foundations.ts';
-import type { RegistryItemProjection } from '../../domain/projections.ts';
-import { CURRENT_VALUATION_ISSUE_LABELS } from '../../domain/currentRegistryValuation.ts';
+import { CURRENT_VALUATION_ISSUE_LABELS, type CurrentRegistryValuation } from '../../domain/currentRegistryValuation.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
-import { useCurrentRegistryValuation } from './useCurrentRegistryValuation.ts';
 
-export function RegistryCurrentValuationSummary({ registry, items, inventoryState, allowed }: {
+export function RegistryCurrentValuationSummary({ registry, state, summary, onRetry }: {
   registry: RegistryDocument;
-  items: RegistryItemProjection[];
-  inventoryState: 'loading' | 'ready' | 'error';
-  allowed: boolean;
+  state: 'loading' | 'ready' | 'error';
+  summary: CurrentRegistryValuation | null;
+  onRetry: () => void;
 }) {
-  const [attempt, setAttempt] = useState(0);
-  const { state, summary } = useCurrentRegistryValuation(registry.id, registry.referenceCurrency, items, inventoryState, allowed, attempt);
-  if (!allowed) return null;
   const money = (amount: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: registry.referenceCurrency, maximumFractionDigits: 0 }).format(amount);
   return (
     <section className="registry-valuation" aria-labelledby="registry-current-valuation-title">
@@ -23,7 +17,7 @@ export function RegistryCurrentValuationSummary({ registry, items, inventoryStat
         <Landmark aria-hidden="true" />
       </header>
       {state === 'loading' && <p role="status"><LoaderCircle className="registry-spinner" aria-hidden="true" /> Chargement des valeurs courantes…</p>}
-      {state === 'error' && <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><p>Le total ne peut pas être confirmé. Les objets ou leurs valeurs sont indisponibles.</p><button type="button" onClick={() => setAttempt((current) => current + 1)}><RefreshCw aria-hidden="true" />Réessayer</button></div>}
+      {state === 'error' && <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><p>Le total ne peut pas être confirmé. Les objets ou leurs valeurs sont indisponibles.</p><button type="button" onClick={onRetry}><RefreshCw aria-hidden="true" />Réessayer</button></div>}
       {summary && <>
         <div className="registry-current-valuation__facts" aria-label="Total patrimonial courant">
           <article><span>{summary.missingCount ? 'Valeur renseignée · total partiel' : 'Valeur patrimoniale courante'}</span><strong>{summary.total === null ? 'Non renseignée' : money(summary.total)}</strong><small>{summary.includedCount} objet(s) sur {summary.itemCount} inclus</small></article>

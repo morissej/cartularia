@@ -28,8 +28,8 @@ beforeEach(() => { mocks.value = evaluated; mocks.error = null; });
 describe('palier documentaire du Cartulaire', () => {
   it('rend le palier, la méthode, les preuves, le manque suivant et une action sans gain inventé', async () => {
     render(<DocumentationTierPanel cartularyId="cart_watch" />);
-    const region = await screen.findByRole('region', { name: 'Palier de complétude documentaire' });
-    expect(region.textContent).toContain('P2');
+    const region = await screen.findByRole('region', { name: 'Documents à compléter' });
+    expect(region.textContent).not.toMatch(/\bP[0-4]\b/);
     expect(region.textContent).toContain('Dossier tenu');
     expect(region.textContent).not.toContain('documentation-tier-watch@1.0.0');
     expect(region.textContent).not.toContain('révision source 7');
@@ -51,7 +51,7 @@ describe('palier documentaire du Cartulaire', () => {
   it('rend l’évaluation fictive locale sans ouvrir d’écoute Firestore', () => {
     vi.mocked(observeDocumentationAssessment).mockClear();
     render(<DocumentationTierPanel cartularyId="cart_demo_rolex_submariner_124060" isDemo assessmentOverride={DEMO_SUBMARINER_DOCUMENTATION_ASSESSMENT} />);
-    expect(screen.getByText('P2')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/\bP[0-4]\b/);
     expect(screen.getByText('Dossier tenu')).toBeTruthy();
     expect(screen.getByText(/Émettre un Sceau/)).toBeTruthy();
     expect(observeDocumentationAssessment).not.toHaveBeenCalled();

@@ -1,7 +1,8 @@
 import { GoogleAuth } from 'google-auth-library';
 const apply = process.argv.includes('--apply');
+const registryOnly = process.argv.includes('--registry-only');
 const registry = 'studio-2614005370-a3e51';
-const targets = [registry, 'cartularia-vault-a3e51', 'cartularia-bridge-a3e51'];
+const targets = registryOnly ? [registry] : [registry, 'cartularia-vault-a3e51', 'cartularia-bridge-a3e51'];
 const runner = `cartularia-recovery-runner@${registry}.iam.gserviceaccount.com`;
 const client = await new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] }).getClient();
 const request = async (url, method = 'GET', data) => (await client.request({ url, method, data })).data;
@@ -50,5 +51,5 @@ for (const project of targets) {
   if (apply) await bind(`https://iam.googleapis.com/v1/projects/${project}/serviceAccounts/${signer}`, 'roles/iam.serviceAccountTokenCreator', `serviceAccount:${runner}`);
   else console.log(JSON.stringify({ planned: 'signer-binding', signer, member: runner }));
 }
-if (apply) await bind(`https://cloudresourcemanager.googleapis.com/v1/projects/${registry}`, 'roles/logging.logWriter', `serviceAccount:${runner}`);
+await bind(`https://cloudresourcemanager.googleapis.com/v1/projects/${registry}`, 'roles/logging.logWriter', `serviceAccount:${runner}`);
 console.log(JSON.stringify({ applied: apply, runner, scope: targets }));

@@ -131,7 +131,8 @@ test('le vocabulaire réserve le Sceau à la projection publique et nomme claire
   assert.doesNotMatch(wave4, /est conservée uniquement dans le tiroir/);
   assert.match(app, /Le Sceau public identifie une publication émise par le serveur/);
   assert.match(app, /Aucun de ces indicateurs ne remplace l’examen physique ni la conclusion d’un expert/);
-  assert.match(registry, /Chaîne serveur & preuves/);
-  assert.match(registry, /Vérification complète/);
+  assert.match(registry, /Vérifier l’historique de mes objets/);
+  assert.match(registry, /Vérifier à nouveau/);
+  assert.match(registry, /<details className="registry-integrity-method">/);
   assert.doesNotMatch(registry, /Confiance blockchain-ready/);
 });

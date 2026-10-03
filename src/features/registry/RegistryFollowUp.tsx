@@ -142,7 +142,7 @@ export function RegistryFollowUp({ registry, canReadCartularies, canManage = fal
         <div>
           <p className="registry-kicker">Suivi des objets</p>
           <h1 id="registry-follow-up-title">Échéances et rappels</h1>
-          <p>Les actions à venir de vos Cartulaires, réunies sans déplacer leurs preuves, archives ou médias.</p>
+          <p>Planifiez et cochez ici les tâches de vos objets. Les échéances en retard ou prévues dans les 30 jours apparaissent aussi parmi les priorités de la vue d’ensemble. Les justificatifs à compléter sont indiqués dans chaque Cartulaire.</p>
         </div>
       </header>
 

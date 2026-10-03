@@ -166,9 +166,9 @@ test('aucun palier ni agrégat Secret n’entre dans la projection publique et l
   const cartularyUi = readFileSync(new URL('../src/features/cartulary/components/DocumentationTierPanel.tsx', import.meta.url), 'utf8');
   const registryUi = readFileSync(new URL('../src/features/registry/RegistryDocumentationSummary.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(publicWritePath, /documentationItems|documentationAssessment|documentationTier|securedValue|exposedValue/);
-  assert.match(cartularyUi, /valeur défendue/);
-  assert.match(cartularyUi, /décote évitée/);
-  assert.match(cartularyUi, /Palier de complétude documentaire/);
+  assert.match(cartularyUi, /Effet sur la valeur/);
+  assert.match(cartularyUi, /Documents à compléter/);
+  assert.match(cartularyUi, /documentationLevelLabel/);
   assert.doesNotMatch(`${cartularyUi}\n${registryUi}`, /prime garantie|garantie de valeur|optimisation/i);
-  assert.match(registryUi, /ordre de grandeur non mesuré|measurement\.label/);
+  assert.match(registryUi, /L’effet sur la valeur n’a pas été mesuré/);
 });

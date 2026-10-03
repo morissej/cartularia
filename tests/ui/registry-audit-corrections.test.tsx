@@ -93,7 +93,7 @@ describe('corrections de l’audit du Registre', () => {
     expect(await screen.findAllByRole('link', { name: /Ouvrir le Cartulaire/ })).toHaveLength(1);
     expect(screen.getByText('Rolex essai')).toBeTruthy(); expect(screen.queryByText('Objet revu')).toBeNull();
     expect(screen.getByText(/Filtre d’alerte : Cartulaires à revoir/)).toBeTruthy();
-    expect(screen.getByRole('note').textContent).toContain('posés à la création');
+    expect(screen.getByRole('note').textContent).toContain('nouveaux dossiers sont en préparation');
     expect(window.location.search).toContain('review=1');
     fireEvent.click(screen.getByRole('button', { name: 'Retirer ce filtre' }));
     await waitFor(() => expect(screen.getAllByRole('link', { name: /Ouvrir le Cartulaire/ })).toHaveLength(2));

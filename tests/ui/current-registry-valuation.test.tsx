@@ -8,7 +8,7 @@ const fixture = vi.hoisted(() => ({ items: [] as any[], valuations: [] as any[],
 vi.mock('../../src/services/registryValuation.ts', () => ({
   observeRegistryValuationItems: (...args: any[]) => fixture.observe(...args),
   observeRegistryValuationSnapshots: (_id: string, next: any) => {
-    next([{ snapshotId: 'historical', asOfDate: '2026-09-26', totalMarketValue: 20750, totalInsuredCapital: 0, coverageGap: 20750, uninsuredLineCount: 1, lowConfidenceShare: 1, lowConfidenceValue: 20750, totalsByLevel: {}, lines: [], excludedLines: [] }]);
+    next([{ snapshotId: 'historical', asOfDate: '2026-09-26', referenceCurrency: 'EUR', totalMarketValue: 20750, totalInsuredCapital: 0, coverageGap: 20750, uninsuredLineCount: 1, lowConfidenceShare: 1, lowConfidenceValue: 20750, totalsByLevel: { ai_proposed: 20750 }, lines: [{ cartularyId: 'rolex', displayTitle: 'Rolex GMT-Master', assetType: 'watch', marketValue: 20750, level: 'ai_proposed', observedAt: '2026-07-18', sourceLabel: 'Note', confidence: 'low', insuredCapital: 0, insuranceContractCount: 0, coverageGap: 20750 }], excludedLines: [] }]);
     return () => {};
   },
   requestRegistryValuationSnapshot: vi.fn(),
@@ -42,10 +42,17 @@ describe('valeur patrimoniale courante du Registre et des Collections', () => {
     const history = screen.getByText('Arrêtés de valeur historiques').closest('details')!;
     expect(history.open).toBe(false);
     expect(history.textContent).toContain(money(20750));
+    const comparison = within(history).getByLabelText('Couverture de l’arrêté par rapport au Registre actuel');
+    expect(comparison.textContent).toContain('1 objet(s) sur 2 du Registre actuel');
+    expect(comparison.textContent).toContain(money(2500));
+    expect(within(comparison).getByRole('link', { name: 'IWC Flieger UTC', hidden: true }).getAttribute('href')).toContain('iwc');
+    expect(comparison.textContent).toContain('Raison de l’absence non renseignée');
     act(() => fixture.callbacks.forEach(next => next([{ ...fixture.valuations[0], marketValue: { ...fixture.valuations[0].marketValue, amount: 22000 } }])));
     expect(current.textContent).toContain(money(24500));
     expect(collection.textContent).toContain(money(24500));
     expect(history.textContent).toContain(money(20750));
+    expect(comparison.textContent).toContain(money(3750));
+    expect(comparison.textContent).toContain('Il ne mesure pas un gain ou une perte');
   });
 
   it('signale nommément la montre sans montant et ne transforme pas une erreur de lecture en total fiable', async () => {
@@ -58,6 +65,17 @@ describe('valeur patrimoniale courante du Registre et des Collections', () => {
     act(() => fixture.errors[0](new Error('permission-denied')));
     expect(current.textContent).not.toContain(money(20750));
     expect(within(current).getByRole('alert').textContent).toContain('Le total ne peut pas être confirmé');
+    expect(screen.queryByLabelText('Couverture de l’arrêté par rapport au Registre actuel')).toBeNull();
+    expect(screen.getByText(/La couverture par rapport au Registre actuel n’est pas confirmée/)).toBeTruthy();
+  });
+
+  it('ne calcule pas un écart entre deux devises différentes', async () => {
+    fixture.valuations[0].marketValue.currency = 'USD';
+    fixture.items[1].valuationCurrency = 'USD';
+    render(<RegistryValuationSummary registry={{ ...registry, referenceCurrency: 'USD' }} membership={membership} items={fixture.items} inventoryState="ready" />);
+    const comparison = await screen.findByLabelText('Couverture de l’arrêté par rapport au Registre actuel');
+    expect(comparison.textContent).toContain('Les devises diffèrent');
+    expect(comparison.textContent).not.toContain('Écart entre les montants connus');
   });
 
   it('ne lit et n’affiche pas les montants sans valuation.read', () => {

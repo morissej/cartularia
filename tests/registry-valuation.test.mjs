@@ -127,7 +127,7 @@ test('le parcours rendu explicite le snapshot, les exclusions, les deux colonnes
   assert.match(source, /Arrêté de valeur/);
   assert.match(source, /Valeur de marché/);
   assert.match(source, /Capital assuré/);
-  assert.match(source, /Lignes exclues de l’arrêté/);
+  assert.match(source, /Objets exclus lors de la création de l’arrêté/);
   assert.match(source, /Aucun taux de change n’est appliqué/);
-  assert.match(source, /Snapshot immuable/);
+  assert.match(source, /Arrêté conservé sans modification/);
 });

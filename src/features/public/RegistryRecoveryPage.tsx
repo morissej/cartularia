@@ -15,10 +15,13 @@ export function RegistryRecoveryPage() {
   const parameters = new URLSearchParams(window.location.search);
   const onboarding = parameters.get('onboarding') === '1';
   const returnTo = safeAccountReturnPath(parameters.get('returnTo'));
+  const securityReturnPath = `/account/security?${new URLSearchParams({ returnTo, ...(onboarding ? { onboarding: '1' } : {}) })}`;
+  const signInHref = `/account/sign-in?${new URLSearchParams({ returnTo: securityReturnPath })}`;
   const [statusAttempt, setStatusAttempt] = useState(0);
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
   const [status, setStatus] = useState<RecoveryStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
   const [kit, setKit] = useState<RegistryRecoveryKit | null>(null);
   const [saved, setSaved] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
@@ -44,11 +47,11 @@ export function RegistryRecoveryPage() {
   useEffect(() => {
     if (!management || !user) return;
     let active = true;
-    setStatus(null); setError('');
-    void loadRegistryRecoveryStatus().then((next) => { if (active) setStatus(next); }, (failure) => {
-      if (active) setError(String(failure?.code || '').includes('unauthenticated')
+    setStatus(null); setError(''); setStatusLoading(true);
+    void loadRegistryRecoveryStatus().then((next) => { if (active) { setStatus(next); setStatusLoading(false); } }, (failure) => {
+      if (active) { setStatusLoading(false); setError(String(failure?.code || '').includes('unauthenticated')
         ? 'Votre session doit être renouvelée pour vérifier le kit actif.'
-        : 'Le service de secours est indisponible ou n’a pas répondu. Aucun kit actif n’est confirmé. Réessayez plus tard ; vous pouvez continuer vers le Registre.');
+        : 'Le service de secours est indisponible ou n’a pas répondu. Aucun kit actif n’est confirmé. Réessayez plus tard ; vous pouvez continuer vers le Registre.'); }
     });
     return () => { active = false; };
   }, [management, user, statusAttempt]);
@@ -86,18 +89,18 @@ export function RegistryRecoveryPage() {
       <p>Le kit contient une clé secrète : toute personne qui le possède peut ouvrir votre Registre. Conservez-le dans un gestionnaire de mots de passe ou un support protégé, séparé de cet appareil. Ne l’envoyez jamais par email ou au support.</p>
       <p>Il ne contient pas votre mot de passe et ne déchiffre pas le Coffre personnel, qui possède son propre secours. Sans kit préalablement activé, ce parcours ne peut pas rétablir votre accès.</p>
       {checking ? <p role="status">Vérification de la session…</p> : management ? <>
-        {!user ? <a href="/account/sign-in?returnTo=%2Faccount%2Fsecurity">Se connecter pour préparer le kit</a> : <section className="recovery-panel">
-          <p role="status">{status === null ? 'État du kit non confirmé.' : status.active ? `Kit actif depuis le ${new Date(status.createdAt!).toLocaleDateString('fr-FR')}.` : 'Aucun kit actif : préparez votre secours avant de conserver des documents importants.'}</p>
-          <button type="button" className="public-solid-button" disabled={busy || status === null} onClick={() => void run(async (assertCurrent) => { const next = await createRegistryRecoveryKit(user); assertCurrent(); if (next.ownerUid !== user.uid) throw new Error('Kit incohérent.'); setKit(next); setSaved(false); setDownloaded(false); })}>{status?.active ? 'Préparer un kit de remplacement' : 'Préparer le kit'}</button>
+        {!user ? <a href={signInHref}>Se connecter pour préparer le kit</a> : <section className="recovery-panel">
+          <p id="recovery-kit-status" role="status">{statusLoading ? 'Vérification du service de secours… La préparation sera disponible dès que l’état du kit sera confirmé.' : status === null ? 'État du kit non confirmé. Utilisez « Revérifier le service de secours » pour réessayer.' : status.active ? `Kit actif depuis le ${new Date(status.createdAt!).toLocaleDateString('fr-FR')}.` : 'Aucun kit actif : préparez votre secours avant de conserver des documents importants.'}</p>
+          <button type="button" className="public-solid-button" aria-describedby="recovery-kit-status" disabled={busy || status === null} onClick={() => void run(async (assertCurrent) => { const next = await createRegistryRecoveryKit(user); assertCurrent(); if (next.ownerUid !== user.uid) throw new Error('Kit incohérent.'); setKit(next); setSaved(false); setDownloaded(false); })}>{status?.active ? 'Préparer un kit de remplacement' : 'Préparer le kit'}</button>
           {kit && <div>
             <p>1. Téléchargez et rangez ce fichier. Le kit actuel, s’il existe, reste actif jusqu’à la confirmation de remplacement.</p>
-            <button type="button" className="public-link-button" onClick={() => { downloadRegistryRecoveryKit(kit); setDownloaded(true); }}>Télécharger le kit secret</button>
-            <label className="account-terms"><input type="checkbox" checked={saved} disabled={!downloaded} onChange={(event) => setSaved(event.target.checked)} /> J’ai conservé le fichier dans un emplacement protégé et accessible si je perds cet appareil.</label>
+            <button type="button" className="public-link-button" disabled={busy} onClick={() => { try { downloadRegistryRecoveryKit(kit); setDownloaded(true); setError(''); } catch { setDownloaded(false); setSaved(false); setError('Le téléchargement n’a pas pu démarrer. Réessayez avant d’activer ce kit.'); } }}>Télécharger le kit secret</button>
+            <label className="account-terms"><input type="checkbox" checked={saved} disabled={busy || !downloaded} onChange={(event) => setSaved(event.target.checked)} /> J’ai conservé le fichier dans un emplacement protégé et accessible si je perds cet appareil.</label>
             <button type="button" className="public-solid-button" disabled={busy || !saved || !downloaded} onClick={() => void run(async (assertCurrent) => { await activateRegistryRecoveryKit(kit); assertCurrent(); const next = await loadRegistryRecoveryStatus(); assertCurrent(); if (!next.active || next.credentialId !== kit.credentialId) throw new Error('unconfirmed'); setStatus(next); setKit(null); setNotice('Kit activé et vérifié. Tout kit précédent a été remplacé.'); })}>2. Activer ce kit</button>
           </div>}
-          {status?.active && <button type="button" className="public-link-button" disabled={busy} onClick={() => { if (window.confirm('Révoquer le kit ? Il ne permettra plus de récupérer cet accès. Votre mot de passe actuel reste valide.')) void run(async (assertCurrent) => { await revokeRegistryRecoveryKit(); assertCurrent(); const next = await loadRegistryRecoveryStatus(); assertCurrent(); setStatus(next); setNotice('Kit révoqué. Préparez un nouveau secours si nécessaire.'); }); }}>Révoquer le kit actif</button>}
-          <p><a href="/account/sign-in?returnTo=%2Faccount%2Fsecurity">Renouveler ma connexion</a></p>
-          <button type="button" className="public-link-button" disabled={busy} onClick={() => setStatusAttempt((value) => value + 1)}>Revérifier le service de secours</button>
+          {status?.active && <button type="button" className="public-link-button" disabled={busy} onClick={() => { if (window.confirm('Révoquer le kit ? Il ne permettra plus de récupérer cet accès. Votre mot de passe actuel reste valide.')) void run(async (assertCurrent) => { await revokeRegistryRecoveryKit(); assertCurrent(); const next = await loadRegistryRecoveryStatus(); assertCurrent(); if (next.active) throw new Error('unconfirmed'); setStatus(next); setNotice('Kit révoqué. Préparez un nouveau secours si nécessaire.'); }); }}>Révoquer le kit actif</button>}
+          <p><a href={signInHref}>Renouveler ma connexion</a></p>
+          <button type="button" className="public-link-button" disabled={busy || statusLoading} onClick={() => setStatusAttempt((value) => value + 1)}>Revérifier le service de secours</button>
           <p><a href={returnTo}>{onboarding ? 'Continuer vers mon Registre' : 'Ouvrir mon Registre'}</a></p>
         </section>}
       </> : <section className="recovery-panel">

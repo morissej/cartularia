@@ -9,7 +9,7 @@ export const ASSET_TYPE_LABELS: Record<string, string> = {
 
 export const LIFECYCLE_LABELS: Record<string, string> = {
   draft: 'Brouillon',
-  review: 'À vérifier',
+  review: 'En préparation',
   active: 'Actif',
   suspended: 'Suspendu',
   transferred: 'Transféré',
@@ -27,9 +27,9 @@ export const POSSESSION_LABELS: Record<string, string> = {
 };
 
 export const COMPLETENESS_LABELS: Record<string, string> = {
-  imported_unreviewed: 'Données à vérifier',
-  partial: 'Partiel',
-  complete: 'Complet',
+  imported_unreviewed: 'Informations à relire',
+  partial: 'Documents à compléter',
+  complete: 'Informations complètes',
 };
 
 /**
@@ -38,7 +38,7 @@ export const COMPLETENESS_LABELS: Record<string, string> = {
  * décrit l'action « Marquer comme revu » de la page Accueil du Cartulaire (lot B, `CartularyReviewStatus`),
  * traitée par `syncCartularyToRegistry` : elle n'est vraie qu'avec la fonction redéployée.
  */
-export const REVIEW_SIGNAL_EXPLANATION = '« À vérifier » et « Données à vérifier » sont posés à la création de chaque Cartulaire : ses informations sont déclarées par le propriétaire ou importées de son dossier, et n’ont pas encore été revues. Le propriétaire éditeur le lève depuis la page Accueil de son Cartulaire (« Marquer comme revu ») ; il ne bloque ni la consultation, ni l’édition, ni la publication, ni la cession.';
+export const REVIEW_SIGNAL_EXPLANATION = 'Les nouveaux dossiers sont en préparation et leurs informations restent à relire. Depuis l’Accueil du Cartulaire, le propriétaire éditeur peut choisir « Marquer comme revu » après sa relecture. Cette confirmation ne remplace pas les justificatifs manquants et ne bloque ni la consultation, ni l’édition, ni la publication, ni la cession.';
 
 export const labelFromIdentifier = (value: string) => value
   .replace(/^col_/, '')

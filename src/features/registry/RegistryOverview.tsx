@@ -134,7 +134,7 @@ export function RegistryOverview({ registry, organization, membership }: {
         <div>
           <p className="registry-kicker">Tableau de bord</p>
           <h1>{registry.name}</h1>
-          <p>{registry.description || 'État transverse des Cartulaires autorisés.'}</p>
+          <p>{registry.description || 'Retrouvez vos objets, leurs documents et les prochaines actions à effectuer.'}</p>
         </div>
         <div className="registry-dashboard-heading__actions">
           <span className={`registry-status registry-status--${registry.status}`}>
@@ -148,7 +148,7 @@ export function RegistryOverview({ registry, organization, membership }: {
         <article>
           <span>Cartulaires</span>
           <strong>{visibleTotal}</strong>
-          <small>Projections privées autorisées</small>
+          <small>Objets de votre Registre</small>
         </article>
         <article>
           <span>Collections</span>
@@ -158,35 +158,34 @@ export function RegistryOverview({ registry, organization, membership }: {
         <article>
           <span>Types d’actifs</span>
           <strong>{loadState === 'ready' ? summary.assetTypeCount : '—'}</strong>
-          <small>Noyau multi-actifs commun</small>
+          <small>Catégories d’objets</small>
         </article>
         <article className={summary.needsReviewCount > 0 ? 'registry-fact--attention' : undefined}>
-          <span>À revoir</span>
+          <span>À relire</span>
           <strong>{loadState === 'ready' ? summary.needsReviewCount : '—'}</strong>
           <small>
             {loadState === 'ready' && summary.needsReviewCount === 0
-              ? 'Aucun signal de revue'
+              ? 'Aucune relecture signalée'
               : loadState === 'ready'
-                ? <a href={`${registrySectionHref(registry.id, 'items')}?review=1`}>Voir les Cartulaires à revoir</a>
-                : 'Déclarations non encore revues'}
+                ? <a href={`${registrySectionHref(registry.id, 'items')}?review=1`}>Voir les Cartulaires à relire</a>
+                : 'Informations à relire'}
           </small>
         </article>
       </section>
 
       <RegistryValuationSummary registry={registry} membership={membership} items={items} inventoryState={loadState} />
-      <RegistryDocumentationSummary registry={registry} membership={membership} />
 
       {loadState === 'loading' && (
         <section className="registry-dashboard-loading" role="status">
           <LoaderCircle className="registry-spinner" aria-hidden="true" />
-          <span>Calcul des agrégats autorisés…</span>
+          <span>Chargement de la vue d’ensemble…</span>
         </section>
       )}
 
       {loadState === 'error' && (
         <section className="registry-dashboard-error" role="alert">
           <AlertTriangle aria-hidden="true" />
-          <div><h2>Synthèse indisponible</h2><p>Le contexte reste accessible, mais ses agrégats n’ont pas pu être chargés.</p></div>
+          <div><h2>Synthèse indisponible</h2><p>Les informations de vos objets n’ont pas pu être chargées.</p></div>
           <button type="button" onClick={() => void reload()}><RefreshCw aria-hidden="true" /> Réessayer</button>
         </section>
       )}
@@ -194,7 +193,7 @@ export function RegistryOverview({ registry, organization, membership }: {
       {loadState === 'ready' && summary.total === 0 && (
         <section className="registry-dashboard-empty">
           <LibraryBig aria-hidden="true" />
-          <div><h2>Ce Registre ne contient encore aucun Cartulaire</h2><p>Les indicateurs apparaîtront dès qu’une projection privée sera créée.</p></div>
+          <div><h2>Ce Registre ne contient encore aucun Cartulaire</h2><p>Les indicateurs apparaîtront dès que vous aurez ajouté un objet.</p></div>
           <a href={registrySectionHref(registry.id, 'items')}>Ouvrir le catalogue</a>
         </section>
       )}
@@ -202,7 +201,7 @@ export function RegistryOverview({ registry, organization, membership }: {
       {loadState === 'ready' && summary.total > 0 && (
         <div className="registry-dashboard-grid">
           <section className="registry-dashboard-panel registry-dashboard-panel--composition">
-            <header><div><span className="registry-step">R3</span><h2>Composition du Registre</h2></div><Boxes aria-hidden="true" /></header>
+            <header><div><span className="registry-step">Inventaire</span><h2>Composition du Registre</h2></div><Boxes aria-hidden="true" /></header>
             <AggregateRows rows={summary.byAssetType} total={summary.total} label={assetTypeLabel} />
           </section>
 
@@ -212,34 +211,34 @@ export function RegistryOverview({ registry, organization, membership }: {
           </section>
 
           <section className="registry-dashboard-panel">
-            <header><div><span className="registry-step">Statut</span><h2>État des Cartulaires</h2></div><CircleCheck aria-hidden="true" /></header>
+            <header><div><span className="registry-step">Statut</span><h2>Statut des dossiers</h2></div><CircleCheck aria-hidden="true" /></header>
             <div className="registry-status-counts">
               {summary.byLifecycle.map((row) => <div key={row.key}><span>{lifecycleLabel(row.key)}</span><strong>{row.count}</strong></div>)}
             </div>
-            <p className="registry-dashboard-note">Position administrative : à vérifier, actif, suspendu, transféré ou archivé.</p>
+            <p className="registry-dashboard-note">Situation du dossier : en préparation, actif, suspendu, transféré ou archivé. Ce statut indique où en est sa gestion.</p>
           </section>
 
           <section className="registry-dashboard-panel">
-            <header><div><span className="registry-step">Documents</span><h2>Niveau documentaire</h2></div><BookOpen aria-hidden="true" /></header>
+            <header><div><span className="registry-step">Documents</span><h2>Documents et informations</h2></div><BookOpen aria-hidden="true" /></header>
             <div className="registry-completeness-levels">
               {summary.byCompleteness.map((row) => (
                 <div key={row.key}><strong>{row.count}</strong><span>{completenessLabel(row.key)}</span></div>
               ))}
             </div>
-            <p className="registry-dashboard-note">Quantité et niveau de revue des informations et pièces réunies dans chaque Cartulaire.</p>
+            <p className="registry-dashboard-note">Indique quels dossiers restent à relire ou à compléter. Le détail des justificatifs à ajouter figure plus bas et dans chaque Cartulaire.</p>
             {summary.needsReviewCount > 0 && <p className="registry-dashboard-note">{REVIEW_SIGNAL_EXPLANATION}</p>}
           </section>
 
           <section className="registry-dashboard-panel registry-dashboard-panel--attention">
-            <header><div><span className="registry-step">Actions</span><h2>Alertes à traiter</h2></div><AlertTriangle aria-hidden="true" /></header>
+            <header><div><span className="registry-step">Actions</span><h2>À traiter en priorité</h2></div><AlertTriangle aria-hidden="true" /></header>
             {actionableAttentionCount === 0 && followUpState === 'ready' ? (
-              <div className="registry-attention-clear"><CircleCheck aria-hidden="true" /><span>Aucune alerte opérationnelle en cours.</span></div>
+              <div className="registry-attention-clear"><CircleCheck aria-hidden="true" /><span>Aucune situation urgente ni échéance proche.</span></div>
             ) : actionableAttentionCount > 0 ? (
               <div className="registry-attention-list">
                 {summary.attention.suspended > 0 && <div><a href={`${registrySectionHref(registry.id, 'items')}?lifecycle=suspended`}>Dossiers suspendus</a><strong>{summary.attention.suspended}</strong></div>}
-                {summary.attention.sensitivePossession > 0 && <div><a href={`${registrySectionHref(registry.id, 'items')}?possession=sensitive`}>Situation de possession sensible</a><strong>{summary.attention.sensitivePossession}</strong></div>}
-                {followUpSummary.overdue > 0 && <div><span>Échéances en retard</span><strong>{followUpSummary.overdue}</strong></div>}
-                {followUpSummary.dueSoon > 0 && <div><span>Échéances dans les 30 jours</span><strong>{followUpSummary.dueSoon}</strong></div>}
+                {summary.attention.sensitivePossession > 0 && <div><a href={`${registrySectionHref(registry.id, 'items')}?possession=sensitive`}>Objets perdus, volés ou détruits</a><strong>{summary.attention.sensitivePossession}</strong></div>}
+                {followUpSummary.overdue > 0 && <div><a href={`${registrySectionHref(registry.id, 'follow-up')}?status=overdue`}>Échéances en retard</a><strong>{followUpSummary.overdue}</strong></div>}
+                {followUpSummary.dueSoon > 0 && <div><a href={`${registrySectionHref(registry.id, 'follow-up')}?status=due_soon`}>Échéances dans les 30 jours</a><strong>{followUpSummary.dueSoon}</strong></div>}
               </div>
             ) : null}
             {followUpState === 'loading' && (
@@ -251,22 +250,25 @@ export function RegistryOverview({ registry, organization, membership }: {
             {followUpState === 'error' && (
               <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><div><h3>Alertes non confirmées</h3><p>{canReadCartularies ? 'Les rappels n’ont pas pu être chargés. Une liste vide ne signifie pas qu’il n’existe aucune alerte.' : 'Vos droits actuels ne permettent pas de lire les rappels Secrets.'}</p></div></div>
             )}
-            <p className="registry-dashboard-note">Uniquement les situations qui demandent une action : suspension, perte, vol ou échéance.</p>
+            <p className="registry-dashboard-note">Intervenez sur les dossiers signalés ou sur une échéance proche. Le centre de suivi réunit vos tâches et leurs échéances. Les documents à compléter sont détaillés plus bas.</p>
             <a href={registrySectionHref(registry.id, 'follow-up')}>Ouvrir le centre de suivi <ArrowRight aria-hidden="true" /></a>
           </section>
 
-          <section className="registry-dashboard-panel registry-dashboard-panel--recent">
+        </div>
+      )}
+
+      {loadState === 'ready' && summary.total > 0 && (
+          <section className="registry-dashboard-panel registry-dashboard-panel--recent registry-dashboard-activity">
             <header><div><span className="registry-step">Activité</span><h2>Mises à jour récentes</h2></div><Clock3 aria-hidden="true" /></header>
             <div className="registry-recent-items">
               {summary.recentItems.map((item) => (
                 <a href={`${registrySectionHref(registry.id, 'items')}?q=${encodeURIComponent(item.displayTitle)}`} key={item.cartularyId}>
                   <span><strong>{item.displayTitle}</strong><small>{assetTypeLabel(item.assetType)} · {collectionName(item.collectionId)}</small></span>
-                  <span>R{item.sourceRevision}</span>
+                  <span>Version {item.sourceRevision}</span>
                 </a>
               ))}
             </div>
           </section>
-        </div>
       )}
 
       {loadState === 'ready' && canReadCartularies && (
@@ -284,6 +286,8 @@ export function RegistryOverview({ registry, organization, membership }: {
           {followUpState === 'ready' && pendingFollowUps.length === 0 && <p>Aucune tâche à faire.</p>}
         </section>
       )}
+
+      <RegistryDocumentationSummary registry={registry} membership={membership} />
 
       <section className="registry-dashboard-account">
         <div><span>Contexte</span><strong>{organization.name}</strong></div>

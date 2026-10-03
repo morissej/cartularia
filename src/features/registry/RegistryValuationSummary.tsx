@@ -4,6 +4,8 @@ import type { MembershipDocument, RegistryDocument } from '../../domain/foundati
 import type { RegistryItemProjection, RegistryValuationLevel, RegistryValuationSnapshot } from '../../domain/projections.ts';
 import { observeRegistryValuationSnapshots, requestRegistryValuationSnapshot } from '../../services/registryValuation.ts';
 import { buildCartularyHref } from './registryCatalog.ts';
+import { valuationExclusionLabel } from '../../domain/documentationPresentation.ts';
+import { useCurrentRegistryValuation } from './useCurrentRegistryValuation.ts';
 import { RegistryCurrentValuationSummary } from './RegistryCurrentValuationSummary.tsx';
 
 const LEVEL_LABELS: Record<RegistryValuationLevel, string> = {
@@ -11,18 +13,6 @@ const LEVEL_LABELS: Record<RegistryValuationLevel, string> = {
   ai_proposed: 'Proposée par IA',
   professional: 'Professionnel mandaté',
   transaction: 'Transaction observée',
-};
-
-const EXCLUSION_LABELS: Record<string, string> = {
-  missing_amount: 'montant absent',
-  missing_currency: 'devise absente',
-  missing_level: 'niveau absent',
-  missing_date: 'date absente',
-  missing_source: 'source absente',
-  missing_confidence: 'confiance absente',
-  currency_mismatch: 'devise différente de EUR',
-  value_after_statement: "valeur postérieure à l’arrêté",
-  inactive_projection: 'projection inactive',
 };
 
 const euro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
@@ -36,6 +26,7 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
   items: RegistryItemProjection[];
   inventoryState: 'loading' | 'ready' | 'error';
 }) {
+  const [valuationAttempt, setValuationAttempt] = useState(0);
   const [snapshots, setSnapshots] = useState<RegistryValuationSnapshot[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [asOfDate, setAsOfDate] = useState(today);
@@ -48,6 +39,8 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
     && membership.permissions.includes('cartulary.edit')
     && membership.roles.includes('legal_owner')
     && membership.invitationManaged !== true;
+
+  const current = useCurrentRegistryValuation(registry.id, registry.referenceCurrency, items, inventoryState, canRead, valuationAttempt);
 
   useEffect(() => {
     if (!canRead) return () => undefined;
@@ -71,6 +64,11 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
     () => loadedRegistryId === registry.id && state === 'ready' ? snapshots.find((snapshot) => snapshot.snapshotId === selectedId) || snapshots[0] || null : null,
     [selectedId, snapshots, loadedRegistryId, registry.id, state],
   );
+  const includedIds = new Set(selected?.lines.map((line) => line.cartularyId));
+  const excludedIds = new Set(selected?.excludedLines.map((line) => line.cartularyId));
+  const currentLines = current.summary?.lines ?? [];
+  const currentIncludedCount = currentLines.filter((line) => includedIds.has(line.cartularyId)).length;
+  const unrecordedLines = currentLines.filter((line) => !includedIds.has(line.cartularyId) && !excludedIds.has(line.cartularyId));
 
   if (!canRead) return null;
 
@@ -82,7 +80,7 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
       setSelectedId(snapshot.snapshotId);
       setNotice(`Arrêté du ${formatDate(snapshot.asOfDate)} créé et figé.`);
     } catch {
-      setNotice("L’arrêté n’a pas été créé. Vérifiez les droits, la date et la disponibilité des projections.");
+      setNotice("L’arrêté n’a pas été créé. Vérifiez les droits, la date et la disponibilité des valeurs.");
     } finally {
       setCreating(false);
     }
@@ -90,12 +88,12 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
 
   return (
     <>
-    <RegistryCurrentValuationSummary registry={registry} items={items} inventoryState={inventoryState} allowed={canRead} />
+    <RegistryCurrentValuationSummary registry={registry} state={current.state} summary={current.summary} onRetry={() => setValuationAttempt((value) => value + 1)} />
     <details className="registry-valuation-history">
       <summary>Arrêtés de valeur historiques</summary>
     <section className="registry-valuation" aria-labelledby="registry-valuation-title">
       <header className="registry-valuation__header">
-        <div><span className="registry-step">DEV‑08</span><h2 id="registry-valuation-title">Arrêté de valeur</h2><p>Photographie Secret figée en EUR, sans conversion automatique.</p></div>
+        <div><span className="registry-step">Historique privé</span><h2 id="registry-valuation-title">Arrêté de valeur</h2><p>Montants documentés conservés à une date donnée, en euros.</p></div>
         <Landmark aria-hidden="true" />
       </header>
 
@@ -110,8 +108,8 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
 
       {notice && <p className="registry-valuation__notice" role="status">{notice}</p>}
       {state === 'loading' && <div className="registry-dashboard-loading" role="status"><LoaderCircle className="registry-spinner" aria-hidden="true" /><span>Chargement des arrêtés autorisés…</span></div>}
-      {state === 'error' && <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><div><h3>Arrêtés indisponibles</h3><p>Les valeurs Secret n’ont pas pu être lues avec les droits actuels.</p></div></div>}
-      <p className="registry-dashboard-note">Les arrêtés conservent une photographie datée et appliquent des exigences documentaires supplémentaires. Leur total peut différer de la valeur patrimoniale courante.</p>
+      {state === 'error' && <div className="registry-dashboard-error" role="alert"><AlertTriangle aria-hidden="true" /><div><h3>Arrêtés indisponibles</h3><p>Les valeurs privées n’ont pas pu être lues avec les droits actuels.</p></div></div>}
+      <p className="registry-dashboard-note">La valeur patrimoniale ci-dessus suit les montants actuels. Un arrêté conserve les montants suffisamment documentés à la date choisie. Les objets absents et les changements de valeur expliquent les différences entre ces deux vues.</p>
       {state === 'ready' && !selected && <div className="registry-valuation__empty"><CalendarDays aria-hidden="true" /><div><h3>Aucun arrêté figé</h3><p>Créez un arrêté daté pour conserver une photographie des valeurs documentées.</p></div></div>}
 
       {selected && (
@@ -123,13 +121,27 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
                 {snapshots.map((snapshot) => <option value={snapshot.snapshotId} key={snapshot.snapshotId}>{formatDate(snapshot.asOfDate)} · {formatMoney(snapshot.totalMarketValue)}</option>)}
               </select>
             </label>
-            <span><ShieldCheck aria-hidden="true" />Snapshot immuable</span>
+            <span><ShieldCheck aria-hidden="true" />Arrêté conservé sans modification</span>
           </div>
 
+          {current.summary && <section className="registry-valuation__comparison" aria-label="Couverture de l’arrêté par rapport au Registre actuel">
+            <h3>Comparer avec le Registre actuel</h3>
+            <p><strong>{currentIncludedCount} objet(s) sur {current.summary.itemCount} du Registre actuel inclus dans cet arrêté.</strong> Les objets absents ne sont pas évalués à zéro.</p>
+            <dl>
+              <div><dt>Valeur courante{current.summary.missingCount > 0 ? ' connue · total partiel' : ''}</dt><dd>{current.summary.total === null ? 'Non renseignée' : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: registry.referenceCurrency, maximumFractionDigits: 0 }).format(current.summary.total)}</dd></div>
+              <div><dt>Valeur conservée au {formatDate(selected.asOfDate)}</dt><dd>{formatMoney(selected.totalMarketValue)}</dd></div>
+              {current.summary.total !== null && registry.referenceCurrency === selected.referenceCurrency && <div><dt>Écart entre les montants connus</dt><dd>{formatMoney(Math.round((current.summary.total - selected.totalMarketValue) * 100) / 100)}</dd></div>}
+            </dl>
+            <p className="registry-dashboard-note">Cet écart peut venir de la date, des objets inclus ou des justificatifs disponibles. Il ne mesure pas un gain ou une perte. L’arrêté historique reste inchangé.</p>
+            {registry.referenceCurrency !== selected.referenceCurrency && <p>Les devises diffèrent : aucun écart monétaire n’est calculé.</p>}
+            {unrecordedLines.length > 0 && <div className="registry-valuation__excluded"><h3>Objets actuels absents de cet arrêté</h3><ul>{unrecordedLines.map((line) => <li key={line.cartularyId}><a href={buildCartularyHref(line.cartularyId, window.location.pathname, line.assetType)}>{line.displayTitle}</a><span>Raison de l’absence non renseignée dans cet arrêté.</span></li>)}</ul></div>}
+          </section>}
+          {current.state !== 'ready' && <p className="registry-valuation__notice">La couverture par rapport au Registre actuel n’est pas confirmée : {current.state === 'loading' ? 'chargement des valeurs en cours.' : 'les valeurs courantes sont indisponibles.'}</p>}
+
           <div className="registry-valuation__facts" aria-label="Totaux de l’arrêté">
-            <article><span>Valeur de marché</span><strong>{formatMoney(selected.totalMarketValue)}</strong><small>{selected.lines.length} ligne(s) incluse(s)</small></article>
+            <article><span>Valeur de marché</span><strong>{formatMoney(selected.totalMarketValue)}</strong><small>{selected.lines.length} objet(s) inclus dans cet arrêté</small></article>
             <article><span>Capital assuré</span><strong>{formatMoney(selected.totalInsuredCapital)}</strong><small>Contrats applicables à la date</small></article>
-            <article className={selected.coverageGap > 0 ? 'is-alert' : undefined}><span>{selected.coverageGap >= 0 ? 'Écart de couverture' : 'Excédent de couverture'}</span><strong>{formatMoney(Math.abs(selected.coverageGap))}</strong><small>{selected.uninsuredLineCount} ligne(s) non assurée(s)</small></article>
+            <article className={selected.coverageGap > 0 ? 'is-alert' : undefined}><span>{selected.coverageGap >= 0 ? 'Écart de couverture' : 'Excédent de couverture'}</span><strong>{formatMoney(Math.abs(selected.coverageGap))}</strong><small>{selected.uninsuredLineCount} objet(s) sans assurance renseignée</small></article>
             <article><span>Faible confiance</span><strong>{Math.round(selected.lowConfidenceShare * 100)} %</strong><small>{formatMoney(selected.lowConfidenceValue)} de la valeur totale</small></article>
           </div>
 
@@ -150,7 +162,7 @@ export function RegistryValuationSummary({ registry, membership, items, inventor
             </table>
           </div>
 
-          {selected.excludedLines.length > 0 && <div className="registry-valuation__excluded"><h3>Lignes exclues de l’arrêté</h3><ul>{selected.excludedLines.map((line) => <li key={line.cartularyId}><strong>{line.displayTitle}</strong><span>{line.reasons.map((reason) => EXCLUSION_LABELS[reason] || reason).join(' · ')}</span></li>)}</ul></div>}
+          {selected.excludedLines.length > 0 && <div className="registry-valuation__excluded"><h3>Objets exclus lors de la création de l’arrêté</h3><ul>{selected.excludedLines.map((line) => <li key={line.cartularyId}><strong>{line.displayTitle}</strong><span>{line.reasons.map(valuationExclusionLabel).join(' · ')}</span></li>)}</ul></div>}
           <p className="registry-dashboard-note">Une ligne en devise différente, postérieure à l’arrêté ou privée de niveau, date, source, confiance ou devise est exclue et signalée. Aucun taux de change n’est appliqué.</p>
         </>
       )}

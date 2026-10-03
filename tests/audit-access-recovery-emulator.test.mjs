@@ -131,11 +131,13 @@ test('V03 Registre — vrai jeton custom, nouvelle session SDK et changement de 
   const issuedBeforeSuspension = await commands.begin(input);
   const suspendedProof = { ...input, challengeId: issuedBeforeSuspension.challengeId, signature: await signRecoveryChallenge(kit, issuedBeforeSuspension.message) };
   await adminAuth.updateUser(identity.uid, { disabled: true });
-  await assert.rejects(commands.begin(input), (error) => error.code === 'permission-denied');
-  await assert.rejects(commands.complete(suspendedProof), (error) => error.code === 'permission-denied');
+  // The account guard uses domain codes; the callable adapter maps underscores
+  // to Firebase's hyphenated codes. These direct command calls check the guard.
+  await assert.rejects(commands.begin(input), (error) => error.code === 'permission_denied');
+  await assert.rejects(commands.complete(suspendedProof), (error) => error.code === 'permission_denied');
   await adminAuth.updateUser(identity.uid, { disabled: false });
   await registryDb.doc(`users/${identity.uid}`).update({ status: 'suspended' });
-  await assert.rejects(commands.begin(input), (error) => error.code === 'permission-denied');
+  await assert.rejects(commands.begin(input), (error) => error.code === 'permission_denied');
   await registryDb.doc(`users/${identity.uid}`).update({ status: 'active' });
   const refreshed = await actualSession(independent, email, changedPassword);
   await commands.revoke(refreshed.requestAuth);

@@ -9,9 +9,9 @@ const todoBoardSource = readFileSync(new URL('../src/features/registry/RegistryT
 const followUpSource = readFileSync(new URL('../src/features/registry/RegistryFollowUp.tsx', import.meta.url), 'utf8');
 
 test('la synthèse distingue statut, niveau documentaire et alertes actionnables', () => {
-  assert.match(source, /État des Cartulaires/);
-  assert.match(source, /Niveau documentaire/);
-  assert.match(source, /Alertes à traiter/);
+  assert.match(source, /Statut des dossiers/);
+  assert.match(source, /Documents et informations/);
+  assert.match(source, /À traiter en priorité/);
   assert.doesNotMatch(source, /<h2>Cycle de vie<\/h2>/);
   assert.doesNotMatch(source, /<h2>Complétude documentaire<\/h2>/);
   assert.doesNotMatch(source, /<h2>Points d’attention<\/h2>/);
@@ -37,8 +37,8 @@ test('l’en-tête ne duplique plus le lien du catalogue et qualifie le statut d
 
 test('la carte À revoir conduit au catalogue filtré et explique le signal (P-C5, lot A)', () => {
   assert.match(source, /items'\)\}\?review=1/, 'la carte est navigable vers `?review=1`');
-  assert.match(source, /Voir les Cartulaires à revoir/);
-  assert.match(source, /Aucun signal de revue/);
+  assert.match(source, /Voir les Cartulaires à relire/);
+  assert.match(source, /Aucune relecture signalée/);
   assert.doesNotMatch(source, /Statut ou import à vérifier/, 'le sous-titre ambigu disparaît');
   // La note d'explication dépend d'un agrégat, jamais du mode démonstration (ADR-026).
   assert.match(source, /summary\.needsReviewCount > 0 && <p className="registry-dashboard-note">\{REVIEW_SIGNAL_EXPLANATION\}<\/p>/);
@@ -46,10 +46,10 @@ test('la carte À revoir conduit au catalogue filtré et explique le signal (P-C
 });
 
 test('l’explication du signal est unique, dit comment le lever depuis le lot B, et reste partagée avec le catalogue', () => {
-  assert.match(REVIEW_SIGNAL_EXPLANATION, /posés à la création/);
+  assert.match(REVIEW_SIGNAL_EXPLANATION, /nouveaux dossiers sont en préparation/);
   // B11 : la garde d'honnêteté du lot A (« ne lève ce signal pour l’instant ») est remplacée par l'action réelle,
   // nommée comme le bouton de la page Accueil (CartularyReviewStatus) ; jamais « vérifié » : la revue n'est pas un sceau.
-  assert.match(REVIEW_SIGNAL_EXPLANATION, /Le propriétaire éditeur le lève depuis la page Accueil de son Cartulaire \(« Marquer comme revu »\)/);
+  assert.match(REVIEW_SIGNAL_EXPLANATION, /Depuis l’Accueil du Cartulaire, le propriétaire éditeur peut choisir « Marquer comme revu » après sa relecture/);
   assert.doesNotMatch(REVIEW_SIGNAL_EXPLANATION, /pour l’instant|Aucune action/);
   assert.match(REVIEW_SIGNAL_EXPLANATION, /ni la consultation, ni l’édition, ni la publication, ni la cession/);
   assert.doesNotMatch(REVIEW_SIGNAL_EXPLANATION, /vérifié par/);
