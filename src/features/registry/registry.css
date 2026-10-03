@@ -736,7 +736,6 @@
 
 .registry-valuation { display: grid; gap: var(--s4); margin-top: var(--s5); padding: var(--s5); border: 1px solid var(--ink); background: var(--sheet); }
 .registry-valuation-history { margin-top: var(--s3); border: 1px solid var(--rule); }
-.registry-dashboard-activity { margin-top: var(--s4); }
 .registry-valuation-history > summary { padding: var(--s3); cursor: pointer; font-family: var(--font-mono); font-size: 12px; }
 .registry-valuation-history > .registry-valuation { margin-top: 0; border: 0; }
 .registry-current-valuation__facts article { display: grid; gap: var(--s2); padding: var(--s4); background: var(--fill); }

@@ -254,11 +254,7 @@ export function RegistryOverview({ registry, organization, membership }: {
             <a href={registrySectionHref(registry.id, 'follow-up')}>Ouvrir le centre de suivi <ArrowRight aria-hidden="true" /></a>
           </section>
 
-        </div>
-      )}
-
-      {loadState === 'ready' && summary.total > 0 && (
-          <section className="registry-dashboard-panel registry-dashboard-panel--recent registry-dashboard-activity">
+          <section className="registry-dashboard-panel registry-dashboard-panel--recent">
             <header><div><span className="registry-step">Activité</span><h2>Mises à jour récentes</h2></div><Clock3 aria-hidden="true" /></header>
             <div className="registry-recent-items">
               {summary.recentItems.map((item) => (
@@ -269,6 +265,7 @@ export function RegistryOverview({ registry, organization, membership }: {
               ))}
             </div>
           </section>
+        </div>
       )}
 
       {loadState === 'ready' && canReadCartularies && (
